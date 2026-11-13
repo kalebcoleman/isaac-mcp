@@ -1,622 +1,945 @@
-"""Cameras: the viewport camera, the wrist RealSense, extra cameras and their ROS graphs."""
+"""Work-cell cameras: a wrist and an overhead D415, built from pack geometry.
 
-import omni.kit.commands
-import omni.usd
-import omni.ui as ui
-import numpy as np
-import os
-import traceback
-from isaacsim.core.utils.stage import add_reference_to_stage
-import omni.graph.core as og
-from pxr import UsdGeom, Gf
-from .settings import _local_asset, _use_legacy_tf_publisher
+Plain functions, no twin mixin. ``build_cameras`` is the entry point the workcell
+scene calls; ``plan_cameras`` is the same plan without USD authoring, so host
+tests can check intrinsics, optical offsets and BOM tagging on CPU.
+
+Geometry may only come from the external versioned pack, through
+``assets.asset(logical_id) -> absolute Path`` (a role-to-Path mapping is also
+accepted for the scene integration). Nothing here reads ``settings.py``, the
+asset cache or any checkout path, and nothing writes to the asset store.
+
+Pack mesh conventions this module assumes (all parts: metres, Z-up, one default
+Xform prim at the local origin, no joints):
+
+* ``d415``: unconfirmed dimensioned proxy, body centred at the origin and
+  modelled 0.099 x 0.020 x 0.023 m. Local axes are the D415 optical frame:
+  +X right, +Y down, +Z forward. It is not a D455/rsd455 substitute. The render
+  camera sits at this origin and applies Rx(180 deg) because a USD camera looks
+  down -Z with +Y up.
+* ``wrist_mount``: centred proxy box 0.030 x 0.060 x 0.012 m, local axes equal
+  to the optical frame. It is centred between tool0 and the camera optical
+  origin; the manifest may refine that with ``asset_layout.wrist_mount.mount_pose``.
+* ``overhead_mount``: unit cube centred at the origin, axes equal to the world.
+  It is scaled to the gantry envelope: extrusion thickness x post span x height,
+  centred at the post midpoint and half the configured height.
+* ``overhead_release`` / ``overhead_shelf``: centred boxes with world axes,
+  placed at the camera optical position. The pack owns their real dimensions;
+  the shelf may use ``overhead_mount.printed_shelf_size_m``, and
+  ``asset_layout.<role>.mount_pose`` can separate their stack.
+
+No fiducial or marker geometry is authored or referenced. Extrinsics are config
+values, pending markerless hand-eye calibration.
+"""
+
+from __future__ import annotations
+
+import math
+from pathlib import Path
+
+try:  # package import inside Kit
+    from .hardware_config import camera_intrinsics
+except ImportError:  # loaded by file path in host tests
+    from hardware_config import camera_intrinsics
 
 
-class Cameras:
-    """Part of DigitalTwin (extension.py), which mixes it in."""
+SCHEMA = 1
+REQUIRED_ASSET_ROLES = ("d415", "wrist_mount", "overhead_mount", "overhead_release", "overhead_shelf")
+D415_BODY_SIZE_M = (0.099, 0.020, 0.023)
+WRIST_BRACKET_SIZE_M = (0.030, 0.060, 0.012)
+DEFAULT_APERTURE_MM = 36.0
+DEFAULT_CLIPPING_RANGE_M = (0.1, 10.0)
+USD_CAMERA_ROTATION = (0.0, 1.0, 0.0, 0.0)  # Rx(180 deg), wxyz
+OVERHEAD_ROOT = "/World/Workcell/cameras/overhead"
+REQUIRED_ROBOT_FRAMES = ("flange_path", "tool0_path", "gripper_path", "articulation_root", "robot_path")
+REQUIRED_CONFIG_PATHS = (
+    "pack.id", "pack.version",
+    *(f"assets.{role}" for role in REQUIRED_ASSET_ROLES),
+    "wrist_camera.offset_in_tool0_m", "wrist_camera.rotation_in_tool0_deg",
+    "wrist_camera.resolution", "wrist_camera.color_fov_deg", "wrist_camera.ros_namespace",
+    "wrist_camera.body_size_m", "wrist_camera.bracket_size_m",
+    "overhead_camera.position_m", "overhead_camera.look_at_m", "overhead_camera.up_hint",
+    "overhead_camera.resolution", "overhead_camera.color_fov_deg", "overhead_camera.ros_namespace",
+    "overhead_mount.type", "overhead_mount.extrusion_size_m", "overhead_mount.post_xy_m",
+    "overhead_mount.height_m", "overhead_mount.removable", "overhead_mount.printed_shelf_size_m",
+    "robot.reach_m",
+    "interfaces.wrist_camera_topics", "interfaces.overhead_camera_topics",
+)
+FORBIDDEN_PATH_TOKENS = ("ur5e-digital-twin", "isaac-mcp-salvage", "/.cache/", "/raw/")
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
-    def _list_stage_cameras(self):
-        """Return all UsdGeom.Camera prim paths on the current stage (deduplicated).
-        Always includes /OmniverseKit_Persp as a fallback even if the stage is empty."""
-        from pxr import UsdGeom
-        stage = omni.usd.get_context().get_stage()
-        seen = set()
-        cams = []
-        if stage:
-            for prim in stage.Traverse():
-                if prim.IsA(UsdGeom.Camera):
-                    p = str(prim.GetPath())
-                    if p not in seen:
-                        seen.add(p)
-                        cams.append(p)
-        if "/OmniverseKit_Persp" not in seen:
-            cams.insert(0, "/OmniverseKit_Persp")
-        return cams
 
-    def _refresh_viewport_camera_list(self):
-        """Rebuild the active-viewport ComboBox with all cameras currently on the stage.
-        Default selection prefers /World/workspace_camera_sim if present.
-        Selecting an item auto-switches the viewport (no Apply needed)."""
-        cams = self._list_stage_cameras()
-        default_pick = "/World/workspace_camera_sim"
-        try:
-            default_idx = cams.index(default_pick)
-        except ValueError:
-            default_idx = 0
-        self._viewport_cam_frame.clear()
-        with self._viewport_cam_frame:
-            self._viewport_cam_combo = ui.ComboBox(default_idx, *cams, width=220)
-        # Auto-apply on selection change
-        self._viewport_cam_combo.model.add_item_changed_fn(
-            lambda model, item: self._apply_active_viewport_camera()
-        )
-        print(f"Viewport camera list refreshed ({len(cams)} cameras)")
+def build_cameras(stage, assets, config, robot_report, *, author=None, config_path=None):
+    """Author the wrist and overhead D415 cameras and return a JSON report.
 
-    def _set_active_viewport_camera(self, camera_path: str):
-        """Switch the active viewport to render through the given camera prim path.
-        Records the previous camera so _undo_viewport_camera can swap back."""
-        try:
-            import omni.kit.viewport.utility as vp_utils
-            from pxr import Sdf
-            viewport = vp_utils.get_active_viewport()
-            if viewport is None:
-                print("No active viewport")
-                return False
-            prev = str(viewport.camera_path)
-            if prev != camera_path:
-                self._prev_viewport_cam = prev
-            viewport.camera_path = Sdf.Path(camera_path)
-            print(f"Active viewport → {camera_path}")
-            return True
-        except Exception as ex:
-            print(f"Error setting active viewport camera: {ex}")
-            return False
+    ``assets`` exposes ``asset(logical_id) -> absolute Path``; the workcell scene
+    may pass its resolved ``{role: Path}`` mapping instead. ``config`` is the
+    flattened mapping from ``hardware_config.load_config()``. ``robot_report``
+    provides at least the five frame keys listed in ``REQUIRED_ROBOT_FRAMES``.
 
-    def _undo_viewport_camera(self):
-        """Swap the active viewport back to the previously selected camera."""
-        prev = getattr(self, "_prev_viewport_cam", None)
-        if not prev:
-            print("No previous viewport camera to undo to")
-            return
-        # Swapping makes the current camera the new "previous" — handled by _set_active_viewport_camera
-        self._set_active_viewport_camera(prev)
-        # Also reflect the change in the dropdown selection if the camera is in the list
-        try:
-            items = self._viewport_cam_combo.model.get_item_children()
-            labels = [self._viewport_cam_combo.model.get_item_value_model(i).as_string for i in items]
-            if prev in labels:
-                self._viewport_cam_combo.model.get_item_value_model().set_value(labels.index(prev))
-        except Exception:
-            pass
+    The report has ``cameras`` (wrist and overhead, each with ``prim_path``,
+    optical transform, USD conversion, intrinsics, CameraInfo, RGB/depth and
+    proposed topics), ``parts`` (one ``{prim_path, asset_id, bom_id}`` per
+    referenced pack part), ``limitations`` and provenance. ``author`` is a test
+    seam: ``author(stage, internal_report)``; the default uses pxr.
+    """
+    if stage is None:
+        raise ValueError("build_cameras needs a USD stage")
+    report = plan_cameras(config, robot_report, assets=assets, config_path=config_path)
+    report["authoring"] = (author or author_report)(stage, report)
+    return _public_report(report)
 
-    def _apply_active_viewport_camera(self):
-        """Read the current ComboBox selection and apply it to the active viewport."""
-        cams = self._list_stage_cameras()  # rebuild in same order as last refresh
-        idx = self._viewport_cam_combo.model.get_item_value_model().as_int
-        # Use the items from the combo's actual model rather than re-listing, to be safe
-        item_models = self._viewport_cam_combo.model.get_item_children()
-        if 0 <= idx < len(item_models):
-            label = self._viewport_cam_combo.model.get_item_value_model(item_models[idx]).as_string
-            self._set_active_viewport_camera(label)
+
+def plan_cameras(config, robot_report, assets=None, config_path=None):
+    """Plan both cameras without USD; internal ``_path`` keys are stripped by build."""
+    _check_flattened(config)
+    robot = _robot_frames(robot_report)
+    assets_cfg = config.get("assets") or {}
+    if not isinstance(assets_cfg, dict):
+        raise ValueError("config.assets must be a mapping of roles to pack ids")
+
+    limitations = [
+        "The D415 body is an explicitly unconfirmed dimensioned proxy (0.099 x 0.020 x 0.023 m), "
+        "not a D455/rsd455 substitute and not a verified CAD model.",
+        "Extrinsics come only from config; no fiducial or marker-based calibration is used, and "
+        "markerless hand-eye calibration is pending.",
+        "Rendered depth is single-pinhole distance_to_image_plane, not D415 stereo or IR depth; "
+        "no projector, noise or stereo matching is modelled.",
+        "ROS topics are proposed realsense2_camera 4.x names, not published or verified; no ROS graph "
+        "is built. Max's pipeline reads the sensor through pyrealsense2 directly.",
+        "Mount, shelf and release geometry uses the pack's centred-proxy convention; asset-local "
+        "datums and stacked offsets still need CAD or manifest confirmation.",
+        "Capture needs a running Isaac RTX renderer and a rendered frame; no pixels are synthesized.",
+        "The capture helper targets Isaac Sim 6.x isaacsim.sensors.experimental.rtx; older releases "
+        "only have the deprecated camera API and must not silently substitute another source.",
+        "Camera bodies and mounts are visual-only: RigidBodyAPI and CollisionAPI are removed from "
+        "referenced parts, so nothing becomes a nested rigid body under tool0.",
+    ]
+    wrist, wrist_parts, wrist_root = _plan_wrist(config, robot, assets, assets_cfg, limitations)
+    overhead, overhead_parts, overhead_root = _plan_overhead(config, assets, assets_cfg, limitations)
+    parts = wrist_parts + overhead_parts
+    roots = [root for root in (wrist_root, overhead_root) if root]
+
+    built = [camera for camera in (wrist, overhead) if camera["status"] == "built"]
+    if len(built) == 2 and len(parts) == 6:
+        status = "ok"
+    elif built:
+        status = "partial"
+    else:
+        status = "unavailable"
+
+    report = {
+        "schema": SCHEMA,
+        "status": status,
+        "cameras": {"wrist": wrist, "overhead": overhead},
+        "parts": parts,
+        "roots": roots,
+        "limitations": _dedupe(limitations),
+        "provenance": {
+            "config": {"path": str(config_path) if config_path else None,
+                       "note": "Flattened by hardware_config.load_config(); per-leaf status and source stay in the raw JSON."},
+            "pack": _value(config, "pack"),
+            "assets": {"loader": _loader_name(assets), "resolved_roles": [p["role"] for p in parts]},
+            "robot": robot,
+            "conventions": {"optical": "+X right, +Y down, +Z forward",
+                            "usd_camera": "-Z forward, +Y up",
+                            "conversion": "Rx(180 deg) about the camera +X axis",
+                            "rotation_in_tool0_deg_order": "extrinsic XYZ"},
+        },
+        "required_config": {path: _value(config, path) for path in REQUIRED_CONFIG_PATHS},
+        "asset_conventions": _asset_conventions(config),
+        "capture": _capture_contract(),
+        "fiducials": {"used": False,
+                      "note": "No fiducial or marker geometry is authored or referenced; extrinsics are config values."},
+    }
+    return report
+
+
+def author_report(stage, report, usd=None):
+    """Author the planned roots, pack references and cameras into ``stage``."""
+    Gf, Usd, UsdGeom, UsdPhysics = usd or _import_usd()
+    _require_units(stage, UsdGeom)
+    for root in report["roots"]:
+        parent = root.get("parent")
+        if parent and not _valid(stage, parent):
+            raise ValueError(f"robot frame {parent} is not on the stage; no cameras were built")
+
+    for part in report["parts"]:
+        if not part.get("_path"):
+            raise ValueError(f"part {part['prim_path']} has no resolved pack path")
+
+    for root in report["roots"]:
+        prim = _define_xform(stage, UsdGeom, root["prim_path"])
+        _set_transform(Gf, UsdGeom, prim, root["translation_m"], root["quaternion_wxyz"])
+
+    parts_authored, physics_removed = [], []
+    for part in report["parts"]:
+        prim = stage.GetPrimAtPath(part["prim_path"])
+        if not prim or not prim.IsValid():
+            prim = _define_xform(stage, UsdGeom, part["prim_path"])
+        if not UsdGeom.Xformable(prim):
+            raise ValueError(f"part prim is not transformable: {part['prim_path']}")
+        if prim.IsInstance():
+            raise ValueError(f"part root must be editable, not instanceable: {part['prim_path']}")
+        if not prim.HasAuthoredReferences():
+            if not prim.GetReferences().AddReference(part["_path"]):
+                raise ValueError(f"could not reference {part['asset_id']} at {part['prim_path']}")
+        _set_transform(Gf, UsdGeom, prim, part["local"]["translation_m"],
+                       part["local"]["quaternion_wxyz"], part["local"].get("scale"))
+        prim.SetCustomDataByKey("workcell:asset_id", part["asset_id"])
+        prim.SetCustomDataByKey("workcell:bom_id", part["bom_id"])
+        prim.SetCustomDataByKey("workcell:fidelity", part["fidelity"])
+        if any(item.IsA(UsdPhysics.Joint) for item in Usd.PrimRange(prim)):
+            raise ValueError(f"camera part must not contain joints: {part['prim_path']}")
+        physics_removed += _strip_physics(Usd, UsdPhysics, prim)
+        parts_authored.append(part["prim_path"])
+
+    cameras_authored = []
+    for key in ("wrist", "overhead"):
+        camera = report["cameras"][key]
+        if camera["status"] != "built":
+            continue
+        cam = UsdGeom.Camera.Define(stage, camera["prim_path"])
+        cam.CreateProjectionAttr().Set("perspective")
+        cam.CreateFocalLengthAttr().Set(camera["intrinsics"]["focal_length_mm"])
+        cam.CreateHorizontalApertureAttr().Set(camera["intrinsics"]["horizontal_aperture_mm"])
+        cam.CreateVerticalApertureAttr().Set(camera["intrinsics"]["vertical_aperture_mm"])
+        cam.CreateClippingRangeAttr().Set(Gf.Vec2f(*camera["depth"]["clipping_range_m"]))
+        _set_transform(Gf, UsdGeom, cam.GetPrim(), camera["usd_camera"]["translation_m"],
+                       camera["usd_camera"]["quaternion_wxyz"])
+        cameras_authored.append(camera["prim_path"])
+
+    wrist = report["cameras"]["wrist"]
+    remaining = []
+    if wrist["status"] == "built" and _valid(stage, wrist["root_path"]):
+        root = stage.GetPrimAtPath(wrist["root_path"])
+        remaining = [str(prim.GetPath()) for prim in Usd.PrimRange(root)
+                     if prim.HasAPI(UsdPhysics.RigidBodyAPI)]
+    if remaining:
+        report["limitations"].append(
+            "Rigid bodies remain under the wrist mount after authoring: " + ", ".join(remaining)
+            + "; verify the pack assets.")
+    return {"roots": [root["prim_path"] for root in report["roots"]],
+            "parts": parts_authored, "cameras": cameras_authored,
+            "physics_removed": physics_removed, "rigid_bodies_remaining": remaining}
+
+
+def make_camera_sensor(camera_prim, resolution, annotators=("rgb", "distance_to_image_plane")):
+    """Create Isaac's official RTX ``CameraSensor`` for a built camera prim.
+
+    ``resolution`` is ``[width, height]``; the sensor API takes ``(height, width)``.
+    The extension is ``isaacsim.sensors.experimental.rtx`` in Isaac Sim 6.x.
+    Requires a running renderer and a playing/rendered timeline; no pixels are
+    synthesized here.
+    """
+    from isaacsim.sensors.experimental.rtx import CameraSensor
+
+    width, height = _resolution(resolution)
+    return CameraSensor(camera_prim, resolution=(height, width), annotators=list(annotators))
+
+
+def read_frame(sensor, annotator="rgb"):
+    """Return ``(data, info)`` from a sensor; refuse to invent a frame."""
+    data, info = sensor.get_data(annotator)
+    if data is None:
+        raise RuntimeError(
+            f"No {annotator} frame is available; play or step the timeline so the RTX renderer "
+            "produces one. No pixels are synthesized.")
+    return data, info
+
+
+# --------------------------------------------------------------------------- plan
+
+def _plan_wrist(config, robot, assets, assets_cfg, limitations):
+    section = config.get("wrist_camera") or {}
+    offset = _vector(section.get("offset_in_tool0_m"), 3, "wrist_camera.offset_in_tool0_m")
+    rotation = _vector(section.get("rotation_in_tool0_deg"), 3, "wrist_camera.rotation_in_tool0_deg")
+    if rotation is None:
+        rotation = [0.0, 0.0, 0.0]
+        limitations.append("wrist_camera.rotation_in_tool0_deg is missing; identity rotation assumed.")
+    if offset is None:
+        return _unavailable("wrist", "wrist_camera.offset_in_tool0_m is missing; the wrist camera cannot be placed."), [], None
+    resolution, _, intrinsics = _camera_optics(section, "wrist_camera", limitations)
+    if resolution is None:
+        return _unavailable("wrist", "wrist_camera resolution or FOV is missing/invalid; the wrist camera cannot be built."), [], None
+
+    tool0 = robot["tool0_path"]
+    root = f"{tool0}/wrist_d415"
+    cam_path = f"{root}/D415_color"
+    optical_q = _euler_xyz_deg_to_quat(rotation)
+    optical = _pose_block(offset, optical_q)
+    usd_q = _quat_mul(optical_q, USD_CAMERA_ROTATION)
+    usd = _usd_block(cam_path, root, [0.0, 0.0, 0.0], usd_q)
+
+    body_size = _vector(section.get("body_size_m"), 3, "wrist_camera.body_size_m") or list(D415_BODY_SIZE_M)
+    bracket_size = _vector(section.get("bracket_size_m"), 3, "wrist_camera.bracket_size_m") or list(WRIST_BRACKET_SIZE_M)
+    # In the wrist root frame, tool0 sits at -R^T * offset; centre the proxy bracket between them.
+    bridge = [-0.5 * value for value in _rotate_vector(_quat_conjugate(optical_q), offset)]
+    gap = math.hypot(offset[0], offset[1])
+    if gap > max(bracket_size[0], bracket_size[1]) / 2:
+        limitations.append(
+            f"Wrist bracket proxy ({bracket_size[0]:.3f} x {bracket_size[1]:.3f} m) may not span the "
+            f"{gap:.3f} m lateral tool0 offset; confirm the real bracket CAD before lab use.")
+
+    parts = []
+    bracket = _part(config, assets, assets_cfg, "wrist_mount", f"{root}/bracket", root,
+                    bridge, optical_q, "printed wrist bracket", limitations)
+    if bracket:
+        parts.append(bracket)
+    body = _part(config, assets, assets_cfg, "d415", f"{root}/body", root,
+                 [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0], "D415 wrist body proxy", limitations)
+    if body:
+        parts.append(body)
+    geometry = "referenced" if len(parts) == 2 else ("partial" if parts else "unavailable")
+
+    namespace = section.get("ros_namespace") or "wrist_camera"
+    if not section.get("ros_namespace"):
+        limitations.append("wrist_camera.ros_namespace is missing; 'wrist_camera' assumed for proposed frames/topics.")
+    frames = _frames(namespace)
+    camera = {
+        "status": "built",
+        "prim_path": cam_path,
+        "root_path": root,
+        "parent": tool0,
+        "mount": {"placement": section.get("mount_position"),
+                  "asset_id": _value(config, "assets.wrist_mount"),
+                  "bom_id": _bom_id(config, "wrist_mount"),
+                  "offset_in_tool0_m": list(offset),
+                  "rotation_in_tool0_deg": list(rotation)},
+        "asset_id": _value(config, "assets.d415"),
+        "bom_id": _bom_id(config, "d415"),
+        "geometry_status": geometry,
+        "body_geometry": _proxy_geometry("d415", body_size, "config.wrist_camera.body_size_m or pack proxy default"),
+        "optical": optical,
+        "usd_camera": usd,
+        "intrinsics": intrinsics,
+        "camera_info": _camera_info(frames["optical"], resolution, intrinsics),
+        "rgb": _rgb_block(resolution),
+        "depth": _depth_block(section, resolution),
+        "frames": frames,
+        "topics": _topics(config, "wrist_camera_topics", namespace, limitations),
+        "physics": _physics_block(tool0),
+    }
+    limitations.append(
+        "Wrist body geometry is centred on the optical origin; the pack declares no body-to-optical datum, "
+        "and the bracket proxy is bridged from the configured tool0 offset, so overlap is possible.")
+    root_entry = {"name": "wrist_mount", "prim_path": root, "parent": tool0,
+                  "translation_m": list(offset), "quaternion_wxyz": list(optical_q)}
+    return camera, parts, root_entry
+
+
+def _plan_overhead(config, assets, assets_cfg, limitations):
+    section = config.get("overhead_camera") or {}
+    position = _vector(section.get("position_m"), 3, "overhead_camera.position_m")
+    target = _vector(section.get("look_at_m"), 3, "overhead_camera.look_at_m")
+    up_hint = _vector(section.get("up_hint"), 3, "overhead_camera.up_hint") or [1.0, 0.0, 0.0]
+    resolution, _, intrinsics = _camera_optics(section, "overhead_camera", limitations)
+    if position is None or target is None or resolution is None:
+        return _unavailable("overhead",
+                            "overhead_camera position, look_at, resolution or FOV is missing/invalid; "
+                            "the overhead camera cannot be built."), [], None
+
+    mount = config.get("overhead_mount") or {}
+    reach = _number(_value(config, "robot.reach_m"), "robot.reach_m")
+    mount_check = _gantry_check(position, mount, reach, limitations)
+    optical_q = _look_at_quaternion(position, target, up_hint)
+    optical = _pose_block(position, optical_q)
+    usd_q = _quat_mul(optical_q, USD_CAMERA_ROTATION)
+    cam_path = f"{OVERHEAD_ROOT}/D415_color"
+    usd = _usd_block(cam_path, OVERHEAD_ROOT, position, usd_q)
+
+    body_size = _vector((config.get("wrist_camera") or {}).get("body_size_m"), 3,
+                        "wrist_camera.body_size_m") or list(D415_BODY_SIZE_M)
+    parts = []
+    if mount_check["supports"]:
+        mount_pose = mount_check["pose"]
+        part = _part(config, assets, assets_cfg, "overhead_mount", f"{OVERHEAD_ROOT}/mount",
+                     OVERHEAD_ROOT, mount_pose["translation_m"], mount_pose["quaternion_wxyz"],
+                     "gantry mount proxy", limitations, scale=mount_pose["scale"])
+        if part:
+            parts.append(part)
+    else:
+        limitations.append("overhead_mount.post_xy_m/height_m are missing; the gantry proxy is not referenced.")
+    shelf_size = _vector(mount.get("printed_shelf_size_m"), 3, "overhead_mount.printed_shelf_size_m")
+    for role, purpose in (("overhead_release", "removable quick-release proxy"),
+                          ("overhead_shelf", "printed camera shelf proxy")):
+        part = _part(config, assets, assets_cfg, role, f"{OVERHEAD_ROOT}/{role.split('_')[-1]}",
+                     OVERHEAD_ROOT, position, [1.0, 0.0, 0.0, 0.0], purpose, limitations)
+        if part:
+            parts.append(part)
+    body = _part(config, assets, assets_cfg, "d415", f"{OVERHEAD_ROOT}/body", OVERHEAD_ROOT,
+                 position, optical_q, "D415 overhead body proxy", limitations)
+    if body:
+        parts.append(body)
+    geometry = "referenced" if len(parts) == 4 else ("partial" if parts else "unavailable")
+
+    namespace = section.get("ros_namespace") or "overhead_camera"
+    if not section.get("ros_namespace"):
+        limitations.append("overhead_camera.ros_namespace is missing; 'overhead_camera' assumed for proposed frames/topics.")
+    frames = _frames(namespace)
+    camera = {
+        "status": "built",
+        "prim_path": cam_path,
+        "root_path": OVERHEAD_ROOT,
+        "parent": OVERHEAD_ROOT,
+        "mount": {"type": mount.get("type"), "removable": mount.get("removable"),
+                  "quick_release_base": mount.get("quick_release_base"),
+                  "post_xy_m": mount.get("post_xy_m"), "height_m": mount.get("height_m"),
+                  "reach_check": {key: mount_check[key]
+                                  for key in ("status", "arm_reach_m", "supports", "camera_m", "ok")}},
+        "asset_id": _value(config, "assets.d415"),
+        "bom_id": _bom_id(config, "d415"),
+        "geometry_status": geometry,
+        "body_geometry": _proxy_geometry("d415", body_size, "config.wrist_camera.body_size_m or pack proxy default"),
+        "optical": optical,
+        "usd_camera": usd,
+        "intrinsics": intrinsics,
+        "camera_info": _camera_info(frames["optical"], resolution, intrinsics),
+        "rgb": _rgb_block(resolution),
+        "depth": _depth_block(section, resolution),
+        "frames": frames,
+        "topics": _topics(config, "overhead_camera_topics", namespace, limitations),
+        "physics": _physics_block(None),
+    }
+    if shelf_size:
+        camera["mount"]["printed_shelf_size_m"] = shelf_size
+    limitations.append(
+        "Overhead release and shelf proxies are placed at the camera optical position with world axes; "
+        "use asset_layout mount_pose entries to separate their stack once the pack declares it.")
+    root_entry = {"name": "overhead", "prim_path": OVERHEAD_ROOT, "parent": None,
+                  "translation_m": [0.0, 0.0, 0.0], "quaternion_wxyz": [1.0, 0.0, 0.0, 0.0]}
+    return camera, parts, root_entry
+
+
+# ------------------------------------------------------------------------ parts
+
+def _part(config, assets, assets_cfg, role, prim_path, parent, translation, orientation, purpose,
+          limitations, scale=None):
+    asset_id, path = _resolve_asset(assets, assets_cfg, role, limitations)
+    if path is None:
+        return None
+    layout = _layout(config, role)
+    bom_id = layout.get("bom_id") or role
+    if not isinstance(bom_id, str) or not bom_id:
+        raise ValueError(f"asset_layout.{role}.bom_id must be a nonempty string")
+    fidelity = layout.get("fidelity", "unverified")
+    if fidelity not in ("placeholder", "unverified", "verified"):
+        raise ValueError(f"asset_layout.{role}.fidelity must be placeholder, unverified or verified")
+    if fidelity != "verified":
+        limitations.append(f"{role}: {fidelity} geometry declared by the pack; not a verified CAD/dynamics claim.")
+    pose_t, pose_q, pose_source = _apply_mount_pose(translation, orientation, layout, role)
+    return {
+        "prim_path": prim_path,
+        "parent": parent,
+        "role": role,
+        "asset_id": asset_id,
+        "bom_id": bom_id,
+        "fidelity": fidelity,
+        "purpose": purpose,
+        "pose_source": pose_source,
+        "local": {"translation_m": list(pose_t), "quaternion_wxyz": list(pose_q),
+                  **({"scale": list(scale)} if scale else {}),
+                  "matrix4x4_row_major": _matrix4(pose_q, pose_t)},
+        "_path": str(path),
+    }
+
+
+def _resolve_asset(assets, assets_cfg, role, limitations):
+    asset_id = assets_cfg.get(role)
+    if not isinstance(asset_id, str) or not asset_id:
+        limitations.append(f"config.assets.{role} is missing; {role} geometry is not referenced.")
+        return None, None
+    if assets is None:
+        limitations.append(f"No asset resolver was supplied; {role} geometry is not referenced.")
+        return asset_id, None
+    try:
+        if callable(getattr(assets, "asset", None)):
+            value = assets.asset(asset_id)
+        elif isinstance(assets, dict):
+            value = assets[role]
         else:
-            print(f"Invalid combo index {idx}")
+            raise TypeError("assets must expose asset(id) or map a role to an absolute Path")
+    except (FileNotFoundError, KeyError, ValueError, TypeError) as exc:
+        limitations.append(f"{role} asset {asset_id!r} is unavailable: {exc}")
+        return asset_id, None
+    try:
+        path = Path(value)
+    except TypeError:
+        limitations.append(f"{role} asset {asset_id!r} did not resolve to a path.")
+        return asset_id, None
+    if not path.is_absolute():
+        limitations.append(f"{role} asset {asset_id!r} is not an absolute path; refusing it.")
+        return asset_id, None
+    resolved = path.resolve()
+    if resolved.is_relative_to(_REPO_ROOT):
+        limitations.append(
+            f"{role} asset {asset_id!r} resolves inside the checkout; work-cell geometry must come "
+            "from the external versioned pack.")
+        return asset_id, None
+    text = str(resolved).casefold().replace("\\", "/")
+    if any(token in text for token in FORBIDDEN_PATH_TOKENS):
+        limitations.append(f"{role} asset {asset_id!r} resolves under an old cache/raw source path; refusing it.")
+        return asset_id, None
+    if role == "d415" and any(token in (asset_id + " " + text) for token in ("d455", "rsd455")):
+        raise ValueError("the d415 role must not resolve to the D455 compatibility asset")
+    return asset_id, resolved
 
-    def _toggle_viewport_rendering(self):
-        """Toggle viewport rendering on/off to free GPU resources."""
-        import omni.kit.viewport.utility as vp_utils
-        viewport = vp_utils.get_active_viewport()
-        if viewport is None:
-            print("Warning: No active viewport found")
-            return
-        self._viewport_rendering_enabled = not self._viewport_rendering_enabled
-        viewport.updates_enabled = self._viewport_rendering_enabled
-        state = "enabled" if self._viewport_rendering_enabled else "disabled"
-        print(f"Viewport rendering {state}")
-        if self._viewport_toggle_btn:
-            self._viewport_toggle_btn.text = "Disable Viewport" if self._viewport_rendering_enabled else "Enable Viewport"
 
-    # Standing-height view in front of the long side of the bench. Lens matches /World/workspace_camera_sim.
-    PERSON_VIEW_PATH = "/World/person_view"
+def _apply_mount_pose(translation, orientation, layout, role):
+    pose = layout.get("mount_pose")
+    if not pose:
+        return list(translation), list(orientation), "pack centred-proxy convention"
+    position = _vector(pose.get("position_m", [0.0, 0.0, 0.0]), 3, f"asset_layout.{role}.mount_pose.position_m")
+    quaternion = _quaternion(pose.get("orientation_wxyz", [1.0, 0.0, 0.0, 0.0]),
+                             f"asset_layout.{role}.mount_pose.orientation_wxyz")
+    if position is None or quaternion is None:
+        raise ValueError(f"asset_layout.{role}.mount_pose needs finite position_m and orientation_wxyz")
+    world_t = [a + b for a, b in zip(translation, _rotate_vector(orientation, position))]
+    return world_t, _quat_mul(orientation, quaternion), f"config.asset_layout.{role}.mount_pose"
 
-    PERSON_VIEW_EYE = (0.0, -2.2, 1.2)
 
-    PERSON_VIEW_TARGET = (0.0, -0.3, 0.3)
+def _gantry_check(position, mount, reach, limitations):
+    check = {"status": "unverified", "arm_reach_m": reach, "supports": [], "camera_m": None, "ok": None}
+    if reach is not None and reach <= 0:
+        raise ValueError("robot.reach_m must be finite and positive")
+    if mount:
+        if mount.get("type") != "gantry":
+            raise ValueError("overhead_mount.type must be gantry; the clamp alternative is not implemented")
+        if mount.get("removable") is not True:
+            raise ValueError("overhead_mount.removable must be true; the overhead mount must be removable")
+        posts = mount.get("post_xy_m")
+        height = _number(mount.get("height_m"), "overhead_mount.height_m")
+        if not isinstance(posts, (list, tuple)) or len(posts) != 2:
+            raise ValueError("overhead_mount.post_xy_m must contain two [x, y] posts")
+        xy = [_vector(post, 2, "overhead_mount.post_xy_m") for post in posts]
+        if any(post is None for post in xy):
+            raise ValueError("overhead_mount.post_xy_m must contain finite x/y pairs")
+        if height is not None and height <= 0:
+            raise ValueError("overhead_mount.height_m must be positive")
+        supports = []
+        for x, y in xy:
+            ground = math.hypot(x, y)
+            top = math.hypot(x, y, height) if height is not None else None
+            supports.append({"xy_m": [x, y], "ground_m": ground, "top_m": top})
+        camera_distance = math.sqrt(sum(value * value for value in position))
+        check.update({"status": "checked", "supports": supports, "camera_m": camera_distance})
+        if reach is not None:
+            if camera_distance <= reach:
+                raise ValueError(
+                    f"overhead camera at {camera_distance:.3f} m is inside the {reach:.3f} m arm reach")
+            if any(item["ground_m"] <= reach for item in supports):
+                raise ValueError("every overhead gantry support must stand outside the arm reach")
+            check["ok"] = True
+        else:
+            limitations.append("robot.reach_m is missing; overhead gantry clearance is unverified.")
+        thickness = _number(mount.get("extrusion_size_m"), "overhead_mount.extrusion_size_m")
+        thickness = thickness or 0.0381
+        span_x = max(item["xy_m"][0] for item in supports) - min(item["xy_m"][0] for item in supports)
+        span_y = max(item["xy_m"][1] for item in supports) - min(item["xy_m"][1] for item in supports)
+        height_m = height or position[2]
+        center = [sum(item["xy_m"][0] for item in supports) / 2,
+                  sum(item["xy_m"][1] for item in supports) / 2,
+                  height_m / 2]
+        check["pose"] = {"translation_m": center,
+                         "quaternion_wxyz": [1.0, 0.0, 0.0, 0.0],
+                         "scale": [max(span_x, thickness), max(span_y, thickness), height_m]}
+    else:
+        limitations.append("overhead_mount is missing; the gantry mount and its clearance are unverified.")
+    return check
 
-    def _ensure_person_view_camera(self):
-        """Create the fixed person-view camera if the stage does not have it, then return its prim path."""
-        stage = omni.usd.get_context().get_stage()
-        if stage is None:
+
+# --------------------------------------------------------------------- metadata
+
+def _camera_optics(section, label, limitations):
+    resolution = _resolution(section.get("resolution"))
+    fov = _vector(section.get("color_fov_deg"), 2, f"{label}.color_fov_deg")
+    if resolution is None or fov is None:
+        return None, None, None
+    try:
+        fx, fy, cx, cy = camera_intrinsics(list(resolution), list(fov))
+    except ValueError as exc:
+        limitations.append(f"{label} resolution/FOV is invalid: {exc}")
+        return None, None, None
+    aperture = DEFAULT_APERTURE_MM
+    focal = fx * aperture / resolution[0]
+    vertical = resolution[1] * focal / fy
+    intrinsics = {
+        "width": resolution[0], "height": resolution[1], "fov_deg": list(fov),
+        "fx": fx, "fy": fy, "cx": cx, "cy": cy,
+        "focal_length_mm": focal, "horizontal_aperture_mm": aperture, "vertical_aperture_mm": vertical,
+        "aperture_assumption_mm": aperture,
+        "pixel_model": "ideal pinhole, square pixels; no lens distortion",
+        "camera_matrix": [[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]],
+    }
+    return resolution, fov, intrinsics
+
+
+def _camera_info(frame_id, resolution, intrinsics):
+    fx, fy, cx, cy = intrinsics["fx"], intrinsics["fy"], intrinsics["cx"], intrinsics["cy"]
+    return {
+        "frame_id": frame_id,
+        "width": resolution[0], "height": resolution[1],
+        "distortion_model": "plumb_bob", "D": [0.0] * 5,
+        "K": [fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0],
+        "R": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+        "P": [fx, 0.0, cx, 0.0, 0.0, fy, cy, 0.0, 0.0, 0.0, 1.0, 0.0],
+        "binning_x": 0, "binning_y": 0,
+        "note": "Proposed CameraInfo for the proposed realsense2_camera topics; not published or verified.",
+    }
+
+
+def _rgb_block(resolution):
+    return {"encoding": "rgb8", "width": resolution[0], "height": resolution[1],
+            "annotator": "rgb", "source": "Isaac RTX renderer",
+            "note": "Rendered color; no synthetic pixels are generated by this module."}
+
+
+def _depth_block(section, resolution):
+    clipping = _vector(section.get("clipping_range_m"), 2, "camera.clipping_range_m")
+    source = "config"
+    if clipping is None:
+        clipping = list(DEFAULT_CLIPPING_RANGE_M)
+        source = "render default"
+    if clipping[0] <= 0 or clipping[1] <= clipping[0]:
+        raise ValueError("camera clipping_range_m must be positive and increasing")
+    return {"encoding": "32FC1", "width": resolution[0], "height": resolution[1],
+            "annotator": "distance_to_image_plane", "units": "m",
+            "clipping_range_m": list(clipping), "clipping_source": source,
+            "aligned_to": "color",
+            "note": "Single-pinhole optical-axis depth from the RTX renderer; not D415 stereo or IR."}
+
+
+def _topics(config, key, namespace, limitations):
+    names = _value(config, f"interfaces.{key}")
+    if not isinstance(names, list) or not names or not all(isinstance(name, str) and name for name in names):
+        limitations.append(f"interfaces.{key} is missing; no ROS topics are proposed for {namespace}.")
+        return {"status": "unavailable", "verified": False, "names": [], "namespace": namespace}
+    return {"status": "proposed", "verified": False, "namespace": namespace, "names": list(names),
+            "note": "Proposed realsense2_camera 4.x names from config/interfaces; not published or verified. "
+                    "Max's localizer reads the sensor through pyrealsense2 directly."}
+
+
+def _frames(namespace):
+    return {"link": f"{namespace}_link", "optical": f"{namespace}_color_optical_frame",
+            "depth": f"{namespace}_aligned_depth_to_color_optical_frame"}
+
+
+def _physics_block(tool0):
+    return {"attachment": tool0,
+            "rigid_body": "none; referenced RigidBodyAPI and CollisionAPI are removed at author time",
+            "note": "Visual-only pack geometry follows the parent transform; no nested rigid body is created."}
+
+
+def _asset_conventions(config):
+    section = config.get("wrist_camera") or {}
+    body = _vector(section.get("body_size_m"), 3, "wrist_camera.body_size_m") or list(D415_BODY_SIZE_M)
+    bracket = _vector(section.get("bracket_size_m"), 3, "wrist_camera.bracket_size_m") or list(WRIST_BRACKET_SIZE_M)
+    shelf = _vector((config.get("overhead_mount") or {}).get("printed_shelf_size_m"), 3,
+                    "overhead_mount.printed_shelf_size_m") or [0.1, 0.06, 0.008]
+    return {
+        "d415": {"kind": "unconfirmed dimensioned proxy", "dimensions_m": body,
+                 "default_prim": "centred Xform at the body geometric centre",
+                 "axes": "D415 optical frame: +X right, +Y down, +Z forward",
+                 "origin": "body centre; the render camera applies Rx(180 deg) for USD",
+                 "forbidden_substitute": "D455/rsd455"},
+        "wrist_mount": {"kind": "centred proxy box", "dimensions_m": bracket,
+                        "axes": "optical frame", "placement": "centre between tool0 and the camera optical origin"},
+        "overhead_mount": {"kind": "unit cube proxy", "dimensions_m": [1.0, 1.0, 1.0],
+                           "scale": "extrusion thickness x post span x height, centred at the post midpoint",
+                           "axes": "world / Z-up"},
+        "overhead_release": {"kind": "centred proxy box", "dimensions_m": None,
+                             "axes": "world / Z-up", "placement": "camera optical position; mount_pose may offset"},
+        "overhead_shelf": {"kind": "centred proxy box", "dimensions_m": shelf,
+                           "axes": "world / Z-up", "placement": "camera optical position; mount_pose may offset"},
+    }
+
+
+def _capture_contract():
+    return {"backend": "isaacsim.sensors.experimental.rtx.CameraSensor",
+            "verified": False,
+            "functions": ["make_camera_sensor", "read_frame"],
+            "note": "Isaac Sim 6.x only. Requires a running Isaac RTX renderer and a playing/rendered frame. "
+                    "No pixels are synthesized; read_frame returns renderer data or raises."}
+
+
+def _proxy_geometry(role, dimensions, source):
+    return {"role": role, "kind": "unconfirmed dimensioned proxy", "dimensions_m": dimensions,
+            "source": source, "verified": False}
+
+
+def _unavailable(key, reason):
+    return {"status": "unavailable", "prim_path": None, "root_path": None,
+            "geometry_status": "unavailable", "reason": reason}
+
+
+# ------------------------------------------------------------------------ math
+
+def _pose_block(translation, quaternion):
+    return {"translation_m": list(translation), "quaternion_wxyz": list(quaternion),
+            "matrix4x4_row_major": _matrix4(quaternion, translation)}
+
+
+def _usd_block(prim_path, parent, translation, quaternion):
+    return {"prim_path": prim_path, "parent": parent,
+            "translation_m": list(translation), "quaternion_wxyz": list(quaternion),
+            "matrix4x4_row_major": _matrix4(quaternion, translation),
+            "conversion": "Rx(180 deg) about +X maps the optical frame (+Z forward, +Y down) to a USD camera "
+                          "(-Z forward, +Y up).",
+            "optical_from_usd": {"rotation_deg_xyz": [180.0, 0.0, 0.0],
+                                 "quaternion_wxyz": list(USD_CAMERA_ROTATION)}}
+
+
+def _matrix4(quaternion, translation):
+    w, x, y, z = quaternion
+    rows = [
+        [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+        [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+        [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
+    ]
+    return [row + [float(translation[index])] for index, row in enumerate(rows)] + [[0.0, 0.0, 0.0, 1.0]]
+
+
+def _euler_xyz_deg_to_quat(rotation):
+    rx, ry, rz = (math.radians(value) for value in rotation)
+    qx = (math.cos(rx / 2), math.sin(rx / 2), 0.0, 0.0)
+    qy = (math.cos(ry / 2), 0.0, math.sin(ry / 2), 0.0)
+    qz = (math.cos(rz / 2), 0.0, 0.0, math.sin(rz / 2))
+    return _quat_normalize(_quat_mul(_quat_mul(qz, qy), qx))
+
+
+def _look_at_quaternion(position, target, up_hint):
+    forward = _normalize([target[i] - position[i] for i in range(3)], "look_at target")
+    right = _normalize(_cross(forward, up_hint), "up_hint (parallel to view direction?)")
+    down = _cross(forward, right)
+    return _quat_from_basis(right, down, forward)
+
+
+def _quat_from_basis(x_axis, y_axis, z_axis):
+    m00, m01, m02 = x_axis[0], y_axis[0], z_axis[0]
+    m10, m11, m12 = x_axis[1], y_axis[1], z_axis[1]
+    m20, m21, m22 = x_axis[2], y_axis[2], z_axis[2]
+    trace = m00 + m11 + m22
+    if trace > 0:
+        scale = math.sqrt(trace + 1.0) * 2
+        quat = (0.25 * scale, (m21 - m12) / scale, (m02 - m20) / scale, (m10 - m01) / scale)
+    elif m00 > m11 and m00 > m22:
+        scale = math.sqrt(1.0 + m00 - m11 - m22) * 2
+        quat = ((m21 - m12) / scale, 0.25 * scale, (m01 + m10) / scale, (m02 + m20) / scale)
+    elif m11 > m22:
+        scale = math.sqrt(1.0 + m11 - m00 - m22) * 2
+        quat = ((m02 - m20) / scale, (m01 + m10) / scale, 0.25 * scale, (m12 + m21) / scale)
+    else:
+        scale = math.sqrt(1.0 + m22 - m00 - m11) * 2
+        quat = ((m10 - m01) / scale, (m02 + m20) / scale, (m12 + m21) / scale, 0.25 * scale)
+    return _quat_normalize(quat)
+
+
+def _quat_mul(left, right):
+    lw, lx, ly, lz = left
+    rw, rx, ry, rz = right
+    return (lw * rw - lx * rx - ly * ry - lz * rz,
+            lw * rx + lx * rw + ly * rz - lz * ry,
+            lw * ry - lx * rz + ly * rw + lz * rx,
+            lw * rz + lx * ry - ly * rx + lz * rw)
+
+
+def _quat_conjugate(quaternion):
+    w, x, y, z = quaternion
+    return (w, -x, -y, -z)
+
+
+def _quat_normalize(quaternion):
+    length = math.sqrt(sum(value * value for value in quaternion))
+    if length <= 0 or not math.isfinite(length):
+        raise ValueError("Degenerate quaternion")
+    return tuple(value / length for value in quaternion)
+
+
+def _rotate_vector(quaternion, vector):
+    w, x, y, z = quaternion
+    qv = (x, y, z)
+    t = [2 * (qv[1] * vector[2] - qv[2] * vector[1]),
+         2 * (qv[2] * vector[0] - qv[0] * vector[2]),
+         2 * (qv[0] * vector[1] - qv[1] * vector[0])]
+    return [vector[0] + w * t[0] + (qv[1] * t[2] - qv[2] * t[1]),
+            vector[1] + w * t[1] + (qv[2] * t[0] - qv[0] * t[2]),
+            vector[2] + w * t[2] + (qv[0] * t[1] - qv[1] * t[0])]
+
+
+def _cross(left, right):
+    return [left[1] * right[2] - left[2] * right[1],
+            left[2] * right[0] - left[0] * right[2],
+            left[0] * right[1] - left[1] * right[0]]
+
+
+def _normalize(vector, label):
+    length = math.sqrt(sum(value * value for value in vector))
+    if length <= 1e-9 or not math.isfinite(length):
+        raise ValueError(f"Cannot normalize {label}")
+    return [value / length for value in vector]
+
+
+# ------------------------------------------------------------------ config/io
+
+def _check_flattened(config):
+    if not isinstance(config, dict):
+        raise ValueError("config must be the flattened mapping from hardware_config.load_config()")
+    for section, fields in config.items():
+        if isinstance(fields, dict):
+            for key, value in fields.items():
+                if isinstance(value, dict) and set(value) == {"value", "status", "source"}:
+                    raise ValueError(f"config.{section}.{key} is a provenance record; pass the flattened config")
+
+
+def _robot_frames(robot_report):
+    if not isinstance(robot_report, dict):
+        raise ValueError("robot_report must be a mapping")
+    missing = [name for name in REQUIRED_ROBOT_FRAMES
+               if not isinstance(robot_report.get(name), str) or not robot_report.get(name).strip()]
+    if missing:
+        raise ValueError(f"robot_report is missing frame paths: {', '.join(missing)}")
+    frames = {name: robot_report[name] for name in REQUIRED_ROBOT_FRAMES}
+    if any(not value.startswith("/") for value in frames.values()):
+        raise ValueError("robot_report frame paths must be absolute prim paths")
+    return frames
+
+
+def _value(config, path):
+    current = config
+    for part in path.split("."):
+        if not isinstance(current, dict) or part not in current:
             return None
-        if not stage.GetPrimAtPath(self.PERSON_VIEW_PATH).IsValid():
-            eye = np.array(self.PERSON_VIEW_EYE)
-            forward = (np.array(self.PERSON_VIEW_TARGET) - eye)
-            forward /= np.linalg.norm(forward)
-            right = np.cross(forward, [0.0, 0.0, 1.0]); right /= np.linalg.norm(right)
-            up = np.cross(right, forward)
-            rows = [[*right, 0.0], [*up, 0.0], [*(-forward), 0.0], [*eye, 1.0]]
-            camera = UsdGeom.Camera.Define(stage, self.PERSON_VIEW_PATH)
-            camera.GetProjectionAttr().Set("perspective")
-            camera.GetFocalLengthAttr().Set(25.995302200317383)
-            camera.GetHorizontalApertureAttr().Set(36.0)
-            camera.GetVerticalApertureAttr().Set(20.218040466308594)
-            camera.GetClippingRangeAttr().Set(Gf.Vec2f(0.1, 10000.0))
-            camera.GetFStopAttr().Set(0.0)
-            camera.GetFocusDistanceAttr().Set(0.0)
-            UsdGeom.Xformable(camera.GetPrim()).ClearXformOpOrder()
-            UsdGeom.Xformable(camera.GetPrim()).AddTransformOp().Set(Gf.Matrix4d(rows))
-        return self.PERSON_VIEW_PATH
+        current = current[part]
+    return current
 
-    async def _select_person_view_when_loaded(self):
-        """Make the person view the active viewport camera once the stage has settled after opening."""
-        app = omni.kit.app.get_app()
-        for _ in range(60):
-            await app.next_update_async()
-        stage = omni.usd.get_context().get_stage()
-        if stage is None or not stage.GetPrimAtPath(self.PERSON_VIEW_PATH).IsValid():
-            return
-        try:
-            from omni.kit.viewport.utility import get_active_viewport
-            vp = get_active_viewport()
-            if vp is not None:
-                vp.camera_path = self.PERSON_VIEW_PATH
-        except Exception as e:
-            print(f"[ur5e-dt] could not select person view camera: {e}")
 
-    def import_realsense_camera(self):
-        """Import Intel RealSense D455 camera"""
-        usd_path = _local_asset("sensors/rsd455.usd")
-        filename = os.path.splitext(os.path.basename(usd_path))[0]
-        prim_path = f"/World/{filename}"
-        add_reference_to_stage(usd_path=usd_path, prim_path=prim_path)
-        print(f"Prim imported at {prim_path}")
+def _layout(config, role):
+    layout = (config.get("asset_layout") or {}).get(role)
+    return layout if isinstance(layout, dict) else {}
 
-    def attach_camera_to_ur5e(self):
-        """Attach RealSense camera to UR5e wrist"""
-        import omni.kit.commands
-        import omni.usd
-        from pxr import Gf, Usd, UsdPhysics
 
-        stage = omni.usd.get_context().get_stage()
+def _bom_id(config, role):
+    return _layout(config, role).get("bom_id") or role
 
-        # Check camera prim exists
-        if not stage.GetPrimAtPath("/World/rsd455").IsValid():
-            print("[ERROR] Camera prim /World/rsd455 not found — import the RealSense camera first")
-            return
 
-        # Check UR5e wrist link exists
-        if not stage.GetPrimAtPath("/World/UR5e/wrist_3_link").IsValid():
-            print("[ERROR] /World/UR5e/wrist_3_link not found — import the UR5e first")
-            return
+def _vector(value, length, label):
+    if value is None:
+        return None
+    try:
+        values = [float(item) for item in value]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must contain {length} finite numbers") from exc
+    if len(values) != length or not all(math.isfinite(item) for item in values):
+        raise ValueError(f"{label} must contain {length} finite numbers")
+    return values
 
-        # Move the prim
-        result = omni.kit.commands.execute('MovePrim',
-                                 path_from="/World/rsd455",
-                                 path_to="/World/UR5e/wrist_3_link/rsd455")
-        if not result:
-            print("[ERROR] Failed to move camera prim to wrist_3_link")
-            return
 
-        # Set transform properties
-        omni.kit.commands.execute('ChangeProperty',
-                                 prop_path="/World/UR5e/wrist_3_link/rsd455.xformOp:translate",
-                                 value=Gf.Vec3d(0.045, -0.05, 0.07),
-                                 prev=None)
-        omni.kit.commands.execute('ChangeProperty',
-                                 prop_path="/World/UR5e/wrist_3_link/rsd455.xformOp:rotateZYX",
-                                 value=Gf.Vec3d(-90, -180, 270),
-                                 prev=None)
+def _quaternion(value, label):
+    values = _vector(value, 4, label)
+    if values is None:
+        return None
+    if not math.isclose(sum(item * item for item in values), 1.0, abs_tol=1e-6):
+        raise ValueError(f"{label} must be a unit quaternion")
+    return values
 
-        # Remove RigidBodyAPI only from the RSD455 prim to fix nested rigid body error.
-        rsd455_prim = stage.GetPrimAtPath("/World/UR5e/wrist_3_link/rsd455/RSD455")
-        if rsd455_prim.IsValid() and rsd455_prim.HasAPI(UsdPhysics.RigidBodyAPI):
-            UsdPhysics.RigidBodyAPI(rsd455_prim).GetRigidBodyEnabledAttr().Set(False)
-            rsd455_prim.RemoveAPI(UsdPhysics.RigidBodyAPI)
-            print("Removed RigidBodyAPI from RSD455 (nested under wrist_3_link rigid body)")
 
-        print("RealSense camera attached to UR5e wrist_3_link")
+def _resolution(value):
+    if value is None:
+        return None
+    try:
+        width, height = (int(item) for item in value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("camera resolution must be [width, height]") from exc
+    if len(list(value)) != 2 or width <= 0 or height <= 0:
+        raise ValueError("camera resolution must be [width, height]")
+    return [width, height]
 
-    def setup_camera_action_graph(self):
-        """Create ActionGraph for camera ROS2 publishing"""
-        import yaml
 
-        CAMERA_PRIM = "/World/UR5e/wrist_3_link/rsd455/RSD455/Camera_OmniVision_OV9782_Color"
+def _number(value, label):
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be finite") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{label} must be finite")
+    return number
 
-        # Check that camera prim exists
-        stage = omni.usd.get_context().get_stage()
-        if not stage.GetPrimAtPath(CAMERA_PRIM):
-            print(f"Error: Camera prim not found at {CAMERA_PRIM}. Attach camera to UR5e first.")
-            return
 
-        # An optional camera config can override the default resolution.
-        config_path = os.environ.get("UR5E_DT_CAMERA_CONFIG")
-        if config_path and os.path.exists(os.path.expanduser(config_path)):
-            config_path = os.path.expanduser(config_path)
-            with open(config_path, 'r') as f:
-                cam_cfg = yaml.safe_load(f) or {}
-            print(f"Loaded camera config from {config_path}")
-        else:
-            cam_cfg = {}
-            if config_path:
-                print(f"Warning: {config_path} not found, using defaults")
+def _loader_name(assets):
+    if assets is None:
+        return None
+    if isinstance(assets, dict):
+        return "role_path_map"
+    return type(assets).__name__
 
-        # Configuration from yaml (with fallbacks)
-        IMAGE_WIDTH = cam_cfg.get("camera_width", 1280)
-        IMAGE_HEIGHT = cam_cfg.get("camera_height", 720)
-        ROS2_TOPIC = "intel_camera_rgb_sim"
 
-        graph_path = "/Graph/ActionGraph_Camera"
+def _dedupe(items):
+    seen, result = set(), []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
 
-        # Skip if already created
-        if stage.GetPrimAtPath(graph_path):
-            print(f"ActionGraph already exists at {graph_path}, skipping creation.")
-            return
 
-        # Native camera TF publishers already convert USD camera axes to ROS
-        # optical axes. Override only the ROS name so it matches the existing
-        # image/CameraInfo frame without adding a second rotation. Both native
-        # TF adapters honor isaac:nameOverride. Keep the sensor asset untouched.
-        from pxr import Sdf
-        stage.GetPrimAtPath(CAMERA_PRIM).CreateAttribute(
-            "isaac:nameOverride", Sdf.ValueTypeNames.String
-        ).Set("camera_link")
+def _public_report(report):
+    public = dict(report)
+    public["parts"] = [{key: value for key, value in part.items() if not key.startswith("_")}
+                       for part in report["parts"]]
+    return public
 
-        # Camera annotators and TF use the same monotonic simulation clock,
-        # including after Stop/Play. Mixing reset-on-stop images with a
-        # non-resetting TF clock leaves messages hundreds of seconds apart.
-        print(f"Creating ActionGraph: {graph_path}")
-        print(f"Camera: {CAMERA_PRIM}")
-        print(f"Resolution: {IMAGE_WIDTH}x{IMAGE_HEIGHT}")
-        print(f"ROS2 Topic: {ROS2_TOPIC}")
 
-        keys = og.Controller.Keys
-        legacy_tf = _use_legacy_tf_publisher(og)
-        tf_nodes = [] if legacy_tf else [("TFCompute", "isaacsim.core.nodes.IsaacComputeTransformTree")]
-        tf_target = "TFPublish" if legacy_tf else "TFCompute"
-        tf_connections = [("OnPlaybackTick.outputs:tick", "TFPublish.inputs:execIn")] if legacy_tf else [
-            ("OnPlaybackTick.outputs:tick", "TFCompute.inputs:execIn"),
-            ("TFCompute.outputs:execOut", "TFPublish.inputs:execIn"),
-            ("TFCompute.outputs:parentFrames", "TFPublish.inputs:parentFrames"),
-            ("TFCompute.outputs:childFrames", "TFPublish.inputs:childFrames"),
-            ("TFCompute.outputs:translations", "TFPublish.inputs:translations"),
-            ("TFCompute.outputs:orientations", "TFPublish.inputs:orientations"),
-        ]
+# ----------------------------------------------------------------------- USD
 
-        (graph, nodes, _, _) = og.Controller.edit(
-            {"graph_path": graph_path, "evaluator_name": "execution"},
-            {
-                keys.CREATE_NODES: [
-                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                    ("RunOnce", "isaacsim.core.nodes.OgnIsaacRunOneSimulationFrame"),
-                    ("RenderProduct", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
-                    ("Context", "isaacsim.ros2.bridge.ROS2Context"),
-                    ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
-                    ("CameraInfoPublish", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
-                    ("RGBPublish", "isaacsim.ros2.bridge.ROS2CameraHelper"),
-                    ("TFPublish", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
-                ] + tf_nodes,
-                keys.SET_VALUES: [
-                    ("RenderProduct.inputs:cameraPrim", CAMERA_PRIM),
-                    ("RenderProduct.inputs:width", IMAGE_WIDTH),
-                    ("RenderProduct.inputs:height", IMAGE_HEIGHT),
-                    ("CameraInfoPublish.inputs:topicName", "camera_info"),
-                    ("CameraInfoPublish.inputs:frameId", "camera_link"),
-                    ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", False),
-                    ("RGBPublish.inputs:topicName", ROS2_TOPIC),
-                    ("RGBPublish.inputs:type", "rgb"),
-                    ("RGBPublish.inputs:frameId", "camera_link"),
-                    ("RGBPublish.inputs:resetSimulationTimeOnStop", False),
-                    ("TFPublish.inputs:topicName", "tf_cam"),
-                    (f"{tf_target}.inputs:targetPrims", CAMERA_PRIM),
-                    (f"{tf_target}.inputs:parentPrim", "/World"),
-                    ("ReadSimTime.inputs:resetOnStop", False),
-                ],
-                keys.CONNECT: [
-                    ("OnPlaybackTick.outputs:tick", "RunOnce.inputs:execIn"),
-                    ("RunOnce.outputs:step", "RenderProduct.inputs:execIn"),
-                    ("RenderProduct.outputs:execOut", "CameraInfoPublish.inputs:execIn"),
-                    ("RenderProduct.outputs:execOut", "RGBPublish.inputs:execIn"),
-                    ("RenderProduct.outputs:renderProductPath", "CameraInfoPublish.inputs:renderProductPath"),
-                    ("RenderProduct.outputs:renderProductPath", "RGBPublish.inputs:renderProductPath"),
-                    ("Context.outputs:context", "CameraInfoPublish.inputs:context"),
-                    ("Context.outputs:context", "RGBPublish.inputs:context"),
-                    ("Context.outputs:context", "TFPublish.inputs:context"),
-                    ("ReadSimTime.outputs:simulationTime", "TFPublish.inputs:timeStamp"),
-                ] + tf_connections,
-            }
-        )
+def _import_usd():
+    try:
+        from pxr import Gf, Usd, UsdGeom, UsdPhysics
+    except ImportError as exc:
+        raise ImportError(
+            "build_cameras authors USD and needs Isaac Sim's pxr modules; plan_cameras runs without them"
+        ) from exc
+    return Gf, Usd, UsdGeom, UsdPhysics
 
-        # Override the USD camera's baked-in intrinsics to match the real Intel RealSense
-        camera_prim = stage.GetPrimAtPath(CAMERA_PRIM)
-        if camera_prim and camera_prim.IsValid():
-            from pxr import Sdf
-            import numpy as np
 
-            # Use calibrated camera_matrix [fx, fy, cx, cy] from yaml if available,
-            # otherwise fall back to HFOV/VFOV computation
-            camera_matrix = cam_cfg.get("camera_matrix")
-            if camera_matrix and len(camera_matrix) == 4:
-                fx, fy, cx, cy = camera_matrix
-                print(f"Using calibrated camera_matrix from config: fx={fx}, fy={fy}, cx={cx}, cy={cy}")
-            else:
-                hfov_deg = cam_cfg.get("camera_hfov", 69.4)
-                vfov_deg = cam_cfg.get("camera_vfov", 42.5)
-                fx = IMAGE_WIDTH / (2 * np.tan(np.deg2rad(hfov_deg / 2)))
-                fy = IMAGE_HEIGHT / (2 * np.tan(np.deg2rad(vfov_deg / 2)))
-                cx = IMAGE_WIDTH * 0.5
-                cy = IMAGE_HEIGHT * 0.5
-                print(f"Using HFOV/VFOV from config: hfov={hfov_deg}, vfov={vfov_deg}")
+def _require_units(stage, UsdGeom):
+    if (UsdGeom.GetStageUpAxis(stage) != UsdGeom.Tokens.z
+            or not math.isclose(UsdGeom.GetStageMetersPerUnit(stage), 1.0)):
+        raise ValueError("work-cell cameras require a Z-up stage with metresPerUnit=1")
 
-            # Distortion coefficients from yaml
-            dist_coeffs = cam_cfg.get("distortion_coeffs", [0, 0, 0, 0, 0])
 
-            # Set USD aperture/focal-length so the renderer matches the FOV
-            horizontal_aperture_mm = 36.0
-            focal_length_mm = fx * horizontal_aperture_mm / IMAGE_WIDTH
-            vertical_aperture_mm = IMAGE_HEIGHT * focal_length_mm / fy
+def _valid(stage, path):
+    prim = stage.GetPrimAtPath(path)
+    return bool(prim and prim.IsValid())
 
-            camera = UsdGeom.Camera(camera_prim)
-            camera.CreateHorizontalApertureAttr().Set(horizontal_aperture_mm)
-            camera.CreateVerticalApertureAttr().Set(vertical_aperture_mm)
-            camera.CreateFocalLengthAttr().Set(focal_length_mm)
-            camera.CreateClippingRangeAttr().Set(Gf.Vec2f(0.1, 10000.0))
 
-            # Set opencvPinhole lens distortion model for correct CameraInfo publishing
-            camera_prim.CreateAttribute("omni:lensdistortion:model", Sdf.ValueTypeNames.String).Set("opencvPinhole")
-            camera_prim.CreateAttribute("omni:lensdistortion:opencvPinhole:imageSize", Sdf.ValueTypeNames.Int2).Set(Gf.Vec2i(IMAGE_WIDTH, IMAGE_HEIGHT))
-            camera_prim.CreateAttribute("omni:lensdistortion:opencvPinhole:fx", Sdf.ValueTypeNames.Float).Set(fx)
-            camera_prim.CreateAttribute("omni:lensdistortion:opencvPinhole:fy", Sdf.ValueTypeNames.Float).Set(fy)
-            camera_prim.CreateAttribute("omni:lensdistortion:opencvPinhole:cx", Sdf.ValueTypeNames.Float).Set(cx)
-            camera_prim.CreateAttribute("omni:lensdistortion:opencvPinhole:cy", Sdf.ValueTypeNames.Float).Set(cy)
-            # Set distortion coefficients (k1, k2, p1, p2, k3, ..., s4)
-            dist_attr_names = ["k1", "k2", "p1", "p2", "k3", "k4", "k5", "k6", "s1", "s2", "s3", "s4"]
-            for i, attr_name in enumerate(dist_attr_names):
-                val = dist_coeffs[i] if i < len(dist_coeffs) else 0.0
-                camera_prim.CreateAttribute(f"omni:lensdistortion:opencvPinhole:{attr_name}", Sdf.ValueTypeNames.Float).Set(val)
+def _define_xform(stage, UsdGeom, path):
+    prim = stage.GetPrimAtPath(path)
+    if prim and prim.IsValid():
+        return prim
+    return UsdGeom.Xform.Define(stage, path).GetPrim()
 
-            print(f"Overrode camera intrinsics on {CAMERA_PRIM}: fx={fx:.1f}, fy={fy:.1f}, cx={cx:.1f}, cy={cy:.1f}")
-            print(f"Distortion coefficients: {dist_coeffs}")
 
-        print("\nCamera ActionGraph created successfully!")
-        print(f"Test with: ros2 topic echo /{ROS2_TOPIC}")
+def _set_transform(Gf, UsdGeom, prim, translation, quaternion, scale=None):
+    xform = UsdGeom.Xformable(prim)
+    if not xform:
+        raise ValueError(f"Not transformable: {prim.GetPath()}")
+    xform.ClearXformOpOrder()
+    xform.SetResetXformStack(False)
+    xform.AddTranslateOp().Set(Gf.Vec3d(*translation))
+    xform.AddOrientOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Quatd(*quaternion))
+    if scale and any(not math.isclose(value, 1.0) for value in scale):
+        xform.AddScaleOp().Set(Gf.Vec3f(*scale))
 
-    def create_additional_camera(self):
-        """Create additional camera based on selected view type"""
-        import omni.usd
-        from pxr import Gf, Sdf, UsdGeom
-        import numpy as np
 
-        def set_camera_pose(prim_path: str, position_xyz, quat_xyzw):
-            """Apply translation and quaternion orientation (x, y, z, w) to a camera prim."""
-            stage = omni.usd.get_context().get_stage()
-            prim = stage.GetPrimAtPath(prim_path)
-            if not prim.IsValid():
-                raise RuntimeError(f"Camera prim '{prim_path}' not found.")
-            xform = UsdGeom.Xform(prim)
-            xform.ClearXformOpOrder()
-            xform.AddTranslateOp().Set(Gf.Vec3d(*position_xyz))
-            quat = Gf.Quatd(quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2])
-            xform.AddOrientOp(UsdGeom.XformOp.PrecisionDouble).Set(quat)
-
-        def configure_camera_properties(camera_prim, width, height):
-            """Configure camera properties to match Intel RealSense camera intrinsics."""
-            # Intel RealSense specs: HFOV=69.4°, VFOV=42.5° at 1280x720
-            hfov_deg = 69.4
-            vfov_deg = 42.5
-
-            # Compute intrinsics: fx = width / (2 * tan(hfov/2))
-            fx = width / (2 * np.tan(np.deg2rad(hfov_deg / 2)))
-            fy = height / (2 * np.tan(np.deg2rad(vfov_deg / 2)))
-            cx = width * 0.5
-            cy = height * 0.5
-
-            # Derive USD aperture/focal-length so the renderer matches the FOV
-            # Keep horizontal_aperture fixed, compute focal_length from fx
-            horizontal_aperture_mm = 36.0
-            focal_length_mm = fx * horizontal_aperture_mm / width
-            vertical_aperture_mm = height * focal_length_mm / fy
-
-            camera = UsdGeom.Camera(camera_prim)
-            camera.CreateHorizontalApertureAttr().Set(horizontal_aperture_mm)
-            camera.CreateVerticalApertureAttr().Set(vertical_aperture_mm)
-            camera.CreateFocalLengthAttr().Set(focal_length_mm)
-            camera.CreateProjectionAttr().Set("perspective")
-            camera.CreateClippingRangeAttr().Set(Gf.Vec2f(0.1, 10000.0))
-
-            # Set opencvPinhole lens distortion model so ROS2 CameraInfo
-            # publishes fx/fy/cx/cy directly
-            camera_prim.CreateAttribute("omni:lensdistortion:model", Sdf.ValueTypeNames.String).Set("opencvPinhole")
-            camera_prim.CreateAttribute("omni:lensdistortion:opencvPinhole:imageSize", Sdf.ValueTypeNames.Int2).Set(Gf.Vec2i(width, height))
-            camera_prim.CreateAttribute("omni:lensdistortion:opencvPinhole:fx", Sdf.ValueTypeNames.Float).Set(fx)
-            camera_prim.CreateAttribute("omni:lensdistortion:opencvPinhole:fy", Sdf.ValueTypeNames.Float).Set(fy)
-            camera_prim.CreateAttribute("omni:lensdistortion:opencvPinhole:cx", Sdf.ValueTypeNames.Float).Set(cx)
-            camera_prim.CreateAttribute("omni:lensdistortion:opencvPinhole:cy", Sdf.ValueTypeNames.Float).Set(cy)
-            # Zero distortion coefficients (k1-k6, p1, p2, s1-s4)
-            for attr_name in ["k1", "k2", "p1", "p2", "k3", "k4", "k5", "k6", "s1", "s2", "s3", "s4"]:
-                camera_prim.CreateAttribute(f"omni:lensdistortion:opencvPinhole:{attr_name}", Sdf.ValueTypeNames.Float).Set(0.0)
-
-        # Check which camera type is selected
-        is_workspace = self._workspace_checkbox.model.get_value_as_bool()
-        is_custom = self._custom_checkbox.model.get_value_as_bool()
-
-        # Get selected resolution from combo box
-        resolution_index = self._resolution_combo.model.get_item_value_model().get_value_as_int()
-        resolutions = [(640, 480), (1280, 720), (1920, 1080)]
-        resolution = resolutions[resolution_index]
-
-        stage = omni.usd.get_context().get_stage()
-        if not stage:
-            print("Error: No stage found")
-            return
-
-        if is_workspace:
-            prim_path = "/World/workspace_camera_sim"
-            position = (0.8572405778988392, -1.3321141046870788, 0.9906567613694909)
-            # Euler XYZ: (52.144, 39.13, 26.13) degrees
-            quat_xyzw = (0.4714, 0.1994, 0.3347, 0.7912)  # x, y, z, w
-
-            # Create camera prim using UsdGeom.Camera
-            camera_prim = UsdGeom.Camera.Define(stage, prim_path)
-            if not camera_prim:
-                print(f"Error: Failed to create camera at {prim_path}")
-                return
-
-            # Configure camera properties
-            configure_camera_properties(camera_prim.GetPrim(), resolution[0], resolution[1])
-
-            # Set camera pose
-            set_camera_pose(prim_path, position, quat_xyzw)
-            print(f"Workspace camera created at {prim_path} with resolution {resolution[0]}x{resolution[1]}")
-
-        if is_custom:
-            # Get custom prim path from text field
-            custom_prim_path = self._custom_camera_prim_field.model.get_value_as_string()
-            if not custom_prim_path or custom_prim_path.strip() == "":
-                print("Error: Please enter a valid camera prim path")
-                return
-            
-            # Check if the prim already exists
-            existing_prim = stage.GetPrimAtPath(custom_prim_path)
-            if existing_prim and existing_prim.IsValid():
-                print(f"Camera prim already exists at {custom_prim_path}. Using existing prim.")
-                camera_prim = UsdGeom.Camera(existing_prim)
-                if not camera_prim:
-                    # If it exists but is not a camera, convert it
-                    print(f"Prim at {custom_prim_path} exists but is not a camera. Creating camera...")
-                    camera_prim = UsdGeom.Camera.Define(stage, custom_prim_path)
-            else:
-                # Create new camera prim at the specified path
-                camera_prim = UsdGeom.Camera.Define(stage, custom_prim_path)
-                if not camera_prim:
-                    print(f"Error: Failed to create camera at {custom_prim_path}")
-                    return
-            
-            # Configure camera properties
-            configure_camera_properties(camera_prim.GetPrim(), resolution[0], resolution[1])
-            
-            # Note: Pose is not set for custom prim - user should position it manually or it uses existing pose
-            print(f"Custom camera created/updated at {custom_prim_path} with resolution {resolution[0]}x{resolution[1]}")
-
-    def create_additional_camera_actiongraph(self):
-        """Create ActionGraph for additional camera ROS2 publishing"""
-        # Check which cameras exist and create action graphs accordingly
-        is_workspace = self._workspace_checkbox.model.get_value_as_bool()
-        is_custom = self._custom_checkbox.model.get_value_as_bool()
-
-        # Get selected resolution from combo box
-        resolution_index = self._resolution_combo.model.get_item_value_model().get_value_as_int()
-        resolutions = [(640, 480), (1280, 720), (1920, 1080)]
-        width, height = resolutions[resolution_index]
-
-        stage = omni.usd.get_context().get_stage()
-
-        if is_workspace:
-            if not stage.GetPrimAtPath("/World/workspace_camera_sim"):
-                print("Error: Workspace camera not found at /World/workspace_camera_sim. Create it first.")
-            else:
-                self._create_camera_actiongraph(
-                    "/World/workspace_camera_sim",
-                    width, height,
-                    "workspace_camera_sim",
-                    "WorkspaceCameraSim"
-                )
-
-        if is_custom:
-            # Get custom prim path from text field
-            custom_prim_path = self._custom_camera_prim_field.model.get_value_as_string()
-            if not custom_prim_path or custom_prim_path.strip() == "":
-                print("Error: Please enter a valid camera prim path")
-                return
-
-            # Get ROS2 topic name from text field, or generate from prim path if empty
-            topic_name = self._custom_camera_topic_field.model.get_value_as_string()
-            if not topic_name or topic_name.strip() == "":
-                # Extract a clean name for the topic from the prim path if topic is empty
-                prim_name = custom_prim_path.split("/")[-1] if "/" in custom_prim_path else custom_prim_path
-                topic_name = prim_name.lower().replace(" ", "_").replace("-", "_")
-                print(f"Topic name not specified, using generated name: {topic_name}")
-
-            # Use topic name for graph suffix (sanitize for graph name - remove special chars, capitalize)
-            # Convert topic name to a valid graph suffix: remove underscores, capitalize words
-            graph_suffix = topic_name.replace("_", " ").replace("-", " ").title().replace(" ", "")
-
-            if not stage.GetPrimAtPath(custom_prim_path):
-                print(f"Error: Camera prim not found at {custom_prim_path}. Create it first.")
-            else:
-                self._create_camera_actiongraph(
-                    custom_prim_path,
-                    width, height,
-                    topic_name,
-                    graph_suffix
-                )
-
-    def _setup_camera_publisher(self, camera_prim, width, height, topic, graph_suffix):
-        """Route camera publishing to viewport publisher or action graph based on toggle."""
-        use_viewport = self._viewport_pub_checkbox.model.get_value_as_bool()
-        if use_viewport:
-            # Viewport publisher starts after play — just skip action graph creation
-            print(f"Using viewport publisher for /{topic} (action graph skipped)")
-        else:
-            self._create_camera_actiongraph(camera_prim, width, height, topic, graph_suffix)
-
-    def _create_camera_actiongraph(self, camera_prim, width, height, topic, graph_suffix):
-        """Helper method to create camera ActionGraph using og.Controller.edit().
-
-        Follows the same pattern as isaacsim.ros2.bridge's built-in camera graph
-        shortcut (og_rtx_sensors.py). Creates all nodes, sets values, and wires
-        connections in a single batch call. If the graph already exists it is
-        deleted and recreated with the current settings.
-        """
-        graph_path = f"/Graph/ActionGraph_{graph_suffix}"
-
-        # Delete existing graph so it gets recreated with current settings
-        stage = omni.usd.get_context().get_stage()
-        if stage.GetPrimAtPath(graph_path):
-            stage.RemovePrim(graph_path)
-            print(f"Removed existing ActionGraph at {graph_path}")
-
-        print(f"Creating ActionGraph: {graph_path}")
-        print(f"Camera: {camera_prim}, Resolution: {width}x{height}, Topic: /{topic}")
-
-        keys = og.Controller.Keys
-
-        try:
-            (graph_handle, nodes, _, _) = og.Controller.edit(
-                {"graph_path": graph_path, "evaluator_name": "execution"},
-                {
-                    keys.CREATE_NODES: [
-                        ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                        ("RunOnce", "isaacsim.core.nodes.OgnIsaacRunOneSimulationFrame"),
-                        ("RenderProduct", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
-                        ("Context", "isaacsim.ros2.bridge.ROS2Context"),
-                        ("CameraInfoPublish", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
-                        ("RGBPublish", "isaacsim.ros2.bridge.ROS2CameraHelper"),
-                    ],
-                    keys.SET_VALUES: [
-                        ("RenderProduct.inputs:cameraPrim", camera_prim),
-                        ("RenderProduct.inputs:width", width),
-                        ("RenderProduct.inputs:height", height),
-                        ("CameraInfoPublish.inputs:topicName", "camera_info"),
-                        ("CameraInfoPublish.inputs:frameId", "camera_link"),
-                        ("CameraInfoPublish.inputs:resetSimulationTimeOnStop", False),
-                        ("RGBPublish.inputs:topicName", topic),
-                        ("RGBPublish.inputs:type", "rgb"),
-                        ("RGBPublish.inputs:frameId", "camera_link"),
-                        ("RGBPublish.inputs:resetSimulationTimeOnStop", False),
-                    ],
-                    keys.CONNECT: [
-                        ("OnPlaybackTick.outputs:tick", "RunOnce.inputs:execIn"),
-                        ("RunOnce.outputs:step", "RenderProduct.inputs:execIn"),
-                        ("RenderProduct.outputs:execOut", "CameraInfoPublish.inputs:execIn"),
-                        ("RenderProduct.outputs:renderProductPath", "CameraInfoPublish.inputs:renderProductPath"),
-                        ("Context.outputs:context", "CameraInfoPublish.inputs:context"),
-                        ("RenderProduct.outputs:execOut", "RGBPublish.inputs:execIn"),
-                        ("RenderProduct.outputs:renderProductPath", "RGBPublish.inputs:renderProductPath"),
-                        ("Context.outputs:context", "RGBPublish.inputs:context"),
-                    ],
-                },
-            )
-            print(f"{graph_suffix} ActionGraph created successfully!")
-            print(f"Test with: ros2 topic echo /{topic}")
-        except Exception as e:
-            print(f"Error creating ActionGraph: {e}")
-            traceback.print_exc()
+def _strip_physics(Usd, UsdPhysics, prim):
+    removed = []
+    for item in Usd.PrimRange(prim):
+        if item.IsInstanceProxy():
+            continue
+        for api in (UsdPhysics.RigidBodyAPI, UsdPhysics.CollisionAPI):
+            if item.HasAPI(api):
+                item.RemoveAPI(api)
+                removed.append(f"{item.GetPath()}:{api.__name__}")
+    return removed
