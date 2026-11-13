@@ -863,14 +863,12 @@ Limitations and not verified:
   install is pinned to Isaac Lab 3.0.0 / Isaac Sim 6.2.0.0.
 - Other operating systems, GPUs, Isaac Sim versions and installation layouts are not
   supported claims. A prior isolated test of the generic bridge in Isaac Sim 5.1 is not proof
-  that the complete twin and Lab stack support 5.1.
+  that the complete work-cell and Lab stack support 5.1.
 - The Kit guard only probes the configured port plus advertised portfiles; two separate host
   processes can still race the guard.
 - `metrics_summary` returns no scalars for a run too short to log any. Measured on Lab 2.3.2: `sb3` logs every
   `--log_interval` timesteps (default 100,000), `skrl` writes no event file when `max_iterations` is very small, and
   `rl_games` wrote nothing at 3 epochs. For a short `sb3` run, pass `extra_args=["--log_interval=1000"]`.
-- `randomize_single_object` (UR5e twin, not Lab) can fail with its fixed narrow strip; not
-  relevant to Lab tools but noted for completeness.
 - The PyPI published install paths are not verified.
 - The `tensorboard` extra must be installed for metrics readout; otherwise those two tools
   return an install hint.

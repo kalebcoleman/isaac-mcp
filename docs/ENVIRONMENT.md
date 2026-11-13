@@ -116,7 +116,7 @@ These must be the same for the host and for Kit: each reads its own environment.
 
 | Variable | Default | Read by | Meaning |
 |---|---|---|---|
-| `ISAAC_MCP_ASSET_ROOT` | `<workspace>/assets`, else `<workspace>/isaac-mcp-assets` (transitional, with a warning) | host, Kit | The one [asset root](ASSET-PACKS.md#the-asset-root-and-how-it-is-found): packs are `<pack id>/<version>/pack.yaml` under it. No default inside your home folder; with nothing found the error names this setting. |
+| `ISAAC_MCP_ASSET_ROOT` | `<workspace>/assets`, else `<workspace>/isaac-mcp-assets` (transitional, with a warning) | host, Kit | The one [asset root](ASSET-PACKS.md#the-asset-root-and-how-it-is-found): packs are `<pack id>/<version>/pack.yaml` under it. No default inside your home folder, except that the work cell's loader in Kit falls back to `<home>/isaac-workspace/isaac-mcp-assets` when this is unset; otherwise, with nothing found, the error names this setting. |
 | `ISAAC_MCP_ASSET_CONFIG` | unset | host, Kit | The [trusted-project approval file](TOOLS-SCENE.md#one-time-approval). No file means no approved roots. |
 | `ISAAC_MCP_STAGING` | `~/.cache/isaac-mcp/staging` | host, Kit | With no approval file: the private folder the host copies import snapshots into and Kit reads them from. |
 | `ISAAC_MCP_USD_PYTHON` | unset | host | A Python with `usd-core` for USD dependency checks on the host; without it they use the selected Kit. |

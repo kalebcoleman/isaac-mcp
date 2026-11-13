@@ -23,7 +23,7 @@ Kit Process (Isaac Sim 6.2.0.0)
 Inside Kit, `exts/ur5e-dt` registers on the `isaac.mcp.bridge` singleton alongside other packs. The launcher sets
 the shared port to 8766 by default and delays binding until the work cell has registered its tools. Disabling the work cell
 extension removes its live handlers without stopping the shared bridge; the host keeps their catalog entries visible, and an
-in-flight call must drain before the twin can re-register.
+in-flight call must drain before the work cell can re-register.
 
 ---
 
@@ -48,7 +48,7 @@ uv sync --project mcp --locked --extra isaaclab --no-dev
 
 `uv tool install` does not read `uv.lock`, so it is not the checkout install. `uv sync --locked` installs the versions in `mcp/uv.lock` and checks their hashes. The project is editable: modifications to `mcp/isaac_mcp/` take effect whenever the MCP server process restarts. `./install.sh --no-sim` runs the same sync and links `~/.local/bin/isaac-mcp`. Refresh the lock with `uv lock --directory mcp`, never `uv lock` in the repository root (that project is the simulator).
 
-`install.sh` also creates an ffmpeg shim at `~/.local/bin/ffmpeg` (a fixed default) for the twin's viewport recorder, unless an
+`install.sh` also creates an ffmpeg shim at `~/.local/bin/ffmpeg` (a fixed default) for the Kit viewport recorder, unless an
 unrelated file or symlink already occupies that path. Direct `uv tool install` does not create the shim.
 
 ---
@@ -112,7 +112,7 @@ The host advertises `tools.listChanged` and sends `notifications/tools/list_chan
 Code 2.1.314 does) show the change mid-session. If a client does not expose newly discovered tools
 after `refresh_tools`, reconnect it or use the standard-library CLI against
 the verified bridge. List the advertised bridges first and use the host and port it reports; 8766
-below is only the twin's default port:
+below is only the default port:
 
 ```bash
 python3 mcp/isaac_mcp/client.py --list-bridges

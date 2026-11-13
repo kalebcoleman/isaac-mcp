@@ -393,7 +393,7 @@ unchanged. A call with an old `session_id` gets `STALE_TARGET` saying this happe
 counts it under `extension.reloads`.
 
 If a sim tool call is running when the reload happens, the sim and asset tools are missing until that call finishes,
-then return by themselves. A wait over 30 s is logged as an error. The UR5e twin does not have this: if a twin call is
+then return by themselves. A wait over 30 s is logged as an error. The work cell does not have this: if a work-cell call is
 running when `exts/ur5e-dt` reloads, its startup fails with a message saying so, and it needs another reload or a restart.
 
 ## Joint control by name, gains, settling and teleport
@@ -429,7 +429,7 @@ and refuses with `PHYSICS_API_UNAVAILABLE` when neither exists, rather than chan
 ## Editing any prim: move, physics, attributes, revert
 
 These tools edit **any** prim on the stage, not only prims this pack created: imported assets, prims
-from your own USD files and, in a disposable session, the twin's prims. Safety comes from how the edit
+from your own USD files and, in a disposable session, the work cell's prims. Safety comes from how the edit
 is made and undone:
 
 - Every edit is a session-layer opinion. The source USD files and the stage's root layer are never
