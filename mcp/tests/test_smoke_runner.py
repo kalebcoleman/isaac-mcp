@@ -47,7 +47,7 @@ def test_backend_mismatch_refuses_before_checks(tmp_path, monkeypatch, capsys, a
 
         def call(self, name, arguments):
             calls.append(name)
-            return {"app_version": "test-build", "pid": 123} if name == "status" else {"result": actual}
+            return {"app_version": "test-build", "pid": 123} if name == "status" else {"runtime": {"physics_engine": actual}}
 
     def forbidden(*args):
         pytest.fail("A validator ran despite backend mismatch")
@@ -56,7 +56,7 @@ def test_backend_mismatch_refuses_before_checks(tmp_path, monkeypatch, capsys, a
     monkeypatch.setenv("ISAAC_MCP_HOST", "original")
     assert module.main(["scene", "--host", "test-host", "--backend", requested,
                         "--output-dir", str(tmp_path)], client_factory=Client) == 2
-    assert calls == ["status", "run_python"]
+    assert calls == ["status", "sim.stage.info"]
     assert "refusing to run" in capsys.readouterr().out
     result = json.loads((tmp_path / "results.json").read_text())
     first = result["checks"][0]
@@ -82,7 +82,7 @@ def test_success_records_actual_backend(tmp_path, monkeypatch):
             pass
 
         def call(self, name, arguments):
-            return {"app_version": "test-build"} if name == "status" else {"result": "newton"}
+            return {"app_version": "test-build"} if name == "status" else {"runtime": {"physics_engine": "newton"}}
 
     executed = []
     monkeypatch.setattr(module, "execute", lambda name, *args: executed.append(name))
@@ -110,7 +110,7 @@ class _Engine:
         if name == "status":
             return {"app_version": "test-build", "pid": 1}
         self.calls += 1
-        return {"result": self.readings.pop(0) if len(self.readings) > 1 else self.readings[0]}
+        return {"runtime": {"physics_engine": self.readings.pop(0) if len(self.readings) > 1 else self.readings[0]}}
 
 
 def test_probe_waits_for_the_engine_to_settle_on_the_requested_one():
@@ -128,7 +128,7 @@ def test_probe_refuses_a_mismatch_only_after_the_bound_and_a_transient_error_is_
 
     class Starting(_Engine):
         def call(self, name, arguments):
-            if name == "run_python" and not self.calls:
+            if name == "sim.stage.info" and not self.calls:
                 self.calls += 1
                 raise RuntimeError("starting")
             return super().call(name, arguments)
@@ -166,7 +166,7 @@ class _Bridge(_Engine):
 
     def call(self, name, arguments):
         if name == "sim.stage.info":
-            return {"stopped": False, "session_id": "s", "stage_id": "t"}
+            return {"stopped": False, "session_id": "s", "stage_id": "t", "runtime": {"physics_engine": self.readings[0]}}
         if name == "run_python" and "new_stage" in arguments["code"]:
             self.new_stages += 1
             return {"result": True}

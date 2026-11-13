@@ -80,12 +80,14 @@ def probe(client, requested, timeout=None, interval=None, sleep=time.sleep, cloc
     while True:
         try:
             identity = client.call("status", {})
-            reply = client.call("run_python", {"code": (
-                "from isaacsim.core.simulation_manager import SimulationManager\n"
-                "from sim_tools.compat import adapt_simulation_manager\n"
-                "result = adapt_simulation_manager(SimulationManager).get_active_physics_engine()"
-            )})
-            backend = reply["result"]
+            # The engine the status tool reports as physics.active: sim.stage.info runtime.physics_engine.
+            backend = (client.call("sim.stage.info", {}).get("runtime") or {}).get("physics_engine")
+            if backend is None:  # a bridge without the field: ask the simulation manager
+                backend = client.call("run_python", {"code": (
+                    "from isaacsim.core.simulation_manager import SimulationManager\n"
+                    "from sim_tools.compat import adapt_simulation_manager\n"
+                    "result = adapt_simulation_manager(SimulationManager).get_active_physics_engine()"
+                )})["result"]
             metadata = {"backend": backend, "simulator_build": identity.get("app_version"),
                         "pid": identity.get("pid"), "port": client.port}
             readings = (readings + [backend])[-PROBE_STABLE_READINGS:]
