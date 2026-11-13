@@ -45,6 +45,7 @@ A project's `twinsmith.json` is a different file, read for asset packs and the I
 |---|---|---|---|
 | `TWINSMITH_TOOLSETS` | `default` | host | Toolset profile and adjustments. Overrides the files; `--toolsets` overrides it. See [toolsets](TOOLSETS.md). |
 | `TWINSMITH_RUNTIME_ENABLE` | `1` | host | `0` stops the `toolsets` tool from enabling or disabling toolsets while the server runs; `[tools] runtime_enable = false` does the same. See [toolsets](TOOLSETS.md#enabling-a-toolset-while-the-server-runs). |
+| `TWINSMITH_CURSOR_BADGE` | `0` | host | `1` draws a small click-through badge that glides to where `computer` and `sim__ui__act` input lands, then hides; it is hidden from every screenshot but shows in recordings. Overrides `[screen] cursor_badge = true` in the configuration files. |
 | `TWINSMITH_PHYSICS_BACKEND` | `newton` | host, `run.sh`, Kit | Physics engine for a new simulator, `physx` or `newton`. It overrides `[sim] physics_backend` in the configuration files; `--physics-backend` overrides it. The managed launch tool, `run.sh` and `scripts/run_kit.py` all read the same setting. Never falls back to the other engine; the UR5e work cell needs `physx`. See [compatibility](COMPATIBILITY.md#target-engine). |
 | `TWINSMITH_NAME` | `twinsmith` | host | Name the server reports to the client. |
 | `TWINSMITH_INSTRUCTIONS` | built in | host | Replaces the instructions text the server sends to the client. |

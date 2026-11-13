@@ -33,7 +33,9 @@ def map_coords(params: Dict[str, Any], coord_space: str, state: Any) -> Dict[str
 
 
 def badge_args(params: Dict[str, Any], state: Any) -> Dict[str, Any]:
-    """Item 2 (cursor badge): add the internal flag Kit reads when the badge is enabled."""
+    """With ``[screen] cursor_badge`` on, ask Kit to draw its cursor badge (Kit's ``act`` reads ``badge``)."""
+    if getattr(getattr(state, "config", None), "cursor_badge", False):
+        return {**params, "badge": True}
     return params
 
 

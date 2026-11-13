@@ -94,6 +94,7 @@ class Config:
     physics_backend: str = DEFAULT_PHYSICS_BACKEND
     physics_backend_source: str = "built-in"       # built-in, user file, project file or environment
     runtime_enable: bool = True                    # may an agent call toolsets(action="enable")
+    cursor_badge: bool = False                     # draw a click-through badge where computer input lands
 
 
 def _minimal_sim_table(text: str, path: Path) -> dict:
@@ -160,20 +161,24 @@ def resolve(env: Mapping[str, str] | None = None, cli_toolsets: str | None = Non
         raise ValueError("Retired settings: " + "; ".join(
             f"{name} is no longer supported; remove it and use {replacement(name, env[name])}"
             for name in retired))
-    enabled, runtime = DEFAULT, True
+    enabled, runtime, badge = DEFAULT, True, False
     for _, data in _config_files(cwd, home):
         if "toolsets" in data.get("tools", {}):
             enabled = select(data["tools"]["toolsets"])
         if "runtime_enable" in data.get("tools", {}):
             runtime = _flag(data["tools"]["runtime_enable"], "tools.runtime_enable")
+        if "cursor_badge" in data.get("screen", {}):
+            badge = _flag(data["screen"]["cursor_badge"], "screen.cursor_badge")
     if "TWINSMITH_TOOLSETS" in env:
         enabled = select(env["TWINSMITH_TOOLSETS"])
     if cli_toolsets is not None:
         enabled = select(cli_toolsets)
     if "TWINSMITH_RUNTIME_ENABLE" in env:
         runtime = _flag(env["TWINSMITH_RUNTIME_ENABLE"], "TWINSMITH_RUNTIME_ENABLE")
+    if "TWINSMITH_CURSOR_BADGE" in env:
+        badge = _flag(env["TWINSMITH_CURSOR_BADGE"], "TWINSMITH_CURSOR_BADGE")
     backend, source = resolve_physics_backend(env, cwd, home)
-    return Config(enabled, backend, source, runtime)
+    return Config(enabled, backend, source, runtime, cursor_badge=badge)
 
 
 def physics_backend(**kwargs) -> str:

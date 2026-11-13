@@ -177,7 +177,7 @@ def windows():
     dpi = ui.Workspace.get_dpi_scale()
     out = []
     for win in ui.Workspace.get_windows():
-        if not win.visible or not win.title:
+        if not win.visible or not win.title or win.title == BADGE_TITLE:
             continue
         try:  # a docked window behind another tab reports visible but cannot be clicked
             if win.docked and not win.is_selected_in_dock():
@@ -296,7 +296,7 @@ def _shown(path, center, ui_test):
     if getattr(win, "docked", False):
         for other in ui.Workspace.get_windows():
             if (other is not win and other.visible and not getattr(other, "docked", False) and other.title
-                    and other.title not in ("Main ToolBar", "Status Bar")
+                    and other.title not in ("Main ToolBar", "Status Bar", BADGE_TITLE)
                     and inside(center, (other.position_x, other.position_y, other.width, other.height))):
                 return f"the floating window '{other.title}' covers it"
     return None
@@ -494,6 +494,137 @@ def _check_point(x, y):
     return w, h
 
 
+# ---------------------------------------------------------------- cursor badge (opt-in: the host passes badge=True)
+# The protocol of the host's mcp/twinsmith/cursor_badge.py, which Kit cannot import: while shown, the badge
+# keeps the flag file badge-<pid>-kit.shown, hides while a host screenshot holds capture.lock (probed with
+# a non-blocking exclusive flock) and deletes the flag once the hidden frame is drawn, so no screenshot
+# shows it. Recordings take no lock and show it.
+
+BADGE_TITLE = "twinsmith cursor badge"
+BADGE_SIZE, BADGE_OFFSET = 14, 6  # UI points; its corner sits below and right of the hotspot, never on it
+BADGE_GLIDE_S, BADGE_LINGER_S = 0.15, 1.5
+BADGE_LOCK = "capture.lock"
+_badge_state = []  # [the _KitBadge], or [None] once it failed
+
+
+def badge_dir():
+    """Where the host keeps its capture lock and flag files (cursor_badge.desktop_dir on the host)."""
+    import os
+    from pathlib import Path
+
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/twinsmith-desktop-{os.getuid()}"
+    return Path(runtime) / "twinsmith-desktop"
+
+
+def _capture_held(fd):
+    import fcntl
+
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    fcntl.flock(fd, fcntl.LOCK_UN)
+    return False
+
+
+class _KitBadge:
+    """A borderless omni.ui window without inputs, moved over frames by an update subscription that
+    exists only while it is shown."""
+
+    def __init__(self):
+        import os
+
+        import omni.ui as ui
+
+        flags = 0
+        for name in ("NO_TITLE_BAR", "NO_RESIZE", "NO_MOVE", "NO_SCROLLBAR", "NO_SCROLL_WITH_MOUSE", "NO_COLLAPSE",
+                     "NO_CLOSE", "NO_SAVED_SETTINGS", "NO_FOCUS_ON_APPEARING", "NO_MOUSE_INPUTS", "NO_BACKGROUND",
+                     "NO_DOCKING"):
+            flags |= getattr(ui, f"WINDOW_FLAGS_{name}", 0)
+        directory = badge_dir()
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.flag = directory / f"badge-{os.getpid()}-kit.shown"
+        self.fd = os.open(directory / BADGE_LOCK, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        self.window = ui.Window(BADGE_TITLE, width=BADGE_SIZE, height=BADGE_SIZE, flags=flags, visible=False)
+        for attr in ("padding_x", "padding_y"):
+            try:
+                setattr(self.window, attr, 0)
+            except Exception:  # noqa: BLE001 - cosmetic
+                pass
+        with self.window.frame:
+            ui.Circle(style={"background_color": 0xFF008CFF, "border_color": 0xFFFFFFFF, "border_width": 1})
+        self.sub, self.pos, self.hiding = None, None, 0
+        self.start = self.end = (0.0, 0.0)
+        self.t0 = self.last = 0.0
+
+    def glide_to(self, x, y, jump=False):
+        """Glide over the next frames (or with ``jump`` move at once) to window pixel (x, y)."""
+        import time
+
+        import omni.ui as ui
+
+        dpi = ui.Workspace.get_dpi_scale() or 1.0
+        end = (x / dpi + BADGE_OFFSET, y / dpi + BADGE_OFFSET)
+        start = end if jump or self.pos is None else self.pos
+        if not self.window.visible or self.hiding:
+            self.window.position_x, self.window.position_y = start
+            if not self._show():
+                return
+        self.start, self.end = start, end
+        self.t0 = self.last = time.monotonic()
+
+    def _show(self):
+        """Flag, then probe, then show: a capture that locks after the probe still sees the flag."""
+        self.flag.touch(mode=0o600)
+        if _capture_held(self.fd):
+            self.flag.unlink(missing_ok=True)
+            return False
+        self.hiding = 0
+        self.window.visible = True
+        if self.sub is None:
+            import omni.kit.app
+
+            self.sub = omni.kit.app.get_app().get_update_event_stream().create_subscription_to_pop(
+                self._update, name="twinsmith cursor badge")
+        return True
+
+    def _update(self, _event=None):
+        import time
+
+        if self.hiding:  # hidden: drop the flag once that frame has been drawn
+            self.hiding -= 1
+            if not self.hiding:
+                self.flag.unlink(missing_ok=True)
+                self.sub = None
+            return
+        now = time.monotonic()
+        if now - self.last > BADGE_LINGER_S or _capture_held(self.fd):
+            self.window.visible = False
+            self.hiding = 2
+            return
+        t = min(1.0, (now - self.t0) / BADGE_GLIDE_S)
+        self.pos = tuple(a + (b - a) * t for a, b in zip(self.start, self.end))
+        self.window.position_x, self.window.position_y = self.pos
+
+
+def badge(x, y, jump=False):
+    """Show the cursor badge at window pixel (x, y). Best effort: a failure turns it off, never the act."""
+    if _badge_state and _badge_state[0] is None:
+        return
+    try:
+        if not _badge_state:
+            _badge_state.append(_KitBadge())
+        _badge_state[0].glide_to(x, y, jump)
+    except Exception as exc:  # noqa: BLE001
+        _badge_state[:] = [None]
+        try:
+            import carb
+
+            carb.log_warn(f"twinsmith cursor badge off: {exc}")
+        except Exception:  # noqa: BLE001
+            pass
+
+
 async def run_act(a):
     """What sim.ui.act runs: one action, or (item 5) a batch, then (item 5) an optional compact find_after.
     Item 2 draws the cursor badge here when the host asks for it."""
@@ -554,6 +685,8 @@ async def act(a):
         hit = target[2]
         if hit is not None and not hit["enabled"] and action != "move":
             raise UIRefusal("DISABLED", "That widget is disabled (greyed out); it would ignore the input.")
+        if a.get("badge"):  # internal: the host's [screen] cursor_badge; adds no wait to the action
+            badge(target[0], target[1])
 
     menu = menu_path(a.get("menu")) if action == "menu" else None
     result = dict(action=action)
@@ -565,7 +698,7 @@ async def act(a):
 
         win = ui.Workspace.get_window(title)
         if win is None:
-            names = sorted({w.title for w in ui.Workspace.get_windows() if w.title})
+            names = sorted({w.title for w in ui.Workspace.get_windows() if w.title and w.title != BADGE_TITLE})
             raise UIRefusal("NO_WINDOW", f"No Kit window titled {title!r}. Known windows: {', '.join(names[:40])}. "
                                          "Closed windows open from the Window menu (action=menu).")
         if action == "close":
@@ -695,7 +828,10 @@ async def act(a):
     mouse_event(MouseEventType.LEFT_BUTTON_DOWN, x, y, w, h)
     await tick(2)
     for i in range(1, 13):
-        mouse_event(MouseEventType.MOVE, round(x + (ex - x) * i / 12), round(y + (ey - y) * i / 12), w, h)
+        px, py = round(x + (ex - x) * i / 12), round(y + (ey - y) * i / 12)
+        mouse_event(MouseEventType.MOVE, px, py, w, h)
+        if a.get("badge"):
+            badge(px, py, jump=True)
         await tick(1)
     mouse_event(MouseEventType.LEFT_BUTTON_UP, ex, ey, w, h)
     await tick(frames)

@@ -43,7 +43,7 @@ from .tool_hints import CATALOG_HINTS
 from .client import BridgeClient, BridgeError
 from .isaaclab.tools import register_isaaclab_tools
 from .local_tools import IDEMPOTENT_WRITE, READ_ONLY, ScopedTools, strip_schema_titles
-from . import computer_use
+from . import computer_use, cursor_badge
 from .desktop_input import register_desktop_input_tools
 from .sim_sessions import live_sessions, register_sim_session_tools
 from .screen import register_screen_tools
@@ -1961,6 +1961,7 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     state.toolsets = groups
     state.runtime_enable = settings.runtime_enable
     state.config = settings
+    cursor_badge.configure(settings.cursor_badge)
     from .project_assets import Broker
     state.asset_broker = Broker(env.get("TWINSMITH_ASSET_CONFIG", ""))
     if state.asset_broker.requested_profile != "trusted_project":
