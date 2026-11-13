@@ -1,7 +1,7 @@
 # Plan 05: hardware pipeline (PCB, enclosure, render) beside twinsmith
 
 Draft. Docs only: nothing here is registered yet. It complements the roadmap and plans 01 to 04 in pull request #109
-(Phase 7, "parts beyond Jenga", and decision 1, "`cad` as a group"). No GPU is needed for the pull request; a render needs
+(Phase 7, "parts beyond Jenga", and decision 1, which the owner settled on 2026-11-13: `cad` is a group with this tool). No GPU is needed for the pull request; a render needs
 one when it is used.
 
 ## Problem
@@ -38,15 +38,14 @@ plug-in (uploads); single-maintainer parts servers without a license.
 
 ### Group and names
 
-One toolset, `cad`, off by default, the name the roadmap already uses. It holds **one** grouped tool with a plain name,
+One toolset, `cad`. Like every group but `core` it is off in the shipped `default`; the owner's own client configurations
+turn it on (`TWINSMITH_TOOLSETS` lists it), so it is there in every session on the owner's machines. It holds **one** grouped tool with a plain name,
 `hardware`. Authoring (schematic, layout, enclosure modelling, interactive Blender) stays in the beside servers above;
 `hardware` only runs the deterministic steps that turn their files into checked outputs, so an agent in any client gets
 the same gates. The desktop tools after pull request #108 (`doctor`, `windows`, `screenshot`, `computer`) already drive
 the FreeCAD, KiCad or Blender GUI when one is wanted, so `cad` has no GUI tools.
 
-This changes decision 1 in the roadmap from "a row with no toolset" to "a row plus one small tool". If the owner keeps the
-original decision, delete the `hardware` tool from this plan and keep only the README row and the docs page; everything
-below the table still works by hand.
+This is decision 1 in the roadmap as the owner settled it: a group with one small tool, not a README row alone.
 
 | Action | Runs | Notes |
 |---|---|---|
@@ -88,7 +87,7 @@ Executables are found on `PATH` (`kicad-cli`, `blender`, `freecadcmd`, `pio`), K
 | `mcp/tests/test_hardware.py` (new) | Below |
 | `docs/HARDWARE.md` (new) | Setup the owner runs (the table above, install commands, client configuration for Claude Code, Codex and OpenCode), the actions, the safety rules, the KiCad 11 note |
 | `docs/README.md`, `docs/TOOLSETS.md`, `docs/ENVIRONMENT.md`, `README.md` (generated) | The `cad` row and its tool |
-| `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` | Move `hardware` from proposed to existing; record decision 1 |
+| `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` | Move `hardware` from proposed to existing |
 
 Nothing upstream is copied, so `THIRD-PARTY-NOTICES.md` does not change.
 
