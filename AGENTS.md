@@ -74,9 +74,9 @@ configured filters.
 | Isaac Lab (`isaaclab__*`, `run_script`) | 18 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
 | Bridge built-ins (`run_python`, `status`, `job_status`, `job_cancel`, `list_bridges`, `reload_tools`, file tools) | 9 | listed from a packaged catalog even with Kit down; execution needs a reachable bridge; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
 | Generic scene and assets | 71 (`sim__quick_start`, `assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, controller runs, trajectory replay, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots, scan, search and the pack tools run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
-| UR5e twin (`ur5e_dt__*`) | 9 | RISE lab's UR5e digital twin, Kaleb's work with that robot; every other tier is robot-agnostic. Listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
+| UR5e twin (`ur5e_dt__*`) | 10 | RISE lab's UR5e digital twin, Kaleb's work with that robot; every other tier is robot-agnostic. Listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With default groups and no namespace filter, the server registers exactly 120 tools from startup:
+With default groups and no namespace filter, the server registers exactly 121 tools from startup:
 the host, Isaac Lab, bridge built-in, generic and UR5e catalog tiers, whether or not Kit is running.
 A client is shown **48 tools**: related tools are listed as one grouped tool with an `action`
 argument (`sim__prim(action="create")`, `ur5e_dt__workcell(action="quick_start")`, `jobs(action="status")`),
@@ -97,8 +97,8 @@ find out. Fewer tools mean a filter:
   the server starts, so restart the MCP connection after starting Kit.
 
 The other 9 tools are the bridge built-ins, also listed from a snapshot. With the standard
-groups there are 120 tools in total; the optional desktop input and simulator session groups add 9 more.
-`ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 49 tools with otherwise standard settings.
+groups there are 121 tools in total; the optional desktop input and simulator session groups add 9 more.
+`ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 50 tools with otherwise standard settings.
 These filters control discovery, not security. Two things are enforced by the bridge itself: every
 connection must present the bridge's token (clients on the same account read it from a private
 file; `python3 mcp/isaac_mcp/client.py` does too), and a Kit started with `ISAAC_MCP_READ_ONLY=1`

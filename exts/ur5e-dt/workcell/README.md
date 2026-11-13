@@ -1,7 +1,7 @@
 # UR5e Jenga work cell BOM and private asset pack
 
 Status: **candidate, not runtime-qualified.** The pack-backed Workcell API is integrated
-at baseline `aff668a` on `workcell/lab-hardware`. Integration and CPU fixture checks do
+on `workcell/lab-hardware`. Integration and CPU fixture checks do
 not establish a PhysX, render, sensor or lab-fidelity pass. This documentation update
 does not run the simulator or inspect private assets.
 
@@ -9,7 +9,7 @@ does not run the simulator or inspect private assets.
 
 The work cell is one UR5e on a Vention bench with a Bota Rokubi, OnRobot Quick Changer,
 standard OnRobot RG2, black finger pads, a wrist D415 and an overhead D415 on a removable
-gantry. The Jenga tower is 54 blocks of 72 x 24 x 14 mm.
+gantry. The Jenga tower is 54 blocks of nominal 72 x 24 x 14 mm dimensions.
 
 Machine-readable data:
 
@@ -21,14 +21,14 @@ Machine-readable data:
 
 ## Pack-backed Workcell API
 
-The baseline exposes seven grouped tools with nine actions through `isaac.mcp.bridge`:
+The integration exposes seven grouped tools with ten actions through `isaac.mcp.bridge`:
 
 | Group | Actions | Purpose |
 | --- | --- | --- |
 | `ur5e_dt__workcell` | `quick_start`, `status`, `shutdown` | Build a stopped pack-backed scene, read its report, or release workcell state without clearing the stage |
 | `ur5e_dt__robot` | `status` | Read the robot build report |
 | `ur5e_dt__perception` | `status` | Read camera configuration, not captured sensor data |
-| `ur5e_dt__jenga` | `status` | Read the tower build report |
+| `ur5e_dt__jenga` | `build`, `status` | Replace the tower on a stopped timeline or read its build report |
 | `ur5e_dt__real2sim` | `status` | Report synchronization as not implemented |
 | `ur5e_dt__planning` | `status` | Report planning as not implemented |
 | `ur5e_dt__eval` | `status` | Report evaluation as not implemented |
@@ -40,16 +40,21 @@ extension panel or legacy ROS graph setup, and no implemented force capture, pla
 real-hardware control or evaluation. Generic scene tools remain separate. See the
 [tool reference](../../../docs/TOOLS-UR5E.md) for the baseline contract.
 
-A seeded Jenga build action is pending integration by the lead; it is not part of this
-nine-action baseline. The planned variation concept is reproducible, seeded variation
-around nominal blocks and tower placement, with physical uncertainty kept distinct from
-confirmed nominal dimensions. The exact variation schema and supported ranges are pending
-and will be supplied by the lead; no configuration keys or runtime guarantees are defined here.
+The Jenga build action accepts optional `profile` and `seed` overrides. Defaults select
+`measured_pending` with seed 42: modest bounded uniform variation of mass, friction and
+dimensions. All distribution numbers and the selection/seed defaults are explicitly
+unconfirmed and easy to overwrite in the configuration. Placement follows sampled block
+sizes, not independently randomized tower poses. Rebuild replaces the old tower;
+the internal pose-reset helper restores realized initial transforms without resampling,
+restoring velocities or resetting solver state. See the
+[exact variation schema and limits](../../../docs/TOOLS-UR5E.md#seeded-jenga-variation).
 
 ## Hardware configuration and provenance
 
-`lab_hardware.json` is the single hardware configuration. Every leaf is
-`{value, status, source}`. The BOM does not replace it and does not silently choose between
+`lab_hardware.json` is the single hardware configuration. Every section field is
+`{value, status, source}`; structured profiles are nested within `value`. Config statuses
+are only `confirmed` or `unconfirmed`; the other labels below describe BOM/provenance
+concepts, not accepted config statuses. The BOM does not replace it or silently choose between
 conflicting measurements.
 
 | Status | Meaning |
@@ -63,6 +68,10 @@ conflicting measurements.
 The pack-backed work-cell configuration selects the pack by `pack.id` and `pack.version`
 and maps every physical scene role to a **logical asset ID** under `assets`. No asset file
 path is stored in the configuration, and there is no old-store path fallback.
+
+`documentation.bom_csv.value` is `../workcell/bom.csv`, resolved relative to the
+configuration directory. Preserve that layout when copying a configuration, or overwrite
+this field with the appropriate BOM path; it is not relative to the process working directory.
 
 ## BOM IDs and quantities
 

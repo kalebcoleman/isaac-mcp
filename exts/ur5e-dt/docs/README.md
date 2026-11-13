@@ -4,15 +4,15 @@
 this project is robot-agnostic; use `sim__quick_start` for a generic scene.
 
 The extension integrates the pack-backed Workcell API with the shared
-`isaac.mcp.bridge`; it has no socket server or UI panel of its own. Baseline `aff668a`
-on `workcell/lab-hardware` provides seven grouped tools and nine actions:
+`isaac.mcp.bridge`; it has no socket server or UI panel of its own. The
+workcell integration provides seven grouped tools and ten actions:
 
 | Group | Actions |
 | --- | --- |
 | `ur5e_dt__workcell` | `quick_start`, `status`, `shutdown` |
 | `ur5e_dt__robot` | `status` |
 | `ur5e_dt__perception` | `status` |
-| `ur5e_dt__jenga` | `status` |
+| `ur5e_dt__jenga` | `build`, `status` |
 | `ur5e_dt__real2sim` | `status` |
 | `ur5e_dt__planning` | `status` |
 | `ur5e_dt__eval` | `status` |
@@ -28,8 +28,12 @@ There is no legacy extension ROS graph setup or custom `rclpy` build prerequisit
 this API. Generic `sim__*` tools are separate from the workcell interface.
 
 **Candidate, not runtime-qualified:** integration does not establish a PhysX smoke,
-render, sensor or physical-fidelity pass. A seeded Jenga build action and exact variation
-schema are pending lead integration, not capabilities claimed by this baseline.
+render, sensor or physical-fidelity pass. The seeded Jenga build action replaces the
+tower on a stopped timeline. Its default `measured_pending` profile and seed 42 are
+unconfirmed, overwriteable configuration, not measurements. Nominal dimensions remain
+72 × 24 × 14 mm. See the [variation and reset contract](../../../docs/TOOLS-UR5E.md#seeded-jenga-variation)
+for distribution fields, sampling bounds, and the distinction between rebuilding and
+restoring realized initial poses without resetting velocities or solver state.
 
 - Workcell configuration, fidelity gaps and pack creation: [workcell README](../workcell/README.md)
 - Hardware inventory and recorded prices: [BOM](../workcell/BOM.md)

@@ -36,6 +36,7 @@ CATALOG_HINTS = {
     "ur5e_dt.robot_status": _READ,
     "ur5e_dt.perception_status": _READ,
     "ur5e_dt.jenga_status": _READ,
+    "ur5e_dt.jenga_build": _DESTROYS,
     "ur5e_dt.real2sim_status": _READ,
     "ur5e_dt.planning_status": _READ,
     "ur5e_dt.eval_status": _READ,

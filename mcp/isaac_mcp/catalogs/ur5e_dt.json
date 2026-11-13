@@ -94,6 +94,41 @@
       "namespace": "ur5e_dt",
       "owner_id": "ur5e-dt"
     },
+    "ur5e_dt.jenga_build": {
+      "description": "Replace the Jenga tower in the current workcell on a stopped timeline using configured or overridden variation. Resamples blocks; not a physics-state reset.",
+      "parameters": {
+        "profile": {
+          "type": "string",
+          "description": "Optional name in jenga.variation_profiles; omitted uses the configured variation_profile."
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Optional integer seed; omitted uses the configured variation_seed. A selected profile requires a seed."
+        }
+      },
+      "fields": [
+        {
+          "name": "profile",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional name in jenga.variation_profiles; omitted uses the configured variation_profile."
+        },
+        {
+          "name": "seed",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional integer seed; omitted uses the configured variation_seed. A selected profile requires a seed."
+        }
+      ],
+      "namespace": "ur5e_dt",
+      "owner_id": "ur5e-dt"
+    },
     "ur5e_dt.real2sim_status": {
       "description": "Report the real-to-simulation interface availability; no synchronization is implemented.",
       "parameters": {},

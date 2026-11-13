@@ -61,7 +61,8 @@ GROUPS: Dict[str, tuple] = {
         "shutdown": "ur5e_dt__workcell_shutdown"}),
     "ur5e_dt__robot": ("Inspect the workcell robot.", {"status": "ur5e_dt__robot_status"}),
     "ur5e_dt__perception": ("Inspect workcell cameras.", {"status": "ur5e_dt__perception_status"}),
-    "ur5e_dt__jenga": ("Inspect the workcell Jenga tower.", {"status": "ur5e_dt__jenga_status"}),
+    "ur5e_dt__jenga": ("Build and inspect the workcell Jenga tower.", {
+        "build": "ur5e_dt__jenga_build", "status": "ur5e_dt__jenga_status"}),
     "ur5e_dt__real2sim": ("Real-to-simulation interface (not implemented).", {"status": "ur5e_dt__real2sim_status"}),
     "ur5e_dt__planning": ("Planning interface (not implemented).", {"status": "ur5e_dt__planning_status"}),
     "ur5e_dt__eval": ("Evaluation interface (not implemented).", {"status": "ur5e_dt__eval_status"}),

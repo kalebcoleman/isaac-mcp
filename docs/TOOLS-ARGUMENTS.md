@@ -1561,7 +1561,7 @@ Fresh filename search across approved project/library roots. No network discover
 
 ## UR5e twin (`ur5e_dt__*`)
 
-Reference: [TOOLS-UR5E.md](TOOLS-UR5E.md). 9 tools.
+Reference: [TOOLS-UR5E.md](TOOLS-UR5E.md). 10 tools.
 
 ### `ur5e_dt__eval_status`
 
@@ -1570,6 +1570,15 @@ Listed as `ur5e_dt__eval(action="status")`.
 Report the evaluation interface availability; no evaluation is implemented.
 
 No arguments.
+
+### `ur5e_dt__jenga_build`
+
+Listed as `ur5e_dt__jenga(action="build")`.
+
+Replace the Jenga tower in the current workcell on a stopped timeline using configured or overridden variation. Resamples blocks; not a physics-state reset.
+
+- `profile` (string, optional): Optional name in jenga.variation_profiles; omitted uses the configured variation_profile.
+- `seed` (integer, optional): Optional integer seed; omitted uses the configured variation_seed. A selected profile requires a seed.
 
 ### `ur5e_dt__jenga_status`
 

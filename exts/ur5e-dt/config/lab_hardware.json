@@ -63,11 +63,6 @@
       "status": "confirmed",
       "source": "Kaleb."
     },
-    "base_plate_thickness_m": {
-      "value": 0.0,
-      "status": "unconfirmed",
-      "source": "Not measured; robot base placed at z=0 (ROBOT_BASE_Z in settings.py)."
-    },
     "initial_joint_deg": {
       "value": [
         0,
@@ -541,11 +536,6 @@
       "status": "unconfirmed",
       "source": "Kaleb (~15 g); the fmb4 USDs author no mass (density default would give 24 g). Weigh a block."
     },
-    "layers": {
-      "value": 18,
-      "status": "unconfirmed",
-      "source": "Standard 54-block tower = 18 layers x 3; the phase-1 cell builds a short stack (see tower_layers_built)."
-    },
     "tower_layers_built": {
       "value": 18,
       "status": "confirmed",
@@ -568,6 +558,39 @@
       "value": 0.25,
       "status": "unconfirmed",
       "source": "As above."
+    },
+    "variation_profile": {
+      "value": "measured_pending",
+      "status": "unconfirmed",
+      "source": "Provisional variation preset, not measured calibration. Replace with a measured profile name or null for nominal dimensions and scalar mass/friction."
+    },
+    "variation_seed": {
+      "value": 42,
+      "status": "unconfirmed",
+      "source": "Arbitrary reproducibility seed, not a measured hardware parameter; overwrite freely or override at build time."
+    },
+    "variation_profiles": {
+      "value": {
+        "measured_pending": {
+          "mass_kg": {"distribution": "uniform", "min": 0.014, "max": 0.016},
+          "static_friction": {"distribution": "uniform", "min": 0.28, "max": 0.34},
+          "dynamic_friction": {"distribution": "uniform", "min": 0.22, "max": 0.27},
+          "size_tolerance_m": [
+            {"distribution": "uniform", "min": -0.0002, "max": 0.0002},
+            {"distribution": "uniform", "min": -0.0002, "max": 0.0002},
+            {"distribution": "uniform", "min": -0.0002, "max": 0.0002}
+          ]
+        }
+      },
+      "status": "unconfirmed",
+      "source": "All distribution values and bounds are provisional engineering inputs, not measurements. Replace this value object after weighing blocks and measuring friction and dimensions."
+    }
+  },
+  "documentation": {
+    "bom_csv": {
+      "value": "../workcell/bom.csv",
+      "status": "confirmed",
+      "source": "Repository BOM path relative to the hardware configuration directory; preserve this layout or overwrite for portable custom configs."
     }
   },
   "gravity": {

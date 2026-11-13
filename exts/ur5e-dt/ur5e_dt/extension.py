@@ -22,6 +22,13 @@ MCP_TOOL_REGISTRY = {
     "robot_status": {"description": "Read robot build details from the workcell report.", "parameters": {}},
     "perception_status": {"description": "Read camera build details; this does not capture sensor data.", "parameters": {}},
     "jenga_status": {"description": "Read Jenga build details from the workcell report.", "parameters": {}},
+    "jenga_build": {
+        "description": "Replace the Jenga tower in the current workcell on a stopped timeline using configured or overridden variation. Resamples blocks; not a physics-state reset.",
+        "parameters": {
+            "profile": {"type": "string", "description": "Optional name in jenga.variation_profiles; omitted uses the configured variation_profile."},
+            "seed": {"type": "integer", "description": "Optional integer seed; omitted uses the configured variation_seed. A selected profile requires a seed."},
+        },
+    },
     "real2sim_status": {"description": "Report the real-to-simulation interface availability; no synchronization is implemented.", "parameters": {}},
     "planning_status": {"description": "Report the planning interface availability; no planner is implemented.", "parameters": {}},
     "eval_status": {"description": "Report the evaluation interface availability; no evaluation is implemented.", "parameters": {}},
