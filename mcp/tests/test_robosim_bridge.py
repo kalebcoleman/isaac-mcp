@@ -1197,3 +1197,18 @@ def test_tune_push_validates_before_running(fake):
     assert not missing["ok"] and "no readable PUSH" in missing["error"]
     given = complete(bridge, "tune_push", from_file["run"], keys=["block=red"], push={"waypoints": [[0, 0, -0.2], [6, 0, 0]]}, max_trials=1)
     assert given["ok"] and given["trials"][0]["push"]["waypoints"][0] == [0.0, 0.0, -0.2]
+
+
+def test_the_workspace_follows_the_shared_rule(tmp_path, monkeypatch):
+    from twinsmith import pack_manifest
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(pack_manifest, "checkout_root", lambda: None)
+    monkeypatch.delenv("TWINSMITH_WORKSPACE", raising=False)
+    assert RoboSimBridge().workspace == tmp_path / "home" / "robotics-workspace"
+    (tmp_path / "home" / "isaac-workspace").mkdir(parents=True)
+    assert RoboSimBridge().workspace == tmp_path / "home" / "isaac-workspace"      # only while the new folder is absent
+    (tmp_path / "home" / "robotics-workspace").mkdir()
+    assert RoboSimBridge().workspace == tmp_path / "home" / "robotics-workspace"
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(tmp_path / "chosen"))
+    assert RoboSimBridge().workspace == (tmp_path / "chosen").resolve()
+    assert RoboSimBridge(workspace=tmp_path / "given").workspace == (tmp_path / "given").resolve()

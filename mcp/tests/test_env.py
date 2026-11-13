@@ -327,15 +327,17 @@ def test_init_creates_layout_idempotent_and_never_overwrites(world):
     r = run_cli(world, "init", "--workspace", str(target))
     assert r.returncode == 0 and f'export TWINSMITH_WORKSPACE="{target}"' in r.stdout
     assert "TWINSMITH_ASSET_ROOT" in r.stdout and "my-robot/v1" in r.stdout
-    for d in ("isaac-mcp-assets", "envs", "projects", "runs"):
+    for d in ("assets", "envs", "projects", "runs", "tools"):
         assert (target / d).is_dir()
+    assert not (target / "isaac-mcp-assets").exists() and 'TWINSMITH_ASSET_ROOT="' + str(target) + '/assets"' in r.stdout
+    assert "Robotics workspace" in (target / "README.md").read_text()
     assert "Try twinsmith first" in (target / "AGENTS.md").read_text()
     assert (target / "CLAUDE.md").read_text() == "@AGENTS.md\n"
     (target / "AGENTS.md").write_text("mine too")
     (target / "README.md").write_text("mine")
-    (target / "isaac-mcp-assets" / "keep.txt").write_text("x")
+    (target / "assets" / "keep.txt").write_text("x")
     assert run_cli(world, "init", "--workspace", str(target)).returncode == 0
-    assert (target / "README.md").read_text() == "mine" and (target / "isaac-mcp-assets" / "keep.txt").exists()
+    assert (target / "README.md").read_text() == "mine" and (target / "assets" / "keep.txt").exists()
     assert (target / "AGENTS.md").read_text() == "mine too"
 
 
@@ -347,15 +349,43 @@ def test_init_does_not_create_group_writable_folders(world):
         assert run_cli(world, "init", "--workspace", str(target)).returncode == 0
     finally:
         os.umask(old)
-    for d in ("isaac-mcp-assets", "envs", "projects", "runs"):
+    for d in ("assets", "envs", "projects", "runs", "tools"):
         assert (target / d).stat().st_mode & 0o022 == 0, d
 
 
 def test_init_default_workspace_uses_env_then_home(world):
     r = run_cli(world, "init")
-    assert r.returncode == 0 and (world.home / "isaac-workspace" / "runs").is_dir()
+    assert r.returncode == 0 and (world.home / "robotics-workspace" / "runs").is_dir()
+    assert not (world.home / "isaac-workspace").exists()
     r = run_cli(world, "init", env={"TWINSMITH_WORKSPACE": str(world.tmp / "viaenv")})
-    assert (world.tmp / "viaenv" / "isaac-mcp-assets").is_dir()
+    assert (world.tmp / "viaenv" / "assets").is_dir()
+
+
+def test_init_uses_the_old_home_folder_only_while_the_new_one_is_absent(world):
+    old = world.home / "isaac-workspace"
+    old.mkdir()
+    (old / "keep.txt").write_text("x")
+    assert run_cli(world, "init").returncode == 0
+    assert (old / "runs").is_dir() and (old / "assets").is_dir() and (old / "keep.txt").read_text() == "x"
+    assert not (world.home / "robotics-workspace").exists()
+    (world.home / "robotics-workspace").mkdir()                 # the new folder now exists: it wins
+    assert run_cli(world, "init").returncode == 0
+    assert (world.home / "robotics-workspace" / "runs").is_dir()
+    r = run_cli(world, "init", env={"TWINSMITH_WORKSPACE": str(world.tmp / "viaenv")})   # the variable wins over both
+    assert (world.tmp / "viaenv" / "runs").is_dir() and r.returncode == 0
+
+
+def test_init_leaves_an_existing_old_asset_folder_alone_and_says_so(world):
+    target = world.tmp / "oldws"
+    (target / "isaac-mcp-assets" / "pack" / "v1").mkdir(parents=True)
+    (target / "isaac-mcp-assets" / "pack" / "v1" / "pack.yaml").write_text("{}")
+    r = run_cli(world, "init", "--workspace", str(target))
+    assert r.returncode == 0
+    assert (target / "isaac-mcp-assets" / "pack" / "v1" / "pack.yaml").read_text() == "{}"
+    assert not (target / "assets").exists()          # an empty assets/ would be preferred over the populated old folder
+    assert "isaac-mcp-assets" in r.stdout and "left as it is" in r.stdout
+    assert f'TWINSMITH_ASSET_ROOT="{target}/isaac-mcp-assets"' in r.stdout
+    assert (target / "envs").is_dir() and (target / "tools").is_dir()
 
 
 def test_init_refuses_workspace_inside_checkout(world):

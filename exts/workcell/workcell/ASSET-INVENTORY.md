@@ -1,7 +1,7 @@
 # ASU asset inventory — 2026-11-12
 
 The canonical checkout is `<workspace>/twinsmith`; the asset pack is
-`<workspace>/isaac-mcp-assets/ur5e-jenga-workcell/v1`. No external assets or old checkouts were deleted.
+`<workspace>/assets/ur5e-jenga-workcell/v1`. No external assets or old checkouts were deleted.
 
 ## Checkout inventory
 

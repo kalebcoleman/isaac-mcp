@@ -2,15 +2,16 @@
 
 import hashlib
 import importlib.util
-import os
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKCELL = ROOT / "exts/workcell/workcell"
-ASSET_ROOT = Path(os.environ.get("TWINSMITH_ASSET_ROOT")
-                  or Path.home() / "isaac-workspace/isaac-mcp-assets")
+_LOADER = importlib.util.spec_from_file_location("workcell_asset_pack", WORKCELL / "asset_pack.py")
+asset_pack = importlib.util.module_from_spec(_LOADER)
+_LOADER.loader.exec_module(asset_pack)
+ASSET_ROOT = asset_pack.default_root()    # the work cell's own order: the variable, then <workspace>/assets
 PRIVATE_PACK = ASSET_ROOT / "ur5e-jenga-workcell/v1"
 SPEC = importlib.util.spec_from_file_location(
     "workcell_bom", ROOT / "exts/workcell/workcell/bom.py")
