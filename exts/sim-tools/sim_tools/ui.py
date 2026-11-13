@@ -681,10 +681,11 @@ class _KitBadge:
                      "NO_CLOSE", "NO_SAVED_SETTINGS", "NO_BACKGROUND", "NO_DOCKING"):
             flags |= getattr(ui, f"WINDOW_FLAGS_{name}", 0)  # cosmetic
         self.directory = directory = Path(directory)
-        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-        info = os.lstat(directory)  # the host's cursor_badge.trusted: a private folder of this account
-        if directory.name != "twinsmith-desktop" or not (
-                stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022):
+        # The host made the folder; nothing is created from a path that arrives over the bridge. As the
+        # host's cursor_badge.trusted: a private folder of this account, in a folder of the same kind.
+        if not (directory.is_absolute() and directory.name == "twinsmith-desktop" and all(
+                stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022
+                for info in (os.lstat(directory), os.lstat(directory.parent)))):
             raise RuntimeError(f"{directory} is not a private twinsmith-desktop folder of this account")
         self.flag = directory / f"badge-{os.getpid()}-kit.shown"
         try:  # the host's cursor_badge.process_start: a reused PID is then not mistaken for this Kit
@@ -741,12 +742,17 @@ class _KitBadge:
         return True
 
     def close(self):
-        """After a failure: no badge left on screen and no flag left to hold up every screenshot."""
+        """After a failure, or when another host's folder takes over: no badge left on screen, no flag
+        left to hold up every screenshot, and nothing kept open."""
+        import os
+
         self.sub = None
         try:
             self.window.visible = False
+            getattr(self.window, "destroy", lambda: None)()
         finally:
             self.flag.unlink(missing_ok=True)
+            os.close(self.fd)
 
     def _update(self, _event=None):
         import time

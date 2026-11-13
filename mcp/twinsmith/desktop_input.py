@@ -74,8 +74,7 @@ def _desktop_lock():
     """Serialize cooperating MCP servers on this user's X display."""
     if fcntl is None:
         raise RuntimeError("desktop input requires a supported X11 Unix environment")
-    directory = cursor_badge.desktop_dir()
-    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory = cursor_badge.make_desktop_dir()
     name = hashlib.sha256(screen.DISPLAY.encode()).hexdigest()[:16] + ".lock"
     flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
     fd = os.open(directory / name, flags, 0o600)

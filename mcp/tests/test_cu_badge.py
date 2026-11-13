@@ -24,6 +24,7 @@ WATCH = cursor_badge._X11Badge._watch
 
 @pytest.fixture(autouse=True)
 def badge_env(monkeypatch, tmp_path):
+    (tmp_path / "run").mkdir(mode=0o700)  # private, as /run/user/<uid> is
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
     for name, value in (("_enabled", False), ("_badge", None), ("_unavailable", ""), ("_note", "")):
         monkeypatch.setattr(cursor_badge, name, value)
@@ -163,27 +164,45 @@ def test_kit_uses_the_folder_the_host_names(kit, badge_env, tmp_path, monkeypatc
     """Not its own environment's: a server started without XDG_RUNTIME_DIR and a Kit with it would otherwise
     lock different folders, and the badge would be in the host's screenshots."""
     ui = kit.ui
+    named = computer_use.badge_args({}, SimpleNamespace(config=config.Config(cursor_badge=True)))["badge"]
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "kits-own"))
-    ui.badge(10, 10, str(badge_env))
-    assert ui._badge_state[0].flag.parent == badge_env and ui.BADGE_LOCK == cursor_badge.LOCK_NAME
+    ui.badge(10, 10, named)
+    first = ui._badge_state[0]
+    assert first.flag.parent == badge_env and ui.BADGE_LOCK == cursor_badge.LOCK_NAME
     other = tmp_path / "other-host" / "twinsmith-desktop"
+    other.parent.mkdir(mode=0o700)
+    other.mkdir(mode=0o700)
     ui.badge(10, 10, str(other))  # another server asks: its lock is the one to watch now
     assert ui._badge_state[0].flag.parent == other and not list(badge_env.glob("*.shown"))
+    held = {os.readlink(f"/proc/self/fd/{fd}") for fd in os.listdir("/proc/self/fd") if fd.isdigit()
+            and os.path.exists(f"/proc/self/fd/{fd}")}
+    assert str(badge_env / ui.BADGE_LOCK) not in held, "the first folder's lock file is not kept open"
+
+
+def _folder(base, name="twinsmith-desktop", mode=0o700, parent_mode=0o700):
+    (base / "p").mkdir()
+    (base / "p").chmod(parent_mode)
+    (base / "p" / name).mkdir()
+    (base / "p" / name).chmod(mode)
+    return base / "p" / name
 
 
 @pytest.mark.parametrize("make", [
-    lambda base: base / "somewhere-else",                                    # not a twinsmith-desktop folder
-    lambda base: (base / "twinsmith-desktop").mkdir(mode=0o777) or (base / "twinsmith-desktop").chmod(0o777)
-    or base / "twinsmith-desktop",                                           # others can write to it
+    lambda base: _folder(base, name="somewhere-else"),            # not a twinsmith-desktop folder
+    lambda base: _folder(base, mode=0o777),                       # others can write to it
+    lambda base: _folder(base, parent_mode=0o777),                # others can swap it: the /tmp fallback, squatted
+    lambda base: base / "missing" / "twinsmith-desktop",          # Kit creates nothing from a bridge argument
+    lambda base: "twinsmith-desktop",                             # relative
 ])
 def test_kit_badge_stays_off_in_a_folder_that_is_not_private(kit, tmp_path, make):
     kit.ui.badge(10, 10, str(make(tmp_path)))
-    assert kit.ui._badge_state == [None] and kit.fake.windows == []
+    assert kit.ui._badge_state == [None] and kit.fake.windows == [] and not (tmp_path / "missing").exists()
 
 
-def test_a_folder_others_can_write_to_is_not_used(badge_env, monkeypatch):
-    badge_env.mkdir(parents=True)
-    badge_env.chmod(0o777)
+@pytest.mark.parametrize("loose", ["folder", "parent"])
+def test_a_folder_others_can_write_to_is_not_used(badge_env, monkeypatch, loose):
+    badge_env.mkdir()
+    (badge_env if loose == "folder" else badge_env.parent).chmod(0o777)
     _flag(badge_env, os.getpid()).write_text(cursor_badge.process_start(os.getpid()))  # planted: would block
     with cursor_badge.capture_hold(wait_s=0.05):
         pass
@@ -358,6 +377,7 @@ class KitWindow:
 
 @pytest.fixture
 def kit(monkeypatch):
+    cursor_badge.make_desktop_dir()  # the host makes the folder it names to Kit
     ui = _ui_module("sim_tools_ui_badge")
     fake = ModuleType("omni.ui")
     fake.windows = []

@@ -65,11 +65,14 @@ def map_coords(params: Dict[str, Any], coord_space: str, state: Any) -> Dict[str
 
 def badge_args(params: Dict[str, Any], state: Any) -> Dict[str, Any]:
     """With ``[screen] cursor_badge`` on, ask Kit to draw its cursor badge: Kit's ``act`` reads ``badge``,
-    the folder of this server's capture lock, so its badge hides for this server's screenshots."""
+    the folder of this server's capture lock (made here), so its badge hides for this server's screenshots."""
     from . import cursor_badge
 
     if getattr(getattr(state, "config", None), "cursor_badge", False):
-        return {**params, "badge": str(cursor_badge.desktop_dir())}
+        try:
+            return {**params, "badge": str(cursor_badge.make_desktop_dir())}
+        except OSError:  # no folder, no badge; the act goes on
+            pass
     return params
 
 

@@ -71,14 +71,24 @@ def desktop_dir() -> Path:
     return Path(runtime) / "twinsmith-desktop"
 
 
+def make_desktop_dir() -> Path:
+    """desktop_dir(), made private together with the folder above it."""
+    directory = desktop_dir()
+    directory.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory.mkdir(mode=0o700, exist_ok=True)
+    return directory
+
+
 def trusted(directory: Path) -> bool:
-    """A folder this account owns and nobody else can write to. Another local user could otherwise make
-    the predictable /tmp folder first, and hold its lock or plant a flag to stop every screenshot."""
+    """A folder this account owns and nobody else can write to, in a folder of the same kind. Another
+    local user could otherwise make the predictable /tmp folder first, then hold the lock, plant a flag
+    or swap the folder, and stop every screenshot or let a badge into one."""
     try:
-        info = os.lstat(directory)
+        infos = [os.lstat(directory), os.lstat(directory.parent)]
     except OSError:
         return False
-    return stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022
+    return all(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022
+               for info in infos)
 
 
 def write_flag(path: Path) -> None:
@@ -209,7 +219,7 @@ class _X11Badge:
         self.fd = None
         self.disp = _open_display()
         try:
-            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            make_desktop_dir()
             if not trusted(directory):
                 raise RuntimeError(f"{directory} is not a private folder of this account")
             self.fd = _open_lock(directory)

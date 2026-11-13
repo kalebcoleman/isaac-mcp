@@ -175,8 +175,8 @@ server.
   there (`badge-<pid>-<kind>.shown`, holding its process's start time); a capture waits up to 1 s for the flags to go and
   takes no picture if one stays, which happens while an Isaac Sim that shows its badge is too busy to draw a frame: take the
   screenshot again a few seconds later. A flag left by a process that has ended, or whose PID now belongs to another
-  process, is deleted. The server tells Kit which folder to use with each act, so both use the same one, and neither uses
-  a folder that another account owns or can write to.
+  process, is deleted. The server makes the folder and tells Kit which one to use with each act, so both use the same
+  one. Neither uses a folder, or a folder inside one, that another account owns or can write to; the badge is then off.
 - A monitor recording shows both badges. A window recording shows Kit's badge, which is drawn inside that window, but not
   the X11 badge, which is a window of its own.
 
