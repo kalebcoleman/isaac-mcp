@@ -133,6 +133,24 @@ def _neutralize_frame_bodies(stage, root, keep):
     return frames
 
 
+MAX_TGS_VELOCITY_ITERATIONS = 4
+
+
+def _clamp_velocity_iterations(root):
+    """Cap pack-authored articulation velocity iterations at the TGS-supported 4.
+
+    The RG2 asset authors 16; PhysX warns about more than 4 in a TGS scene. Position
+    iterations are left as authored. Session layer only.
+    """
+    clamped = []
+    for prim in Usd.PrimRange(root):
+        attribute = prim.GetAttribute("physxArticulation:solverVelocityIterationCount")
+        if attribute and (attribute.Get() or 0) > MAX_TGS_VELOCITY_ITERATIONS:
+            attribute.Set(MAX_TGS_VELOCITY_ITERATIONS)
+            clamped.append(str(prim.GetPath()))
+    return clamped
+
+
 def _deactivate_dangling_joints(stage, root):
     """Deactivate disabled pack joints that name no second body.
 
@@ -238,7 +256,7 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
     _set_world(assembly, _pose(placement.get("position_m", [0, 0, 0]),
                               placement.get("orientation_wxyz", [1, 0, 0, 0])))
     parts, roots, bodies, mounts = [], {}, {}, {}
-    frame_bodies, dropped_joints = [], []
+    frame_bodies, dropped_joints, clamped = [], [], []
     limitations = ["Pack fidelity is declared, not independently verified; no runtime validation performed.",
                    "Pack collision geometry, inertia, joint limits and drives are preserved; no synthetic drives.",
                    "Closed-chain RG2 dynamics and separate-articulation mounting require PhysX validation.",
@@ -282,6 +300,7 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
             dropped_joints += _deactivate_dangling_joints(stage, roots[role])
         else:
             declared = sources[role][1]["body"]
+            clamped += _clamp_velocity_iterations(roots[role])
             frame_bodies += _neutralize_frame_bodies(
                 stage, roots[role],
                 roots[role].GetPath() if declared == "." else roots[role].GetPath().AppendPath(declared))
@@ -389,7 +408,8 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
             "bota_sensor_path": str(sensor.GetPath()), "pad_paths": pad_paths,
             "parts": parts, "limitations": limitations, "max_opening_m": 0.110,
             "stack_order": list(order), "assembly_path": str(root),
-            "frame_bodies_neutralized": frame_bodies, "joints_deactivated": dropped_joints}
+            "frame_bodies_neutralized": frame_bodies, "joints_deactivated": dropped_joints,
+            "velocity_iterations_clamped": clamped}
 
 
 def _pads(stage, root, gripper, config, reference):
