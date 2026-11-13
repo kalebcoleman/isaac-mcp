@@ -1038,6 +1038,7 @@ def test_status_through_the_host_adds_host_and_keeps_every_bridge_field(monkeypa
     payload = json.loads(answer)
     host = payload.pop("host")
     assert "core" in payload.pop("toolsets")["on"]
+    assert {"default", "default_from"} <= set(payload.pop("physics"))      # the host adds the engine setting too
     assert set(payload) == set(direct) and payload["pid"] == direct["pid"] and payload["port"] == live.port
     assert host["stale"] is True and host["commit"] == COMMIT_B and "warning" in host
     assert str(tmp_path) not in answer, "status must not publish the checkout path"

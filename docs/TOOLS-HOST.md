@@ -115,8 +115,14 @@ toolsets = ["default", "+lab", "-screen"]
 physics_backend = "physx"
 ```
 
-`ISAAC_MCP_PHYSICS_BACKEND` overrides `[sim].physics_backend`; values are `physx` (default)
-or `newton`. This setting is recorded for future backend selection; it does not switch a running simulator.
+`ISAAC_MCP_PHYSICS_BACKEND` overrides `[sim].physics_backend`; values are `physx` or `newton`, and the default is
+the one built into `isaac_mcp/config.py`. The managed launch (`sim__launch` without `physics_backend`), `run.sh` and
+`scripts/run_ur5e_dt.py` all read it from there: the `--physics-backend` flag or the launch argument first, then the
+environment variable, the project file, the user file and the built-in default. `python3 -m isaac_mcp.config --print
+physics_backend` prints it with the standard library only. It never switches a running simulator, and a session that
+cannot give the requested engine starts nothing. `status` reports `physics`: the engine of the selected bridge when
+one answers (`active`), the configured `default` and where it came from (`default_from`: built-in, user file, project
+file or environment).
 For example, `isaac-mcp --toolsets all,+input,+launch` enables every implemented toolset.
 Run `isaac-mcp toolsets` to print effective selection, counts and enable instructions without starting a server.
 The startup log, `status` and the `isaac-mcp://toolsets` resource report selection.
@@ -239,7 +245,7 @@ creates files, and can affect the GPU and network. All four tools have conservat
 
 | MCP tool | Arguments | Use |
 |---|---|---|
-| `sim__launch` | `port=null`, `ros_domain=null`, `headless=false`, `allow_shared_domain=false`, `enable_motion_bvh=false`, `physics_backend="physx"` | Start a new process with a local bridge, workcell tools, chosen ROS domain and separate output/log and persistent Kit settings. Omit `port` and `ros_domain` to select free values. Optional Motion BVH enables RTX LiDAR motion effects; `physics_backend="newton"` selects the installed Newton engine without fallback. Returns a session ID and PID before the bridge is ready. |
+| `sim__launch` | `port=null`, `ros_domain=null`, `headless=false`, `allow_shared_domain=false`, `enable_motion_bvh=false`, `physics_backend=null` (the configured default) | Start a new process with a local bridge, workcell tools, chosen ROS domain and separate output/log and persistent Kit settings. Omit `port` and `ros_domain` to select free values. Optional Motion BVH enables RTX LiDAR motion effects; `physics_backend="newton"` selects the installed Newton engine without fallback, and the result says which engine and where the choice came from. Returns a session ID and PID before the bridge is ready. |
 | `sim__list` | `include_exited=false` | List simulators. Managed sessions have `managed: true`, including those started by an earlier server process; only the 3 newest exited ones are listed unless `include_exited=true` (their records and logs stay on disk). Advertised bridges started some other way have `managed: false`, an ID `external-<pid>-<port>`, and their PID, port, app and version from the portfile; the listing does not call them. |
 | `sim__status` | `session_id` | Managed session: check the original PID's identity, bridge and Kit readiness, and current memory snapshot. For a session launched with `physics_backend="newton"` that is running, `physics` reports whether Newton is the active engine and its tensor extension is on (`ready`, `engine`, `tensor_extension_enabled`); wait for `ready: true` before starting work on it. External ID: call that bridge's `status`, report its app, version and readiness, and report `port_conflict` if another PID answers. |
 | `sim__stop` | `session_id`, `expected_pid`, `confirm_discard=false`, `force=false` | With `confirm_discard=true`, send SIGINT to the matching managed process. Without it, the error includes the exact retry call. Poll status for exit; if normal shutdown fails, `force=true` sends SIGKILL. Unsaved changes may be lost. It always refuses an external bridge, because isaac-mcp did not start it. |

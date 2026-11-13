@@ -813,6 +813,30 @@ def _host_brief() -> Dict[str, Any]:
             if host.get(k) not in (None, False)}
 
 
+def _active_engine(state: _BridgeState) -> Optional[str]:
+    """The engine the selected bridge runs, or None when it has no scene tools or does not say."""
+    try:
+        info = state.get_client().call("sim.stage.info", timeout=DISCOVERY_TIMEOUT_S)
+        return (info.get("runtime") or {}).get("physics_engine") or None
+    except Exception:  # noqa: BLE001 - status still answers without it
+        return None
+
+
+def _physics_status(state: _BridgeState, active: Optional[str] = None) -> Dict[str, Any]:
+    """The physics engine: the one the selected bridge runs (when one answers), the configured default
+    for new sessions, and where that default came from. A running session keeps its own engine."""
+    settings = getattr(state, "config", None)
+    if settings is not None:
+        default, source = settings.physics_backend, settings.physics_backend_source
+    else:
+        default, source = config.resolve_physics_backend()
+    out: Dict[str, Any] = {"active": active, "default": default, "default_from": source}
+    if active and active != default:
+        out["note"] = (f"The selected simulator runs {active}; the configured default, {default}, applies to new sessions "
+                       "only. A running session's engine is never changed.")
+    return out
+
+
 def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
     """The ``status`` tool. Short by default: the selected bridge, what else runs here, and the
     stage IDs every scene tool needs. With no bridge it is still an answer, not an error."""
@@ -833,12 +857,14 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
         else:
             message = ("Nothing is running: no Isaac Sim bridge answers. Start your configured simulator, then "
                        "refresh_tools(wait_s=120). See toolsets for available host tools and optional launch support.")
-        return {"running": False, "message": message, **around, "host": _host_brief(), "toolsets": toolsets.describe(state.toolsets, state.runtime_enable)}
+        return {"running": False, "message": message, **around, "host": _host_brief(),
+                "physics": _physics_status(state), "toolsets": toolsets.describe(state.toolsets, state.runtime_enable)}
     if not isinstance(identity, dict):
         return identity
     host = _host_identity(identity.get("extension", {}))
     if detail:
-        return {**identity, "host": host, "toolsets": toolsets.describe(state.toolsets, state.runtime_enable)}
+        return {**identity, "host": host, "physics": _physics_status(state, _active_engine(state) if "sim" in (identity.get("namespaces") or []) else None),
+                "toolsets": toolsets.describe(state.toolsets, state.runtime_enable)}
     out: Dict[str, Any] = {"running": True, **{k: identity[k] for k in _STATUS_SHORT if k in identity}}
     if "sim" in (identity.get("namespaces") or []):
         try:
@@ -866,6 +892,7 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
     out.update(around)
     out["host"] = {k: v for k, v in host.items() if k in ("version", "commit", "warning", "code_drift", "code_drift_message",
                                                            "extension_mismatch") and v not in (None, False)}
+    out["physics"] = _physics_status(state, (out.get("stage") or {}).get("physics_engine"))
     out["toolsets"] = toolsets.describe(state.toolsets, state.runtime_enable)
     out["note"] = "Checked: no need to call this again before each tool. detail=true adds the full bridge identity."
     return out

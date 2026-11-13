@@ -13,7 +13,7 @@ starts `run.sh`. Set host variables in the client's `env` for the `isaac` server
 | `ISAAC_MCP_HOST` | discovered bridge | Bridge host. |
 | `ISAAC_MCP_TOOLSETS` | `default` | Toolset profile and adjustments. Overrides user and project TOML. See [toolsets](TOOLS-HOST.md#choosing-which-local-tools-a-server-exposes). |
 | `ISAAC_MCP_RUNTIME_ENABLE` | `1` | `0` stops `toolsets(action="enable")` and `disable` (same as `[tools] runtime_enable = false`); `list` still works. |
-| `ISAAC_MCP_PHYSICS_BACKEND` | `physx` | Configured backend (`physx` or `newton`); selection is recorded only, not applied to a simulator yet. |
+| `ISAAC_MCP_PHYSICS_BACKEND` | built-in default | Configured backend (`physx` or `newton`) for new sessions: read by `sim__launch`, `run.sh` and `scripts/run_ur5e_dt.py`; overrides `[sim] physics_backend`; `status` reports it. Never switches a running simulator. |
 | `ISAAC_MCP_NAME`, `ISAAC_MCP_INSTRUCTIONS` | built in | Cosmetic server identity. |
 | `ISAAC_MCP_LOG` | `1` | `0` turns off the host server's durable log file (stderr logging stays). See [Diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log). |
 | `ISAAC_MCP_LOG_DIR` | `$XDG_STATE_HOME/isaac-mcp`, else `~/.local/state/isaac-mcp` | Directory of the host's `server-<pid>.log` (1 MB x 3, private). The bridge reads the same variable for its failure log. |
@@ -61,7 +61,7 @@ Details are in the [Isaac Lab reference](TOOLS-ISAACLAB.md).
 |---|---|---|
 | `ISAAC_MCP_PYTHON` | see below | Simulator interpreter. `UR5E_DT_PYTHON` is a deprecated alias. |
 | `UR5E_DT_PORT` | `8766` | Bridge port for `run.sh`. `ISAAC_SIM_PORT` is an older alias; `--port` overrides both. |
-| `ISAAC_MCP_PHYSICS_BACKEND` | `physx` | Engine for a new session, same as `--physics-backend`. `newton` is experimental. |
+| `ISAAC_MCP_PHYSICS_BACKEND` | configured default | Engine for a new session; `--physics-backend` wins over it. `newton` is experimental. |
 | `ISAAC_MCP_NO_HOT_RELOAD` | unset | `1` stops Kit reloading extensions when their files change, same as `--no-hot-reload`. `run.sh` passes `--/app/extensions/fsWatcherEnabled=0`. Use it for recorded runs, or when another process edits this checkout. `status` reports `extension.hot_reload`. See [hot reload](TOOLS-SCENE.md#extension-hot-reload). |
 | `UR5E_DT_HEADLESS` | `0` | Set by `run.sh --headless`. |
 | `OMNI_KIT_ACCEPT_EULA` | unset | `YES` accepts NVIDIA's EULA, same as the installer's `--accept-eula`. |

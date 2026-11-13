@@ -239,7 +239,7 @@ Launch a separate managed Isaac Sim instance, when explicitly asked.
 - `headless` (bool, default `False`): true: no window.
 - `allow_shared_domain` (bool, default `False`): true: allow a ROS domain another session already uses.
 - `enable_motion_bvh` (bool, default `False`): true: accurate RTX LiDAR motion compensation; costs rendering time and GPU memory.
-- `physics_backend` (Literal['physx', 'newton'], default `'physx'`): Engine for this new process. Missing Newton dependencies fail with no fallback.
+- `physics_backend` (Literal['physx', 'newton'] | None, default `None`): Engine for this new process. Omit for the configured default (status shows it). An engine that cannot be given starts nothing: no fallback.
 
 ### `sim__list`
 

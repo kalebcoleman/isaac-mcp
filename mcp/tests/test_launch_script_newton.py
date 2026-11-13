@@ -31,11 +31,16 @@ def launch(monkeypatch, backend, installed=(), refuse=(), engine="newton"):
     modules["omni.kit"].app = modules["omni.kit.app"]
     for name, module in modules.items():
         monkeypatch.setitem(sys.modules, name, module)
-    monkeypatch.setenv("ISAAC_MCP_PHYSICS_BACKEND", backend)
+    if backend is not None:
+        monkeypatch.setenv("ISAAC_MCP_PHYSICS_BACKEND", backend)
     with pytest.raises(SystemExit) as done:
         runpy.run_path(str(SCRIPT), run_name="__main__")
     assert done.value.code == 0
     return enabled
+
+
+def launch_without_env(monkeypatch, installed=(), engine="newton"):
+    return launch(monkeypatch, None, installed=installed, engine=engine)
 
 
 def test_a_newton_launch_enables_the_tensor_extension_where_the_release_ships_one(monkeypatch):
@@ -47,7 +52,37 @@ def test_a_release_without_a_separate_tensor_extension_starts_as_before(monkeypa
 
 
 def test_a_physx_launch_touches_no_extension(monkeypatch):
-    assert launch(monkeypatch, "physx", installed=[TENSORS]) == []
+    assert launch(monkeypatch, "physx", installed=[TENSORS], engine="physx") == []
+
+
+def test_a_physx_request_that_ends_on_another_engine_stops_the_launch(monkeypatch):
+    """The mirror of the Newton check: no Newton fallback behind a PhysX request, and nothing enabled."""
+    with pytest.raises(RuntimeError, match="Requested physx engine is not active.*no newton fallback"):
+        launch(monkeypatch, "physx", installed=[TENSORS], engine="newton")
+
+
+def test_a_build_with_no_engine_query_is_only_physx_and_launches(monkeypatch):
+    """An older build's manager has no get_active_physics_engine: nothing to compare, nothing enabled."""
+    original = launch.__globals__["SimpleNamespace"]
+
+    def without_query(**kwargs):
+        kwargs.pop("get_active_physics_engine", None)
+        return original(**kwargs)
+
+    monkeypatch.setitem(launch.__globals__, "SimpleNamespace", without_query)
+    assert launch(monkeypatch, "physx", engine="physx") == []
+
+
+def test_the_script_reads_the_configured_backend_when_run_directly(monkeypatch, tmp_path):
+    """No ISAAC_MCP_PHYSICS_BACKEND (run.sh always sets it): the one configuration module decides."""
+    from isaac_mcp import config
+    monkeypatch.delenv("ISAAC_MCP_PHYSICS_BACKEND", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "isaac-mcp.toml").write_text('[sim]\nphysics_backend = "newton"\n')
+    assert launch_without_env(monkeypatch, installed=["isaacsim.physics.newton"]) == ["isaacsim.physics.newton"]
+    (tmp_path / "isaac-mcp.toml").unlink()
+    assert config.DEFAULT_PHYSICS_BACKEND in config.PHYSICS_BACKENDS
 
 
 def test_a_tensor_extension_that_will_not_enable_stops_the_launch_instead_of_starting_half_ready(monkeypatch):
