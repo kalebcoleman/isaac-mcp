@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT="${UR5E_DT_PORT:-${ISAAC_SIM_PORT:-8766}}"
 HEADLESS=0
-PHYSICS_BACKEND="${ISAAC_MCP_PHYSICS_BACKEND:-physx}"
+PHYSICS_BACKEND=""     # --physics-backend; else the configured one (see below)
 SHOW_HELP=0
 EXTRA_ARGS=()
 
@@ -118,7 +118,8 @@ Options:
   --headless     Run without visible window (sets UR5E_DT_HEADLESS=1)
   --motion-bvh   Enable RTX sensor motion compensation (increases GPU memory use)
   --realtime     Cap the app at 60 frames per second, so sim time keeps to wall-clock time (for Nav2 with a headless app)
-  --physics-backend physx|newton  Select this new session's engine (default: physx)
+  --physics-backend physx|newton  Select this new session's engine (default: the configured physics_backend:
+                 ISAAC_MCP_PHYSICS_BACKEND, else [sim] physics_backend in the config files, else the built-in)
   --no-hot-reload  Do not reload extensions when their files change (or set ISAAC_MCP_NO_HOT_RELOAD=1)
   --port N       Bridge port (default: 8766)
   -h, --help     Show this help message and exit
@@ -134,7 +135,7 @@ fi
 
 export UR5E_DT_PORT="$PORT"
 case "$PHYSICS_BACKEND" in
-  physx|newton) export ISAAC_MCP_PHYSICS_BACKEND="$PHYSICS_BACKEND" ;;
+  ""|physx|newton) ;;
   *) echo "--physics-backend must be physx or newton" >&2; exit 2 ;;
 esac
 
@@ -180,6 +181,13 @@ if ! "$PY" -c 'import isaacsim' 2>/dev/null </dev/null; then
 fi
 
 SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))' </dev/null)"
+# The flag wins; otherwise the one configuration module says (environment variable, then the project and
+# user config files, then its built-in default). It needs only the standard library, so no SDK is required.
+if [ -z "$PHYSICS_BACKEND" ]; then
+  PHYSICS_BACKEND="$(PYTHONPATH="$ROOT/mcp${PYTHONPATH:+:$PYTHONPATH}" python3 -m isaac_mcp.config --print physics_backend)" \
+    || { echo "run.sh: could not read the configured physics_backend (see the message above); nothing was started" >&2; exit 2; }
+fi
+export ISAAC_MCP_PHYSICS_BACKEND="$PHYSICS_BACKEND"
 # Refuse here rather than after Kit has started: 5.1 has no Newton extension, and never fall back to PhysX.
 # Extensions sit in <site>/exts in a pip install and two levels above the package in a standalone app.
 if [ "$PHYSICS_BACKEND" = newton ] \

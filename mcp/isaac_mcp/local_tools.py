@@ -85,6 +85,10 @@ class ScopedTools:
                 options = {"description": inspect.cleandoc(fn.__doc__ or ""), **kwargs}
                 self._server.tool(name=name, **options)(fn)
                 strip_schema_titles(self._server, tool_name)
+                manager = getattr(self._server, "_tool_manager", None)      # a test double has none
+                if manager is not None:
+                    from .grouped_tools import shorten_listed
+                    shorten_listed(manager._tools[tool_name])
             return fn
 
         return decorator

@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from isaac_mcp import sim_sessions as sim
+from isaac_mcp import config, sim_sessions as sim
 
 _REAL_CHECK_PORT = sim._check_port   # the setup fixture replaces it
 
@@ -39,6 +39,8 @@ def setup(monkeypatch, tmp_path):
     env = {"ISAAC_MCP_SIM_ROOT": str(root), "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "sessions"),
            "UR5E_DT_PYTHON": "/configured/sim-python", "ISAAC_MCP_PYTHON": "/configured/new-python",
            "ISAAC_MCP_WORKSPACE": "/configured/workspace"}
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))       # no configuration file of the machine's own
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sim.client, "discover_bridges", lambda: [])
     monkeypatch.setattr(sim, "_boot_id", lambda: "test-boot")
     monkeypatch.setattr(sim, "_lab_pids", lambda env: set())
@@ -104,8 +106,8 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     assert child["UR5E_DT_PYTHON"] == "/configured/sim-python"
     assert child["ISAAC_MCP_PYTHON"] == "/configured/new-python"
     assert child["ISAAC_MCP_WORKSPACE"] == "/configured/workspace"
-    assert child["ISAAC_MCP_PHYSICS_BACKEND"] == "physx"
-    assert result["physics_backend"] == "physx"
+    assert child["ISAAC_MCP_PHYSICS_BACKEND"] == config.DEFAULT_PHYSICS_BACKEND     # no argument: the configured default
+    assert result["physics_backend"] == config.DEFAULT_PHYSICS_BACKEND and result["physics_backend_source"] == "built-in"
     assert "PYTHONPATH" not in child
     assert "UR5E_DT_SHOW_PANEL" not in child
     assert "--headless" in captured["args"] and captured["start_new_session"] is True
@@ -652,7 +654,7 @@ def test_newton_on_51_refuses_before_starting_anything(setup, tmp_path, monkeypa
 
 def test_physx_on_51_and_newton_on_62_are_not_refused(setup, tmp_path):
     setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
-    assert sim._launch(setup, 18766, 9, True, False)["physics_backend"] == "physx"
+    assert sim._launch(setup, 18766, 9, True, False, physics_backend="physx")["physics_backend"] == "physx"
     setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py62", "6.2.0.0"))
     assert sim._launch(setup, 18767, 10, True, False, physics_backend="newton")["physics_backend"] == "newton"
 
@@ -1145,3 +1147,58 @@ def test_newton_readiness_is_unknown_until_the_scene_tools_answer_and_physx_sess
     plain = _record(setup, session_id="b" * 32, port=18999)
     _newton_kit(monkeypatch)
     assert "physics" not in sim._status(setup, plain["id"])
+
+
+# ---- the configured default, and no silent fallback in either direction ----
+
+
+def test_the_launch_argument_defaults_to_the_configured_backend_not_a_literal():
+    import inspect
+    assert inspect.signature(sim._launch).parameters["physics_backend"].default is None
+
+
+def test_the_current_default_is_physx():
+    """The one test that pins the value: flipping the default in isaac_mcp.config changes this line only."""
+    assert config.DEFAULT_PHYSICS_BACKEND == "physx"
+
+
+@pytest.mark.parametrize("configured,other", [("physx", "newton"), ("newton", "physx")])
+def test_the_configured_default_applies_when_no_argument_is_given_and_an_argument_wins(setup, configured, other):
+    setup["ISAAC_MCP_PHYSICS_BACKEND"] = configured
+    started = sim._launch(setup, 18766, 9, True, False)
+    assert started["physics_backend"] == configured and started["physics_backend_source"] == "environment"
+    chosen = sim._launch(setup, 18767, 10, True, False, physics_backend=other)
+    assert chosen["physics_backend"] == other and chosen["physics_backend_source"] == "argument"
+
+
+def test_the_engine_is_always_named_to_the_new_process(setup, monkeypatch):
+    """So a changed default can never change what an earlier call asked for."""
+    seen = []
+    monkeypatch.setattr(sim.subprocess, "Popen", lambda args, **k: seen.append(k["env"]) or SimpleNamespace(pid=510, wait=lambda: 0))
+    monkeypatch.setattr(sim, "_process_identity", lambda pid: (pid, 12345))
+    setup["ISAAC_MCP_PHYSICS_BACKEND"] = "newton"
+    sim._launch(setup, 18766, 9, True, False, physics_backend="physx")
+    sim._launch(setup, 18767, 10, True, False)
+    assert [env["ISAAC_MCP_PHYSICS_BACKEND"] for env in seen] == ["physx", "newton"]
+
+
+def test_a_configured_newton_on_a_build_without_it_starts_nothing_instead_of_falling_back_to_physx(setup, tmp_path, monkeypatch):
+    setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
+    setup["ISAAC_MCP_PHYSICS_BACKEND"] = "newton"
+    monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
+    with pytest.raises(ValueError, match="5.1.0.0 has no Newton") as error:
+        sim._launch(setup, 18766, 9, True, False)
+    assert "no fallback" in str(error.value) and "physics_backend=physx" in str(error.value)
+
+
+def test_an_explicit_physx_on_that_build_still_starts_and_is_not_changed_by_the_configured_default(setup, tmp_path):
+    setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
+    setup["ISAAC_MCP_PHYSICS_BACKEND"] = "newton"
+    assert sim._launch(setup, 18766, 9, True, False, physics_backend="physx")["physics_backend"] == "physx"
+
+
+def test_a_bad_configured_backend_starts_nothing_and_says_where_it_came_from(setup, monkeypatch):
+    setup["ISAAC_MCP_PHYSICS_BACKEND"] = "bullet"
+    monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
+    with pytest.raises(ValueError, match="physics_backend must be physx or newton, not 'bullet' \\(from the environment\\)"):
+        sim._launch(setup, 18766, 9, True, False)

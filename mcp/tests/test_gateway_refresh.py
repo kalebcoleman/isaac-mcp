@@ -51,7 +51,7 @@ def test_required_optional_and_defaulted_arguments_reach_the_schema(fresh_gatewa
     gw.discover_and_register_tools(fresh_gateway)
     schema = _served(fresh_gateway, "demo__run").parameters
     assert schema["required"] == ["code"]
-    assert schema["properties"]["steps"]["default"] == 4 and schema["properties"]["note"]["default"] is None
+    assert schema["properties"]["steps"]["default"] == 4 and "default" not in schema["properties"]["note"]  # a null default is not listed
 
 
 def test_a_listing_without_argument_lists_is_refused(fresh_gateway, monkeypatch):

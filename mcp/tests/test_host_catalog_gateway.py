@@ -1038,6 +1038,7 @@ def test_status_through_the_host_adds_host_and_keeps_every_bridge_field(monkeypa
     payload = json.loads(answer)
     host = payload.pop("host")
     assert "core" in payload.pop("toolsets")["on"]
+    assert {"default", "default_from"} <= set(payload.pop("physics"))      # the host adds the engine setting too
     assert set(payload) == set(direct) and payload["pid"] == direct["pid"] and payload["port"] == live.port
     assert host["stale"] is True and host["commit"] == COMMIT_B and "warning" in host
     assert str(tmp_path) not in answer, "status must not publish the checkout path"
@@ -1071,7 +1072,9 @@ def test_bridge_listing_help_is_one_working_form(monkeypatch, tmp_path):
     state = gw._state_for(server)
     listed = {tool.name: tool for tool in asyncio.run(server.list_tools())}
     refused = ConnectionRefusedError("[Errno 111] Connection refused")
-    messages = [gw._BRIDGE_HELP, listed["use_bridge"].description,
+    full_use_bridge = json.loads(gw._tool_help(server, "use_bridge"))["use_bridge"]["description"]   # the listing is short
+    assert "Find candidates with status" in listed["use_bridge"].description
+    messages = [gw._BRIDGE_HELP, full_use_bridge,
                 gw._catalog_error("status", refused, state), gw._catalog_error("ur5e_dt.workcell_status", refused, state),
                 gw._starting_hint(server, refused)]
     for message in messages:
