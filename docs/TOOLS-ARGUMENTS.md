@@ -1535,23 +1535,31 @@ Toolset `robosim` is off until you select it with `+robosim`. Reference: [ROBOSI
 
 ### `robosim`
 
-RSS live real-to-sim via its private Python: start a trusted scene, extract video frames, snapshot, compare masks, record a rollout, compare_take, report and stop. Runs the scene's Python (not sandboxed); device=cuda:0 uses the GPU. Image-space metrics only, not physics fitting. Long actions return a run; poll status. CPU never auto-upgrades to GPU.
+RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a trusted scene (frozen until update_scene), reference a clip, compare, rollout a pusher push, compare_take, report, stop. Compares images; no mass or friction fitting. Runs scene code (not sandboxed); cuda:0 uses the GPU. Long actions: poll status.
 
-- `action` (Literal['status', 'start', 'scene_template', 'reference', 'snapshot', 'compare', 'rollout', 'compare_take', 'stop', 'report'], required): Action to perform.
+- `action` (Literal['status', 'start', 'scene_template', 'update_scene', 'reference', 'snapshot', 'compare', 'rollout', 'compare_take', 'stop', 'report'], required): Action to perform.
 - `run` (str | None, default `None`): Exact run name from start; omit for status to list runs.
 - `name` (str | None, default `None`): start: short run name; letters, digits, underscores and hyphens.
-- `scene` (str | None, default `None`): start: absolute trusted Python scene file; copied into the run. Executes code, not sandboxed.
-- `device` (Literal['cpu', 'cuda:0'] | None, default `None`): Required for start: cpu or cuda:0. Later actions inherit the run's device.
+- `scene` (str | None, default `None`): start/update_scene: absolute trusted scene .py, kept as scene-vN.py. Runs code, not sandboxed.
+- `device` (Literal['cpu', 'cuda:0'] | None, default `None`): start (required): cpu is plain MuJoCo, cuda:0 is Newton MuJoCo-Warp. Runs inherit it.
 - `video` (str | None, default `None`): reference: absolute local video file; copied before extracting frames.
-- `keys` (list[str] | None, default `None`): compare/compare_take: RSS object masks, e.g. ['cube=red'] or ['cube=#d01a10~0.1'].
+- `keys` (list[str] | None, default `None`): compare/compare_take: RSS object masks, e.g. ['block=red'] or ['block=#d01a10~0.1'].
 - `take` (str | None, default `None`): rollout/compare_take: take basename, without extension.
-- `routine` (str | None, default `None`): rollout: routine defined by the scene; omit for RSS's default routine.
+- `routine` (str | None, default `None`): rollout: 'push' (default in the template) or 'settle', or a routine your scene defines.
 - `camera` (str | None, default `None`): Camera name from start's RSS status; omit for the scene's first camera.
-- `at` (str, default `'0:start,end'`): reference: RSS time anchors, e.g. '0:start,1:middle,end'.
-- `every` (int, default `4`): rollout: record every N control steps.
+- `at` (str | None, default `None`): reference: RSS anchors in clip seconds, e.g. '0:start,3:middle,6:end'; default from start_s/end_s.
+- `shape` (Literal['box', 'tee'], default `'tee'`): scene_template: box, or tee (a T of two boxes in one rigid body).
+- `push` (dict | None, default `None`): rollout: {'waypoints': [[s, x, y], ...] pusher path in m, 'object_velocity': [vx, vy, wz]}.
+- `duration_s` (float | None, default `None`): rollout: simulated seconds; default the last waypoint time. Not with steps.
+- `steps` (int | None, default `None`): rollout: control steps instead of duration_s.
+- `record_fps` (float, default `10.0`): rollout: frames per simulated second to record (nearest whole step stride).
+- `start_s` (float | None, default `None`): reference: clip window start; compare_take: clip window start (default: reference's).
+- `end_s` (float | None, default `None`): reference/compare_take: clip window end in seconds.
+- `sim_start_s` (float | None, default `None`): compare_take: simulated time matching start_s; default 0.
+- `sim_end_s` (float | None, default `None`): compare_take: simulated time matching end_s; default same length as the clip window.
 - `size` (str, default `'320x240'`): snapshot/compare: WIDTHxHEIGHT pixels.
 - `width` (int, default `320`): reference: contact-sheet tile width.
-- `port` (int, default `8080`): start: live viewer TCP port (RSS listens on all interfaces).
+- `port` (int | None, default `None`): start: viewer port; omit to pick a free one. RSS listens on all interfaces.
 - `wait_s` (float, default `0`): Wait at most this many seconds; poll status with run for completion.
 - `allow_concurrent_gpu` (bool, default `False`): start: knowingly permit cuda:0 despite other GPU workloads or an unavailable GPU check.
 
