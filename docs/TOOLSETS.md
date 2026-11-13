@@ -128,15 +128,17 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 
 | Selection | Listed tools | Characters | Estimated tokens |
 |---|--:|--:|--:|
-| `minimal` | 5 | 6,506 | 1,626 |
-| `default` | 30 | 79,269 | 19,817 |
-| `all` | 47 | 115,982 | 28,995 |
-| `all,+input,+launch` | 49 | 121,057 | 30,264 |
-| `core,lab,code` | 14 | 29,624 | 7,406 |
-| `core,workcell` | 12 | 11,033 | 2,758 |
+| `minimal` | 6 | 6,360 | 1,590 |
+| `default` | 31 | 60,715 | 15,178 |
+| `all` | 48 | 88,982 | 22,245 |
+| `all,+input,+launch` | 50 | 93,071 | 23,267 |
+| `core,lab,code` | 15 | 22,059 | 5,514 |
+| `core,workcell` | 13 | 10,542 | 2,635 |
 
-These sizes were measured on the commit that added this page, before the work that shortens tool descriptions. They will
-fall when that work lands. Measure your own selection; the argument is the same text the server reads:
+Before toolsets existed the server always listed 48 tools, about 28,450 estimated tokens. The listed text is a summary:
+`action="help"` on a grouped tool and `isaac_help(tool="<name>")` return the full description. A test
+(`mcp/tests/test_toolsets.py`) fails when a profile grows past its budget. Measure your own selection; the argument is the
+same text the server reads:
 
 ```bash
 cd mcp
@@ -154,13 +156,25 @@ uv run --locked --isolated --python 3.12 --extra test python ../scripts/measure_
 
 ## Enabling a toolset while the server runs
 
-> **Status: described from the design, to be checked against the final code.** Another change adds a `toolsets` tool to the
-> `core` toolset; its arguments are not described here until that code is merged.
+The `toolsets` tool is in `core`, so it is always listed. Its actions:
 
-The `toolsets` tool has the actions `list`, `enable` and `disable`, so an agent can turn a toolset on for the rest of a
-session instead of restarting the server. `input` and `launch` are never enabled this way: those two let a client act on
-the desktop or start simulator processes, so only a person can turn them on, by editing the configuration before the server
-starts. What the tool changes is the listed tools; it does not change any permission.
+- `toolsets(action="list")` returns what `status` reports: the toolsets that are on, the ones that are off with a one-line
+  summary and tool count, the planned ones, and which can be enabled now.
+- `toolsets(action="enable", names=["robosim"])` registers those toolsets' tools for the rest of this server process and
+  tells the client the tool list changed. The result names the tools that became available. A client that loads tools
+  lazily may need to look a new tool up by name before calling it.
+- `toolsets(action="disable", names=["screen"])` removes them again. `core` cannot be disabled.
+
+Rules the server enforces:
+
+- `input` and `launch` are never enabled this way. They let a client act on the desktop or start simulator processes, so
+  only a person can turn them on, in the configuration, before the server starts. A call that names one of them is refused
+  and changes nothing.
+- A change made with this tool lasts until the server stops. It is not written to any file.
+- `[tools] runtime_enable = false` in a configuration file, or `ISAAC_MCP_RUNTIME_ENABLE=0`, turns `enable` and `disable`
+  off; `list` still answers.
+
+What the tool changes is the listed tools; it does not change any permission.
 
 ## Toolsets control what is listed, not what is allowed
 

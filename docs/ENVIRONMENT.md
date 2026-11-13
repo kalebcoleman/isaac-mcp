@@ -46,7 +46,8 @@ A project's `isaac-mcp.json` is a different file, read for asset packs and the I
 | Variable | Default | Read by | Meaning |
 |---|---|---|---|
 | `ISAAC_MCP_TOOLSETS` | `default` | host | Toolset profile and adjustments. Overrides the files; `--toolsets` overrides it. See [toolsets](TOOLSETS.md). |
-| `ISAAC_MCP_PHYSICS_BACKEND` | `physx` | host, `run.sh`, Kit | Physics engine, `physx` or `newton`. `run.sh` reads it for a new simulator (`--physics-backend` overrides it) and `scripts/run_ur5e_dt.py` applies it inside Kit; the host validates it with `[sim] physics_backend`. Never falls back to the other engine. See [compatibility](COMPATIBILITY.md#target-engine). |
+| `ISAAC_MCP_RUNTIME_ENABLE` | `1` | host | `0` stops the `toolsets` tool from enabling or disabling toolsets while the server runs; `[tools] runtime_enable = false` does the same. See [toolsets](TOOLSETS.md#enabling-a-toolset-while-the-server-runs). |
+| `ISAAC_MCP_PHYSICS_BACKEND` | `physx` | host, `run.sh`, Kit | Physics engine for a new simulator, `physx` or `newton`. It overrides `[sim] physics_backend` in the configuration files; `--physics-backend` overrides it. The managed launch tool, `run.sh` and `scripts/run_ur5e_dt.py` all read the same setting. Never falls back to the other engine. See [compatibility](COMPATIBILITY.md#target-engine). |
 | `ISAAC_MCP_NAME` | `isaac` | host | Name the server reports to the client. |
 | `ISAAC_MCP_INSTRUCTIONS` | built in | host | Replaces the instructions text the server sends to the client. |
 | `ISAAC_MCP_LOG` | `1` | host | `0` turns off the durable log file; stderr logging stays. See [diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log). |
