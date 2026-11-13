@@ -464,9 +464,11 @@ class JointTools:
         applied, clamped, rounded = allowed_targets(
             rows, limits, state["positions"], units, clamp, "Target"
         )
+        sm = self.physics_manager()
+        if state["backend"] == "newton":
+            self.newton_timestep(sm, stage)  # refuses, before any target is written, when Newton's two timesteps disagree
         dof_set(view, "get_dof_position_targets", "set_dof_position_targets",
                 {index: row[2] for index, row in applied.items()})
-        sm = self.physics_manager()
         before_time, dt = sm.get_simulation_time(), sm.get_physics_dt()
         if not finite_clock(before_time) or not finite_clock(dt) or dt <= 0:
             refuse("PHYSICS_CLOCK_INVALID",

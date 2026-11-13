@@ -760,7 +760,10 @@ def occupancy_map(scene, stage, a):
         refuse("EXTENSION_UNAVAILABLE", "isaacsim.asset.gen.omap could not be enabled in this Isaac Sim.")
     from isaacsim.asset.gen.omap.bindings import _omap
 
-    in_collider = _start_in_collider(stage, start, (z[0] + z[1]) / 2, cell, to_su)
+    from .newton_support import engine_name
+
+    newton = engine_name() == "newton"  # the two collider probes below are PhysX scene queries: they do not run under Newton
+    in_collider = False if newton else _start_in_collider(stage, start, (z[0] + z[1]) / 2, cell, to_su)
     om = _omap.acquire_omap_interface()
     # Before omap 2.3.3 a collider within one cell below a positive z_min still hits: a floor at z=0 fills the default slice.
     z_low = min(z[0] + 1.01 * cell, (z[0] + z[1]) / 2) if _omap_before_2_3_3() and z[0] > 0 else z[0]
@@ -783,7 +786,7 @@ def occupancy_map(scene, stage, a):
                        "inside the bounds and a UsdPhysics.Scene on the stage.")
             pgm, origin, counts = pgm_and_origin(buffer, width, height, min_bound, cell * to_su, mpu, clear)
             next_low = raised_slice(z_low, z[1], cell, counts["occupied"] and not start_occupied, attempt)
-            if next_low is None or not _colliders_in_bounds(lo, hi, (z_low, z[1]), to_su):
+            if next_low is None or newton or not _colliders_in_bounds(lo, hi, (z_low, z[1]), to_su):
                 break
             z_low = next_low
     finally:
@@ -793,7 +796,7 @@ def occupancy_map(scene, stage, a):
         refuse("START_BLOCKED", f"start {start} {reason}. The generator flood-fills free space from it, so the "
                "map would be empty or wrong. Move start to open floor next to (not on) the robot; `clear` only "
                "edits the saved image. No files were written.", cells=counts)
-    colliders = _colliders_in_bounds(lo, hi, (z_low, z[1]), to_su) if counts["occupied"] == 0 else []
+    colliders = _colliders_in_bounds(lo, hi, (z_low, z[1]), to_su) if counts["occupied"] == 0 and not newton else []
     if colliders:
         refuse("MAP_NO_OBSTACLES", f"The generator marked no cell occupied, but colliders are inside the bounds and z "
                f"slice ({', '.join(colliders)}), so this map would be wrong. Raising the slice's bottom by up to "
@@ -822,7 +825,13 @@ def occupancy_map(scene, stage, a):
     else:
         warn = None
     raised = {"z_used": [round(z_low, 4), z[1]], "z_note": slice_bottom_note(cell)} if z_low != z[0] else {}
-    return dict(pgm=str(pgm_path), yaml=str(yaml_path), width=width, height=height, resolution=cell, **raised,
+    skipped = dict(backend="newton", checks_skipped=[
+        "start inside a collider (PhysX overlap query)", "colliders inside the mapped volume (PhysX overlap query)",
+        "raising the slice bottom to clear a floor, which depends on that second check"],
+        checks_note="Not run under Newton, which has no overlap query here: a start point inside a collider is caught only by the "
+                    "map-based checks (no walls found, start cell occupied or not free). The map generator itself is native "
+                    "(isaacsim.asset.gen.omap) and was not verified under Newton, so inspect the saved map.") if newton else {}
+    return dict(pgm=str(pgm_path), **skipped, yaml=str(yaml_path), width=width, height=height, resolution=cell, **raised,
                 origin=[round(origin[0], 4), round(origin[1], 4), 0.0], cells=counts, yaml_text=yaml_text,
                 **({"warning": warn} if warn else {}),
                 usage="ros2 launch nav2_bringup localization_launch.py map:=<yaml> use_sim_time:=true")

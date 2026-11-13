@@ -25,7 +25,10 @@ unrelated jobs; record the source, versions, backend, observed effects and limit
 
 - [ ] Investigate the Sim 6.2 Newton exact-step timing mismatch: 20 requested steps at
   `dt=0.002` advanced the reported clock by 0.020 s, not 0.040 s. Check solver steps,
-  clock and body state independently before changing the timing guard.
+  clock and body state independently before changing the timing guard. The code now
+  cross-checks the two timestep sources before stepping and reports Newton's own clock;
+  run `scripts/smoke/newton_checks.py` (`exact_steps_default`, `exact_steps_configured`) on a free GPU and,
+  if a mismatch remains, read `newton.clocks_before/after` and `newton.timestep_check` in the step error.
 - [ ] Qualify the Isaac Sim, Newton, Warp, MuJoCo and GPU/driver versions that actually load;
   document installation and diagnostics without replacing the simulator's matched packages.
 - [ ] Exercise GPU Newton with representative rigid contacts, articulations, control, sensors,

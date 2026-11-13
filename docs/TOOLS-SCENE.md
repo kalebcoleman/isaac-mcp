@@ -767,6 +767,7 @@ requested engine fails instead of falling back. Newton uses its tensor adapter, 
 paused solver steps and Fabric publication; it does not report authored USD as runtime pose.
 On Sim 6.2 one GPU Newton exact-step probe returned `STEP_TIMING_MISMATCH`; inspect state and
 do not assume exact stepping succeeds on every Newton scene. See [compatibility](COMPATIBILITY.md#release-backend-scope).
+The likely cause is two timesteps on one scene; see [Newton in the generic tools](#newton-in-the-generic-tools).
 The older three releases need a scoped internal playing-flag adapter, restored even on error.
 Direct Newton steps invalidate captured CUDA graphs to avoid stale dt/state buffers.
 Newton requires meter stages and a qualified extension/library stack. Paused saves copy up to
@@ -933,3 +934,36 @@ ambiguous runtime target refuses with the producer and camera details. A graph t
 run may not provide enough evidence to recover a missing target: set its target and retry.
 Pause before saving an active scene; saving while playing remains refused. After Stop a
 native texture may have been torn down, so inspect a refusal rather than assuming it is live.
+
+### Newton in the generic tools
+
+Newton (Isaac Sim 6.2, MuJoCo-Warp) is experimental and PhysX is still the default. These are the differences in the
+generic scene tools, read from the installed extension; the live checks that prove them are in
+`scripts/smoke/newton_checks.py` (`python3 scripts/smoke.py physics --backend newton --discard-changes --check newton_checks`).
+
+- **Contact buffers.** MuJoCo-Warp holds a fixed number of contacts (`nconmax`, default 200 per world) and constraint rows
+  (`njmax`, default 1200 per world) and drops what does not fit. A 54-block tower needs far more. `sim__quick_start` (every Newton
+  quick scene, and the Jenga tower in particular) sizes both from the rigid-body count (32 contacts per body, 8 rows per contact, at
+  least 512 and 2048) and reports them as `newton_buffers`; `sim__physics action=configure` does the same on a stopped timeline,
+  and the handler takes `nconmax` / `njmax` there as overrides (the tool contract does not list them yet). The buffers are process-local (not saved in USD) and take effect on the next Play.
+- **Reading them.** `sim__physics action=inspect` adds a `newton` section: the configured buffers, the last step's active contacts and
+  constraints against their capacity, and MuJoCo-Warp's overflow flags. A full buffer or a set overflow bit adds a warning to `warnings`
+  with the code `CONTACT_BUFFER_FULL`, `CONSTRAINT_BUFFER_FULL` or `NEWTON_SOLVER_OVERFLOW`. The flags persist until the solver resets, so a
+  set bit means the buffer overflowed at some step since. Counters that cannot be read are reported as such, never as safe.
+- **Contacts.** `sim__physics action=contacts` reads Newton's contact snapshot of the last step: pairs with `contact_points` and a summed
+  world-frame `force` in newtons on `collider_a` (there is no impulse; `impulse` is null). It needs MuJoCo-Warp with contact outputs on.
+- **Raycast** is refused under Newton (`RAYCAST_UNSUPPORTED`): the extension's raycast handler is an empty stub and Newton 1.6.1 has no
+  public ray query. Use contacts, `sim__prim__bounds` or `sim__prim__measure`, or a PhysX session.
+- **Push.** `sim__physics action=apply impulse=[...]` on Newton applies `impulse / (dt / substeps)` as a force for the first substep of the
+  next step (Newton has no atomic impulse call) and reports `applied_force_n` and `force_duration_s`. A zero impulse reports `applied: false`.
+- **Timestep.** A MuJoCo scene has two timesteps: `mjc:option:timestep` (what `get_physics_dt`, exact stepping and controllers use; default
+  0.002 s) and `newton:timeStepsPerSecond` (what Newton and the clock follow; default 1000 Hz). Authored apart they disagree, which is the likely
+  cause of the Sim 6.2 `STEP_TIMING_MISMATCH` (20 steps of 0.002 s read as 0.020 s). `sim__quick_start` and `sim__physics action=configure` now
+  author both from one rate, and `sim__simulation action=step` (and the joint move) refuses with `STEP_DT_SOURCES_DISAGREE` before stepping if
+  they differ. The step result's `newton` section holds the cross-check and Newton's own clock before and after, so a remaining mismatch can be
+  diagnosed from one call.
+- **Pictures.** Newton writes poses to Fabric and leaves USD at the authored pose. `sim__camera action=capture` and `sim__lidar action=read` carry a
+  `physics_render` report (Fabric updates on or off); with them off the picture shows authored poses. A paused change made other than by
+  `sim__simulation` step or run is not published until the next step.
+- **Occupancy map.** The start-in-collider and colliders-in-volume checks are PhysX overlap queries and are skipped under Newton; the result says so in
+  `checks_skipped`. The generator itself (`isaacsim.asset.gen.omap`) was not verified under Newton.

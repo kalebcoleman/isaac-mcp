@@ -12,6 +12,10 @@ not silently change the backend of an existing scene. Earlier narrow 6.2 Newton 
 MuJoCo Warp on CPU; earlier tests also produced native crashes, invalid state, rendering and contact failures.
 On 2026-11-06, a 6.2 headless Newton session reported the MuJoCo solver on `cuda:0` and a cube fell under
 gravity, but 20 exact steps at 0.002 s returned `STEP_TIMING_MISMATCH` (observed 0.020 s, expected 0.040 s).
+The observed 0.020 s is exactly 20 steps of 1 ms, Newton's default rate (`newton:timeStepsPerSecond` = 1000 Hz), while the expected 0.040 s used
+`mjc:option:timestep` (0.002 s), which is what `SimulationManager.get_physics_dt()` reads on a MuJoCo scene. The tools now author both from one
+rate and refuse before stepping when they differ (see [Newton in the generic tools](TOOLS-SCENE.md#newton-in-the-generic-tools)); whether that
+removes the mismatch is not yet measured on a GPU.
 This does not qualify broader scene, contact, robot or Lab workflows. See the [Newton and Warp checklist](CHECKLIST.md#newton-and-warp-gpu-physics).
 
 Isaac Sim 6.2 loaded its bundled Warp 1.17.0 even though the Python environment also contained a different

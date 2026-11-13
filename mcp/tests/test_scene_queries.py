@@ -331,9 +331,11 @@ def test_query_argument_refusals(monkeypatch, call, code):
     assert refusal(call).code == code
 
 
-def test_newton_refuses_with_stable_codes(monkeypatch):
+def test_newton_refuses_raycast_and_other_engines_contacts_with_stable_codes(monkeypatch):
+    """Newton contacts are read from its snapshot (test_newton_parity.py); raycast has no Newton query and stays refused."""
     monkeypatch.setattr(queries, "_engine", lambda: SimpleNamespace(get_active_physics_engine=lambda: "newton"))
     assert refusal(queries.raycast, [0, 0, 3], [0, 0, -1]).code == "RAYCAST_UNSUPPORTED"
+    monkeypatch.setattr(queries, "_engine", lambda: SimpleNamespace(get_active_physics_engine=lambda: "remotesim"))
     assert refusal(queries.contacts, ["/World/Cube"], None).code == "CONTACT_QUERY_UNSUPPORTED"
 
 
