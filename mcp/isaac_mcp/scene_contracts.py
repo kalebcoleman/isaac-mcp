@@ -101,7 +101,7 @@ add(
 )
 add(
     "sim.quick_start",
-    "One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns session_id, stage_id, paths and next steps. For the RISE lab UR5e twin, use ur5e_dt__quick_start.",
+    "One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns session_id, stage_id, paths and next steps; on Newton a newton field with the rate and buffers. For the RISE lab UR5e twin, use ur5e_dt__quick_start.",
     dict(
         robot=field("string", "Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.", False),
         fixed_base=field("boolean", "Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.", False),
@@ -218,7 +218,7 @@ add(
 )
 add(
     "sim.physics.inspect",
-    'Report authored collision, body, mass and joints. A bounded report that includes articulations. Does not assert initialized or stable physics.',
+    'Report authored collision, body, mass and joints. A bounded report that includes articulations. Does not assert initialized or stable physics. On Newton it adds a newton section (configured buffers, active contacts and constraints against capacity, overflow flags) and warnings CONTACT_BUFFER_FULL, CONSTRAINT_BUFFER_FULL, NEWTON_SOLVER_OVERFLOW, NEWTON_SOLVER_NOT_CONVERGED.',
     dict(
         **TARGET,
         root=field("string", "Absolute subtree path.", False, default="/"),
@@ -238,7 +238,7 @@ add(
 )
 add(
     "sim.physics.contacts",
-    'Read current PhysX contact pairs and impulses. For up to 32 bodies from the last delivered contact report. Subscribes once on first use or Play; a call before any report says so. Only colliders with PhysxContactReportAPI report; paths without it are listed with the fix, and a call where none report refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED. No app update is pumped.',
+    'Read current contact pairs: PhysX impulses, or on Newton the last step\'s summed world-frame force in N on collider_a (impulse is null). For up to 32 bodies from the last delivered contact report. Subscribes once on first use or Play; a call before any report says so. Only colliders with PhysxContactReportAPI report; paths without it are listed with the fix, and a call where none report refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED only if forces are unavailable. No app update is pumped.',
     dict(
         **TARGET,
         paths=field("array", "1..32 absolute rigid-body or collider paths."),
@@ -500,7 +500,7 @@ add(
 )
 add(
     "sim.physics.configure",
-    'Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch.',
+    'Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. On Newton it also sizes the solver\'s contact and constraint buffers, reported as newton_buffers.',
     dict(
         **TARGET,
         path=field("string", "PhysicsScene prim path."),
@@ -513,6 +513,8 @@ add(
         dt=field(
             "number", "Physics timestep seconds, 1/1000..1/10.", False, default=1 / 60
         ),
+        nconmax=field("integer", "Newton only: MuJoCo-Warp contact buffer per world. Default: sized from the rigid-body count. Refused on PhysX.", False),
+        njmax=field("integer", "Newton only: constraint rows per world; same rules as nconmax.", False),
     ),
 )
 add(
@@ -543,7 +545,7 @@ add(
 )
 add(
     "sim.simulation.step",
-    'Advance exact physics steps while paused. 1..120 steps on the selected PhysX or qualified Newton backend, PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback.',
+    'Advance exact physics steps while paused. 1..120 steps on the selected PhysX or qualified Newton backend, PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. On Newton it first compares the scene\'s timestep with Newton\'s, refuses STEP_DT_SOURCES_DISAGREE if they differ, and adds a newton section.',
     dict(
         **TARGET,
         steps=field("integer", "Number of physics steps 1..120."),
@@ -609,7 +611,7 @@ add(
 )
 add(
     "sim.camera.capture",
-    'Capture an RTX camera image to a PNG. Camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true.',
+    'Capture an RTX camera image to a PNG. Camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true. The result has a physics_render field.',
     dict(
         **TARGET,
         path=field("string", "Camera from sim__camera__create or sim__quick_start, or any other Camera with adopt=true."),
@@ -632,7 +634,7 @@ add(
 )
 add(
     "sim.lidar.read",
-    'Read LiDAR return points. CPU Cartesian points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. For a LiDAR from an opened file, pass adopt=true.',
+    'Read LiDAR return points. CPU Cartesian points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. For a LiDAR from an opened file, pass adopt=true. The result has a physics_render field.',
     dict(
         **TARGET,
         path=field("string", "Pack-created LiDAR path, or an existing OmniLidar with adopt=true."),
@@ -963,7 +965,7 @@ add(
         density=field(
             "number", "Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.", False
         ),
-        impulse=field("array", "A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing.", False),
+        impulse=field("array", "A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing. On Newton it is applied as impulse/(dt/substeps) force in the next step's first substep.", False),
         at=field("array", "With impulse: the world point [x, y, z] to push at. Default: the body's centre.", False),
     ),
 )
