@@ -430,8 +430,11 @@ def readiness():
 
 
 def zoom_rect(ref):
-    """Item 6 (zoom): the widget's rectangle in window pixels, for the host to crop around."""
-    raise UIRefusal("NOT_SUPPORTED", "zoom_ref is not implemented yet.")
+    """The widget's rectangle (x, y = top-left) in window pixels, for the host to crop around. The ref
+    is checked as for an action: a stale, hidden or covered widget is refused."""
+    x, y, hit = _resolve({"ref": ref})
+    w, h = hit["width"], hit["height"]
+    return dict(ref=ref, type=hit["type"], name=hit["name"], x=x - w // 2, y=y - h // 2, width=w, height=h)
 
 
 def _resolve(a):
@@ -478,7 +481,8 @@ def _resolve(a):
             except Exception:  # noqa: BLE001
                 pass
         return round(c.x * dpi), round(c.y * dpi), dict(ref=ref, type=type(found.widget).__name__,
-                                                          name=getattr(found.widget, "name", ""), enabled=enabled)
+                                                          name=getattr(found.widget, "name", ""), enabled=enabled,
+                                                          width=round(s.x * dpi), height=round(s.y * dpi))
     x, y = a.get("x"), a.get("y")
     if type(x) is not int or type(y) is not int:
         raise UIRefusal("INVALID_VALUE", "Give ref (from sim__ui__find) or integer x and y window pixels.")

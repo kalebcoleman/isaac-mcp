@@ -37,6 +37,21 @@ def badge_args(params: Dict[str, Any], state: Any) -> Dict[str, Any]:
     return params
 
 
+ZOOM_PAD = 32  # window pixels of context kept around a zoomed widget
+ZOOM_MIN = 200  # smallest crop side, so a small button still shows its neighbours
+
+
+def zoom_region(rect: Dict[str, int], width: int, height: int) -> list:
+    """[x, y, w, h] to crop for a widget at ``rect`` (window pixels): padded, at least ZOOM_MIN on a side,
+    centred on the widget and shifted (never shrunk below the window) to stay inside a width x height window."""
+    x, y, w, h = rect["x"], rect["y"], rect["width"], rect["height"]
+    cw = min(width, max(w + 2 * ZOOM_PAD, ZOOM_MIN))
+    ch = min(height, max(h + 2 * ZOOM_PAD, ZOOM_MIN))
+    left = min(max(0, round(x + w / 2 - cw / 2)), width - cw)
+    top = min(max(0, round(y + h / 2 - ch / 2)), height - ch)
+    return [left, top, cw, ch]
+
+
 def attach_capture(text: str, failed: bool, state: Any, region: Optional[list] = None) -> Any:
     """Item 1 / item 6: the bridge's answer plus a capture of the Kit window (a crop with ``region``),
     as a CallToolResult so a failed act still carries the picture."""
@@ -58,6 +73,15 @@ def kit_ui(canonical: str, params: Dict[str, Any], state: Any,
                                     "effects": "No input was sent."})) from None
     result = dispatch(canonical, params, state)
     failed = failed_of(result)
+    if canonical == "sim.ui.find" and params.get("zoom_ref"):
+        if failed:  # stale, hidden or covered widget: nothing to look at
+            raise ToolError(result)
+        win = kit_window(state)
+        if win is None:
+            raise ToolError(json.dumps({"status": "error", "code": "NO_WINDOW", "message":
+                                        "The selected bridge's Isaac Sim window is not visible on this desktop, "
+                                        "so there is nothing to zoom into."}))
+        return attach_capture(result, False, state, region=zoom_region(json.loads(result), win["width"], win["height"]))
     if screenshot_after:
         return attach_capture(result, failed, state)
     if failed:
