@@ -90,7 +90,7 @@ def _desktop_lock():
         os.close(fd)
 
 
-_call_lock_state: list = []  # the lock probe's answer, once per tool call (set inside _action_lock)
+_call_lock_state: list = []  # the lock probe's answer, once per tool call or batch step
 
 
 @contextmanager
@@ -445,10 +445,11 @@ def _batch_plan(steps: list, coord_space: str, width: int, height: int) -> list[
                 _check_text(args["text"])
             elif name == "key":
                 _key_symbol(args["key"], args.get("modifiers", []))
-            if "x" in args:
-                args["x"], args["y"] = screen.map_point(coord_space, args["x"], args["y"], width, height)
-            if "end_x" in args:
-                args["end_x"], args["end_y"] = screen.map_point(coord_space, args["end_x"], args["end_y"], width, height)
+            for kx, ky in (("x", "y"), ("end_x", "end_y")):
+                if kx in args:
+                    args[kx], args[ky] = screen.map_point(coord_space, args[kx], args[ky], width, height)
+                    if not (0 <= args[kx] < width and 0 <= args[ky] < height):
+                        raise ValueError("coordinates are outside the selected window")
         except ValueError as exc:
             raise ValueError(f"actions[{i}]: {exc}; nothing was sent") from None
         plan.append((name, args))
@@ -561,6 +562,7 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         failure = None
         with _action_lock():
             for name, args in plan:
+                _call_lock_state.clear()  # a batch can run for minutes: each step probes the screen lock again
                 size = {"width": expected_width, "height": expected_height} if "x" in args else {}
                 try:
                     done.append(_STEPS[name](window_id, expected_pid, **args, **size))
