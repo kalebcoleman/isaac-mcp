@@ -14,7 +14,7 @@ bridge's own metadata takes precedence over these snapshots once discovered.
 
 ## Host gateway and desktop
 
-Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 13 tools.
+Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 14 tools.
 
 ### `isaac_help`
 
@@ -139,6 +139,13 @@ Tile 2-6 windows over a monitor's work area, e.g. Isaac Sim left and RViz 2 righ
 - `layout` (str, default `'left_right'`): left_right (one row), top_bottom (one column) or grid.
 - `monitor` (int | None, default `None`): 1-based index from screen_info. Default: the monitor holding the first window.
 - `gap` (int, default `0`): Pixels between tiles.
+
+### `toolsets`
+
+Toolsets: groups of tools that are on or off. list shows which are on, off with their tool counts, and which you can enable now; enable registers a toolset's tools (the tool list changes and the result names the new tools); disable removes them. Lasts for this server process only. input and launch cannot be enabled at run time; the user sets them at startup.
+
+- `action` (Literal['list', 'enable', 'disable'], required): list: what is on or off. enable/disable: turn toolsets on or off for this server process.
+- `names` (list[str] | None, default `None`): Toolset names for enable or disable, e.g. ["lab"]. Take them from list or status.
 
 ### `use_bridge`
 

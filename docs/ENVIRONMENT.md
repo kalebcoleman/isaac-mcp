@@ -12,6 +12,7 @@ starts `run.sh`. Set host variables in the client's `env` for the `isaac` server
 | `UR5E_DT_PORT` | unset | Older name for the same pin, which older client entries still use. Takes precedence over `ISAAC_MCP_PORT`. |
 | `ISAAC_MCP_HOST` | discovered bridge | Bridge host. |
 | `ISAAC_MCP_TOOLSETS` | `default` | Toolset profile and adjustments. Overrides user and project TOML. See [toolsets](TOOLS-HOST.md#choosing-which-local-tools-a-server-exposes). |
+| `ISAAC_MCP_RUNTIME_ENABLE` | `1` | `0` stops `toolsets(action="enable")` and `disable` (same as `[tools] runtime_enable = false`); `list` still works. |
 | `ISAAC_MCP_PHYSICS_BACKEND` | `physx` | Configured backend (`physx` or `newton`); selection is recorded only, not applied to a simulator yet. |
 | `ISAAC_MCP_NAME`, `ISAAC_MCP_INSTRUCTIONS` | built in | Cosmetic server identity. |
 | `ISAAC_MCP_LOG` | `1` | `0` turns off the host server's durable log file (stderr logging stays). See [Diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log). |

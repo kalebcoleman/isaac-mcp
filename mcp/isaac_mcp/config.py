@@ -67,10 +67,28 @@ def select(value) -> frozenset[str]:
     return frozenset(enabled | {"core"})
 
 
+# The one place the default physics engine is written down.
+DEFAULT_PHYSICS_BACKEND = "physx"
+PHYSICS_BACKENDS = ("physx", "newton")
+
+
+def _flag(value, name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be true or false, not {value!r}")
+
+
 @dataclass(frozen=True)
 class Config:
     toolsets: frozenset[str] = DEFAULT
-    physics_backend: str = "physx"
+    physics_backend: str = DEFAULT_PHYSICS_BACKEND
+    physics_backend_source: str = "built-in"       # built-in, user file, project file or environment
+    runtime_enable: bool = True                    # may an agent call toolsets(action="enable")
 
 
 def resolve(env: Mapping[str, str] | None = None, cli_toolsets: str | None = None,
@@ -81,26 +99,32 @@ def resolve(env: Mapping[str, str] | None = None, cli_toolsets: str | None = Non
         raise ValueError("Retired settings: " + "; ".join(
             f"{name} is no longer supported; remove it and use {replacement(name, env[name])}"
             for name in retired))
-    enabled, backend = DEFAULT, "physx"
+    enabled, backend, source, runtime = DEFAULT, DEFAULT_PHYSICS_BACKEND, "built-in", True
     current = (Path.cwd() if cwd is None else Path(cwd)).resolve()
     user = (Path.home() if home is None else Path(home)) / ".config/isaac-mcp/config.toml"
     project = next((directory / "isaac-mcp.toml" for directory in (current, *current.parents)
                     if (directory / "isaac-mcp.toml").is_file()), None)
-    for path in (user, project):
+    for label, path in (("user file", user), ("project file", project)):
         if path is not None and path.is_file():
             with path.open("rb") as stream:
                 data = tomllib.load(stream)
             if "toolsets" in data.get("tools", {}):
                 enabled = select(data["tools"]["toolsets"])
-            backend = data.get("sim", {}).get("physics_backend", backend)
+            if "runtime_enable" in data.get("tools", {}):
+                runtime = _flag(data["tools"]["runtime_enable"], "tools.runtime_enable")
+            if "physics_backend" in data.get("sim", {}):
+                backend, source = data["sim"]["physics_backend"], label
     if "ISAAC_MCP_TOOLSETS" in env:
         enabled = select(env["ISAAC_MCP_TOOLSETS"])
     if cli_toolsets is not None:
         enabled = select(cli_toolsets)
-    backend = env.get("ISAAC_MCP_PHYSICS_BACKEND", backend)
-    if backend not in {"physx", "newton"}:
+    if "ISAAC_MCP_RUNTIME_ENABLE" in env:
+        runtime = _flag(env["ISAAC_MCP_RUNTIME_ENABLE"], "ISAAC_MCP_RUNTIME_ENABLE")
+    if env.get("ISAAC_MCP_PHYSICS_BACKEND"):
+        backend, source = env["ISAAC_MCP_PHYSICS_BACKEND"], "environment"
+    if backend not in PHYSICS_BACKENDS:
         raise ValueError("physics_backend must be physx or newton")
-    return Config(enabled, backend)
+    return Config(enabled, backend, source, runtime)
 
 
 def physics_backend(**kwargs) -> str:
