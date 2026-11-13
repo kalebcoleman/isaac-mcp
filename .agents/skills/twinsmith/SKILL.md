@@ -216,13 +216,16 @@ Never hand-build TF or clock graphs with `run_python`; use the tools so the tree
 
 ## Computer use: Isaac Sim, FreeCAD or any X11 window
 
-Prefer a dedicated tool when one exists (a `sim__*` tool or `run_python` beats clicking Isaac Sim's UI). When the UI is the way:
+Prefer a dedicated tool when one exists (a `sim__*` tool or `run_python` beats clicking Isaac Sim's UI). Lab PCs are often used
+remotely with the screen locked: monitor screenshots are then composed from window pixels and `computer` is refused, but
+`sim__ui` still works. When the UI is the way:
 
 1. `doctor` once: X11 or Wayland, XTEST, locked or not, whether `input` is on, the Kit window, the cursor badge, and the next call.
 2. `windows(action="list")` for the target's `window_id` and PID; `screenshot(window_id=...)` to look. Its caption prints a
    `coord_space` token.
 3. Act with that token as `coord_space` and `x`, `y` measured in the image you were shown; add `screenshot_after=true` to see the
-   result in the same answer (it brings a fresh token). `expected_width`/`expected_height` stay the window's saved size.
+   result in the same answer (it brings a fresh token). `expected_width`/`expected_height` are the window's size, the token's
+   last field (`/WxH`), also after a zoom.
    - Isaac Sim's own UI: `sim__ui__find(query="play")` or `window="Stage"` gives widgets with a `ref`; `sim__ui__act` with that
      `ref` (or `x`, `y`): `click`, `double_click`, `right_click`, `move`, `drag`, `scroll`, `type`, `keypress`, `menu`
      (`"Create/Mesh/Cube"`; a wrong path lists the real items), `tab`, `close` or `wait`. `find_after="<text>"` lists matching
