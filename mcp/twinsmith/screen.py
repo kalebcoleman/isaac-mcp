@@ -1437,13 +1437,37 @@ def map_point(coord_space: str | None, x: int, y: int, width: int, height: int) 
     return rx + int((x + 0.5) * rw / iw), ry + int((y + 0.5) * rh / ih)
 
 
+ZOOM_MAX = 4  # a crop is enlarged at most this much; beyond it pixels only get blurrier
+
+
+def region_rect(region, coord_space: str | None, width: int, height: int) -> tuple[int, int, int, int]:
+    """[x, y, width, height] in ``coord_space`` -> (x, y, width, height) in pixels of a ``width`` x
+    ``height`` window. Both corners go through map_point, so a region read off a downscaled screenshot
+    or an earlier zoom selects the same window pixels. Corners snap to the window pixel under each corner
+    pixel's centre, so a region of an image downscaled 2x or more can lose a window pixel at its leading edge."""
+    if not (isinstance(region, (list, tuple)) and len(region) == 4 and all(type(v) is int for v in region)):
+        raise ValueError("region must be [x, y, width, height] as integers")
+    x, y, w, h = region
+    if w < 1 or h < 1:
+        raise ValueError("region width and height must be at least 1")
+    x0, y0 = map_point(coord_space, x, y, width, height)
+    x1, y1 = map_point(coord_space, x + w - 1, y + h - 1, width, height)  # last pixel, inclusive
+    if not (0 <= x0 <= x1 < width and 0 <= y0 <= y1 < height):
+        raise ValueError(f"region {region} is outside the {width}x{height} window")
+    return x0, y0, x1 - x0 + 1, y1 - y0 + 1
+
+
+def zoom_size(width: int, height: int, max_width: int) -> tuple[int, int]:
+    """Inline size of a width x height crop: as large as fits a max_width square, at most ZOOM_MAX times."""
+    scale = min(ZOOM_MAX, max_width / width, max_width / height)
+    return max(1, round(width * scale)), max(1, round(height * scale))
+
+
 def capture(monitor: int | None = None, window: str | None = None, window_id: int | None = None,
             max_width: int = 1600, label: str | None = None, region: list[int] | None = None,
             coord_space: str = "window", auto: Callable[[], dict | None] | None = None) -> list:
     """What the screenshot tool returns: [Image, caption]. Also used after an action (screenshot_after)
     and for zooms, so there is one capture path. ``auto`` picks the default window when none is named."""
-    if region is not None:
-        raise ValueError("region is not supported yet")
     SHOT_DIR.mkdir(parents=True, exist_ok=True)
     max_width = max(320, min(int(max_width), 3840))
     target = None
@@ -1452,9 +1476,16 @@ def capture(monitor: int | None = None, window: str | None = None, window_id: in
         target = _match_window(window, window_id)
     elif monitor is None:
         target = auto() if auto else None
+    if region is not None and target is None:
+        raise ValueError("region zooms into a window: name one with window or window_id")
     if target is not None:
         win = target
         full = _grab_window_image(win)
+        window_size = full.size
+        rect = (0, 0, *window_size)
+        if region is not None:
+            rect = region_rect(region, coord_space, *window_size)
+            full = full.crop((rect[0], rect[1], rect[0] + rect[2], rect[1] + rect[3]))
         source = f"{win['width']}x{win['height']}+{win['x']}+{win['y']}"
         target_label = f"{win['title']} (id={win['id']})"
     else:
@@ -1472,7 +1503,11 @@ def capture(monitor: int | None = None, window: str | None = None, window_id: in
     path = SHOT_DIR / f"screen-{_stamp()}{_label_tag(label)}.png"
     full.save(path, "PNG", optimize=True)
     inline = full
-    if full.width > max_width:
+    if region is not None:
+        size = zoom_size(full.width, full.height, max_width)
+        if size != full.size:
+            inline = full.resize(size, PILImage.LANCZOS)
+    elif full.width > max_width:
         height = max(1, round(full.height * max_width / full.width))
         inline = full.resize((max_width, height), PILImage.LANCZOS)
     caption = (
@@ -1485,7 +1520,10 @@ def capture(monitor: int | None = None, window: str | None = None, window_id: in
     if target is not None:
         # Input tools map points in this image back to window pixels themselves (OpenAI's computer-use
         # guide: map coordinates from a downscaled screenshot to the environment's pixels).
-        token = coord_token(inline.width, inline.height, (0, 0, full.width, full.height), full.width, full.height)
+        if region is not None:
+            caption += (f"\nregion: {rect[0]},{rect[1]},{rect[2]}x{rect[3]} of the {window_size[0]}x{window_size[1]} "
+                        f"window, shown {inline.width / full.width:.2f}x")
+        token = coord_token(inline.width, inline.height, rect, *window_size)
         caption += f"\ncoord_space: {token} (pass it with x/y measured in this image)"
     elif inline.width != full.width:
         caption += "\ninput: screenshot the window (window_id) for a coord_space token; input tools map its points"
