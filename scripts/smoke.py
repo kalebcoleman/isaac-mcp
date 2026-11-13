@@ -16,11 +16,15 @@ TOOLSETS = {
     "core": ["validate_scene_sessions"],
     "scene": ["validate_scene_tools", "validate_scene_prim_edit", "validate_scene_clear",
               "validate_scene_reopen", "validate_generic_scene"],
-    "physics": ["validate_scene_joints", "validate_scene_edges", "validate_scene_equivalents"],
+    "physics": ["validate_scene_joints", "validate_scene_edges", "validate_scene_equivalents", "newton_checks"],
     "sensors": ["validate_scene_sensors", "validate_scene_camera_freshness"],
     "ros2": [], "assets": [], "lab": ["smoke_test"], "screen": [], "code": [],
     "kit_debug": [], "workcell": ["workcell_smoke"],
 }
+
+
+# Checks that only mean something on Newton: on PhysX they are skipped, with a note, not failed.
+NEWTON_ONLY = ("newton_checks",)
 
 
 class BackendMismatch(RuntimeError):
@@ -85,6 +89,11 @@ def execute(name, args, output, client_factory, metadata):
         if result.get("result", {}).get("status") != "passed":
             raise RuntimeError(f"Generic scene did not pass: {result}")
         output.write_text(json.dumps(result, indent=2))
+        return
+    if name == "newton_checks":
+        if not args.discard_changes:
+            raise ValueError("Newton checks replace the open stage twice; requires --discard-changes")
+        asyncio.run(load_check(name).validate(args.port, str(output)))
         return
     module = load_check(name)
     if name == "validate_scene_sessions":
@@ -166,8 +175,12 @@ def main(argv=None, client_factory=None):
                 if name != "smoke_test":
                     with client_factory(host=args.host, port=args.port) as client:
                         metadata = probe(client, args.backend)
-                execute(name, args, output_dir / f"{name}.json", client_factory, metadata)
-                row["status"] = "pass"
+                if name in NEWTON_ONLY and metadata["backend"] != "newton":
+                    row["status"] = "skipped"
+                    row["note"] = f"Newton-only check; this simulator runs {metadata['backend']}, so it was not run"
+                else:
+                    execute(name, args, output_dir / f"{name}.json", client_factory, metadata)
+                    row["status"] = "pass"
             except BackendMismatch as error:
                 metadata.update(getattr(error, "metadata", {}))
                 row["error"] = str(error)
@@ -196,6 +209,8 @@ def main(argv=None, client_factory=None):
         print(f"{row['check']:35} {row['status']:8} {str(row['backend']):8} {str(row['simulator_build']):12} {row['seconds']}")
         if "error" in row:
             print("  " + row["error"])
+        if "note" in row:
+            print("  " + row["note"])
     print(f"JSON: {report}")
     return exit_code
 
