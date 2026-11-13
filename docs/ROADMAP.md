@@ -43,13 +43,14 @@ What `origin/main` shows today. Each line is from the code or a recorded result,
 | Jenga variation | Seeded per-block variation of size, mass and friction exists (`measured_pending` profile); every number in it is unconfirmed. |
 | Real-to-sim | `robosim` reproduced one real push by image displacement on CPU and GPU. It does not fit mass or friction, match rotation, or estimate the camera. Pinned to RoboSimStudio `87b5e32`. |
 | Perception, planning, evaluation | Nothing. The work cell reads its camera configuration only. |
-| Real robot | Nothing in this repository drives one, by design. |
+| Real robot | Nothing in this repository drives one, by design. Only the owner's laptop connects to it ([hosts](#hardware-and-hosts)). |
 
 ## Hardware and hosts
 
-Two machines. The ASU PC is the main host and stays on; the home PC is normally off and is used only when the owner is at
-it. **Nothing on the critical path may depend on the home PC being reachable.** Machines are named by role here, not by
-hostname.
+Two simulation PCs and one laptop. The ASU PC is the main host and stays on; the home PC is normally off and is used only
+when the owner is at it. **Nothing on the critical path may depend on the home PC being reachable.** Neither PC is connected
+to the UR5e: both are simulation-only. The owner's laptop is the only machine that connects to the real robot. Machines are
+named by role here, not by hostname.
 
 | | ASU PC (main, always on) | Home PC (normally off) |
 |---|---|---|
@@ -59,6 +60,16 @@ hostname.
 | Installed | Isaac Sim 6.0.0.0 to 6.2.0.0, Isaac Lab 2.3.2 and 3.0.0, RoboSimStudio at `87b5e32`, work-cell pack `v1`, the twinsmith host | Not verified from here |
 
 The ASU column was read on that machine on 2026-11-13 (`nvidia-smi`, `scripts/env.py find`, the checkouts themselves).
+
+**The robot boundary** (the owner's statement of the lab's wiring; it cannot be read from either PC).
+
+| Machine | Connected to the UR5e | Agents and agent-facing ROS servers |
+|---|---|---|
+| ASU PC | No | Allowed. ROS 2 and a ROS MCP server with publish, service and action tools are installed here; they reach only simulated ROS 2 |
+| Home PC | No | Allowed, on the same terms |
+| Laptop | **Yes, and it is the only one** | **Never.** No agent runs here and no agent-facing ROS MCP server is ever installed here. It runs only ROS 2 code the owner has approved |
+
+twinsmith and everything in this roadmap run on the two PCs. Nothing here is installed on the laptop.
 
 **Limits, stated plainly.**
 
@@ -79,8 +90,8 @@ The ASU column was read on that machine on 2026-11-13 (`nvidia-smi`, `scripts/en
 - [ ] We'll refine this as we go: per-phase GPU memory and run times once measured, and a rule for booking the GPU around games.
 - [ ] Finish the ASU PC's workspace move when no game is running.
 - [ ] Verify the home PC's row on that machine the next time it is on.
-- [ ] Not established here: which machine the real robot and the D415s are attached to, and whether the ASU PC has a desktop
-  session for the `computer` group.
+- [ ] Not established here: which machine the lab's D415s are attached to for recording, how recordings travel from the
+  laptop to the ASU PC, and whether the ASU PC has a desktop session for the `computer` group.
 
 ## The phases
 
@@ -189,7 +200,8 @@ simulation got.
   system identification module ([plan](plans/04-robosim-bump-and-sysid.md)).
 - First target: the arm's joint parameters (damping, armature, friction loss, gains) from recorded joint trajectories, because
   that data needs no perception. Second target: block mass and friction from push recordings, once Phase 5 gives object poses.
-- A data contract for approved exports: a folder of episodes the owner copies off the robot PC. No tool reads the robot.
+- A data contract for approved exports: a folder of episodes the owner copies off the laptop, the one machine connected to
+  the robot. No tool reads the robot.
 
 **Exit criteria.**
 - On synthetic data with known parameters, `sysid` recovers each within 5 percent, in a CPU test.
