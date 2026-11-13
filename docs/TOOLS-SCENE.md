@@ -29,7 +29,7 @@ UR5e twin, `ur5e_dt__quick_start`.
 
 - 18 layers of 3 dynamic blocks (54), twice real size: 15 x 5 x 3 cm, 120 g, friction 0.5/0.4, on a 34 cm table, tower centre at (0.7, 0). Odd layers run along x, towards the arm, and their middle block is 0.4 mm thinner, so it is loose, as the block a player looks for is.
 - a Franka on the floor beside the table, in a ready pose with its hand level at layer 9, holding a thin red push rod between open fingers. The rod is a collider on the hand's own body, so it adds no joint, and both fingers get a drive.
-- PhysX at 120 Hz with 32 solver iterations per block.
+- PhysX at 120 Hz with 32 solver iterations per block. Newton runs the tower at 500 Hz: at 120 Hz it falls apart (see `NEWTON_HZ` in `jenga.py`).
 
 The result's `environment.poke_example` has everything for one push: the `block`, the `approach`, `touch` and `through` points, and `ik` (the `link`, `offset` and `orientation` for `sim__arm__ik`). It is for layer 9. For another layer, change the `z` of each point by 3 cm a layer: the odd layers run along x, and only layers near 9 and above let the hand stay level.
 

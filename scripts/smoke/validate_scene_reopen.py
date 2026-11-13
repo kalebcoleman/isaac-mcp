@@ -2,7 +2,7 @@
 
 The test launcher opens the approved saved file before its main loop. Every
 inspection, scene action and observation below uses the actual MCP interface.
-The final explicit UR5e new_stage call discards ONLY this disposable test stage.
+The final sim__quick_start call (discard_changes=true) discards ONLY this disposable test stage.
 """
 
 import argparse
@@ -94,7 +94,7 @@ async def validate(args):
             assert pixels.std() > 5 and pixels.shape == (480, 640, 3)
             await invoke("sim__viewport__frame", **t, path=args.body.rsplit("/", 1)[0])
             await invoke("sim__timeline__control", **t, action="stop")
-            await invoke("ur5e_dt__new_stage")
+            await invoke("sim__quick_start", discard_changes=True)
             fresh = await invoke("sim__stage__info")
             assert fresh["stage_id"] != info["stage_id"]
             assert fresh["sensor_resources"]["count"] == 0, fresh

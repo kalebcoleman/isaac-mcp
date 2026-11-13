@@ -60,17 +60,24 @@ a results table and the path to a JSON report in a temporary directory. Use a ho
 Python environment with this checkout's dependencies. No simulator is started by
 the scene runner; checks mutate an explicitly selected disposable bridge.
 
-Existing fixture and sequencing prerequisites still apply. Use repeated `--check`
-to select individual validators: clear requires the stage left by equivalents;
-reopen requires a fresh process with the saved scene and `--saved`, `--body`, and
-`--expected-z`. Sessions needs `--second-port`; prim-edit needs `--directory` for
-its existing fixture. Generic scene replaces the stage and requires
-`--discard-changes`. Workcell delegates unchanged to `workcell_smoke.py` and needs
-`--config` and `--mutate-stage`; it remains PhysX-only. Lab delegates to
-`smoke_test.py`, which starts GPU jobs rather than using the selected bridge;
-its backend/build are unavailable in the report and `--backend` is refused rather
-than claiming that the task engine was verified. Unmapped toolsets list no checks.
-The runner stops after the first failure rather than continuing on uncertain state.
+Existing fixture prerequisites still apply. Use repeated `--check` to select individual validators.
+The runner starts each check's own MCP server with the toolsets that check needs (`ISAAC_MCP_TOOLSETS`,
+see `CHECK_TOOLSETS` in `scripts/smoke.py`; `--toolsets` overrides it for every check) and calls tools by
+their listed names. It waits, up to 60 s, for the simulator's reported engine to settle on the requested
+one before it refuses a mismatch with exit 2 (the bridge answers `status` a few seconds before Newton is the
+active engine). Validators that work on one shared stage (tools, equivalents, edges, sensors, camera
+freshness, clear) run together in that order, each prerequisite added when a later check is selected, with
+only the timeline stopped between them; every other check starts on a new empty stage with the timeline
+stopped. Sessions needs `--second-port`; prim-edit needs `--directory` for its existing fixture. Generic scene
+replaces the stage and requires `--discard-changes`. Reopen needs a simulator that already has a saved scene
+open (the launcher cannot open a file at startup): without `--saved`, `--body` and `--expected-z` it is
+reported as `needs_setup` with the exact commands. Workcell delegates unchanged to `workcell_smoke.py` and
+needs `--config` and `--mutate-stage`; it remains PhysX-only. Lab delegates to `smoke_test.py` (started with
+`default,+lab`), which starts GPU jobs rather than using the selected bridge; its backend/build are
+unavailable in the report and `--backend` is refused rather than claiming that the task engine was verified.
+Unmapped toolsets list no checks. A failed check is reported with its innermost exception and traceback and
+the run continues with the next independent check; a check whose prerequisite did not pass is `not_run`,
+and a backend mismatch stops the run.
 
 <a id="last-live-check"></a><a id="headless-physx-check"></a>
 On 2026-11-03, headless PhysX checks on Sim 6.2 passed the legacy workstation verifier, the 20-check twin
