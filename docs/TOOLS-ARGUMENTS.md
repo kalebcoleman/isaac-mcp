@@ -1535,21 +1535,21 @@ Toolset `robosim` is off until you select it with `+robosim`. Reference: [ROBOSI
 
 ### `robosim`
 
-RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a trusted scene (frozen until update_scene), reference a clip, compare, rollout a pusher push, compare_take, report, stop. Compares images; no mass or friction fitting. Runs scene code (not sandboxed); cuda:0 uses the GPU. Long actions: poll status.
+RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a scene from plain-data template (frozen until update_scene), reference a clip, compare, tune_push, rollout, compare_take, report, stop. Compares images; no mass or friction fitting. Scene code is not sandboxed; cuda:0 uses the GPU. Long actions: poll status.
 
-- `action` (Literal['status', 'start', 'scene_template', 'update_scene', 'reference', 'snapshot', 'compare', 'rollout', 'compare_take', 'stop', 'report'], required): Action to perform.
-- `run` (str | None, default `None`): Exact run name from start; omit for status to list runs.
+- `action` (Literal['status', 'start', 'scene_template', 'update_scene', 'reference', 'snapshot', 'compare', 'rollout', 'tune_push', 'compare_take', 'stop', 'report'], required): Action to perform.
+- `run` (str | None, default `None`): Exact run name from start. status: omit for a compact list. scene_template: write the file there.
 - `name` (str | None, default `None`): start: short run name; letters, digits, underscores and hyphens.
-- `scene` (str | None, default `None`): start/update_scene: absolute trusted scene .py, kept as scene-vN.py. Runs code, not sandboxed.
+- `scene` (str | None, default `None`): start/update_scene, advanced: absolute trusted scene .py (runs code, not sandboxed). Else use template.
 - `device` (Literal['cpu', 'cuda:0'] | None, default `None`): start (required): cpu is plain MuJoCo, cuda:0 is Newton MuJoCo-Warp. Runs inherit it.
 - `video` (str | None, default `None`): reference: absolute local video file; copied before extracting frames.
 - `keys` (list[str] | None, default `None`): compare/compare_take: RSS object masks, e.g. ['block=red'] or ['block=#d01a10~0.1'].
-- `take` (str | None, default `None`): rollout/compare_take: take basename, without extension.
+- `take` (str | None, default `None`): rollout/compare_take: take name. tune_push: base name; trials are NAME-1, NAME-2.
 - `routine` (str | None, default `None`): rollout: 'push' (default in the template) or 'settle', or a routine your scene defines.
 - `camera` (str | None, default `None`): Camera name from start's RSS status; omit for the scene's first camera.
 - `at` (str | None, default `None`): reference: RSS anchors in clip seconds, e.g. '0:start,3:middle,6:end'; default from start_s/end_s.
-- `shape` (Literal['box', 'tee'], default `'tee'`): scene_template: box, or tee (a T of two boxes in one rigid body).
-- `push` (dict | None, default `None`): rollout: {'waypoints': [[s, x, y], ...] pusher path in m, 'object_velocity': [vx, vy, wz]}.
+- `shape` (Literal['box', 'tee', 'jenga'], default `'tee'`): scene_template: tee, box or jenga, unless template gives a shape.
+- `push` (dict | None, default `None`): rollout/tune_push: {'waypoints': [[s, x, y], ...] pusher path in m, 'object_velocity': [vx, vy, wz]}.
 - `duration_s` (float | None, default `None`): rollout: simulated seconds; default the last waypoint time. Not with steps.
 - `steps` (int | None, default `None`): rollout: control steps instead of duration_s.
 - `record_fps` (float, default `10.0`): rollout: frames per simulated second to record (nearest whole step stride).
@@ -1562,6 +1562,9 @@ RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a tru
 - `port` (int | None, default `None`): start: viewer port; omit to pick a free one. RSS listens on all interfaces.
 - `wait_s` (float, default `0`): Wait at most this many seconds; poll status with run for completion.
 - `allow_concurrent_gpu` (bool, default `False`): start: knowingly permit cuda:0 despite other GPU workloads or an unavailable GPU check.
+- `template` (dict | None, default `None`): start/update_scene/scene_template: plain data {shape, size, position [x,y], yaw, color, camera, push}.
+- `all` (bool, default `False`): status without run: every run in full, not live servers and the 5 newest.
+- `max_trials` (int | None, default `None`): tune_push: most rollouts to try (default 6, at most 12).
 
 ## `input`: Desktop mouse and keyboard input
 

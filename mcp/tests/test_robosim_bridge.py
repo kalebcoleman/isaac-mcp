@@ -7,6 +7,7 @@ import math
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -36,6 +37,17 @@ def write(name, text="fake"):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     return str(path)
+def fake_physics(push):
+    """Image displacement of the fake block as a known function of the push: 0.5 of the pusher's travel, turned 0.3 rad
+    counter-clockwise, at 480 px per metre, image y pointing down (+y on the table is up in the picture)."""
+    import math
+    if not push or not push.get("waypoints"):
+        return [0.0, 0.0]
+    w = push["waypoints"]
+    dx, dy = w[-1][1] - w[0][1], w[-1][2] - w[0][2]
+    angle = math.atan2(dy, dx) + 0.3
+    length = 0.5 * math.hypot(dx, dy)
+    return [round(480 * length * math.cos(angle), 1), round(-480 * length * math.sin(angle), 1)]
 def state():
     path = run / "state.json"
     return json.loads(path.read_text()) if path.exists() else {"generation": 1, "resets": 0, "last_error": ""}
@@ -77,15 +89,17 @@ elif action == "eval":
         reply.update(value=None, stdout="", playing=False)
 elif action == "ref":
     out = pathlib.Path(option("--out"))
+    clip_text = pathlib.Path(args[2]).read_text()
+    duration = float(clip_text.split()[1]) if clip_text.startswith("trimmed ") else 12.0
     anchors = []
     for item in option("--at").split(","):
         when, _, label = item.partition(":")
-        t = 6.0 if when == "end" else float(when)
+        t = round(duration - 0.001, 3) if when == "end" else float(when)
         write(out / f"t{t:06.2f}.jpg")
         anchors.append({"t": t, "file": f"t{t:06.2f}.jpg", "label": label})
-    write(out / "timeline.json", json.dumps({"clip": "fake", "duration": 12.0, "anchors": anchors}))
+    write(out / "timeline.json", json.dumps({"clip": "fake", "duration": duration, "anchors": anchors}))
     reply.update(frames=[a["file"] for a in anchors], contact=write(out / "contact.jpg"),
-                 timeline=str(out / "timeline.json"), duration=12.0, fps=10.0)
+                 timeline=str(out / "timeline.json"), duration=duration, fps=10.0)
 elif action == "snapshot":
     reply["image"] = write(option("--out"))
 elif action == "compare":
@@ -96,8 +110,11 @@ elif action == "compare":
         timeline = json.loads(pathlib.Path(option("--timeline")).read_text())
         rows = []
         last = len(timeline["anchors"]) - 1
+        full = [-40.0, -40.0]
+        if (run / "physics.json").exists():
+            full = fake_physics(json.loads((run / (option("--take") + ".json")).read_text()).get("push"))
         for i, anchor in enumerate(timeline["anchors"]):
-            moved = [100.0 - 40 * i / last, 100.0 - 40 * i / last]
+            moved = [100.0 + full[0] * i / last, 100.0 + full[1] * i / last]
             row_photo = [100.0 - 50 * i / last, 100.0 - 60 * i / last]
             entry = reading(moved)
             entry["photo"] = dict(entry["photo"], centre=row_photo)
@@ -130,9 +147,10 @@ elif action == "status":
             frames = [{"i": i, "step": m, "t": round(m / 50.0, 4)} for i, m in enumerate(marks)]
             write(run / (take + ".mp4"))
             write(run / (take + ".json"), json.dumps({"name": take, "every": every, "fps": round(50 / every), "control_hz": 50.0,
-                                                      "frames": frames}))
+                                                      "frames": frames, "push": data["rollout"].get("push")}))
             if data["rollout"].get("push") and "IGNORE_PUSH" not in (run / "scene.py").read_text():
-                write(run / ("push-" + take + ".json"), json.dumps({"applied": True, "pusher_tracked": True}))
+                write(run / ("push-" + take + ".json"), json.dumps({"applied": True, "pusher_tracked": True,
+                                                                    "object_start_xy_m": [0.0, -0.075]}))
             reply["last_take"] = take
         else:
             reply["last_take"] = take
@@ -154,7 +172,15 @@ def fake(tmp_path, monkeypatch):
     original_run = subprocess.run
     gpu_calls = []
 
+    ffmpeg_calls = []
+
     def run(argv, **kwargs):
+        if argv[0].endswith("ffmpeg"):
+            ffmpeg_calls.append(list(argv))
+            if "-t" not in argv:  # the header probe: ffmpeg -hide_banner -i FILE
+                return subprocess.CompletedProcess(argv, 1, "", "  Duration: 00:00:12.00, start: 0.000000, bitrate: 89 kb/s\n    Stream #0:0: Video: h264, yuv420p, 320x240, 10 fps, 10 tbr\n")
+            Path(argv[-1]).write_text("trimmed " + argv[argv.index("-t") + 1])
+            return subprocess.CompletedProcess(argv, 0, "", "")
         if argv[0] == "git":
             return subprocess.CompletedProcess(argv, 0, PIN + "0" * 33 + "\n", "")
         if argv[0] == "nvidia-smi":
@@ -163,7 +189,10 @@ def fake(tmp_path, monkeypatch):
         return original_run(argv, **kwargs)
 
     monkeypatch.setattr(subprocess, "run", run)
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name, *a, **k: "/fake/bin/ffmpeg" if name == "ffmpeg" else real_which(name, *a, **k))
     bridge = RoboSimBridge(workspace=tmp_path / "workspace", root=root)
+    bridge.ffmpeg_calls = ffmpeg_calls
     scene = tmp_path / "scene.py"
     scene.write_text("scene = 'fake'\n")
     video = tmp_path / "input.mp4"
@@ -187,7 +216,7 @@ def complete(bridge, action, run, **kwargs):
     return result["operation"]["result"]
 
 
-@pytest.mark.parametrize("action", ["status", "scene_template", "start", "update_scene", "reference", "snapshot", "compare", "rollout", "compare_take", "stop", "report"])
+@pytest.mark.parametrize("action", ["status", "scene_template", "start", "update_scene", "reference", "snapshot", "compare", "rollout", "tune_push", "compare_take", "stop", "report"])
 def test_missing_install(tmp_path, action):
     result = RoboSimBridge(workspace=tmp_path).call(action)
     assert not result["ok"]
@@ -377,13 +406,19 @@ def test_registration_one_group(fake):
     assert all(len(prop.get("description", "")) < 120 for prop in tool.inputSchema["properties"].values())
     assert tool.annotations.destructiveHint and not tool.annotations.readOnlyHint
     assert "update_scene" in tool.inputSchema["properties"]["action"]["enum"]
-    for argument in ("push", "duration_s", "steps", "record_fps", "start_s", "end_s", "sim_start_s", "sim_end_s", "shape"):
+    for argument in ("push", "duration_s", "steps", "record_fps", "start_s", "end_s", "sim_start_s", "sim_end_s", "shape",
+                     "template", "all", "max_trials"):
         assert argument in tool.inputSchema["properties"]
+    assert "tune_push" in tool.inputSchema["properties"]["action"]["enum"]
+    assert "jenga" in tool.inputSchema["properties"]["shape"]["enum"]
     assert "every" not in tool.inputSchema["properties"]
     flat = " ".join(tool.description.split())
     assert "frozen until update_scene" in flat and "no mass or friction" in flat
     result = asyncio.run(server.call_tool("robosim", {"action": "scene_template"}))
-    assert "OBJECT_MASS" in str(result) and "TeeShape" in str(result)
+    reply = json.loads(result[0][0].text)
+    text = Path(reply["path"]).read_text()
+    assert "OBJECT_MASS" in text and "TeeShape" in text and "class TeeShape" not in json.dumps(reply)
+    assert '"runs": []' in str(asyncio.run(server.call_tool("robosim", {"action": "status", "all": True})))  # all=true reached the bridge
 
 
 # ---- new behaviour: template, push, timing, mapping, reload, trimming, stop ----
@@ -400,22 +435,178 @@ def finish(bridge, run, result):
     return result["operation"]["result"], result
 
 
-def test_scene_template_shapes_and_contents(fake):
+def test_scene_template_writes_a_file_and_returns_its_path_not_the_source(fake):
     bridge = fake[0]
     tee = bridge.call("scene_template")
-    assert tee["ok"] and tee["shape"] == "tee" and 'SHAPE = "tee"' in tee["scene"]
-    box = bridge.call("scene_template", shape="box")
-    assert 'SHAPE = "box"' in box["scene"] and 'SHAPE = "tee"' not in box["scene"]
-    assert not bridge.call("scene_template", shape="sphere")["ok"]
-    ast.parse(tee["scene"])
+    assert tee["ok"] and tee["shape"] == "tee" and "scene" not in tee
+    path = Path(tee["path"])
+    assert path.is_file() and path.parent == bridge.runs / "_templates"
+    text = path.read_text()
+    assert 'SHAPE = "tee"' in text
+    ast.parse(text)
     for needle in ("class TeeShape", "def push_routine", "def settle_routine", "routines = {", "PUSH = {", "coord_start", "dof_start",
                    "joint_q", "OBJECT_NAME"):
-        assert needle in tee["scene"]
-    assert "cube" not in tee["scene"]
-    assert "PUSH" in tee["parameters"] and "TEE_BAR_HALF" in tee["parameters"]
-    assert "MuJoCo-Warp" in tee["note"] and "no mass or friction" in tee["note"]
+        assert needle in text
+    assert "cube" not in text
+    assert len(json.dumps(tee)) < 4000 and "class TeeShape" not in json.dumps(tee)
+    assert set(tee["parameters"]) >= {"shape", "size", "position", "yaw", "color", "camera", "push"}
+    assert tee["template"]["shape"] == "tee" and tee["mask_key"] == "block=red" and "+x is right and +y is up" in tee["frame"]
+    assert "[bar_length, stem_length, thickness, height]" in tee["size_meaning"]
+    assert "MuJoCo-Warp" in tee["note"] and "no mass or friction" in tee["note"] and "template={...}" in tee["use"]
+    assert bridge.call("scene_template")["path"] == tee["path"]  # same content, same file
+    box = bridge.call("scene_template", shape="box")
+    assert 'SHAPE = "box"' in Path(box["path"]).read_text() and box["path"] != tee["path"]
+    assert not bridge.call("scene_template", shape="sphere")["ok"]
+    assert not bridge.call("scene_template", template={"colour": "red"})["ok"]
     with pytest.raises(ValueError):
         template.scene_text("cone")
+    first = start(fake)
+    inside = bridge.call("scene_template", run=first["run"], template={"shape": "tee", "yaw": 0.5})
+    assert Path(inside["path"]).parent == Path(first["run_dir"]) and "OBJECT_XY_YAW = (0.0, 0.0, 0.5)" in Path(inside["path"]).read_text()
+
+
+def test_jenga_template_is_a_flat_wooden_block_with_a_stated_mask_key(fake):
+    bridge = fake[0]
+    reply = bridge.call("scene_template", shape="jenga")
+    text = Path(reply["path"]).read_text()
+    assert 'SHAPE = "jenga"' in text and "BOX_HALF = (0.036, 0.012, 0.007)" in text
+    assert "OBJECT_COLOUR = (0.76, 0.6, 0.42)" in text and "OBJECT_MASS = 0.02" in text
+    assert reply["mask_key"] == "block=wood" and "72 x 24 x 14 mm" in reply["size_meaning"]
+    assert reply["template"]["size"] == [0.072, 0.024, 0.014] and reply["template"]["color"] == "wood"
+    assert 'elif SHAPE in ("box", "jenga")' in text and "PUSHER_RADIUS" in text
+    ast.parse(text)
+    assert "wood" in template.COLOURS and template.mask_key("wood") == "block=wood"
+    assert template.mask_key("#c2996b") == "block=#c2996b~0.1" and template.mask_key([1, 0, 0], "thing") == "thing=#ff0000~0.1"
+
+
+def test_template_table_is_above_the_ground_plane_so_it_does_not_speckle():
+    text = template.scene_text("tee")
+    top = float(next(line for line in text.splitlines() if line.startswith("TABLE_TOP =")).split("=")[1].split("#")[0])
+    assert 0.001 <= top <= 0.01
+    assert "at=(0.0, 0.0, TABLE_TOP - 0.02)" in text and "half_height + TABLE_TOP" in text and "PUSHER_HALF_HEIGHT + TABLE_TOP" in text
+    assert "TABLE_COLOUR = (0.9, 0.9, 0.9)" in text and "ground plane" in text
+
+
+def test_template_resolution_defaults_merging_and_errors():
+    tee = template.resolve({})
+    assert tee["shape"] == "tee" and tee["size"] == [0.13, 0.105, 0.035, 0.04] and tee["position"] == [0.0, 0.0]
+    assert tee["push"] == {"waypoints": [[0.0, 0.0, -0.2], [2.0, 0.0, 0.0]], "object_velocity": None}
+    constants = template.constants(tee)
+    assert constants["TEE_BAR_HALF"] == (0.065, 0.0175) and constants["TEE_STEM_HALF"] == (0.0175, 0.0525)
+    assert constants["OBJECT_HALF_HEIGHT"] == 0.02 and constants["OBJECT_XY_YAW"] == (0.0, 0.0, 0.0)
+    moved = template.resolve({"position": [0.01, -0.07], "yaw": -0.25}, tee)
+    assert moved["size"] == tee["size"] and moved["push"]["waypoints"][1][1:] == [0.01, -0.07]  # a default push follows the object
+    pushed = template.resolve({"push": {"waypoints": [[0, 0, -0.2], [3, 0, 0.1]]}}, moved)
+    assert pushed["push"]["waypoints"][1] == [3.0, 0.0, 0.1] and not pushed.get("push_default")
+    again = template.resolve({"position": [0.05, 0.0]}, pushed)
+    assert again["push"] == pushed["push"]  # an explicit push is kept
+    other = template.resolve({"shape": "box"}, pushed)
+    assert other["shape"] == "box" and other["size"] == [0.13, 0.14, 0.04] and other["push"] != pushed["push"]
+    camera = template.resolve({"camera": {"eye": [0, 0, 0.5]}}, tee)["camera"]
+    assert camera == {"eye": [0.0, 0.0, 0.5], "target": [-0.05, 0.12, 0.0]}
+    for bad in ({"size": [0.1, 0.1]}, {"size": [0.1, 0.1, 0.1, 9.0]}, {"position": [1.0, 0.0]}, {"yaw": float("nan")}, {"color": "plaid"},
+                {"mass": 0}, {"shape": "cone"}, {"nope": 1}, {"camera": {"eye": [0, 0, -1]}}, {"push": {"waypoints": [[0, 0, 0]]}},
+                {"push": {"object_velocity": [1, 0, 0]}}, "tee"):
+        with pytest.raises(ValueError):
+            template.resolve(bad)
+
+
+def test_start_and_update_scene_accept_plain_data_and_write_the_scene_file(fake, tmp_path):
+    bridge, scene = fake[0], fake[1]
+    first = bridge.call("start", name="data", device="cpu", template={"shape": "tee", "position": [0.01, -0.07], "yaw": -0.25,
+                                                                       "size": [0.136, 0.11, 0.0368, 0.04]}, wait_s=10)
+    assert first["ok"], first
+    run, path = first["run"], Path(first["run_dir"])
+    text = (path / "scene.py").read_text()
+    assert text == (path / "scene-v1.py").read_text() and "OBJECT_XY_YAW = (0.01, -0.07, -0.25)" in text
+    assert "TEE_BAR_HALF = (0.068, 0.0184)" in text and "TEE_STEM_HALF = (0.0184, 0.055)" in text
+    ledger = json.loads((path / "run.json").read_text())
+    assert ledger["scene_versions"][0]["source"] == "template" and ledger["scene_versions"][0]["template"]["yaw"] == -0.25
+    assert ledger["inputs"]["scene"]["sha256"] == hashlib.sha256(text.encode()).hexdigest()
+    updated = complete(bridge, "update_scene", run, template={"yaw": -0.3, "color": "blue"})
+    assert updated["ok"] and updated["version"] == 2 and updated["template"]["yaw"] == -0.3
+    assert updated["template"]["size"] == [0.136, 0.11, 0.0368, 0.04] and updated["template"]["position"] == [0.01, -0.07]  # merged
+    assert updated["mask_key"] == "block=blue"
+    assert "OBJECT_XY_YAW = (0.01, -0.07, -0.3)" in (path / "scene.py").read_text()
+    assert (path / "scene-v1.py").read_text() == text
+    # a file path still works, and is exclusive with template
+    assert complete(bridge, "update_scene", run, scene=str(scene))["version"] == 3
+    both = bridge.call("update_scene", run=run, scene=str(scene), template={})
+    assert not both["ok"] and "not both" in both["error"]
+    assert "template={...}" in bridge.call("update_scene", run=run)["error"]
+    assert not bridge.call("start", name="x", device="cpu")["ok"] and not bridge.call("start", name="x", device="cpu", template={"bad": 1})["ok"]
+    bad = bridge.call("update_scene", run=run, template={"yaw": "x"})
+    assert not bad["ok"] and json.loads((path / "run.json").read_text())["scene_versions"][-1]["version"] == 3
+    # after a scene from a file, the next template starts from the defaults
+    assert complete(bridge, "update_scene", run, template={"yaw": 1.0})["template"]["size"] == [0.13, 0.105, 0.035, 0.04]
+
+
+def test_status_lists_live_servers_and_the_five_newest_runs_one_line_each(fake):
+    bridge = fake[0]
+    runs = []
+    for index in range(7):
+        result = bridge.call("start", name=f"r{index}", device="cpu", template={}, wait_s=10)
+        runs.append(result["run"])
+    for run in runs[:5]:
+        assert complete(bridge, "stop", run)["stopped"]
+    listing = bridge.call("status")
+    assert listing["ok"] and listing["total_runs"] == 7 and "runs" not in listing
+    assert sorted(line["run"] for line in listing["live_servers"]) == sorted(runs[5:])
+    assert [line["run"] for line in listing["recent_runs"]] == list(reversed(sorted(runs)))[:5]
+    line = listing["recent_runs"][0]
+    assert set(line) == {"run", "state", "device", "engine", "age", "line"} and line["state"] == "live"
+    assert line["device"] == "cpu" and line["engine"] == "MuJoCo (CPU)" and line["age"].endswith("s")
+    assert line["line"] == f"{line['run']} | live | cpu | MuJoCo (CPU) | {line['age']} old"
+    assert listing["recent_runs"][-1]["state"] == "stopped" and "all=true" in listing["listing"]
+    assert len(json.dumps(listing)) < 3500
+    everything = bridge.call("status", show_all=True)
+    assert len(everything["runs"]) == 7 and everything["runs"][0]["engine"]["physics"].startswith("plain MuJoCo")
+    detail = bridge.call("status", run=runs[0])
+    assert detail["run"] == runs[0] and detail["ledger"].endswith("run.json") and detail["server_alive"] is False
+
+
+def test_reference_trims_the_clip_with_ffmpeg_and_keeps_original_seconds(fake):
+    bridge = fake[0]
+    first = start(fake)
+    run, path = first["run"], Path(first["run_dir"])
+    result = complete(bridge, "reference", run, video=str(fake[2]), start_s=1, end_s=5)
+    cut = [call for call in bridge.ffmpeg_calls if "-t" in call]
+    assert len(cut) == 1 and cut[0][cut[0].index("-ss") + 1] == "1.000" and cut[0][cut[0].index("-t") + 1] == "4.100"
+    assert cut[0][cut[0].index("-i") + 1] == str(path / "reference-2.mp4") and cut[0][-1] == str(path / "reference-2-trim.mp4")
+    assert result["trimmed"]["duration_s"] == 4.0 and result["trimmed"]["file_duration_s"] == 4.1  # one extra frame holds the end_s frame
+    assert "trimmed with ffmpeg" in result["trimmed"]["note"]
+    assert result["duration"] == 4.0 and result["source_duration_s"] == 12.0 and result["window"] == {"start_s": 1, "end_s": 5}
+    assert "contact sheet" in result["window_note"] and "trimmed" in result["window_note"]
+    assert [a["t"] for a in result["anchors"]] == [1.0, 3.0, 5.0]  # original clip seconds
+    ref_call = [json.loads(line)["args"] for line in (path / "calls.jsonl").read_text().splitlines() if '"ref"' in line][0]
+    assert ref_call[2] == str(path / "reference-2-trim.mp4") and ref_call[4] == "0:start,2:middle,4:end"
+    ledger = json.loads((path / "run.json").read_text())
+    assert ledger["reference"]["offset_s"] == 1 and ledger["reference"]["duration_s"] == 4.0 and ledger["inputs"]["reference-2-trim"]["sha256"]
+    # compare_take keeps original seconds: a 4 s take against the 1-5 s window
+    complete(bridge, "rollout", run, take="t4", duration_s=4, push={"waypoints": [[0, 0, -0.2], [4, 0, 0]]})
+    compared = complete(bridge, "compare_take", run, take="t4", keys=["block=red"])
+    mapping = compared["time_mapping"]
+    assert (mapping["clip_start_s"], mapping["clip_end_s"], mapping["sim_start_s"], mapping["sim_end_s"]) == (1, 5, 0, 4)
+    assert [(a["clip_t"], a["sim_t_requested"]) for a in mapping["anchors"]] == [(1.0, 0.0), (3.0, 2.0), (5.0, 4.0)]
+    assert [a["t"] for a in json.loads(Path(mapping["timeline"]).read_text())["anchors"]] == [1.0, 3.0, 5.0]
+    # anchors given in original seconds are shifted for the cut clip; times outside the span are refused
+    explicit = complete(bridge, "reference", run, video=str(fake[2]), start_s=2, end_s=8, at="2:a,5:b,8:c")
+    assert [a["t"] for a in explicit["anchors"]] == [2.0, 5.0, 8.0] and explicit["duration"] == 6.0
+    outside = bridge.call("reference", run=run, video=str(fake[2]), start_s=2, end_s=8, at="1:a,5:b", wait_s=10)
+    assert "outside the trimmed span 2-8.1 s" in outside["operation"]["result"]["error"]
+    # nothing to cut: the whole clip is used as it is
+    before = len(bridge.ffmpeg_calls)
+    whole = complete(bridge, "reference", run, video=str(fake[2]), start_s=0)
+    assert whole["window"] == {"start_s": 0, "end_s": 12.0} and "trimmed" not in whole and len(bridge.ffmpeg_calls) == before + 1  # only the probe
+
+
+def test_reference_window_without_ffmpeg_says_how_to_proceed(fake, monkeypatch):
+    bridge = fake[0]
+    run = start(fake)["run"]
+    monkeypatch.setattr(shutil, "which", lambda *args, **kwargs: None)
+    refused = bridge.call("reference", run=run, video=str(fake[2]), start_s=1, end_s=5, wait_s=10)["operation"]["result"]
+    assert not refused["ok"] and "ffmpeg" in refused["error"] and "pass `at`" in refused["error"]
+    assert complete(bridge, "reference", run, video=str(fake[2]), at="0:a,6:b")["ok"]  # `at` alone needs no ffmpeg
 
 
 def test_status_says_no_bridge_and_names_the_engine(fake):
@@ -715,15 +906,15 @@ def test_reference_window(fake):
     first = start(fake)
     run, path = first["run"], Path(first["run_dir"])
     result = complete(bridge, "reference", run, video=str(fake[2]), start_s=1, end_s=5)
-    assert result["window"] == {"start_s": 1, "end_s": 5} and "contact sheet shows the whole clip" in result["window_note"]
+    assert result["window"] == {"start_s": 1, "end_s": 5} and "contact sheet" in result["window_note"]
     assert [a["t"] for a in result["anchors"]] == [1.0, 3.0, 5.0] and [a["label"] for a in result["anchors"]] == ["start", "middle", "end"]
-    calls = [json.loads(line)["args"] for line in (path / "calls.jsonl").read_text().splitlines()]
-    assert [call for call in calls if call[0] == "ref"][0][3:5] == ["--at", "1:start,3:middle,5:end"]
     assert json.loads((path / "run.json").read_text())["reference"]["start_s"] == 1
     explicit = complete(bridge, "reference", run, video=str(fake[2]), start_s=2, at="2:a,4:b")
-    assert explicit["window"] == {"start_s": 2, "end_s": 12.0}
+    assert explicit["window"] == {"start_s": 2, "end_s": 12.0} and [a["t"] for a in explicit["anchors"]] == [2.0, 4.0]
     only_start = complete(bridge, "reference", run, video=str(fake[2]), start_s=2)
-    assert only_start["anchors"][0]["t"] == 2.0
+    assert [a["t"] for a in only_start["anchors"]] == [2.0, 11.9] and only_start["duration"] == 10.0  # the clip's last frame
+    only_end = complete(bridge, "reference", run, video=str(fake[2]), end_s=4)
+    assert only_end["anchors"][0]["t"] == 0.0 and only_end["trimmed"]["source_end_s"] == 4 and only_end["duration"] == 4.0
     beyond = bridge.call("reference", run=run, video=str(fake[2]), start_s=1, end_s=20, wait_s=10)
     assert "beyond the clip's duration" in beyond["operation"]["result"]["error"]
     assert "greater than start_s" in bridge.call("reference", run=run, video=str(fake[2]), start_s=5, end_s=5)["error"]
@@ -771,3 +962,228 @@ def test_listed_description_and_arguments_stay_short(fake):
     assert len(tool.description) < 400
     longest = max(len(prop.get("description", "")) for prop in tool.inputSchema["properties"].values())
     assert longest < 120, longest
+
+
+# ---- the bridge's own verdict ----
+
+def moved_entry(clip, sim):
+    first = {"objects": {"b": {"photo": {"centre": [100.0, 100.0]}, "sim": {"centre": [100.0, 100.0]}}}}
+    last = {"objects": {"b": {"photo": {"centre": [100.0 + clip[0], 100.0 + clip[1]]}, "sim": {"centre": [100.0 + sim[0], 100.0 + sim[1]]}}}}
+    return plan.centroid_displacement(first, last, "b")
+
+
+def test_verdict_thresholds_are_stated_and_applied():
+    clip = (-53.8, -56.6)
+    matches = plan.bridge_verdict(moved_entry(clip, (-65.4, -61.5)), 0.52)
+    assert matches["verdict"] == "matches" and matches["failed"] == []
+    assert matches["numbers"]["magnitude_ratio"] == 1.15 and matches["numbers"]["end_frame_overlap"] == 0.52
+    low = plan.bridge_verdict(moved_entry(clip, (-11.6, -22.5)), 0.0)  # the first user test: 32 percent of the distance, overlap 0
+    assert low["verdict"] == "moved, but not like the clip" and len(low["failed"]) == 2
+    assert any("magnitude_ratio 0.32" in text and "0.5 to 2" in text for text in low["failed"])
+    assert any("end_frame_overlap 0.0 is not above 0.2" in text for text in low["failed"])
+    assert plan.bridge_verdict(moved_entry(clip, (-30.0, -30.0)), 0.3)["verdict"] == "matches"            # ratio 0.54
+    assert plan.bridge_verdict(moved_entry(clip, (-27.0, -28.0)), 0.3)["verdict"] == "moved, but not like the clip"  # ratio 0.498
+    assert plan.bridge_verdict(moved_entry(clip, (-100, -100)), 0.3)["verdict"] == "matches"               # ratio 1.81
+    assert plan.bridge_verdict(moved_entry(clip, (-150, -150)), 0.3)["failed"][0].startswith("magnitude_ratio 2.7")
+    assert plan.bridge_verdict(moved_entry(clip, (-65.4, -61.5)), 0.2)["verdict"] == "moved, but not like the clip"  # overlap must be above 0.2
+    sideways = plan.bridge_verdict(moved_entry(clip, (60.0, -50.0)), 0.5)
+    assert sideways["verdict"] == "moved, but not like the clip" and any("direction_error_deg" in text for text in sideways["failed"])
+    still = plan.bridge_verdict(moved_entry(clip, (1.0, 2.0)), 0.5)
+    assert still["verdict"] == "did not move" and "under 3 px" in still["failed"][0]
+    assert plan.bridge_verdict(moved_entry((1, 1), (0, 0)), 0.5)["failed"][0].endswith("too)")
+    assert plan.bridge_verdict(moved_entry(clip, (2.0, 2.0)), None)["verdict"] == "did not move"
+    assert plan.bridge_verdict(plan.centroid_displacement({"objects": {}}, {"objects": {}}, "b"), None)["verdict"] == "did not move"
+    thresholds = plan.VERDICT_THRESHOLDS
+    assert thresholds["magnitude_ratio_range"] == [0.5, 2.0] and thresholds["direction_error_deg_below"] == 30
+    assert thresholds["end_frame_overlap_above"] == 0.2 and thresholds["did_not_move_below_px"] == 3
+    assert plan.overall_verdict({"a": matches, "b": low}) == "moved, but not like the clip"
+    assert plan.overall_verdict({"a": matches, "b": still}) == "did not move" and plan.overall_verdict({}) is None
+    assert plan.direction_error_deg((1, 0), (0, 1)) == 90.0 and plan.direction_error_deg((1, 0), (0, 0)) is None
+
+
+def test_compare_take_reports_the_bridge_verdict_beside_rss_s(fake):
+    bridge = fake[0]
+    first = start(fake)
+    run, path = first["run"], Path(first["run_dir"])
+    complete(bridge, "reference", run, video=str(fake[2]), at="0:start,3:middle,6:end")
+    complete(bridge, "rollout", run, take="plain", duration_s=6)
+    plain = complete(bridge, "compare_take", run, take="plain", keys=["block=red"])
+    assert plain["verdict"] == "matches" and plain["rss_verdict"] == "1 of 1 did what the clip did" and plain["rss_score"] == 0.4
+    assert "score" not in plain and "RSS's own" in plain["rss_note"]
+    bridge_part = plain["bridge_verdict"]
+    assert bridge_part["verdict"] == "matches" and bridge_part["thresholds"] == plan.VERDICT_THRESHOLDS and "not RSS's" in bridge_part["source"]
+    numbers = bridge_part["by_object"]["block"]["numbers"]
+    assert numbers["end_frame_overlap"] == 0.5 and numbers["sim_px"] == [-40.0, -40.0] and numbers["clip_px"] == [-50.0, -60.0]
+    # RSS still says the block "did what the clip did" while the bridge says it barely moved
+    (path / "physics.json").write_text("{}")
+    complete(bridge, "rollout", run, take="still", duration_s=6)
+    still = complete(bridge, "compare_take", run, take="still", keys=["block=red"])
+    assert still["verdict"] == "did not move" and still["rss_verdict"] == "1 of 1 did what the clip did"
+    assert "under 3 px" in still["bridge_verdict"]["by_object"]["block"]["failed"][0]
+    complete(bridge, "rollout", run, take="short", duration_s=6, push={"waypoints": [[0, 0, -0.2], [6, 0, -0.17]]})
+    short = complete(bridge, "compare_take", run, take="short", keys=["block=red"])
+    assert short["verdict"] == "moved, but not like the clip" and any("magnitude_ratio" in text for text in short["bridge_verdict"]["by_object"]["block"]["failed"])
+    text = Path(complete(bridge, "report", run)["report"]).read_text()
+    assert "bridge verdict **did not move**" in text and "RSS's own score 0.4" in text and "magnitude ratio" in text
+
+
+# ---- tune_push ----
+
+def known_physics(clip=(-53.8, -56.6), *, gain=0.5, turn=0.3, pixels_per_m=480.0, floor=0.0):
+    """A block whose image displacement is a known function of the push: gain times the pusher's travel, turned by
+    ``turn`` radians, at ``pixels_per_m``; ``floor`` metres of travel does nothing (the pusher must first reach the block)."""
+    def evaluate(push, trial):
+        w = push["waypoints"]
+        dx, dy = w[-1][1] - w[0][1], w[-1][2] - w[0][2]
+        travel = max(0.0, math.hypot(dx, dy) - floor)
+        angle = math.atan2(dy, dx) + turn
+        length = gain * travel * pixels_per_m
+        return {"clip_px": list(clip), "sim_px": [round(length * math.cos(angle), 1), round(-length * math.sin(angle), 1)],
+                "end_overlap": 0.5}
+    return evaluate
+
+
+AXES = plan.image_axes(template.DEFAULT_CAMERA["eye"], template.DEFAULT_CAMERA["target"])
+PUSH0 = {"waypoints": [[0.0, 0.0, -0.2], [6.0, 0.0, 0.0]], "object_velocity": None}
+
+
+def test_image_axes_say_which_way_the_table_goes_in_the_picture():
+    (rx, ry), (dx, dy) = AXES
+    assert (rx, ry) == (1.0, -0.0) and dx == 0 and dy < 0  # +x is right; table +y is up in the image (image y points down)
+    assert round(math.degrees(plan.table_angle((0, -10), AXES))) == 90 and round(math.degrees(plan.table_angle((10, 0), AXES))) == 0
+    assert round(math.degrees(plan.table_angle((-53.8, -56.6), AXES))) == 133  # the real block moves toward -x, +y on the table
+    with pytest.raises(ValueError):
+        plan.image_axes((0, 0, 1), (0, 0, 0))
+
+
+def test_transform_push_turns_about_the_object_and_stretches_from_the_pusher_start():
+    pivot = (0.0, -0.075)
+    assert plan.transform_push(PUSH0, pivot, 1.0, 0.0)["waypoints"] == PUSH0["waypoints"]
+    double = plan.transform_push(PUSH0, pivot, 2.0, 0.0)
+    assert double["waypoints"] == [[0.0, 0.0, -0.2], [6.0, 0.0, 0.2]]  # the start stays, the travel past the object grows
+    turned = plan.transform_push(PUSH0, pivot, 1.0, math.pi / 2)
+    assert turned["waypoints"][0][1:] == [0.125, -0.075] and turned["waypoints"][1][1:] == [-0.075, -0.075]
+    both = plan.transform_push(PUSH0, pivot, 2.0, math.pi / 2)
+    assert both["waypoints"][0][1:] == [0.125, -0.075] and both["waypoints"][1][1:] == [-0.275, -0.075]
+    aimed = plan.aimed_push(PUSH0, pivot, math.pi / 2)
+    assert aimed["waypoints"] == [[0.0, 0.0, -0.225], [6.0, 0.0, 0.025]]
+
+
+def test_search_converges_on_a_known_function_and_stops_early():
+    trials, best, why = plan.search_push(PUSH0, (0.0, -0.075), AXES, known_physics())
+    assert why == "within tolerance" and best is trials[-1] and 1 < len(trials) <= 4
+    assert trials[0]["scale"] == 1.0 and trials[0]["rotation_deg"] == 0.0 and trials[0]["push"] == PUSH0
+    assert trials[0]["magnitude_ratio"] < 0.7 and trials[0]["direction_error_deg"] > 15
+    assert 0.8 <= best["magnitude_ratio"] <= 1.25 and best["direction_error_deg"] < 15
+    assert [t["trial"] for t in trials] == list(range(1, len(trials) + 1))
+    assert best["rotation_deg"] != 0 and best["push"] != PUSH0 and all(len(t["push"]["waypoints"]) == 2 for t in trials)
+    # the push that was kept does give a displacement within a factor of 1.5 on both axes
+    sim = known_physics()(best["push"], 0)["sim_px"]
+    assert sim[0] < 0 and sim[1] < 0 and 1 / 1.5 < sim[0] / -53.8 < 1.5 and 1 / 1.5 < sim[1] / -56.6 < 1.5
+    # a push that already matches stops at the first trial
+    first = plan.search_push(best["push"], (0.0, -0.075), AXES, known_physics())
+    assert first[2] == "within tolerance" and len(first[0]) == 1
+
+
+def test_search_is_bounded_and_keeps_the_best_trial():
+    calls = []
+
+    def stubborn(push, trial):
+        calls.append(trial)
+        return {"clip_px": [-53.8, -56.6], "sim_px": [20.0, 5.0 * trial], "end_overlap": 0.1}  # never close, always moves
+    trials, best, why = plan.search_push(PUSH0, (0.0, -0.075), AXES, stubborn, max_trials=4)
+    assert why == "max_trials" and len(trials) == 4 == len(calls) and best["trial"] in (1, 2, 3, 4)
+    assert best["cost"] == min(t["cost"] for t in trials)
+    only = plan.search_push(PUSH0, (0.0, -0.075), AXES, stubborn, max_trials=1)
+    assert len(only[0]) == 1 and only[2] == "max_trials"
+    for bad in (0, 13, True, 2.5):
+        with pytest.raises(ValueError, match="max_trials"):
+            plan.search_push(PUSH0, (0.0, 0.0), AXES, stubborn, max_trials=bad)
+
+
+def test_search_aims_again_when_the_block_did_not_move():
+    # the first push passes beside the block (travel under 0.3 m does nothing): the next trial aims through the object
+    physics = known_physics(floor=0.05)
+
+    def beside(push, trial):
+        w = push["waypoints"]
+        return {"clip_px": [-53.8, -56.6], "sim_px": [0.4, 0.2] if trial == 1 else physics(push, trial)["sim_px"], "end_overlap": 0.2}
+    trials, best, why = plan.search_push(PUSH0, (0.0, -0.075), AXES, beside)
+    assert trials[0]["magnitude_ratio"] < 0.02 and trials[0]["cost"] == 10.0
+    assert trials[1]["scale"] == 1.0 and trials[1]["sim_px"][0] < 0 < 1  # re-aimed straight, unscaled, then refined
+    assert why in ("within tolerance", "max_trials") and best["cost"] < 10
+
+
+def test_search_refuses_a_clip_that_does_not_move_and_an_unknown_start():
+    still = lambda push, trial: {"clip_px": [0.5, -0.5], "sim_px": [10.0, 10.0]}
+    with pytest.raises(ValueError, match="no displacement to match"):
+        plan.search_push(PUSH0, (0, 0), AXES, still)
+    with pytest.raises(ValueError, match="start position is unknown"):
+        plan.search_push(PUSH0, None, AXES, known_physics(), max_trials=3)
+    revealed = lambda push, trial: dict(known_physics()(push, trial), pivot=(0.0, -0.075))
+    assert plan.search_push(PUSH0, None, AXES, revealed)[2] == "within tolerance"  # a trial can tell where the object started
+
+
+def prepare_tuning(fake, **start_arguments):
+    bridge = fake[0]
+    first = bridge.call("start", name="tune", device="cpu", template=start_arguments.get("template", {}), wait_s=10)
+    run, path = first["run"], Path(first["run_dir"])
+    (path / "physics.json").write_text("{}")
+    complete(bridge, "reference", run, video=str(fake[2]), at="0:start,3:middle,6:end")
+    return bridge, run, path
+
+
+def test_tune_push_runs_bounded_rollouts_and_returns_the_trial_table(fake):
+    bridge, run, path = prepare_tuning(fake)
+    result = complete(bridge, "tune_push", run, keys=["block=red"], take="tn", record_fps=10)
+    assert result["ok"] and result["within_tolerance"] and result["stopped_because"] == "within tolerance"
+    trials = result["trials"]
+    assert 1 <= len(trials) <= 6 and [t["take"] for t in trials] == [f"tn-{k}" for k in range(1, len(trials) + 1)] == result["takes"]
+    assert trials[0]["scale"] == 1.0 and trials[0]["push"]["waypoints"] == [[0.0, 0.0, -0.2], [2.0, 0.0, 0.0]]  # the template's own push
+    for row in trials:
+        assert set(row) >= {"trial", "scale", "rotation_deg", "push", "sim_px", "clip_px", "magnitude_ratio", "direction_error_deg", "end_overlap", "take"}
+        assert (path / f"{row['take']}.mp4").is_file()
+    best = result["best_push"]
+    assert best == {"waypoints": trials[result["best_trial"] - 1]["push"]["waypoints"], "object_velocity": None}
+    assert plan.validate_push(best)[0]["waypoints"] == best["waypoints"]
+    assert 0.8 <= result["best_magnitude_ratio"] <= 1.25 and result["best_direction_error_deg"] < 15
+    assert result["tolerance"] == {"magnitude_ratio": [0.8, 1.25], "direction_error_deg_below": 15.0}
+    assert "PUSH PATH" in result["scope"] and "does not change mass, friction" in result["scope"]
+    assert "best_push" in result["use"]["rollout"] and "template={'push': best_push}" in result["use"]["update_scene"]
+    assert result["duration_s"] == 6.0
+    # every trial rolled out 6 s at the clip rate, and the best push drives the next ordinary rollout and the scene update
+    final = complete(bridge, "rollout", run, take="final", push=best, duration_s=6, record_fps=10)
+    assert final["ok"] and final["push"]["waypoints"] == best["waypoints"]
+    again = complete(bridge, "update_scene", run, template={"push": best})
+    assert again["template"]["push"]["waypoints"] == best["waypoints"]
+    assert "tune_push" in Path(complete(bridge, "report", run)["report"]).read_text()
+
+
+def test_tune_push_is_bounded_by_max_trials_and_reports_a_miss(fake):
+    bridge, run, path = prepare_tuning(fake)
+    (path / "physics.json").write_text("{}")
+    calls_before = len([1 for line in (path / "calls.jsonl").read_text().splitlines() if '"play"' in line])
+    stuck = complete(bridge, "tune_push", run, keys=["block=red"], take="one", max_trials=1, push={"waypoints": [[0, 0, -0.2], [6, 0, -0.19]]})
+    assert len(stuck["trials"]) == 1 and stuck["stopped_because"] == "max_trials" and not stuck["within_tolerance"]
+    assert "Not within tolerance after 1 trials" in stuck["note"] and stuck["best_push"]["waypoints"] == [[0.0, 0.0, -0.2], [6.0, 0.0, -0.19]]
+    plays = len([1 for line in (path / "calls.jsonl").read_text().splitlines() if '"play"' in line])
+    assert plays - calls_before == 1
+    assert bridge.call("tune_push", run=run, keys=["block=red"], max_trials=13)["ok"] is False
+
+
+def test_tune_push_validates_before_running(fake):
+    bridge = fake[0]
+    run = bridge.call("start", name="v", device="cpu", template={}, wait_s=10)["run"]
+    assert "needs reference frames" in bridge.call("tune_push", run=run, keys=["block=red"], wait_s=10)["operation"]["result"]["error"]
+    complete(bridge, "reference", run, video=str(fake[2]), at="0:start,6:end")
+    assert not bridge.call("tune_push", run=run, wait_s=10)["ok"]  # keys are required
+    done = complete(bridge, "tune_push", run, keys=["block=red"], take="a", max_trials=2)
+    assert done["ok"] and len(done["trials"]) == 2  # the fake block never moves far enough, so both trials run
+    repeat = bridge.call("tune_push", run=run, keys=["block=red"], take="a", max_trials=2)
+    assert not repeat["ok"] and "Take already exists" in repeat["error"]
+    from_file = bridge.call("start", name="filescene", device="cpu", scene=str(fake[1]), wait_s=10)
+    complete(bridge, "reference", from_file["run"], video=str(fake[2]), at="0:start,6:end")
+    missing = bridge.call("tune_push", run=from_file["run"], keys=["block=red"], wait_s=10)["operation"]["result"]
+    assert not missing["ok"] and "no readable PUSH" in missing["error"]
+    given = complete(bridge, "tune_push", from_file["run"], keys=["block=red"], push={"waypoints": [[0, 0, -0.2], [6, 0, 0]]}, max_trials=1)
+    assert given["ok"] and given["trials"][0]["push"]["waypoints"][0] == [0.0, 0.0, -0.2]
