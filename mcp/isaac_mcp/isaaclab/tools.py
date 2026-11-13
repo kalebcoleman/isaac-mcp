@@ -364,7 +364,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         label: _ScriptLabel = None,
         timeout_s: _ScriptTimeout = 600,
         single_instance_key: _SingleKey = None,
-        uses_gpu: Annotated[bool, Field(description="true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget), as in run_script. Default false: it starts at once and does not block GPU jobs.")] = False,
+        uses_gpu: Annotated[bool, Field(description="true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget). Default false: it starts at once and does not block GPU jobs.")] = False,
         min_free_vram_mb: _MinVram = None,
         wait_for_vram_s: _VramWait = 0,
     ) -> str:

@@ -393,7 +393,7 @@ arguments. Isaac Lab itself is not modified, and `isaaclab__play` still runs the
   estimated. A play script that never builds its environment through `gymnasium.make`, or never steps it,
   likewise produces no score: the runner reports that rather than inventing one. A multi-agent environment
   whose base `step` returns a per-agent reward dict is also reported as unscoreable. An uncaught error is
-  written into the result and still fails the job. A job killed by `timeout_s` or `runs_cancel` may leave
+  written into the result and still fails the job. A job killed by `timeout_s` or `jobs action=cancel` may leave
   no result at all.
 - A training log's mean reward is a different measurement: it usually covers a recent window of rollouts,
   often with stochastic actions, while eval runs the saved policy deterministically. Expect a gap in either
@@ -843,7 +843,7 @@ the launch proceeds as before.
   in the same second.
 - The host keeps an in-memory map of active `Popen` handles; on server restart, records are
   rehydrated and dead "running" jobs take their recorded exit code, or `failed` with note "host restarted" if they left none.
-- `runs_cancel` records `cancelled` before signalling, so the watcher does not overwrite it.
+- `jobs action=cancel` records `cancelled` before signalling, so the watcher does not overwrite it.
   Cancelling an already-finished job is a no-op.
 - Subprocesses are launched with `shell=False`, an explicit argv list, and
   `start_new_session=True`, so the whole process group can be signalled. The child inherits a

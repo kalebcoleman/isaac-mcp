@@ -522,7 +522,7 @@ Run any Python script as a managed job: a job_id at once, a log, a hard timeout,
 - `label` (str | None, default `None`): Short name, used in the job_id and runs_list.
 - `timeout_s` (float, default `600`): Hard wall limit in seconds; the whole process group is killed at expiry.
 - `single_instance_key` (str | None, default `None`): Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.
-- `uses_gpu` (bool, default `False`): true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget), as in run_script. Default false: it starts at once and does not block GPU jobs.
+- `uses_gpu` (bool, default `False`): true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget). Default false: it starts at once and does not block GPU jobs.
 - `min_free_vram_mb` (int | None, default `None`): Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.
 - `wait_for_vram_s` (float, default `0`): With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).
 

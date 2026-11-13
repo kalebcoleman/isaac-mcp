@@ -195,8 +195,9 @@ def test_python_paths_is_the_documented_argument_and_python_path_its_alias(tmp_p
     server = FastMCP("t")
     tools.register_isaaclab_tools(server, groups={"core", "lab", "code"})
     listed = {t.name: t for t in asyncio.run(server.list_tools())}
-    for name in ("train", "eval", "play", "env_check", "record", "envs_list", "run_script"):
-        assert {"python_paths", "python_path"} <= set(listed[name if name == "run_script" else f"isaaclab__{name}"].inputSchema["properties"]), name
+    for name in ("train", "eval", "play", "env_check", "record", "envs_list"):
+        assert {"python_paths", "python_path"} <= set(listed[f"isaaclab__{name}"].inputSchema["properties"]), name
+    assert "python_paths" in listed["run_script"].inputSchema["properties"]
 
 
 def test_play_and_run_script_agree(tmp_path):

@@ -87,7 +87,7 @@ are not registered by this pack.
 - `start_screen_recording`: Records window or desktop activity to MP4 at a specified framerate (default 15 fps). Window capture reads that window's buffer directly, so overlapping windows do not obscure it.
 - `stop_screen_recording`: Finalizes recording and returns the path to the MP4.
 - `screen_recording_status`: Reports elapsed recording time and captured frames.
-- `screen_info`: Reports active display, attached monitors, capture directories, and recording state.
+- `windows(action="info")` (`screen_info`): Reports active display, attached monitors, capture directories, and recording state.
 - `move_window` / `tile_windows`: Place one window, or lay out two to six, for a recording.
 - `join_videos`: Join clips into one new MP4, or (`mode=sheet`) write a PNG contact sheet of frames at chosen times.
 
@@ -293,7 +293,7 @@ config**. The file does not allow comments.
 
 Format from [Antigravity's MCP docs](https://antigravity.google/docs/mcp) and
 [Codex's MCP docs](https://developers.openai.com/codex/mcp). On the test machine, `codex exec`
-called `screen_info` through a Codex entry of this form (2026-10-31); the Antigravity entry has not
+called `windows(action="info")` through a Codex entry of this form (2026-10-31); the Antigravity entry has not
 been tested here.
 
 ### Agent skill
