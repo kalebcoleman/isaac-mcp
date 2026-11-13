@@ -15,9 +15,15 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / "mcp") not in sys.path:
+    sys.path.insert(0, str(ROOT / "mcp"))
+from isaac_mcp import tool_groups  # noqa: E402  (pure data; needs no MCP SDK)
 
 
-def parameters(port):
+def parameters(port, toolsets=None):
+    """Server parameters for one bridge. ``toolsets`` (an ISAAC_MCP_TOOLSETS value such as
+    "all" or "default,+kit_debug") overrides the environment; without it an exported
+    ISAAC_MCP_TOOLSETS opts in, else a scene-only client is started."""
     return StdioServerParameters(
         command=sys.executable,
         args=["-m", "isaac_mcp.server"],
@@ -25,6 +31,7 @@ def parameters(port):
             # Defaults for a scene-only client; an exported value opts in (e.g. default,+input).
             "ISAAC_MCP_TOOLSETS": "default,-code",
             **os.environ,
+            **({"ISAAC_MCP_TOOLSETS": toolsets} if toolsets else {}),
             "PYTHONPATH": str(ROOT / "mcp"),
             "ISAAC_MCP_PORT": str(port),
             "UR5E_DT_PORT": str(port),
@@ -32,14 +39,31 @@ def parameters(port):
     )
 
 
+def listed(name, args):
+    """The listed tool that runs a single-purpose tool: ``sim__prim__create`` is sent as
+    ``sim__prim`` with ``action="create"``. A name that is not part of a group is sent as it is."""
+    found = tool_groups.members().get(name)
+    if not found:
+        return name, args
+    group, action = found
+    args = {("sub_action" if key == "action" else key): value for key, value in args.items()}
+    return group, {"action": action, **args}
+
+
 async def call(client, name, args):
-    result = await client.call_tool(name, args)
+    """Call a tool by the name a client is shown. The transcript keeps the name the caller used
+    (``tool``) and records what was sent (``sent``, ``sent_arguments``)."""
+    sent, sent_args = listed(name, args)
+    result = await client.call_tool(sent, sent_args)
     data = "\n".join(x.text for x in result.content if x.type == "text")
     try:
         data = json.loads(data)
     except ValueError:
         pass
-    return dict(tool=name, arguments=args, isError=result.isError, result=data)
+    record = dict(tool=name, arguments=args, isError=result.isError, result=data)
+    if sent != name:
+        record.update(sent=sent, sent_arguments=sent_args)
+    return record
 
 
 async def main(port, name, args):
