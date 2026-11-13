@@ -163,6 +163,19 @@ def test_zoom_rect_is_the_widget_rectangle_in_window_pixels(kit_ui):
     assert rect == dict(ref=REF, type="Button", name="play", x=60, y=50, width=40, height=20)
 
 
+def test_find_routes_zoom_ref_before_listing_and_after_the_headless_check(kit_ui, monkeypatch):
+    sys.path.insert(0, str(ROOT / "exts/sim-tools"))
+    from sim_tools import graph, ui
+
+    monkeypatch.setattr(ui, "zoom_rect", lambda ref: {"zoomed": ref})
+    monkeypatch.setattr(graph, "_headless", lambda: False)
+    assert ui.find({"zoom_ref": REF, "query": "ignored", "limit": 0}) == {"zoomed": REF}
+    monkeypatch.setattr(graph, "_headless", lambda: True)
+    with pytest.raises(ui.UIRefusal) as err:
+        ui.find({"zoom_ref": REF})
+    assert err.value.code == "NO_UI"
+
+
 def test_zoom_rect_refuses_a_stale_ref(kit_ui):
     kit_ui.finder.find = lambda path: None
     with pytest.raises(kit_ui.module.UIRefusal) as err:
