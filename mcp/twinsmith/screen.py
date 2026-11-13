@@ -1429,6 +1429,8 @@ def map_point(coord_space: str | None, x: int, y: int, width: int, height: int) 
                          "capture it again")
     if not (iw and ih and rw and rh) or rx + rw > ww or ry + rh > wh:
         raise ValueError("coord_space token is inconsistent; capture the window again")
+    if type(x) is not int or type(y) is not int:
+        raise ValueError(f"x and y must be integer pixels of that image, not {x!r} and {y!r}")
     if not (0 <= x < iw and 0 <= y < ih):
         raise ValueError(f"({x}, {y}) is outside that {iw}x{ih} image")
     # Pixel centres: the last image pixel lands inside the rectangle, never on its far edge.
@@ -1486,7 +1488,7 @@ def capture(monitor: int | None = None, window: str | None = None, window_id: in
         token = coord_token(inline.width, inline.height, (0, 0, full.width, full.height), full.width, full.height)
         caption += f"\ncoord_space: {token} (pass it with x/y measured in this image)"
     elif inline.width != full.width:
-        caption += f"\nscale: multiply a point in this image by {full.width / inline.width:.3f} for screen pixels"
+        caption += "\ninput: screenshot the window (window_id) for a coord_space token; input tools map its points"
     if target is None and composed:
         caption += COMPOSITE_NOTE
     buf = io.BytesIO()
