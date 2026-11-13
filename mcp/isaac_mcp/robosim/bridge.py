@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import concurrent.futures
 import datetime
 import fcntl
@@ -19,12 +20,14 @@ import time
 import uuid
 
 from . import plan
-from .template import PARAMETERS, scene_text
+from . import template as scene_template_module
+from .template import FRAME, PARAMETERS, SHAPES, SIZE_MEANING
 
 PIN = "87b5e32"
 REPOSITORY = "https://github.com/robosimstudio/robosimstudio"
 ACTIONS = ("status", "start", "scene_template", "update_scene", "reference", "snapshot", "compare",
-           "rollout", "compare_take", "stop", "report")
+           "rollout", "tune_push", "compare_take", "stop", "report")
+RECENT_RUNS = 5
 STOP_WAIT_S = 15.0
 BASE_PORT = 8080
 NO_BRIDGE = ("robosim needs no Isaac Sim or Kit bridge: it runs RoboSimStudio in its own Python environment. "
@@ -184,23 +187,56 @@ class RoboSimBridge:
                 self._claim_server(path, ledger)
             self._save(path, ledger)
 
+    @staticmethod
+    def _sha256(file):
+        digest = hashlib.sha256()
+        with Path(file).open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
     def _copy_input(self, source, destination):
         original = Path(source).expanduser()
         if not original.is_absolute() or not original.is_file():
             raise ValueError("Input must be an existing absolute file path.")
         shutil.copyfile(original, destination)
-        digest = hashlib.sha256()
-        with destination.open("rb") as source_file:
-            for chunk in iter(lambda: source_file.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return {"source": str(original.resolve()), "copy": str(destination),
-                "sha256": digest.hexdigest()}
+        return {"source": str(original.resolve()), "copy": str(destination), "sha256": self._sha256(destination)}
+
+    @staticmethod
+    def _current_template(ledger):
+        """The template data behind the scene version now loaded, or None when it came from a file."""
+        for entry in reversed(ledger.get("scene_versions") or []):
+            if entry.get("loaded"):
+                return entry.get("template")
+        return None
+
+    def _scene_template(self, info, run, shape, template):
+        """Write a template's scene file (into the run folder, else the shared templates folder) and describe it."""
+        spec = dict(template or {})
+        spec.setdefault("shape", shape)
+        resolved = scene_template_module.resolve(spec)
+        text = scene_template_module.scene_source(resolved)
+        if run:
+            folder, _ = self._load(run)
+        else:
+            folder = self.runs / "_templates"
+            folder.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha256(text.encode()).hexdigest()[:8]
+        path = folder / f"scene-template-{resolved['shape']}-{digest}.py"
+        path.write_text(text)
+        shown = {key: value for key, value in resolved.items() if key not in ("mask_key", "push_default")}
+        return dict(info, ok=True, path=str(path), shape=resolved["shape"], template=shown, parameters=PARAMETERS,
+                    size_meaning=SIZE_MEANING[resolved["shape"]], mask_key=resolved["mask_key"], frame=FRAME,
+                    use=("start(name=..., device='cpu', template={...}) builds this scene from data, no file needed; "
+                         f"scene='{path}' starts from the file (advanced: edit its constants, trusted Python, not sandboxed)."),
+                    note=("Image comparison only; no mass or friction fitting. Physics: cpu runs plain MuJoCo, cuda:0 runs "
+                          "Newton's MuJoCo-Warp. The scene has a static table, the object, a pusher cylinder and one camera."))
 
     def call(self, action, *, run=None, name=None, scene=None, device=None, video=None,
              keys=None, take=None, routine=None, camera=None, at=None, shape="tee", push=None,
              duration_s=None, steps=None, record_fps=10.0, start_s=None, end_s=None,
              sim_start_s=None, sim_end_s=None, size="320x240", width=320, port=None, wait_s=0,
-             allow_concurrent_gpu=False):
+             allow_concurrent_gpu=False, template=None, show_all=False, max_trials=None):
         info = self._installation()
         try:
             if info.get("error"):
@@ -210,19 +246,25 @@ class RoboSimBridge:
             if action not in ACTIONS:
                 raise ValueError("action must be one of: " + ", ".join(ACTIONS))
             if action == "scene_template":
-                return dict(info, ok=True, scene=scene_text(shape), parameters=PARAMETERS, shape=shape,
-                            note="Trusted Python, not sandboxed. Contains a pusher and a working push: parameterise "
-                                 "PUSH, or pass rollout(push={'waypoints': [[seconds, x, y], ...]}) without editing. "
-                                 "Image comparison only; no mass or friction fitting. Physics: cpu runs plain MuJoCo, "
-                                 "cuda:0 runs Newton's MuJoCo-Warp.")
+                return self._scene_template(info, run, shape, template)
             if action == "status":
-                return dict(info, bridge_needed=False, note=NO_BRIDGE, **self._status(run, wait_s))
+                return dict(info, bridge_needed=False, note=NO_BRIDGE, **self._status(run, wait_s, show_all))
+            scene_source = resolved = None
             if action in ("start", "update_scene"):
-                if not scene or Path(scene).suffix != ".py" or not Path(scene).is_absolute() or not Path(scene).is_file():
-                    raise ValueError("scene must be an existing absolute .py file containing trusted scene code.")
-                problems = plan.scene_problems(Path(scene).read_text(errors="replace"))
-                if problems:
-                    raise ValueError(" ".join(problems))
+                if template is not None and scene:
+                    raise ValueError("Give template (plain data) or scene (a .py file), not both.")
+                if template is None and not scene:
+                    raise ValueError("Give template={...} (plain data; {} is the default T) or scene=<absolute .py file>.")
+                if template is not None:
+                    if action == "start":
+                        resolved = scene_template_module.resolve(template)
+                        scene_source = scene_template_module.scene_source(resolved)
+                else:
+                    if Path(scene).suffix != ".py" or not Path(scene).is_absolute() or not Path(scene).is_file():
+                        raise ValueError("scene must be an existing absolute .py file containing trusted scene code.")
+                    problems = plan.scene_problems(Path(scene).read_text(errors="replace"))
+                    if problems:
+                        raise ValueError(" ".join(problems))
             if action == "start":
                 if device not in ("cpu", "cuda:0"):
                     raise ValueError("start requires explicit device='cpu' or device='cuda:0'. No automatic GPU selection.")
@@ -241,22 +283,32 @@ class RoboSimBridge:
                               rss_commit=info["rss_commit"], device=device, created_at=_now(),
                               inputs={}, commands=[], operations=[], server=None, scene_versions=[],
                               reference=None, allow_concurrent_gpu=allow_concurrent_gpu)
-                self._install_scene(path, ledger, scene)
+                self._install_scene(path, ledger, scene, text=scene_source, template=resolved)
                 self._save(path, ledger)
             else:
                 path, ledger = self._load(run)
+                if action == "update_scene" and template is not None:
+                    resolved = scene_template_module.resolve(template, self._current_template(ledger))
+                    scene_source = scene_template_module.scene_source(resolved)
                 if device is not None and device != ledger["device"]:
                     raise ValueError("device cannot change within a run; start a separate run.")
                 if action not in ("stop", "report") and not self._owned_alive(ledger):
                     raise ValueError("Run's bridge-owned server is not alive. Start a new run; no other server was contacted.")
-                if action in ("compare", "compare_take") and (not keys or any(not isinstance(key, str) or "=" not in key for key in keys)):
+                if action in ("compare", "compare_take", "tune_push") and (not keys or any(not isinstance(key, str) or "=" not in key for key in keys)):
                     raise ValueError("keys must contain RSS masks such as ['block=red'].")
-                if action in ("rollout", "compare_take"):
+                if action == "tune_push":
+                    take = take or "tune"
+                    if max_trials is None:
+                        max_trials = plan.TUNE_DEFAULT_TRIALS
+                    if isinstance(max_trials, bool) or not isinstance(max_trials, int) or not 1 <= max_trials <= plan.TUNE_MAX_TRIALS:
+                        raise ValueError(f"max_trials must be a whole number from 1 to {plan.TUNE_MAX_TRIALS}.")
+                if action in ("rollout", "compare_take", "tune_push"):
                     _name(take)
                 if routine:
                     _name(routine)
-                if action == "rollout":
-                    if (path / f"{take}.json").exists():
+                if action in ("rollout", "tune_push"):
+                    taken = [take] if action == "rollout" else [f"{take}-{k}" for k in range(1, max_trials + 1)]
+                    if any((path / f"{each}.json").exists() for each in taken):
                         raise ValueError("Take already exists; choose a new take name.")
                     if push is not None:
                         push, _ = plan.validate_push(push)
@@ -272,12 +324,12 @@ class RoboSimBridge:
                 raise ValueError("size must be WIDTHxHEIGHT (1–9999 pixels each).")
             if not isinstance(width, int) or not 1 <= width <= 4096:
                 raise ValueError("width must be 1–4096.")
-            if shape not in ("box", "tee"):
-                raise ValueError("shape must be 'box' or 'tee'.")
             arguments = dict(video=video, keys=keys, take=take, routine=routine, camera=camera, at=at,
                              push=push, duration_s=duration_s, steps=steps, record_fps=record_fps,
                              start_s=start_s, end_s=end_s, sim_start_s=sim_start_s, sim_end_s=sim_end_s,
-                             size=size, width=width, port=port, scene=scene if action == "update_scene" else None)
+                             size=size, width=width, port=port, scene=scene if action == "update_scene" else None,
+                             scene_source=scene_source if action == "update_scene" else None,
+                             template=resolved if action == "update_scene" else None, max_trials=max_trials)
             with self._mutex:
                 if run in self._jobs and not self._jobs[run].done():
                     raise ValueError("Run has an active operation; poll status before another action.")
@@ -319,15 +371,9 @@ class RoboSimBridge:
             lock.close()
             future.set_result(result)
 
-    def _status(self, run, wait_s):
+    def _status(self, run, wait_s, show_all=False):
         if not run:
-            runs = []
-            for ledger_path in sorted(self.runs.glob("*/run.json"), reverse=True):
-                try:
-                    runs.append(self._status(ledger_path.parent.name, 0))
-                except (OSError, ValueError, KeyError):
-                    continue
-            return {"ok": True, "runs": runs, "live_servers": [entry["server"] for entry in runs if entry["server_alive"]]}
+            return self._overview(show_all)
         future = self._jobs.get(run)
         if future and wait_s:
             try:
@@ -341,6 +387,52 @@ class RoboSimBridge:
                 "server": ledger.get("server"), "server_alive": self._owned_alive(ledger),
                 "operation": operation, "ledger": str(path / "run.json")}
 
+    @staticmethod
+    def _age(created_at):
+        try:
+            seconds = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(created_at)).total_seconds()
+        except (TypeError, ValueError):
+            return "unknown"
+        for unit, size in (("d", 86400), ("h", 3600), ("m", 60)):
+            if seconds >= size:
+                return f"{int(seconds // size)}{unit}"
+        return f"{max(0, int(seconds))}s"
+
+    def _one_line(self, name, ledger):
+        operation = ledger["operations"][-1] if ledger.get("operations") else None
+        alive = self._owned_alive(ledger)
+        if alive:
+            state = f"running {operation['action']}" if operation and operation["state"] == "running" else "live"
+        else:
+            state = "stopped" if ledger.get("server") else "never started"
+        engine, age = plan.engine_short(ledger["device"]), self._age(ledger.get("created_at"))
+        return {"run": name, "state": state, "device": ledger["device"], "engine": engine, "age": age,
+                "line": f"{name} | {state} | {ledger['device']} | {engine} | {age} old", "alive": alive}
+
+    def _overview(self, show_all):
+        """Without a run: live servers and the five newest runs, one line each; ``all`` lists every run in full."""
+        loaded = []
+        for ledger_path in sorted(self.runs.glob("*/run.json"), reverse=True):
+            try:
+                loaded.append((ledger_path.parent.name, self._load(ledger_path.parent.name)[1]))
+            except (OSError, ValueError, KeyError):
+                continue
+        lines = [self._one_line(name, ledger) for name, ledger in loaded]
+        live = [line for line in lines if line["alive"]]
+        for line in lines:
+            del line["alive"]
+        if show_all:
+            runs = []
+            for name, _ in loaded:
+                try:
+                    runs.append(self._status(name, 0))
+                except (OSError, ValueError, KeyError):
+                    continue
+            return {"ok": True, "runs": runs, "live_servers": live, "total_runs": len(loaded)}
+        return {"ok": True, "live_servers": live, "recent_runs": lines[:RECENT_RUNS], "total_runs": len(loaded),
+                "listing": (f"Live servers, then the {RECENT_RUNS} most recent runs, one line each (name | state | device | engine | age). "
+                            "status(run=NAME) gives one run's full detail; status(all=true) lists every run in full.")}
+
     # ------------------------------------------------------------------ helpers
     @staticmethod
     def _free_port():
@@ -353,12 +445,17 @@ class RoboSimBridge:
                 return candidate
         raise ValueError(f"No free port from {BASE_PORT} to {BASE_PORT + 199}; pass port.")
 
-    def _install_scene(self, path, ledger, source):
-        """Copy a scene in as the next scene-vN.py and make scene.py (the file RSS loads) the same bytes."""
+    def _install_scene(self, path, ledger, source=None, text=None, template=None):
+        """Install a scene (a file, or text built from template data) as the next scene-vN.py and make
+        scene.py (the file RSS loads) the same bytes."""
         ledger.setdefault("scene_versions", [])
         version = len(ledger["scene_versions"]) + 1
         versioned = path / f"scene-v{version}.py"
-        entry = self._copy_input(source, versioned)
+        if text is not None:
+            versioned.write_text(text)
+            entry = {"source": "template", "copy": str(versioned), "sha256": self._sha256(versioned), "template": template}
+        else:
+            entry = self._copy_input(source, versioned)
         shutil.copyfile(versioned, path / "scene.py")
         entry.update(version=version, file=str(versioned), installed_at=_now(), loaded=None)
         ledger["scene_versions"].append(entry)
@@ -384,7 +481,8 @@ class RoboSimBridge:
 
     # ------------------------------------------------------------------ actions
     def _execute(self, action, path, ledger, *, video, keys, take, routine, camera, at, push, duration_s, steps,
-                 record_fps, start_s, end_s, sim_start_s, sim_end_s, size, width, port, scene):
+                 record_fps, start_s, end_s, sim_start_s, sim_end_s, size, width, port, scene, scene_source=None,
+                 template=None, max_trials=None):
         camera_args = ["--camera", camera] if camera else []
         key_args = [part for key in keys or [] for part in ("--key", key)]
         sequence = len(ledger["operations"])
@@ -409,7 +507,7 @@ class RoboSimBridge:
                 reply["status"] = status
             return reply
         if action == "update_scene":
-            return self._update_scene(path, ledger, scene)
+            return self._update_scene(path, ledger, scene, scene_source, template)
         if action == "stop":
             if not self._owned_alive(ledger):
                 return {"ok": True, "stopped": False, "final_state": "not running",
@@ -445,15 +543,18 @@ class RoboSimBridge:
                                       sim_start_s, sim_end_s, sequence)
         if action == "rollout":
             return self._rollout(path, ledger, take, routine, camera_args, push, duration_s, steps, record_fps)
+        if action == "tune_push":
+            return self._tune_push(path, ledger, take, keys, key_args, camera_args, push, duration_s, record_fps,
+                                   start_s, end_s, sim_start_s, sim_end_s, max_trials, sequence)
         if action == "report":
             return self._report(path, ledger)
         raise ValueError(f"Unsupported action {action}")
 
-    def _update_scene(self, path, ledger, scene):
+    def _update_scene(self, path, ledger, scene, scene_source=None, template=None):
         before = self._command(path, ledger, ["status"], timeout=30)
         previous = (path / "scene.py").read_bytes()
         previous_inputs = ledger["inputs"]["scene"]
-        entry = self._install_scene(path, ledger, scene)
+        entry = self._install_scene(path, ledger, scene, text=scene_source, template=template)
         reply = self._command(path, ledger, ["reload"], timeout=330)
         status = self._command(path, ledger, ["status"], timeout=30)
         generation = (before.get("generation"), status.get("generation"))
@@ -474,10 +575,51 @@ class RoboSimBridge:
                 "restarted": False, "reloaded": True, "generation": {"before": generation[0], "after": generation[1]},
                 "load_seconds": reply.get("seconds"), "names": status.get("names"), "routines": status.get("routines"),
                 "cameras": status.get("cameras"),
+                "template": template, "mask_key": (template or {}).get("mask_key"),
                 "what_happened": (f"Saved your scene as {Path(entry['file']).name} (older versions are kept) and copied it to scene.py. "
                                   "Asked the running RSS server (same process, not restarted) to reload; it rebuilt the scene in place. "
                                   "The physics restarted from the new scene's start state. Earlier takes, reference frames and the log "
                                   "are untouched; an open viewer tab keeps its connection.")}
+
+    @staticmethod
+    def _clip_info(ffmpeg, clip):
+        """``(duration_s, fps)`` read from ffmpeg's header report; either may be None."""
+        text = subprocess.run([ffmpeg, "-hide_banner", "-i", str(clip)], capture_output=True, text=True, timeout=60).stderr
+        found = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", text)
+        rate = re.search(r"(\d+(?:\.\d+)?) fps", text)
+        return (int(found[1]) * 3600 + int(found[2]) * 60 + float(found[3]) if found else None,
+                float(rate[1]) if rate and float(rate[1]) > 0 else None)
+
+    def _trim(self, source, destination, start, end):
+        """Cut ``start``-``end`` seconds of ``source`` into ``destination`` with ffmpeg (RSS cannot trim)."""
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            raise ValueError("start_s/end_s cut the clip with ffmpeg, which is not on PATH. Install ffmpeg, or leave them out "
+                             "and pass `at` anchor times instead.")
+        for codec in (["libx264", "-preset", "veryfast", "-crf", "16"], ["mpeg4", "-q:v", "2"]):
+            result = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}", "-i", str(source),
+                                     "-t", f"{end - start:.3f}", "-an", "-c:v", *codec, "-pix_fmt", "yuv420p", str(destination)],
+                                    capture_output=True, text=True, timeout=300)
+            if result.returncode == 0 and Path(destination).is_file():
+                return
+        raise ValueError("ffmpeg could not cut the clip: " + (result.stderr or "no output")[-400:])
+
+    @staticmethod
+    def _shift_at(at, offset, span):
+        """Anchor times given in clip seconds, as seconds into the trimmed clip (``end`` stays ``end``)."""
+        parts = []
+        for item in at.split(","):
+            when, colon, label = item.strip().partition(":")
+            if when.strip().lower() != "end":
+                try:
+                    shifted = float(when) - offset
+                except ValueError:
+                    raise ValueError(f"at has an unreadable time {when!r}; use seconds like '0:start,3:middle,end'.") from None
+                if shifted < -1e-6 or shifted > span + 1e-6:
+                    raise ValueError(f"at time {float(when):g} s is outside the trimmed span {offset:g}-{offset + span:g} s.")
+                when = f"{max(0.0, shifted):g}"
+            parts.append(when.strip() + colon + label)
+        return ",".join(parts)
 
     def _reference(self, path, ledger, video, at, width, start_s, end_s, sequence):
         suffix = Path(video or "").suffix
@@ -485,36 +627,70 @@ class RoboSimBridge:
             raise ValueError("video must be an absolute file path with a video extension.")
         windowed = start_s is not None or end_s is not None
         first = 0.0 if start_s is None else start_s
+        copied = path / f"reference-{sequence}{suffix}"
+        ledger["inputs"][f"reference-{sequence}"] = self._copy_input(video, copied)
+        feed, offset, trimmed, source_duration, end_anchor = copied, 0.0, None, None, None
+        if windowed:
+            ffmpeg = shutil.which("ffmpeg")
+            source_duration, fps = self._clip_info(ffmpeg, copied) if ffmpeg else (None, None)
+            frame = 1.0 / fps if fps else 0.0
+            last = end_s if end_s is not None else source_duration
+            if source_duration is not None and last is not None and last > source_duration + 1e-6:
+                return {"ok": False, "error": f"end_s {last:g} is beyond the clip's duration {source_duration:g} s."}
+            if first > 0 or (end_s is not None and (source_duration is None or end_s < source_duration - 1e-6)):
+                if last is None:
+                    raise ValueError("Cannot read the clip's length, so end_s is needed to cut it.")
+                # one frame past end_s goes into the cut so that the frame at end_s itself is its last
+                cut_end = min(last + frame, source_duration) if source_duration is not None else last
+                feed = path / f"reference-{sequence}-trim{suffix}"
+                self._trim(copied, feed, first, cut_end)
+                offset = first
+                end_anchor = last if cut_end > last + 1e-6 else (cut_end - frame if frame else None)
+                ledger["inputs"][f"reference-{sequence}-trim"] = {"source": str(copied), "copy": str(feed), "sha256": self._sha256(feed),
+                                                                  "source_start_s": first, "source_end_s": cut_end, "tool": "ffmpeg"}
+                trimmed = {"file": str(feed), "source_start_s": first, "source_end_s": last, "duration_s": round(last - first, 3),
+                           "file_duration_s": round(cut_end - first, 3),
+                           "note": (f"The clip was trimmed with ffmpeg to {first:g}-{last:g} s of the original and RSS was given that cut; the "
+                                    "contact sheet and the reported duration cover that span (the file holds one extra frame so the frame at "
+                                    f"{last:g} s is in it). Times you give and read stay in original clip seconds.")}
+            elif source_duration is not None and frame:
+                end_anchor = source_duration - frame
+        span = (trimmed or {}).get("file_duration_s")
         if at is None:
             if not windowed:
                 at = "0:start,end"
             elif end_s is None:
-                at = f"{first:g}:start,end"
+                at = f"{first:g}:start,{end_anchor:g}:end" if end_anchor is not None else f"{first:g}:start,end:end"
             else:
-                at = f"{first:g}:start,{(first + end_s) / 2:g}:middle,{end_s:g}:end"
-        copied = path / f"reference-{sequence}{suffix}"
-        ledger["inputs"][f"reference-{sequence}"] = self._copy_input(video, copied)
-        reply = self._command(path, ledger, ["ref", "frames", str(copied), "--at", at,
-                                           "--width", str(width), "--out", str(path / "ref")])
+                top = end_anchor if end_anchor is not None else end_s
+                at = f"{first:g}:start,{(first + top) / 2:g}:middle,{top:g}:end"
+        if trimmed:
+            at = self._shift_at(at, offset, span)
+        reply = self._command(path, ledger, ["ref", "frames", str(feed), "--at", at, "--width", str(width), "--out", str(path / "ref")])
         if not reply.get("ok"):
             return reply
         duration = reply.get("duration")
-        last = end_s if end_s is not None else duration
-        if isinstance(duration, (int, float)) and last is not None and last > duration + 1e-6:
+        last = end_s if end_s is not None else (source_duration if trimmed else duration)
+        if not trimmed and isinstance(duration, (int, float)) and last is not None and last > duration + 1e-6:
             return dict(reply, ok=False, error=f"end_s {last:g} is beyond the clip's duration {duration:g} s.")
         timeline = self._timeline(path)
+        anchors = timeline.get("anchors", [])
         reply["window"] = {"start_s": first, "end_s": last} if windowed else None
-        reply["anchors"] = [{"t": a.get("t"), "label": a.get("label"), "file": a.get("file")}
-                            for a in timeline.get("anchors", [])]
-        reply["window_note"] = ("Times are seconds in the original clip. The anchors cover the window; the contact sheet "
-                                "shows the whole clip." if windowed else "Times are seconds in the clip.")
-        ledger["reference"] = {"clip": str(copied), "duration_s": duration, "fps": reply.get("fps"),
-                               "start_s": start_s, "end_s": end_s, "timeline": str(path / "ref/timeline.json")}
+        reply["anchors"] = [{"t": round(float(a["t"]) + offset, 3), "label": a.get("label"), "file": a.get("file")} for a in anchors]
+        if trimmed:
+            reply.update(trimmed=trimmed, duration=trimmed["duration_s"], source_duration_s=source_duration)
+        reply["window_note"] = ("Times are seconds in the original clip (anchors, start_s, end_s). The clip was trimmed to the window, so "
+                                "the contact sheet and duration cover the trimmed span." if trimmed else "Times are seconds in the clip.")
+        ledger["reference"] = {"clip": str(feed), "duration_s": trimmed["duration_s"] if trimmed else duration, "fps": reply.get("fps"),
+                               "start_s": start_s, "end_s": end_s, "offset_s": offset, "trimmed": bool(trimmed),
+                               "source_duration_s": source_duration, "timeline": str(path / "ref/timeline.json")}
         return reply
 
     def _compare_take(self, path, ledger, take, keys, key_args, camera_args, start_s, end_s, sim_start_s, sim_end_s, sequence):
         timeline = self._timeline(path)
-        anchors = timeline.get("anchors") or []
+        known = ledger.get("reference") or {}
+        offset = float(known.get("offset_s") or 0.0)
+        anchors = [dict(a, t=round(float(a["t"]) + offset, 3)) for a in timeline.get("anchors") or []]
         if not anchors:
             raise ValueError("No reference anchors: run reference first.")
         try:
@@ -522,7 +698,6 @@ class RoboSimBridge:
             take_duration = float(meta["frames"][-1]["t"])
         except (OSError, ValueError, KeyError, IndexError):
             raise ValueError(f"No readable take named {take!r}; run rollout first.") from None
-        known = ledger.get("reference") or {}
         mapping = plan.time_mapping([float(a["t"]) for a in anchors], take_duration,
                                     clip_start=start_s if start_s is not None else known.get("start_s"),
                                     clip_end=end_s if end_s is not None else known.get("end_s"),
@@ -541,6 +716,7 @@ class RoboSimBridge:
         displacement = {name: plan.centroid_displacement(rows[0], rows[-1], name) for name in names} if len(rows) >= 2 else {}
         reply["anchors"] = rows
         reply["displacement_px"] = displacement
+        self._verdict(reply, rows, displacement)
         reply["time_mapping"] = {**{k: v for k, v in mapping.items() if k not in ("sim_t", "warnings")},
                                  "timeline": str(mapped_file),
                                  "anchors": [{"clip_t": row.get("t"), "sim_t_requested": mapping["sim_t"].get(float(row["t"])),
@@ -549,6 +725,21 @@ class RoboSimBridge:
         reply["ratio_note"] = "area_ratio = sim pixels / photo pixels; linear_scale_ratio = RSS size_ratio = sqrt(area_ratio)."
         reply["scope"] = plan.engine(ledger["device"])["scope"]
         return reply
+
+    @staticmethod
+    def _verdict(reply, rows, displacement):
+        """Put the bridge's own verdict at ``verdict``; RSS's score and verdict stay, labelled as RSS's."""
+        reply["rss_score"], reply["rss_verdict"] = reply.pop("score", None), reply.pop("verdict", None)
+        reply["rss_note"] = ("rss_score and rss_verdict are RSS's own: its overlap score and a did-it-move count. They do not "
+                             "measure how far the block moved; the verdict above them is the bridge's, with its thresholds.")
+        by_object = {}
+        for name, moved in displacement.items():
+            overlap = ((rows[-1].get("objects") or {}).get(name) or {}).get("iou")
+            by_object[name] = plan.bridge_verdict(moved, overlap)
+        overall = plan.overall_verdict(by_object)
+        reply["verdict"] = overall
+        reply["bridge_verdict"] = {"verdict": overall, "by_object": by_object, "thresholds": plan.VERDICT_THRESHOLDS,
+                                   "source": "the bridge's own check on image-centroid displacement and end-frame overlap, not RSS's"}
 
     def _rollout(self, path, ledger, take, routine, camera_args, push, duration_s, steps, record_fps):
         if push is not None:
@@ -616,6 +807,77 @@ class RoboSimBridge:
             warnings.append(f"The pusher missed its path by up to {applied.get('pusher_tracking_error_max_m')} m.")
         return result
 
+    def _starting_push(self, path, ledger, push):
+        """The push tune_push starts from: the one given, the loaded template's, else the scene's own ``PUSH``."""
+        if push is not None:
+            return push
+        template = self._current_template(ledger)
+        if template:
+            return template["push"]
+        reply = self._command(path, ledger, ["eval", "PUSH"], timeout=60)
+        try:
+            found = ast.literal_eval(reply["value"])
+            return plan.validate_push(found)[0]
+        except (KeyError, TypeError, ValueError, SyntaxError):
+            raise ValueError("Give push={'waypoints': [[seconds, x, y], ...]}: the scene has no readable PUSH to start from.") from None
+
+    def _tune_push(self, path, ledger, take, keys, key_args, camera_args, push, duration_s, record_fps,
+                   start_s, end_s, sim_start_s, sim_end_s, max_trials, sequence):
+        known = ledger.get("reference")
+        if not known or not (path / "ref/timeline.json").is_file():
+            raise ValueError("tune_push needs reference frames: run reference first.")
+        name = keys[0].split("=", 1)[0]
+        start_push = self._starting_push(path, ledger, push)
+        template = self._current_template(ledger)
+        eye, target = ((template["camera"]["eye"], template["camera"]["target"]) if template
+                       else (scene_template_module.DEFAULT_CAMERA["eye"], scene_template_module.DEFAULT_CAMERA["target"]))
+        axes = plan.image_axes(eye, target)
+        if duration_s is None:
+            anchors = [float(a["t"]) + float(known.get("offset_s") or 0.0) for a in self._timeline(path).get("anchors", [])]
+            first = start_s if start_s is not None else (known.get("start_s") if known.get("start_s") is not None else min(anchors))
+            last = end_s if end_s is not None else (known.get("end_s") if known.get("end_s") is not None else max(anchors))
+            duration_s = last - first
+        takes = []
+
+        def evaluate(trial_push, number):
+            trial_take = f"{take}-{number}"
+            rolled = self._rollout(path, ledger, trial_take, None, camera_args, trial_push, duration_s, None, record_fps)
+            if not rolled.get("ok"):
+                raise ValueError(f"trial {number}: rollout failed: {rolled.get('error')}")
+            compared = self._compare_take(path, ledger, trial_take, keys, key_args, camera_args, start_s, end_s,
+                                          sim_start_s, sim_end_s, f"{sequence}-{number}")
+            if not compared.get("ok"):
+                raise ValueError(f"trial {number}: compare_take failed: {compared.get('error')}")
+            moved = (compared.get("displacement_px") or {}).get(name) or {}
+            if moved.get("clip_px") is None or moved.get("sim_px") is None:
+                raise ValueError(f"trial {number}: the mask for {name!r} was not found at the first and last anchors; "
+                                 "check keys with compare.")
+            rows = compared["anchors"]
+            iou = lambda row: ((row.get("objects") or {}).get(name) or {}).get("iou")
+            takes.append(trial_take)
+            applied = rolled.get("push_applied") or {}
+            return {"clip_px": moved["clip_px"], "sim_px": moved["sim_px"], "start_overlap": iou(rows[0]), "end_overlap": iou(rows[-1]),
+                    "take": trial_take, "video": rolled.get("mp4"), "bridge_verdict": compared.get("verdict"),
+                    "pivot": applied.get("object_start_xy_m"), "warnings": rolled.get("warnings")}
+
+        initial_pivot = template["position"] if template else None
+        trials, best, stopped = plan.search_push(start_push, initial_pivot, axes, evaluate, max_trials=max_trials)
+        best_push = {"waypoints": best["push"]["waypoints"], "object_velocity": best["push"].get("object_velocity")}
+        within = stopped == "within tolerance"
+        low, high = plan.TUNE_RATIO_OK
+        return {"ok": True, "object": name, "trials": [{k: v for k, v in row.items() if k != "warnings"} for row in trials],
+                "best_trial": best["trial"], "best_push": best_push, "within_tolerance": within, "stopped_because": stopped,
+                "tolerance": {"magnitude_ratio": [low, high], "direction_error_deg_below": plan.TUNE_DIRECTION_OK_DEG},
+                "clip_px": best["clip_px"], "best_sim_px": best["sim_px"], "best_magnitude_ratio": best["magnitude_ratio"],
+                "best_direction_error_deg": best["direction_error_deg"], "takes": takes, "duration_s": duration_s,
+                "scope": plan.TUNE_SCOPE,
+                "use": {"rollout": "rollout(run, take=NEW, push=best_push, duration_s=..., record_fps=10), then compare_take",
+                        "update_scene": "update_scene(run, template={'push': best_push}) writes it into the scene"},
+                "note": ("Each trial is a full rollout plus the comparison, on the take named <take>-<n>. The search rescales the push about the "
+                         "object's start and turns it by the measured direction error; it stops early within tolerance." if within else
+                         f"Not within tolerance after {len(trials)} trials; best_push is the best seen (trial {best['trial']}). "
+                         "Run tune_push again from it (push=best_push) or change the scene; this tunes the push path only.")}
+
     def _report(self, path, ledger):
         report = path / "REPORT.md"
         engine = plan.engine(ledger["device"])
@@ -648,13 +910,24 @@ class RoboSimBridge:
                 lines.append(f"- rollout `{result['take']}`: {result.get('steps')} steps = {result.get('duration_s')} s simulated at "
                              f"{result.get('control_hz')} Hz, {result.get('frames')} frames at {result.get('record_fps')} per simulated second"
                              f"{'' if operation['state'] == 'completed' else ' (failed: ' + str(result.get('error')) + ')'}.")
+            if operation["action"] == "tune_push" and result.get("trials"):
+                lines.append(f"- tune_push `{result.get('object')}`: {len(result['trials'])} trials, {result.get('stopped_because')}; best trial "
+                             f"{result.get('best_trial')} gave sim {result.get('best_sim_px')} px against the clip's {result.get('clip_px')} px "
+                             f"(ratio {result.get('best_magnitude_ratio')}, direction error {result.get('best_direction_error_deg')} degrees). "
+                             "It tunes the push path, not mass or friction.")
+                lines += [f"  - trial {t['trial']}: scale {t['scale']}, rotation {t['rotation_deg']} deg, sim {t['sim_px']} px, "
+                          f"ratio {t['magnitude_ratio']}, direction error {t['direction_error_deg']} deg" for t in result["trials"]]
             if operation["action"] == "compare_take" and result.get("verdict"):
                 mapping = result.get("time_mapping") or {}
-                lines.append(f"- compare_take `{result.get('take')}`: score {result.get('score')}; {result.get('verdict')}. Clip "
+                lines.append(f"- compare_take `{result.get('take')}`: bridge verdict **{result.get('verdict')}** "
+                             f"(RSS's own score {result.get('rss_score')}, RSS's verdict: {result.get('rss_verdict')}). Clip "
                              f"{mapping.get('clip_start_s')}–{mapping.get('clip_end_s')} s against sim "
                              f"{mapping.get('sim_start_s')}–{mapping.get('sim_end_s')} s.")
                 for name, moved in (result.get("displacement_px") or {}).items():
                     lines.append(f"  - {name}: centroid displacement clip {moved['clip_px']} px, sim {moved['sim_px']} px, "
-                                 f"difference {moved['difference_px']} px.")
+                                 f"difference {moved['difference_px']} px; magnitude ratio {moved['magnitude_ratio']}, "
+                                 f"direction error {moved['direction_error_deg']} degrees.")
+                for name, found in ((result.get("bridge_verdict") or {}).get("by_object") or {}).items():
+                    lines += [f"  - {name} fails: {text}" for text in found["failed"]]
                 lines += [f"  - warning: {text}" for text in result.get("warnings") or []]
         return ["## Summary", "", *lines, ""] if lines else []
