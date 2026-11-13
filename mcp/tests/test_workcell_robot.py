@@ -401,3 +401,40 @@ def test_contact_native_backend_failure_is_unavailable(monkeypatch, method):
                                           physics_dt_s=0.01, backend="physx")
     assert result["status"] == "unavailable"
     assert result["measurement"] is None
+
+
+def test_frame_only_body_and_dangling_disabled_joint_are_neutralized(cell):
+    stage, pack, config = cell
+    originals = {key: path.read_bytes() for key, path in pack.paths.items()}
+    source = Usd.Stage.Open(str(pack.paths["pack/rg2"]))
+    center = body(source, "/khi_rs080n/gripper_center", (0, 0, 0.2))
+    joint = UsdPhysics.FixedJoint.Define(source, "/khi_rs080n/gripper_center_joint")
+    joint.CreateBody0Rel().SetTargets([Sdf.Path("/khi_rs080n/onrobot_rg2_base_link")])
+    joint.CreateBody1Rel().SetTargets([center.GetPath()])
+    source.GetPrimAtPath("/khi_rs080n").CreateAttribute(
+        "physxArticulation:solverVelocityIterationCount", Sdf.ValueTypeNames.Int).Set(16)
+    source.GetRootLayer().Save()
+    arm = Usd.Stage.Open(str(pack.paths["pack/robot"]))
+    leftover = UsdPhysics.FixedJoint.Define(arm, "/Asset/robot_gripper_joint")
+    leftover.CreateBody0Rel().SetTargets([Sdf.Path("/Asset/wrist_3_link")])
+    leftover.CreateJointEnabledAttr().Set(False)
+    arm.GetRootLayer().Save()
+    saved = {key: path.read_bytes() for key, path in pack.paths.items()}
+
+    report = robot.build_robot(stage, pack, config)
+
+    assert report["frame_bodies_neutralized"] == [f"{report['gripper_path']}/gripper_center"]
+    assert report["joints_deactivated"] == [f"{report['robot_path']}/robot_gripper_joint"]
+    assert report["velocity_iterations_clamped"] == [report["gripper_path"]]
+    assert stage.GetPrimAtPath(report["gripper_path"]).GetAttribute(
+        "physxArticulation:solverVelocityIterationCount").Get() == 4
+    frame = stage.GetPrimAtPath(report["frame_bodies_neutralized"][0])
+    assert frame and not frame.HasAPI(UsdPhysics.RigidBodyAPI) and not frame.HasAPI(UsdPhysics.MassAPI)
+    assert not stage.GetPrimAtPath(f"{report['gripper_path']}/gripper_center_joint").IsActive()
+    assert not stage.GetPrimAtPath(report["joints_deactivated"][0]).IsActive()
+    base = stage.GetPrimAtPath(f"{report['gripper_path']}/onrobot_rg2_base_link")
+    assert base.HasAPI(UsdPhysics.RigidBodyAPI)  # the declared RG2 body is never neutralized
+    for prim in Usd.PrimRange(stage.GetPrimAtPath(report["assembly_path"])):
+        if prim.IsA(UsdPhysics.Joint):
+            assert UsdPhysics.Joint(prim).GetBody1Rel().GetTargets()  # no dangling active joint
+    assert {key: path.read_bytes() for key, path in pack.paths.items()} == saved != originals
