@@ -664,10 +664,11 @@ class Extension(omni.ext.IExt):
                         try:
                             result = find(args) if name == "sim.ui.find" else await run_act(args)
                         except UIRefusal as exc:
-                            return dict(status="error", code=exc.code, message=str(exc),
-                                        effects="No input was sent." if name == "sim.ui.find" or exc.code in (
+                            # A failed batch step says itself what the steps before it sent (exc.effects).
+                            return dict(status="error", code=exc.code, message=str(exc), **exc.details,
+                                        effects=exc.effects or ("No input was sent." if name == "sim.ui.find" or exc.code in (
                                             "INVALID_VALUE", "LIMIT", "STALE_WIDGET", "NOT_VISIBLE",
-                                            "OUT_OF_WINDOW", "NO_UI", "DISABLED", "NO_WINDOW") else "Inspect the UI before retrying.")
+                                            "OUT_OF_WINDOW", "NO_UI", "DISABLED", "NO_WINDOW") else "Inspect the UI before retrying."))
                     elif name == "assets.import_path" and args.get("format") == "mesh":
                         from .mesh_import import run as import_mesh
 

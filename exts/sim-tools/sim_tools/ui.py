@@ -27,6 +27,11 @@ MAX_TEXT = 500
 MAX_WIDGETS_PER_WINDOW = 6000
 ACTIONS = ("click", "double_click", "right_click", "move", "drag", "scroll", "type", "keypress", "menu", "tab", "close",
            "wait")
+POINTER_ACTIONS = ("click", "double_click", "right_click", "move", "drag", "scroll")
+# The arguments one action takes; in a batch each step carries its own, and none may be given at the top level.
+STEP_FIELDS = ("ref", "x", "y", "end_x", "end_y", "text", "keys", "window", "menu", "scroll_x", "scroll_y")
+MAX_BATCH = 10
+MAX_BATCH_FRAMES = 600  # a whole batch waits at most this many frames, well inside the bridge's 300 s timeout
 
 # Key names (OpenAI-style, case-insensitive) -> carb.input.KeyboardInput attribute names.
 KEY_NAMES = {
@@ -44,9 +49,11 @@ MODIFIER_KEYS = {"CONTROL": "LEFT_CONTROL", "SHIFT": "LEFT_SHIFT", "ALT": "LEFT_
 
 
 class UIRefusal(ValueError):
-    def __init__(self, code, message):
+    """``effects`` overrides what the bridge says about input already sent; ``details`` join the error envelope."""
+
+    def __init__(self, code, message, effects=None, **details):
         super().__init__(message)
-        self.code = code
+        self.code, self.effects, self.details = code, effects, details
 
 
 def parse_keys(keys):
@@ -498,10 +505,98 @@ def _check_point(x, y):
     return w, h
 
 
+def check_step(a):
+    """Refuse a malformed action before anything is sent (pure, no Kit). Returns the frames it waits."""
+    action = a.get("action")
+    if action not in ACTIONS:
+        raise UIRefusal("INVALID_VALUE", f"action must be one of {', '.join(ACTIONS)}.")
+    frames = a.get("frames", 3)
+    if type(frames) is not int or not 0 <= frames <= 600:
+        raise UIRefusal("INVALID_VALUE", "frames: 0..600 frames to wait after the action.")
+    if action == "type":
+        text = a.get("text")
+        if not isinstance(text, str) or not 1 <= len(text) <= MAX_TEXT or any(c in "\r\n\t" or ord(c) < 32 for c in text):
+            raise UIRefusal("INVALID_VALUE", f"text: 1..{MAX_TEXT} characters without control characters; "
+                                             "send enter or tab with action=keypress.")
+    elif action == "keypress":
+        parse_keys(a.get("keys"))
+    elif action == "scroll":
+        sx, sy = a.get("scroll_x", 0), a.get("scroll_y", 0)
+        if type(sx) is not int or type(sy) is not int or not (sx or sy) or abs(sx) > 20 or abs(sy) > 20:
+            raise UIRefusal("INVALID_VALUE", "scroll_x/scroll_y: wheel steps, -20..20, not both 0 (negative "
+                                             "scroll_y scrolls down).")
+    elif action == "drag" and (type(a.get("end_x")) is not int or type(a.get("end_y")) is not int):
+        raise UIRefusal("INVALID_VALUE", "drag needs integer end_x and end_y window pixels.")
+    elif action == "menu":
+        menu_path(a.get("menu"))
+    elif action in ("tab", "close"):
+        window_title(a.get("window"), action)
+    if action in POINTER_ACTIONS and not a.get("ref") and (type(a.get("x")) is not int or type(a.get("y")) is not int):
+        raise UIRefusal("INVALID_VALUE", "Give ref (from sim__ui__find) or integer x and y window pixels.")
+    return frames
+
+
+def _batch_steps(a):
+    """The batch's steps, every one checked before the first is run. Top-level keys that are not an
+    action's own (internal flags the host adds) are passed to each step."""
+    steps = a["actions"]
+    if not isinstance(steps, list) or not 1 <= len(steps) <= MAX_BATCH:
+        raise UIRefusal("INVALID_VALUE", f"actions: 1..{MAX_BATCH} action objects.")
+    # scroll_x/scroll_y arrive as 0 when unset (their default); the top-level action is required by the
+    # host's schema and is ignored here.
+    given = [k for k in STEP_FIELDS if a.get(k) is not None and not (k in ("scroll_x", "scroll_y") and a[k] == 0)]
+    if given:
+        raise UIRefusal("INVALID_VALUE", f"With actions, give {', '.join(given)} inside each step, not at the top level.")
+    shared = {k: v for k, v in a.items() if k not in STEP_FIELDS + ("action", "actions", "frames", "find_after")}
+    out, frames = [], 0
+    for i, step in enumerate(steps):
+        if not isinstance(step, dict) or set(step) - set(STEP_FIELDS + ("action", "frames")):
+            raise UIRefusal("INVALID_VALUE", f"actions[{i}]: an object with action and its own arguments "
+                                             f"({', '.join(STEP_FIELDS)}, frames) only.")
+        try:
+            frames += max(check_step(step), 2)
+        except UIRefusal as exc:
+            raise UIRefusal(exc.code, f"actions[{i}]: {exc}") from None
+        out.append({**shared, **step})
+    if frames > MAX_BATCH_FRAMES:
+        raise UIRefusal("INVALID_VALUE", f"actions wait {frames} frames in all (each step at least 2); keep the "
+                                         f"batch at {MAX_BATCH_FRAMES} or less, or split it.")
+    return out
+
+
+def _find_after(query):
+    """Up to 10 widgets matching *query*, compactly. A failure is a note: the action already happened."""
+    try:
+        found = find(dict(query=query, limit=10))
+    except Exception as exc:  # noqa: BLE001
+        return dict(query=query, note=f"find_after failed: {exc}")
+    keys = ("ref", "type", "name", "text", "value", "x", "y")
+    return dict(query=query, matches=found["matches"],
+                widgets=[{k: w[k] for k in keys if k in w} for w in found["widgets"]])
+
+
 async def run_act(a):
-    """What sim.ui.act runs: one action, or (item 5) a batch, then (item 5) an optional compact find_after.
+    """What sim.ui.act runs: one action, or a batch of up to MAX_BATCH (``actions``) that stops at the first
+    failure, then optionally up to 10 widgets matching ``find_after``.
     Item 2 draws the cursor badge here when the host asks for it."""
-    return await act(a)
+    query = a.get("find_after")
+    if query is not None and (not isinstance(query, str) or not 1 <= len(query) <= 120):
+        raise UIRefusal("INVALID_VALUE", "find_after: text of 1..120 characters, matched like sim__ui__find query.")
+    if a.get("actions") is None:
+        result = await act(a)
+        return dict(result, find_after=_find_after(query)) if query else result
+    steps = _batch_steps(a)
+    done = []
+    for i, step in enumerate(steps):
+        try:
+            done.append(await act(step))
+        except Exception as exc:  # noqa: BLE001 - reported with the steps that ran
+            extra = dict(find_after=_find_after(query)) if query else {}
+            raise UIRefusal(getattr(exc, "code", "ACT_FAILED"), f"actions[{i}] ({step['action']}): {exc}",
+                            effects=f"The {i} step(s) before it ran and sent input; inspect the UI before retrying." if i else None,
+                            completed=i, failed_index=i, steps=done, **extra) from exc
+    result = dict(action="batch", completed=len(done), steps=done)
+    return dict(result, find_after=_find_after(query)) if query else result
 
 
 async def act(a):
@@ -511,12 +606,8 @@ async def act(a):
     import omni.kit.app
     from carb.input import KeyboardEventType, MouseEventType
 
-    action = a.get("action")
-    if action not in ACTIONS:
-        raise UIRefusal("INVALID_VALUE", f"action must be one of {', '.join(ACTIONS)}.")
-    frames = a.get("frames", 3)
-    if type(frames) is not int or not 0 <= frames <= 600:
-        raise UIRefusal("INVALID_VALUE", "frames: 0..600 frames to wait after the action.")
+    frames = check_step(a)  # everything checkable without Kit, before the first event
+    action = a["action"]
     app = omni.kit.app.get_app()
     appwin = omni.appwindow.get_default_app_window()
     if appwin is None:
@@ -532,27 +623,15 @@ async def act(a):
         provider.buffer_mouse_event(mouse, kind, (x / w, y / h), 0, (float(x), float(y)))
 
     # Validate everything before the first event, so a refusal really means nothing was sent.
-    text = keys = target = end = scroll = None
-    if action == "type":
-        text = a.get("text")
-        if not isinstance(text, str) or not 1 <= len(text) <= MAX_TEXT or any(c in "\r\n\t" or ord(c) < 32 for c in text):
-            raise UIRefusal("INVALID_VALUE", f"text: 1..{MAX_TEXT} characters without control characters; "
-                                             "send enter or tab with action=keypress.")
-    if action == "keypress":
-        keys = parse_keys(a.get("keys"))
-    if action == "scroll":
-        scroll = a.get("scroll_x", 0), a.get("scroll_y", 0)
-        sx, sy = scroll
-        if type(sx) is not int or type(sy) is not int or not (sx or sy) or abs(sx) > 20 or abs(sy) > 20:
-            raise UIRefusal("INVALID_VALUE", "scroll_x/scroll_y: wheel steps, -20..20, not both 0 (negative "
-                                             "scroll_y scrolls down).")
-    if action == "drag":
-        end = a.get("end_x"), a.get("end_y")
-        if type(end[0]) is not int or type(end[1]) is not int:
-            raise UIRefusal("INVALID_VALUE", "drag needs integer end_x and end_y window pixels.")
+    target = None
+    text = a.get("text") if action == "type" else None
+    keys = parse_keys(a.get("keys")) if action == "keypress" else None
+    scroll = (a.get("scroll_x", 0), a.get("scroll_y", 0)) if action == "scroll" else None
+    end = (a.get("end_x"), a.get("end_y")) if action == "drag" else None
+    if end:
         _check_point(*end)
     focus_first = action in ("type", "keypress") and (a.get("ref") or a.get("x") is not None)
-    if action in ("click", "double_click", "right_click", "move", "drag", "scroll") or focus_first:
+    if action in POINTER_ACTIONS or focus_first:
         target = _resolve(a)
         _check_point(target[0], target[1])
         hit = target[2]
