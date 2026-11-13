@@ -232,6 +232,7 @@ def test_enable_registers_exactly_what_startup_would(name):
     assert set(result["tools_available"]) == set(server.grouped_tools.listed_names(instance)) - before
     assert result["changed"] == [name] and name in result["on"]
     assert "nothing was written" in result["scope"]
+    assert "loads tools lazily, search for the tool by name (for example robosim) before calling it" in result["note"]
 
 
 @pytest.mark.parametrize("name", RUNTIME)
@@ -413,3 +414,24 @@ def test_help_names_the_enable_call_for_a_toolset_that_is_off():
     assert 'toolsets(action="enable"' not in switched_off and "switched off" in switched_off
     assert 'names=["launch"]' not in server._isaac_help("start a simulator")
     assert "Explicit-only" in server._isaac_help("start a simulator")
+
+
+@pytest.mark.parametrize("bridges", [[], [{"port": 8766, "pid": 1}]])
+def test_status_without_a_bridge_says_which_tools_need_none(monkeypatch, bridges):
+    class Client:
+        def call(self, *args, **kwargs):
+            raise ConnectionRefusedError("refused")
+
+    class State:
+        toolsets = frozenset()
+        runtime_enable = True
+
+        def get_client(self):
+            return Client()
+
+    monkeypatch.setattr(server, "_surroundings", lambda state: {"bridges": bridges})
+    monkeypatch.setattr(server, "_physics_status", lambda *args, **kwargs: {})
+    answer = server._where_am_i({}, State())
+    assert answer["running"] is False
+    assert "The robosim, isaaclab (lab) and screen tools need no bridge." in answer["message"]
+    assert ("use_bridge(port=8766)" in answer["message"]) == bool(bridges)
