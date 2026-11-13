@@ -123,3 +123,40 @@ def test_cli_table_and_override(monkeypatch, capsys):
         row = next(row for row in output.splitlines() if row.startswith(name + " "))
         assert row.split()[1] == ("on" if name in {"core", "lab"} else "off")
         assert "+" + name in row
+
+
+@pytest.mark.parametrize("selection", ["minimal", "default", "all,+input,+launch"])
+def test_status_resource_and_help_share_selection(selection, monkeypatch):
+    instance = build(selection)
+    state = server._state_for(instance)
+    monkeypatch.setattr(state, "get_client", lambda: (_ for _ in ()).throw(ConnectionRefusedError("Connection refused")))
+    monkeypatch.setattr(server, "_surroundings", lambda state: {"bridges": []})
+    expected = toolsets.describe(state.toolsets)
+    assert server._where_am_i({}, state)["toolsets"] == expected
+    contents = asyncio.run(instance.read_resource("isaac-mcp://toolsets"))
+    assert json.loads(list(contents)[0].content) == expected
+    help_tool = instance._tool_manager._tools["isaac_help"]
+    answer = help_tool.fn(task="train a policy")
+    if "lab" in state.toolsets:
+        assert "isaaclab__train" in answer
+    else:
+        assert "Toolsets off:" in answer and "lab" in answer
+        assert "ISAAC_MCP_TOOLSETS" in answer
+        assert "isaaclab__train" not in answer
+
+
+def test_help_respects_disabled_code_and_mixed_topics(monkeypatch):
+    monkeypatch.setattr(server, "_record_help_gap", lambda *args: None)
+    answer = server._isaac_help("simulate cloth tearing", enabled={"core"})
+    assert "run_python" not in answer
+    assert "Toolsets off: code" in answer
+    answer = server._isaac_help("where am i", enabled={"core"})
+    assert "Available: status" in answer
+    assert "sim__launch" not in answer
+    assert "launch" in answer
+
+
+def test_instructions_are_short_and_selection_neutral():
+    assert 450 < len(server.SERVER_INSTRUCTIONS) < 700
+    assert "status" in server.SERVER_INSTRUCTIONS and "toolsets" in server.SERVER_INSTRUCTIONS
+    assert "isaaclab__" not in server.SERVER_INSTRUCTIONS

@@ -81,3 +81,13 @@ def owner(name: str, namespace: str | None = None,
     if namespace and namespace not in catalog_namespaces:
         return "extensions"
     raise ValueError(f"Tool {name!r} has no toolset")
+
+
+ENABLE = "Add +name to tools.toolsets in ~/.config/isaac-mcp/config.toml or set ISAAC_MCP_TOOLSETS, then restart the MCP server."
+
+
+def describe(enabled) -> dict:
+    """Stable status shared by the host status tool and the MCP resource."""
+    return {"on": [name for name in TOOLSETS if name in enabled],
+            "off": {name: spec.summary for name, spec in TOOLSETS.items() if name not in enabled},
+            "planned": list(PLANNED), "enable": ENABLE}

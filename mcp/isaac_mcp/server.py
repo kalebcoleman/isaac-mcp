@@ -60,30 +60,13 @@ LIST_BRIDGES_HELP = (
     "tool's own Python, or the list_bridges tool (a bridge built-in) when a bridge already answers")
 
 SERVER_NAME = os.getenv("ISAAC_MCP_NAME", "isaac")
-SERVER_INSTRUCTIONS = os.getenv(
-    "ISAAC_MCP_INSTRUCTIONS",
-    "Isaac Sim / Isaac Lab MCP server. Which tool first: to build a new scene, sim__quick_start, the "
-    "universal starting point, which needs no IDs. On a scene that already exists, sim__stage__info "
-    "first: other sim__* and assets__* tools need its session_id and stage_id. sim__* and assets__* "
-    "work on any scene. ur5e_dt__* is one lab's UR5e digital twin (RISE lab): use it only when asked "
-    "for that twin. isaaclab__* runs Isaac Lab training, eval and play jobs and needs no bridge. "
-    "A listed tool does not prove a bridge exists: the sim__*, assets__*, ur5e_dt__* and built-in tools "
-    "(run_python, status, list_bridges, the file tools) are listed by default from a packaged catalog, "
-    "dial the selected bridge when called, and return an error that says what to do. If Kit is still "
-    "starting, refresh_tools(wait_s=120) waits for its bridge. ISAAC_MCP_NAMESPACE and "
-    "ISAAC_MCP_BUILTINS=0 can hide tools. Find advertised bridges with " + LIST_BRIDGES_HELP + ", and "
-    "confirm the chosen bridge's PID and port with status, once, before the first scene-changing call: it also "
-    "gives the stage IDs and says when nothing is running. Start an additional "
-    "Kit only when explicitly requested and resource checks permit. screenshot() and "
-    "start_screen_recording() with no target pick the Isaac Sim or Isaac Lab window when one is open, "
-    "even if it is covered. When a job or scene is running with a window (isaaclab__play, "
-    "headless=false), look at it yourself: take screenshots or a short recording to check the result "
-    "and decide the next step, without waiting to be asked. isaaclab__runs_status reports the job's "
-    "window for screenshot(window_id=...). Start with isaac_help(task): it names the tools for what you want to do, and says when none fits. Prefer these tools over writing your own capture, recording, "
-    "contact-logging, control-loop or training-launch code: sim__simulation__run runs your controller every physics step, "
-    "sim__trajectory__replay turns a saved trajectory into a labelled video, and long simulator work returns a job_id for "
-    "job_status(job_id, wait_s=30) instead of repeated polling. For evidence call screenshot(label=...) or "
-    "start_screen_recording; headless runs use sim__camera__capture. If you skip them, say why.")
+SERVER_INSTRUCTIONS = (
+    "Call status first, once: it identifies the bridge, running work and stage IDs, and lists enabled, "
+    "disabled and planned toolsets. The isaac-mcp://toolsets resource reports the same selection. "
+    "Use isaac_help(task=...) to find an available tool or learn which toolset to enable; disabled "
+    "toolsets register nothing. Prefer listed tools over custom code. Confirm the intended simulator "
+    "before changing a scene; do not start extra GPU work or stop unrelated processes without authorization. "
+    "Tool visibility is not a security boundary. Respect bridge authentication and read-only refusals.")
 
 RESPONSE_TIMEOUT_S = 300.0
 # Discovery must not make host recovery tools wait behind a stalled native Kit
@@ -235,6 +218,7 @@ class _BridgeState:
     """One server's bridge connection and discovery bookkeeping."""
 
     def __init__(self) -> None:
+        self.toolsets = toolsets.DEFAULT
         self.client: Optional[BridgeClient] = None
         self.name_map: Dict[str, str] = {}
         self.registered_meta: Dict[str, Dict[str, Any]] = {}
@@ -851,15 +835,14 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
                        f"advertised: call use_bridge(port={around['bridges'][0]['port']}) after confirming which "
                        "simulator you mean.")
         else:
-            message = ("Nothing is running: no Isaac Sim bridge answers. Start one with sim__launch (when simulator "
-                       "launch is enabled) or ./run.sh --headless, then refresh_tools(wait_s=120). isaaclab__* and the "
-                       "screen tools work without one.")
-        return {"running": False, "message": message, **around, "host": _host_brief()}
+            message = ("Nothing is running: no Isaac Sim bridge answers. Start your configured simulator, then "
+                       "refresh_tools(wait_s=120). See toolsets for available host tools and optional launch support.")
+        return {"running": False, "message": message, **around, "host": _host_brief(), "toolsets": toolsets.describe(state.toolsets)}
     if not isinstance(identity, dict):
         return identity
     host = _host_identity(identity.get("extension", {}))
     if detail:
-        return {**identity, "host": host}
+        return {**identity, "host": host, "toolsets": toolsets.describe(state.toolsets)}
     out: Dict[str, Any] = {"running": True, **{k: identity[k] for k in _STATUS_SHORT if k in identity}}
     if "sim" in (identity.get("namespaces") or []):
         try:
@@ -887,6 +870,7 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
     out.update(around)
     out["host"] = {k: v for k, v in host.items() if k in ("version", "commit", "warning", "code_drift", "code_drift_message",
                                                            "extension_mismatch") and v not in (None, False)}
+    out["toolsets"] = toolsets.describe(state.toolsets)
     out["note"] = "Checked: no need to call this again before each tool. detail=true adds the full bridge identity."
     return out
 
@@ -1694,14 +1678,34 @@ def _help_matches(task: str) -> list:
     return [topic for score, _, topic in sorted(scored, reverse=True) if score and score * 2 >= best]
 
 
-def _isaac_help(task: Optional[str], no_fit: bool = False) -> str:
+def _enable_toolsets(names) -> str:
+    return "Toolsets off: " + ", ".join(sorted(names)) + ". " + toolsets.ENABLE
+
+
+def _help_topic(name: str, text: str, enabled) -> str:
+    available, missing = [], set()
+    for candidate in dict.fromkeys(re.findall(r"\b[A-Za-z][A-Za-z0-9_]*\b", text)):
+        try:
+            group = toolsets.owner(candidate)
+        except ValueError:
+            continue
+        if group in enabled:
+            available.append(candidate)
+        else:
+            missing.add(group)
+    if missing:
+        text = ("Available: " + ", ".join(available) + ". " if available else "") + _enable_toolsets(missing)
+    return f"- {name}: {text}"
+
+
+def _isaac_help(task: Optional[str], no_fit: bool = False, enabled=toolsets.DEFAULT) -> str:
     task = (task or "").strip()
     hits = _help_matches(task) if task else []
     lines = []
     if task and (no_fit or not hits):
         recorded = _record_help_gap(task, "no_fit" if no_fit else "no_match")
         lines.append(f"No isaac tool is known to fit {task!r}." if not hits or no_fit else "")
-        lines.append(_RUN_PYTHON_PATTERN)
+        lines.append(_RUN_PYTHON_PATTERN if "code" in enabled else _enable_toolsets({"code"}))
         if recorded is not None:
             lines.append(f"This question was recorded for the maintainer in {recorded} (local file, never sent anywhere).")
         if hits:
@@ -1711,13 +1715,12 @@ def _isaac_help(task: Optional[str], no_fit: bool = False) -> str:
     else:
         lines.append("Use these isaac tools before writing your own code. If you skip them, say why.")
     chosen = hits or list(_HELP_TOPICS)
-    lines += [f"- {name}: {tools}" for name, _, tools in chosen]
+    lines += [_help_topic(name, tools, enabled) for name, _, tools in chosen]
     if task and hits and not no_fit:
         lines.append("None of these fits? Do not bend a tool to the job: call isaac_help(task=..., no_fit=true), which "
-                     "records the gap and gives the run_python pattern.")
+                     "records the gap and explains the code fallback.")
     lines = [line for line in lines if line]
-    lines.append("First call: status, once (the bridge, what is running, the stage IDs). Nothing running? sim__launch, or just "
-                 "use isaaclab__*, run_script and the screen tools.")
+    lines.append("First call: status, once (the bridge, running work, stage IDs and toolsets).")
     host = _host_identity()
     if host.get("code_drift"):
         lines.append(f"code_drift: true - {host['code_drift_message']}.")
@@ -1748,14 +1751,14 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
         instead of writing your own screenshot, recording, contact-logging or training code. When no
         tool fits it says so, gives the run_python pattern and records the question locally. Reads
         nothing from the simulator and works with no bridge."""
-        return _isaac_help(task, no_fit)
+        return _isaac_help(task, no_fit, groups)
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE, description=(
         "Switch this MCP server to another running Kit bridge on this machine. Use it when several run "
         f"or the wrong one answers.\n\nFind candidates with {LIST_BRIDGES_HELP}. Replaces the bridge tools "
-        "with that Kit's; ur5e_dt__* stay listed but error without the twin. Screen tools are unaffected. "
+        "with that Kit's, within the enabled toolsets. Host tools are unaffected. "
         "Lasts until this server restarts."))
-    async def use_bridge(port: Annotated[int, Field(description="Bridge TCP port from --list-bridges or list_bridges.")], ctx: Context = None) -> Any:  # type: ignore[assignment]
+    async def use_bridge(port: Annotated[int, Field(description="Bridge TCP port from --list-bridges or status.")], ctx: Context = None) -> Any:  # type: ignore[assignment]
         """Switch this MCP server to another running Kit bridge on this machine."""
         return _reported(await _use_bridge(server, port, ctx))
 
@@ -1778,6 +1781,11 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     instructions = tool_groups.listed_form(instructions)
     server = FastMCP(SERVER_NAME, instructions=instructions, lifespan=server_lifespan)
     setattr(server, _STATE_ATTR, state)
+    @server.resource("isaac-mcp://toolsets")
+    def toolset_status() -> str:
+        """Enabled, disabled and planned toolsets for this server."""
+        return json.dumps(toolsets.describe(groups))
+
     _advertise_tools_list_changed(server)
     register_screen_tools(server, port_provider=lambda: _screen_port(state), groups=groups)
     register_desktop_input_tools(server, groups=groups)
