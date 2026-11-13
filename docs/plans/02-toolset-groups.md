@@ -1,7 +1,7 @@
 # Plan 02: toolset groups, off by default
 
-Roadmap [Phase 0](../ROADMAP.md#phase-0-a-clean-surface). No simulator and no GPU. Start after the computer-use pull request
-has merged, and rebase on it: it renames the desktop tools and this plan only regroups them.
+Roadmap [Phase 0](../ROADMAP.md#phase-0-a-clean-surface). No simulator and no GPU. The computer-use pull request (#108) has
+merged; its desktop tools stay in `screen` and `input`, and this plan does not touch them.
 
 ## Problem
 
@@ -17,10 +17,9 @@ specification. In short:
 | Toolset today | Becomes |
 |---|---|
 | `scene`, `physics`, `sensors`, `kit_debug`, and `code` without `run_script` | `sim` |
-| `screen` | `computer` (use the name the computer-use pull request chose if it already made this group) |
 | `robosim` | `real2sim` |
 | `run_script` from `code` | joins `lab` |
-| `core`, `assets`, `lab`, `ros2`, `workcell`, `input`, `launch`, `extensions` | Keep their names |
+| `core`, `assets`, `screen`, `lab`, `ros2`, `workcell`, `input`, `launch`, `extensions` | Keep their names |
 | `planning`, `eval` | Not created here: plan 03 adds each with its first tool |
 
 - Every toolset's `default` is false except `core`. `extensions` is off too.
@@ -30,8 +29,8 @@ specification. In short:
 - No aliases: an old toolset name in a configuration stops the server at startup with the list of valid names, which is what
   any unknown name does today.
 
-Before writing code, confirm the seven open decisions in the [roadmap](../ROADMAP.md#decisions-needed) with the owner; items
-1, 2, 4, 6 and 7 change this plan. Also ask for the seven shorter tool names from the rename pull request and apply the ones
+The owner's [decisions](../ROADMAP.md#decisions) of 2026-11-13 apply: items 2, 4, 6, 7 and 8 shape this plan, and the `cad`
+group of item 1 arrives with plan 05, not here. Still ask for the seven shorter tool names from the rename pull request and apply the ones
 the owner accepts here, so names change once.
 
 ## Files
@@ -45,7 +44,7 @@ the owner accepts here, so names change once.
 | `mcp/twinsmith/config.py` | Profile parsing without `minimal` |
 | `exts/workcell/workcell/extension.py`, `commands.py`, `bridge_binding.py` | Delete `real2sim_status`, `planning_status`, `eval_status` |
 | `mcp/twinsmith/catalogs/workcell.json` | Regenerate |
-| `scripts/gen_tool_reference.py` | The README block becomes group to tools (the `toolsets-full` rows); add the `cad` row as fixed text |
+| `scripts/gen_tool_reference.py` | The README block becomes group to tools (the `toolsets-full` rows) |
 | `scripts/smoke.py`, `scripts/scene_mcp_client.py` | Toolset names |
 | `mcp/tests/test_toolsets.py`, `test_smoke_runner.py`, `test_workcell_*.py`, `test_status_and_help.py`, `test_robosim_bridge.py` | Below |
 | `README.md`, `AGENTS.md`, `.agents/skills/twinsmith/SKILL.md` | Generated table; quick start says to enable `sim` |

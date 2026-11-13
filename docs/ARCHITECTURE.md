@@ -242,8 +242,8 @@ A group is a toolset: one switch, one row in the README. Every group is off by d
 
 | Group | Default | Holds | Kind |
 |---|---|---|---|
-| `core` | always on | Connection, discovery, help, jobs, toolsets, `doctor` | Native |
-| `computer` | off | Screenshots, recording, windows, zoom, and the standard computer-use actions | Native |
+| `core` | always on | Connection, discovery, help, jobs, toolsets | Native |
+| `screen` | off | `screenshot`, `screen_recording`, `windows`, `join_videos`, `doctor` (desktop readiness) | Native |
 | `sim` | off | Everything that runs inside Kit on any scene: stage, prims, physics, joints, sensors, code in Kit, Kit's log and UI | Native |
 | `assets` | off | Import, packs, mesh preparation, validation | Native |
 | `real2sim` | off | RoboSimStudio runs, system identification, the pose-service client | Wrapped |
@@ -252,12 +252,14 @@ A group is a toolset: one switch, one row in the README. Every group is off by d
 | `lab` | off | Isaac Lab jobs and script jobs | Native |
 | `ros2` | off | Simulator-side ROS 2 transforms, graphs and occupancy maps | Native |
 | `workcell` | off | The lab's UR5e Jenga work cell | Native |
-| `input` | explicit only | Desktop mouse and keyboard, as the computer-use pull request defines it | Native |
+| `input` | explicit only | `computer`: desktop mouse and keyboard | Native |
+| `cad` | off (on in the owner's configuration) | `hardware`: checks, fabrication files and renders around the CAD servers beside twinsmith | Wrapped |
 | `launch` | explicit only | Starting and stopping simulators | Native |
 | `extensions` | off | Tools a project's own Kit extension registers | Native |
 
-`cad` is a row in the README table and not a toolset: CAD authoring runs in separate MCP servers beside twinsmith (FreeCAD
-today), and twinsmith's part is importing what they export, which is a format on `assets__import_path`.
+`cad` holds no authoring: FreeCAD, KiCad and Blender run as separate MCP servers beside twinsmith. Its one tool checks and
+packages what they produce (plan 05, pull request #110); importing their meshes into a scene stays a format on
+`assets__import_path`.
 
 Profiles: `default` is `core` alone and `all` is every group except the explicit-only ones. `minimal` is deleted because it
 equals `default`. Old toolset names are not kept as aliases.
@@ -274,8 +276,8 @@ equals `default`. Old toolset names are not kept as aliases.
 | `code` | `run_script` | `lab` (a host job, not Kit) |
 | `kit_debug` | `sim__ui`, `sim__logs` | `sim` |
 | `assets` | `assets__import_path`, `assets__library`, `assets__pack` | `assets` |
-| `screen` | `screenshot`, `screen_recording`, `windows`, `join_videos` | `computer`, under the names the computer-use pull request gives them |
-| `input` | `window_input` | `input`, as that pull request defines it |
+| `screen` | `screenshot`, `screen_recording`, `windows`, `join_videos`, `doctor` | `screen` |
+| `input` | `computer` | `input` |
 | `lab` | `isaaclab__launch`, `isaaclab__inspect`, `isaaclab__metrics`, `isaaclab__checkpoint_register` | `lab` |
 | `ros2` | `sim__ros2__tf_setup`, `sim__graph`, `sim__map__occupancy` | `ros2` |
 | `workcell` | `workcell__cell`, `workcell__robot`, `workcell__perception`, `workcell__jenga` | `workcell` |
@@ -296,7 +298,8 @@ The `sim__` prefix stays only on tools that need Kit. Tools that work without a 
 | none | `vabar` | `status`, `list`, `run`, `bench`, `results` | VABAR's environment | [03](plans/03-planning-eval-wrappers.md) |
 | none | `sysid` | `status`, `fit`, `report` | Its own MuJoCo environment | [04](plans/04-robosim-bump-and-sysid.md) |
 | none | `perception` | `status`, `pose` | A separate pose service | Later |
-| none | `doctor` | Adds the loaded and pinned versions of every wrapped tool | Host | After the computer-use pull request |
+| none | `status` | Adds the loaded and pinned versions of every wrapped tool | Host | With [03](plans/03-planning-eval-wrappers.md) |
+| none | `hardware` | `status`, `check`, `fab`, `render` | Host; `kicad-cli`, KiKit and Blender beside it | 05 (#110) |
 | none | `use_bridge` | Adds `hold` and `release`: a lease on one Kit for one caller | Host | Later |
 
 A wrapped tool takes the upstream tool's name, bare, and is one grouped tool. A new asset format is an option on
@@ -367,7 +370,7 @@ twinsmith only reports them.
 | VABAR | The 1.0 release commit, set when the wrapper is written | Plan 03 |
 | MuJoCo for `sysid` | 4.0.1, in its own environment | Plan 04 |
 
-Three Newton versions are in play and that is intended. `doctor` reports them side by side; nothing unifies them.
+Three Newton versions are in play and that is intended. `status` reports them side by side; nothing unifies them.
 
 Which machine runs which of these processes, and what each machine cannot run, is in the roadmap's
 [hardware and hosts](ROADMAP.md#hardware-and-hosts).

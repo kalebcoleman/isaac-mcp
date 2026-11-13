@@ -4,7 +4,8 @@ Where twinsmith is going, as phased milestones. Each phase has a goal, a scope, 
 depends on. The target tool layout is in [How it works](ARCHITECTURE.md#target-layout-planned); the next pull requests are
 specified in [plans/](plans/README.md); unfinished details stay in [open items](OPEN-ITEMS.md).
 
-Checked against `origin/main` at `33ff56e` on 2026-11-13. A phase is a goal, not a queue position: the order of work is the
+Checked against `origin/main` at `33ff56e` on 2026-11-13, and updated after the computer-use pull request (#108) merged as
+`6e8a3e2`. A phase is a goal, not a queue position: the order of work is the
 [pull request queue](#pull-request-queue).
 
 ## The thesis in one paragraph
@@ -95,7 +96,7 @@ twinsmith and everything in this roadmap run on the two PCs. Nothing here is ins
 - [ ] Finish the ASU PC's workspace move when no game is running.
 - [ ] Verify the home PC's row on that machine the next time it is on.
 - [ ] Not established here: which machine the lab's D415s are attached to for recording, how recordings travel from the
-  laptop to the ASU PC, and whether the ASU PC has a desktop session for the `computer` group.
+  laptop to the ASU PC, and whether the ASU PC has a desktop session for the `screen` and `input` groups.
 
 ## The phases
 
@@ -119,8 +120,8 @@ flowchart LR
 **Goal.** One naming pass and one grouping pass, so every later tool lands in its final place and nothing is renamed twice.
 
 **Scope.**
-- Land the computer-use pull request (act-and-see, cursor badge, scale mapping, `doctor`, batching, zoom, standard computer-use
-  names). It defines the `computer` group; nothing here edits its files.
+- Done: the computer-use pull request (#108) merged on 2026-11-13. The desktop tools stay in the `screen` group
+  (`screenshot`, `screen_recording`, `windows`, `join_videos`, `doctor`), and `input` holds the one `computer` tool.
 - Regroup every tool into off-by-default groups and delete the three work-cell stubs
   ([plan](plans/02-toolset-groups.md)).
 - Decide the seven shorter tool names from the rename in the same pass.
@@ -132,7 +133,7 @@ flowchart LR
 - The README has one generated table of group to tools. `check_docs.py`, `check_names.py --enforce` and the host suite pass.
 - The listed size of each group is measured with `scripts/measure_tool_list.py` and recorded in [TOOLSETS.md](TOOLSETS.md).
 
-**Depends on.** The computer-use pull request merging first.
+**Depends on.** Nothing still open: #108 has merged.
 
 ### Phase 1: assets that load on Newton
 
@@ -289,7 +290,7 @@ the real robot runs the result as approved ROS 2 code.
 
 | Order | Pull request | Phase | Plan |
 |--:|---|---|---|
-| 0 | Computer use (open, another branch) | 0 | Not specified here |
+| 0 | Computer use (#108, merged 2026-11-13) | 0 | Done |
 | 1 | Mesh preparation, validation, and the work-cell pack rebuild | 1 | [01-assets-mesh-collision](plans/01-assets-mesh-collision.md) |
 | 2 | Toolset groups, stubs deleted, README table | 0 | [02-toolset-groups](plans/02-toolset-groups.md) |
 | 3 | `gap` and `vabar` wrappers | 6 | [03-planning-eval-wrappers](plans/03-planning-eval-wrappers.md) |
@@ -309,7 +310,7 @@ The plan was drafted from a survey dated 2026-11-13. Where it and the code diffe
 | The work cell's perception tool is a stub | It is implemented: it reports the camera configuration. Only the `real2sim`, `planning` and `eval` tools of the work cell are stubs. |
 | Add smoke checks for `screen` and `kit_debug` | Five toolsets have none: `ros2`, `assets`, `screen`, `code` and `kit_debug`. |
 | Fit with `sysid` on RoboSimStudio's CPU runs | RoboSimStudio's own project file notes MuJoCo 3.15 in its lock; the system identification module arrives with MuJoCo 4.0.1. `sysid` needs its own environment. |
-| Extend `doctor` | No `doctor` tool exists on `main`; it arrives with the computer-use pull request. |
+| Extend `doctor` | `doctor` arrived with #108 and checks desktop readiness only. The versions of wrapped tools belong in `status`. |
 | Toolsets are off by default (owner's rule) | Eight toolsets are on by default today. Plan 02 changes that. |
 | No aliases (owner's rule) | `mcp/twinsmith/legacy.py` keeps old setting names for one release and one permanent alias for the asset-root setting; single-purpose tool names stay callable behind each grouped tool. |
 
@@ -318,20 +319,22 @@ Confirmed as the survey said, on 2026-11-13: RoboSimStudio `main` is `4e52e1a`, 
 `--real` option with `franka` and `ur_zed`; VABAR's README pins forks of Graph-as-Policy (`06dd619`) and its skill library
 (`b15859a`).
 
-## Decisions needed
+## Decisions
 
-1. **`cad` as a group.** Nothing native belongs in it: CAD authoring is done by separate servers, and STEP import is a format
-   on the existing import tool. Recommended: `cad` is a row in the README table that names those servers and the import
-   format, with no toolset behind it.
-2. **`default` lists only `core`.** That follows the off-by-default rule and makes the `minimal` profile redundant, so it is
-   deleted. It also turns `extensions` off. Recommended: yes to all three.
-3. **One Graph-as-Policy checkout or two.** VABAR pins forks; the planner could follow upstream. Recommended: one checkout at
-   VABAR's pins for both groups until a planning need forces a second.
-4. **`ros2` stays its own group** instead of joining `sim`, because DDS traffic is a boundary worth one explicit switch.
-   Recommended: keep it separate.
-5. **Decided: where Graph-as-Policy runs.** It asks for 24 GB of GPU memory, so it runs on the ASU PC (about 96 GB) and not
-   on the home PC's 16 GB RTX 5080. See [hardware and hosts](#hardware-and-hosts).
-6. **Old toolset names in user configurations** (`scene`, `physics`, `screen`, ...) stop the server at startup with the list of
-   valid names, as any unknown name does today. Recommended: no aliases, one table in [MIGRATING.md](MIGRATING.md).
-7. **The `planned` list in `status`.** `planning`, `real2sim` and `eval` become real groups; `backend`, `params` and `compare`
-   have no plan. Recommended: delete the list.
+Decided by the owner on 2026-11-13. Plan 02 builds on these.
+
+1. **`cad` is a group.** It holds one tool, `hardware`, which wraps `kicad-cli`, KiKit and a headless Blender
+   (plan 05, in pull request #110). CAD authoring stays in the separate servers beside
+   twinsmith (FreeCAD, KiCad, Blender), and STEP and mesh import stays a format on `assets__import_path`. Like every group
+   except `core`, it is off in the shipped `default`; the owner's own client configurations turn it on.
+2. **`default` lists only `core`.** The `minimal` profile is deleted because it equals `default`, and `extensions` is off.
+3. **One Graph-as-Policy checkout**, at VABAR's pins, for both `planning` and `eval`, until a planning need forces a second.
+4. **`ros2` stays its own group**, because DDS traffic is a boundary worth one explicit switch.
+5. **Graph-as-Policy runs on the ASU PC.** It asks for 24 GB of GPU memory: the ASU PC has about 96 GB, the home PC's RTX 5080
+   has 16 GB. See [hardware and hosts](#hardware-and-hosts).
+6. **Old toolset names are not aliased.** A configuration that names `scene`, `physics` or another removed group stops the
+   server at startup with the list of valid names; [MIGRATING.md](MIGRATING.md) gets one table of old to new.
+7. **The `planned` list in `status` is deleted.** `planning`, `real2sim` and `eval` become real groups; `backend`, `params` and
+   `compare` had no plan.
+8. **The desktop group keeps the name `screen`** that #108 left it with, so it is not renamed twice; `computer` stays the
+   name of the one tool in `input`.
