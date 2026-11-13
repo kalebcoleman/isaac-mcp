@@ -18,7 +18,7 @@ IDENTITY = {
     "jobs": {"running": 0, "jobs": []}, "read_only": False, "auth": True, "extension": {"commit": "unknown", "dirty": None},
 }
 STAGE = {"session_id": "s1", "stage_id": "g1", "source": "anon:0x1:World.usd", "default_prim": "/World", "playing": False,
-         "stopped": True, "runtime": {"physics_engine": "physx"}, "prim_count": 9}
+         "stopped": True, "runtime": {"physics_engine": "newton"}, "prim_count": 9}
 
 
 class Bridge:
@@ -46,7 +46,7 @@ def test_status_is_one_short_answer_with_the_stage_ids(state):
     out = json.loads(gw._dispatch("status", {}, state))
     assert out["running"] is True and out["pid"] == 4242 and out["port"] == 8766 and out["app_ready"] is True
     assert out["stage"] == {"session_id": "s1", "stage_id": "g1", "source": "anon:0x1:World.usd", "default_prim": "/World",
-                            "timeline": "stopped", "physics_engine": "physx"}
+                            "timeline": "stopped", "physics_engine": "newton"}
     assert not {"namespaces", "extension", "busy", "read_only", "bridges", "jobs_running"} & set(out)
     assert "no need to call this again" in out["note"]
     assert [tool for tool, _ in state.client.calls] == ["status", "sim.stage.info"], "one check-in is two cheap bridge reads"

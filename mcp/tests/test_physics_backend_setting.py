@@ -33,7 +33,7 @@ def write(path, backend):
 
 
 def test_the_default_is_written_in_one_place_and_this_pins_its_current_value():
-    assert config.DEFAULT_PHYSICS_BACKEND == "physx"      # the one pin; a later change flips this line and that constant
+    assert config.DEFAULT_PHYSICS_BACKEND == "newton"     # the one pin; a later change flips this line and that constant
     assert config.DEFAULT_PHYSICS_BACKEND in config.PHYSICS_BACKENDS
 
 

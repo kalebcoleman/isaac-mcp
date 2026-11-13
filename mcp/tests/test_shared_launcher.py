@@ -31,7 +31,8 @@ def test_launcher_sets_shared_port_and_waits_for_twin_registration(tmp_path, por
         except OSError:
             pytest.skip("default work cell port is already in use")
         port = probe.getsockname()[1]
-    env = os.environ | {"TWINSMITH_SIM_PYTHON": str(fake_python), "OMNI_KIT_ACCEPT_EULA": "YES"}
+    env = os.environ | {"TWINSMITH_SIM_PYTHON": str(fake_python), "OMNI_KIT_ACCEPT_EULA": "YES",
+                        "TWINSMITH_PHYSICS_BACKEND": "physx"}   # the fake Sim has no Newton
     for name in ("TWINSMITH_PORT", "TWINSMITH_DEFER_START"):
         env.pop(name, None)
     if port_source == "ephemeral":
@@ -66,7 +67,8 @@ def test_launcher_always_enables_twin_tools(tmp_path):
         'printf "arg=%s\\n" "$@"\n'
     )
     fake_python.chmod(0o755)
-    env = os.environ | {"TWINSMITH_SIM_PYTHON": str(fake_python), "TWINSMITH_DEFER_START": "1"}
+    env = os.environ | {"TWINSMITH_SIM_PYTHON": str(fake_python), "TWINSMITH_DEFER_START": "1",
+                        "TWINSMITH_PHYSICS_BACKEND": "physx"}   # the fake Sim has no Newton
     args = ["bash", str(launcher), "--port", "0"]
     result = subprocess.run(args,
                             env=env, text=True, capture_output=True)

@@ -226,8 +226,10 @@ def test_refuses_non_physx_before_stage_access(modules, monkeypatch, tmp_path):
     physics = types.ModuleType("workcell_test.physics_compat")
     physics.selected_engine = lambda: "newton"
     monkeypatch.setitem(sys.modules, physics.__name__, physics)
-    with pytest.raises(RuntimeError, match="PhysX"):
+    with pytest.raises(RuntimeError, match="not yet qualified on Newton") as refused:
         asyncio.run(scene.Workcell().quick_start())
+    for way in ("--physics-backend physx", 'physics_backend = "physx"', "TWINSMITH_PHYSICS_BACKEND=physx", "Work cell on Newton"):
+        assert way in str(refused.value)
 
 
 def test_unsaved_stage_refused_without_replacement(modules, monkeypatch, tmp_path):

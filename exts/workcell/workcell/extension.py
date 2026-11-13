@@ -10,7 +10,7 @@ from .commands import Commands
 
 MCP_TOOL_REGISTRY = {
     "workcell_quick_start": {
-        "description": "Build a stopped PhysX workcell from an external asset pack. Refuses unsaved stage changes unless explicitly allowed.",
+        "description": "Build a stopped workcell from an external asset pack; qualified on PhysX only, so a Newton session refuses it. Refuses unsaved stage changes unless explicitly allowed.",
         "parameters": {
             "config_path": {"type": "string", "description": "Optional hardware configuration path."},
             "mode": {"type": "string", "enum": ["physics", "mirror_real"], "default": "physics", "description": "Physics mode, or zero-gravity mirror mode."},

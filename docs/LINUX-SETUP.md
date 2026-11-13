@@ -100,7 +100,8 @@ the interpreter it chose and how to pin it. See [what is auto-detected](#what-is
 
 Use an unused port. A live bridge may already exist: inspect it before starting another process.
 The launcher enables the bridge, the generic scene tools, the work-cell tools and NVIDIA's bundled ROS bridge. The physics
-engine is chosen with `--physics-backend` or `TWINSMITH_PHYSICS_BACKEND`; the target and the current default are in
+engine is chosen with `--physics-backend` or `TWINSMITH_PHYSICS_BACKEND`; Newton is the default and PhysX is opt-in (the
+UR5e work cell needs PhysX); see
 [compatibility](COMPATIBILITY.md#target-engine), and a request for an engine the build lacks starts nothing.
 
 For a windowless GPU session, use `./run.sh --headless --port 8766` instead. To leave either running after your shell or a tool's time limit ends, use `setsid nohup ./run.sh --port 8766 > kit.log 2>&1 < /dev/null &`. Headless Sim still

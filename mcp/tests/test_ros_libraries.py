@@ -42,7 +42,8 @@ def _run_sh_with_app(tmp_path, *lib):
     python.write_text(f'#!/bin/sh\ncase "$1" in -c) case "$2" in *__file__*) echo {site};; esac; exit 0;; esac\n'
                       'echo "LD=$LD_LIBRARY_PATH"\n')
     python.chmod(0o755)
-    env = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", "TWINSMITH_SIM_PYTHON": str(python), "ROS_DISTRO": "humble"}
+    env = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", "TWINSMITH_SIM_PYTHON": str(python), "ROS_DISTRO": "humble",
+           "TWINSMITH_PHYSICS_BACKEND": "physx"}   # the fake Sim has no Newton; these tests are about ROS libraries
     return subprocess.run(["bash", str(ROOT / "run.sh"), "--headless"], capture_output=True, text=True, env=env)
 
 

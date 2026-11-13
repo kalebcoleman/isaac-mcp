@@ -9,6 +9,25 @@ ROLES = ("robot", "bench", "base_plate", "bota", "quick_changer", "rg2", "finger
          "jenga_block", "materials")
 
 
+NEWTON_REFUSAL = (
+    "The UR5e work cell is not yet qualified on Newton, the selected engine; no scene was built and no engine was switched. "
+    "Live findings (Isaac Sim 6.2, Newton 1.6.1): the bench's triangle-mesh colliders overflow Newton's triangle-pair buffer; "
+    "the separate RG2 articulation is mis-indexed by Newton's USD importer, ending in MuJoCo's error that a moving body's mass "
+    "and inertia must exceed mjMINVAL; the pack's drive gains are unstable in "
+    "MuJoCo-Warp; the RG2 closed chain did not move under command; and the flange force/torque read is unqualified. "
+    "For the work cell use a PhysX session: `run.sh --physics-backend physx`, `[sim] physics_backend = \"physx\"` in the "
+    "twinsmith config, or TWINSMITH_PHYSICS_BACKEND=physx. Details: docs/OPEN-ITEMS.md, \"Work cell on Newton\"."
+)
+
+
+def _require_physx():
+    from .physics_compat import selected_engine
+
+    engine = selected_engine()
+    if engine != "physx":
+        raise RuntimeError(f"{NEWTON_REFUSAL} Selected engine: {engine}.")
+
+
 def _bom_rows(config, config_path=None):
     from . import bom, hardware_config
 
@@ -163,9 +182,7 @@ class Workcell:
             raise ValueError("discard_changes must be a boolean")
         config, raw, pack, assets = _preflight(config_path, mode)
         rows = _bom_rows(config, config_path)
-        from .physics_compat import selected_engine
-        if selected_engine() != "physx":
-            raise RuntimeError("Workcell requires the selected PhysX backend; no fallback was attempted")
+        _require_physx()
         import omni.usd
         import omni.timeline
         from sim_tools.stage_open import stage_has_unsaved_work
@@ -239,15 +256,12 @@ class Workcell:
             raise RuntimeError("Build the workcell before rebuilding its tower")
         import omni.usd
         import omni.timeline
-        from .physics_compat import selected_engine
-
         stage, config, assets, rows = self._runtime
         if omni.usd.get_context().get_stage() != stage:
             raise RuntimeError("Workcell stage changed; quick_start is required")
         if not omni.timeline.get_timeline_interface().is_stopped():
             raise RuntimeError("Stop the timeline before rebuilding the tower")
-        if selected_engine() != "physx":
-            raise RuntimeError("Workcell requires the selected PhysX backend")
+        _require_physx()
         report, parts, audit = _replace_tower(stage, config, assets, rows, self._report["parts"], profile, seed)
         self._report.update(jenga=report, parts=parts, bom_audit=audit)
         return copy.deepcopy(report)

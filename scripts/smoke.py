@@ -147,11 +147,12 @@ def reopen_setup(args):
     """What validate_scene_reopen needs: a simulator that has a saved scene open. The launcher cannot open a
     file at startup, so the scene is opened through the stage tool before the check is run."""
     port = args.port
-    backend = args.backend or "physx"
+    launch = f" --physics-backend {args.backend}" if args.backend else ""   # none: the configured default engine
+    check = f" --backend {args.backend}" if args.backend else ""
     return ("needs a session opened with a saved file. Save a scene with a rigid body (sim__stage action=save), "
-            f"start a simulator ./run.sh --headless --physics-backend {backend} --port {port}, open that file in it "
+            f"start a simulator ./run.sh --headless{launch} --port {port}, open that file in it "
             "(sim__stage action=open path=<saved.usda>), then run: python3 scripts/smoke.py scene "
-            f"--backend {backend} --port {port} --check validate_scene_reopen "
+            f"{check.strip()} --port {port} --check validate_scene_reopen "
             "--saved <saved.usda> --body </World/Body> --expected-z <rest height in metres>")
 
 
