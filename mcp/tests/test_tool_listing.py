@@ -100,7 +100,7 @@ def test_schema_titles_are_not_listed(either):
 @pytest.mark.parametrize(
     "name",
     ["screenshot", "start_screen_recording", "stop_screen_recording", "join_videos", "run_python", "put_file",
-     "ur5e_dt__save_scene_state", "ur5e_dt__new_stage", "assets__pack_build", "isaaclab__runs_tail", "sim__camera__capture"],
+     "ur5e_dt__jenga_build", "ur5e_dt__workcell_quick_start", "assets__pack_build", "isaaclab__runs_tail", "sim__camera__capture"],
 )
 def test_nothing_that_writes_claims_to_be_read_only(single, name):
     listed = single
@@ -110,10 +110,10 @@ def test_nothing_that_writes_claims_to_be_read_only(single, name):
 def test_destructive_tools_say_so(single):
     listed = single
     hints = {t.name: t.annotations for t in listed}
-    for name in ("run_python", "put_file", "ur5e_dt__new_stage", "ur5e_dt__delete_objects", "isaaclab__runs_cancel",
+    for name in ("run_python", "put_file", "ur5e_dt__workcell_quick_start", "ur5e_dt__jenga_build", "isaaclab__runs_cancel",
                  "window_click", "sim__stop"):
         assert hints[name].destructiveHint is True, name
-    for name in ("status", "get_file", "stat_file", "list_bridges", "ur5e_dt__get_recording_status", "screen_info"):
+    for name in ("status", "get_file", "stat_file", "list_bridges", "ur5e_dt__workcell_status", "screen_info"):
         assert hints[name].readOnlyHint is True and hints[name].destructiveHint is False, name
 
 
@@ -153,7 +153,7 @@ def test_instructions_name_the_starting_points_and_what_is_universal():
 def test_the_skill_has_a_decision_path():
     text = (REPO / ".agents/skills/isaac-mcp/SKILL.md").read_text()
     head = text[text.index("## Which tool do I start with?"):text.index("## Ground rules")]
-    assert "sim__quick_start" in head and "sim__stage__info" in head and "ur5e_dt__quick_start" in head
+    assert "sim__quick_start" in head and "sim__stage__info" in head and "ur5e_dt__workcell_quick_start" in head
 
 
 def test_the_argument_reference_shows_clean_types():

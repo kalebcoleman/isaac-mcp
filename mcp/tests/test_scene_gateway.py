@@ -25,9 +25,9 @@ def test_full_catalog_and_errors(monkeypatch):
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     catalog = load_catalog()
     builtins = {"run_python", "status", "list_bridges", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
-    assert len(catalog) == 23 + len(REGISTRY) + len(builtins)
+    assert len(catalog) == 10 + len(REGISTRY) + len(builtins)
     assert {k for k in catalog if "." not in k} == builtins
-    assert len([k for k in catalog if k.startswith("ur5e_dt.")]) == 23
+    assert len([k for k in catalog if k.startswith("ur5e_dt.")]) == 10
     server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
 
     class Offline:
@@ -138,12 +138,12 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
     hidden = gw.build_server({"ISAAC_MCP_SCENE_TOOLS": "0"})
     visible = gw.build_server({})
     # The 7 bridge built-ins are listed offline too, so offline == with a bridge.
-    assert len(hidden._tool_manager._tools) == 63
-    assert len(visible._tool_manager._tools) == 134
+    assert len(hidden._tool_manager._tools) == 50
+    assert len(visible._tool_manager._tools) == 121
     assert "run_python" in visible._tool_manager._tools and "status" in hidden._tool_manager._tools
     assert "sim__stage__info" in visible._tool_manager._tools
     assert "sim__stage__info" not in hidden._tool_manager._tools
-    assert sum(n.startswith("ur5e_dt__") for n in hidden._tool_manager._tools) == 23
+    assert sum(n.startswith("ur5e_dt__") for n in hidden._tool_manager._tools) == 10
     with LiveBridge() as bridge:
         owner = bridge.bridge.register_owner("generic-sim", "sim")
         owner.add(td("stage.info", lambda: {"selected": True}))
@@ -151,7 +151,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
         gw._state_for(visible).client = BridgeClient(port=bridge.port)
 
         async def run():
-            for server, enabled, count in ((hidden, False, 63), (visible, True, 134)):
+            for server, enabled, count in ((hidden, False, 50), (visible, True, 121)):
                 async with create_connected_server_and_client_session(
                     server._mcp_server
                 ) as client:
@@ -161,7 +161,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
                     assert len(names) == count
                     assert ("sim__stage__info" in names) == enabled
                     assert ("assets__roots" in names) == enabled
-                    assert "run_python" in names and "ur5e_dt__play_scene" in names
+                    assert "run_python" in names and "ur5e_dt__workcell_status" in names
                     if not enabled:
                         refused = await client.call_tool("sim__stage__info", {})
                         assert refused.isError

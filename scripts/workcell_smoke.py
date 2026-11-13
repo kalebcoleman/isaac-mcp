@@ -1,4 +1,4 @@
-"""Verify the workcell in an already-running, explicitly selected Kit bridge."""
+"""Validate stopped-stage authoring/BOM; dynamics and renders need separate qualification."""
 
 import argparse
 import json
@@ -26,14 +26,23 @@ def main():
         print("Bridge:", json.dumps(identity, default=str), flush=True)
         code = f'''import omni.usd
 from ur5e_dt.scene import Workcell
-from pxr import UsdPhysics, UsdGeom
+from pxr import UsdPhysics, UsdGeom, PhysxSchema
 workcell = Workcell()
 report = await workcell.quick_start(config_path={args.config!r}, mode={args.mode!r}, discard_changes={args.discard_changes!r})
 stage = omni.usd.get_context().get_stage()
 assert report["state"] == "ready" and report["backend"] == "physx" and report["timeline"] == "stopped"
 assert report["tabletop_z_m"] == 0.0 and UsdGeom.GetStageMetersPerUnit(stage) == 1.0
 gravity = UsdPhysics.Scene.Get(stage, "/World/PhysicsScene").GetGravityMagnitudeAttr().Get()
-assert abs(gravity - {9.81 if args.mode == 'physics' else 0.0}) < 1e-5
+assert abs(gravity - 9.81) < 1e-5
+assembly_path = stage.GetPrimAtPath(report["robot"]["assembly_path"]).GetPath()
+robot_bodies = 0
+for prim in stage.Traverse():
+    if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+        is_robot = prim.GetPath().HasPrefix(assembly_path)
+        robot_bodies += int(is_robot)
+        disabled = bool(PhysxSchema.PhysxRigidBodyAPI(prim).GetDisableGravityAttr().Get())
+        assert disabled == (is_robot and {args.mode == 'mirror_real'!r}), str(prim.GetPath())
+assert robot_bodies > 0
 assert report["jenga"]["block_size_m"] == [0.072, 0.024, 0.014]
 assert report["jenga"]["block_count"] == len(report["jenga"]["parts"])
 assert report["jenga"]["block_count"] == 3 * report["jenga"]["layers"]
@@ -46,6 +55,7 @@ result = report'''
         print(json.dumps(result, indent=2, default=str))
         if result.get("result", {}).get("state") != "ready":
             raise RuntimeError("workcell smoke did not return a ready report")
+        print("PASS: stopped-stage authoring/BOM only; dynamics and captures are not tested.")
 
 
 if __name__ == "__main__":
