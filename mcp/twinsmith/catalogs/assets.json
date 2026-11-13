@@ -862,6 +862,491 @@
       ],
       "namespace": "assets",
       "owner_id": "generic-assets"
+    },
+    "assets.mesh_inspect": {
+      "description": "Report every mesh of a USD file: triangles, bounds, closed or not, whether it is a collider and its approximation, and totals including the triangles in triangle-mesh colliders (what overflows Newton). Read-only; parses USD in a subprocess of this server's interpreter (the mesh extra). Native USD parsing is not sandboxed.",
+      "parameters": {
+        "source_path": {
+          "type": "string",
+          "description": "Absolute USD file under an approved root or the asset root; or give pack and asset_id.",
+          "required": false
+        },
+        "pack": {
+          "type": "string",
+          "description": "\"<pack id>/<version>\" holding asset_id. Default: the project file's pack.",
+          "required": false
+        },
+        "asset_id": {
+          "type": "string",
+          "description": "Asset id of a file in pack, e.g. bench.",
+          "required": false
+        },
+        "prims": {
+          "type": "array",
+          "description": "Only meshes at or under these prim paths.",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "source_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute USD file under an approved root or the asset root; or give pack and asset_id."
+        },
+        {
+          "name": "pack",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "\"<pack id>/<version>\" holding asset_id. Default: the project file's pack."
+        },
+        {
+          "name": "asset_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Asset id of a file in pack, e.g. bench."
+        },
+        {
+          "name": "prims",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Only meshes at or under these prim paths."
+        }
+      ],
+      "namespace": "assets",
+      "owner_id": "generic-assets"
+    },
+    "assets.mesh_decimate": {
+      "description": "Write a copy of a USD file whose render meshes are decimated (quadric) into a new folder, as a job. For render cost; it does not fix a collider overflow (use split). The source is never changed. Normals and texture coordinates of a decimated mesh are blocked because they no longer match its faces.",
+      "parameters": {
+        "source_path": {
+          "type": "string",
+          "description": "Absolute USD file under an approved root or the asset root; or give pack and asset_id.",
+          "required": false
+        },
+        "pack": {
+          "type": "string",
+          "description": "\"<pack id>/<version>\" holding asset_id. Default: the project file's pack.",
+          "required": false
+        },
+        "asset_id": {
+          "type": "string",
+          "description": "Asset id of a file in pack, e.g. bench.",
+          "required": false
+        },
+        "prims": {
+          "type": "array",
+          "description": "Only meshes at or under these prim paths.",
+          "required": false
+        },
+        "output": {
+          "type": "string",
+          "description": "New absolute folder under an approved root, outside the asset root.",
+          "required": true
+        },
+        "target_tris": {
+          "type": "integer",
+          "description": "About this many triangles in all, shared by mesh size. Give this or ratio.",
+          "required": false
+        },
+        "ratio": {
+          "type": "number",
+          "description": "Keep this fraction of each mesh's triangles, above 0 and at most 1. Give this or target_tris.",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "source_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute USD file under an approved root or the asset root; or give pack and asset_id."
+        },
+        {
+          "name": "pack",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "\"<pack id>/<version>\" holding asset_id. Default: the project file's pack."
+        },
+        {
+          "name": "asset_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Asset id of a file in pack, e.g. bench."
+        },
+        {
+          "name": "prims",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Only meshes at or under these prim paths."
+        },
+        {
+          "name": "output",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "New absolute folder under an approved root, outside the asset root."
+        },
+        {
+          "name": "target_tris",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "About this many triangles in all, shared by mesh size. Give this or ratio."
+        },
+        {
+          "name": "ratio",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Keep this fraction of each mesh's triangles, above 0 and at most 1. Give this or target_tris."
+        }
+      ],
+      "namespace": "assets",
+      "owner_id": "generic-assets"
+    },
+    "assets.mesh_hulls": {
+      "description": "Write a collision layer for a USD file into a new folder, as a job: for each mesh, <parent>/<mesh>_collision with an oriented box or convex hulls (purpose guide, CollisionAPI, convexHull approximation), in the mesh parent's frame so rigid bodies and joints are untouched. Shapes go to the meshes under prims; else to the file's mesh colliders; else, when no mesh is a collider, to every mesh. Sublayer it over the asset, or use split for the composed result.",
+      "parameters": {
+        "source_path": {
+          "type": "string",
+          "description": "Absolute USD file under an approved root or the asset root; or give pack and asset_id.",
+          "required": false
+        },
+        "pack": {
+          "type": "string",
+          "description": "\"<pack id>/<version>\" holding asset_id. Default: the project file's pack.",
+          "required": false
+        },
+        "asset_id": {
+          "type": "string",
+          "description": "Asset id of a file in pack, e.g. bench.",
+          "required": false
+        },
+        "prims": {
+          "type": "array",
+          "description": "Only meshes at or under these prim paths.",
+          "required": false
+        },
+        "output": {
+          "type": "string",
+          "description": "New absolute folder under an approved root, outside the asset root.",
+          "required": true
+        },
+        "method": {
+          "type": "string",
+          "description": "box (oriented box per mesh), convex (one hull), coacd (decomposition) or auto (box unless over twice the hull's volume, then coacd).",
+          "required": false,
+          "default": "box"
+        },
+        "max_hulls": {
+          "type": "integer",
+          "description": "coacd/auto: most convex pieces per mesh, 1 to 256.",
+          "required": false,
+          "default": 16
+        },
+        "threshold": {
+          "type": "number",
+          "description": "coacd/auto: concavity, 0.01 to 1; lower is finer and slower.",
+          "required": false,
+          "default": 0.05
+        }
+      },
+      "fields": [
+        {
+          "name": "source_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute USD file under an approved root or the asset root; or give pack and asset_id."
+        },
+        {
+          "name": "pack",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "\"<pack id>/<version>\" holding asset_id. Default: the project file's pack."
+        },
+        {
+          "name": "asset_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Asset id of a file in pack, e.g. bench."
+        },
+        {
+          "name": "prims",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Only meshes at or under these prim paths."
+        },
+        {
+          "name": "output",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "New absolute folder under an approved root, outside the asset root."
+        },
+        {
+          "name": "method",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "box",
+          "has_default": true,
+          "description": "box (oriented box per mesh), convex (one hull), coacd (decomposition) or auto (box unless over twice the hull's volume, then coacd)."
+        },
+        {
+          "name": "max_hulls",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 16,
+          "has_default": true,
+          "description": "coacd/auto: most convex pieces per mesh, 1 to 256."
+        },
+        {
+          "name": "threshold",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": 0.05,
+          "has_default": true,
+          "description": "coacd/auto: concavity, 0.01 to 1; lower is finer and slower."
+        }
+      ],
+      "namespace": "assets",
+      "owner_id": "generic-assets"
+    },
+    "assets.mesh_split": {
+      "description": "Write a USD asset as a render layer and a collision layer plus the file that composes them, into a new folder, as a job: <stem>_render (the source; the replaced meshes lose their collision schemas, other colliders stay), <stem>_collision.usdc (explicit shapes, purpose guide) and <stem>.usda (sublayers both, keeps the units, up axis and default prim). Point an asset at <stem>.usda; make it a pack version with assets__pack action=build. The source is never changed.",
+      "parameters": {
+        "source_path": {
+          "type": "string",
+          "description": "Absolute USD file under an approved root or the asset root; or give pack and asset_id.",
+          "required": false
+        },
+        "pack": {
+          "type": "string",
+          "description": "\"<pack id>/<version>\" holding asset_id. Default: the project file's pack.",
+          "required": false
+        },
+        "asset_id": {
+          "type": "string",
+          "description": "Asset id of a file in pack, e.g. bench.",
+          "required": false
+        },
+        "prims": {
+          "type": "array",
+          "description": "Only meshes at or under these prim paths.",
+          "required": false
+        },
+        "output": {
+          "type": "string",
+          "description": "New absolute folder under an approved root, outside the asset root.",
+          "required": true
+        },
+        "collision": {
+          "type": "object",
+          "description": "Collision shape options: method, max_hulls, threshold (as for hulls).",
+          "required": false
+        }
+      },
+      "fields": [
+        {
+          "name": "source_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute USD file under an approved root or the asset root; or give pack and asset_id."
+        },
+        {
+          "name": "pack",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "\"<pack id>/<version>\" holding asset_id. Default: the project file's pack."
+        },
+        {
+          "name": "asset_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Asset id of a file in pack, e.g. bench."
+        },
+        {
+          "name": "prims",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Only meshes at or under these prim paths."
+        },
+        {
+          "name": "output",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "New absolute folder under an approved root, outside the asset root."
+        },
+        {
+          "name": "collision",
+          "kind": "object",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Collision shape options: method, max_hulls, threshold (as for hulls)."
+        }
+      ],
+      "namespace": "assets",
+      "owner_id": "generic-assets"
+    },
+    "assets.validate": {
+      "description": "Check from the file alone whether a USD asset loads on Newton or PhysX: units, triangle-mesh colliders over budget, rendered collision shapes, zero-force drives, nested articulations, massless moving bodies, drive gains too stiff for 500 Hz, loop joints without a mimic. Returns ok and each check's level, prim, detail and fix; on physx the Newton-only rules are info. Read-only, in a subprocess (the mesh extra).",
+      "parameters": {
+        "source_path": {
+          "type": "string",
+          "description": "Absolute USD file under an approved root or the asset root; or give pack and asset_id.",
+          "required": false
+        },
+        "pack": {
+          "type": "string",
+          "description": "\"<pack id>/<version>\" holding asset_id. Default: the project file's pack.",
+          "required": false
+        },
+        "asset_id": {
+          "type": "string",
+          "description": "Asset id of a file in pack, e.g. bench.",
+          "required": false
+        },
+        "engine": {
+          "type": "string",
+          "description": "newton or physx.",
+          "required": false,
+          "default": "newton"
+        },
+        "triangle_budget": {
+          "type": "integer",
+          "description": "Triangle-mesh collider triangles allowed.",
+          "required": false,
+          "default": 200000
+        },
+        "kit": {
+          "type": "boolean",
+          "description": "Also run Isaac Sim's Asset Validator: not available yet, refused.",
+          "required": false,
+          "default": false
+        }
+      },
+      "fields": [
+        {
+          "name": "source_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Absolute USD file under an approved root or the asset root; or give pack and asset_id."
+        },
+        {
+          "name": "pack",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "\"<pack id>/<version>\" holding asset_id. Default: the project file's pack."
+        },
+        {
+          "name": "asset_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Asset id of a file in pack, e.g. bench."
+        },
+        {
+          "name": "engine",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "newton",
+          "has_default": true,
+          "description": "newton or physx."
+        },
+        {
+          "name": "triangle_budget",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": 200000,
+          "has_default": true,
+          "description": "Triangle-mesh collider triangles allowed."
+        },
+        {
+          "name": "kit",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Also run Isaac Sim's Asset Validator: not available yet, refused."
+        }
+      ],
+      "namespace": "assets",
+      "owner_id": "generic-assets"
     }
   }
 }

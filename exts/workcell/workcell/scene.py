@@ -105,6 +105,23 @@ def _tag_parts(stage, parts):
         prim.CreateAttribute("workcell:bom_id", Sdf.ValueTypeNames.String, custom=True).Set(bom_id)
 
 
+def bench_colliders(stage, path="/World/Bench") -> str:
+    """Keep a bench's own collision layer (assets__mesh split: boxes or hulls, purpose guide); without one,
+    make every bench mesh a triangle-mesh collider, which PhysX handles and Newton cannot. Says which."""
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    bench = list(Usd.PrimRange(stage.GetPrimAtPath(path)))
+    if any(prim.HasAPI(UsdPhysics.CollisionAPI) for prim in bench):
+        return "own"
+    meshes = [prim for prim in bench if prim.IsA(UsdGeom.Mesh)]
+    if not meshes:
+        raise ValueError("Bench pack asset has no editable mesh colliders")
+    for prim in meshes:
+        UsdPhysics.CollisionAPI.Apply(prim)
+        UsdPhysics.MeshCollisionAPI.Apply(prim).CreateApproximationAttr().Set("none")
+    return "triangle meshes"
+
+
 def _finish_scene(stage, config, assets, parts, rows):
     from pxr import Usd, UsdGeom, UsdPhysics, UsdShade
     from . import bom
@@ -128,14 +145,7 @@ def _finish_scene(stage, config, assets, parts, rows):
                     binding.Bind(material)
                     if role != "jenga_block":
                         binding.Bind(material, materialPurpose="physics")
-    bench_meshes = 0
-    for prim in Usd.PrimRange(stage.GetPrimAtPath("/World/Bench")):
-        if prim.IsA(UsdGeom.Mesh):
-            UsdPhysics.CollisionAPI.Apply(prim)
-            UsdPhysics.MeshCollisionAPI.Apply(prim).CreateApproximationAttr().Set("none")
-            bench_meshes += 1
-    if not bench_meshes:
-        raise ValueError("Bench pack asset has no editable mesh colliders")
+    bench_colliders(stage)
     bom.verify_config_assets(config, rows)
     return bom.audit_parts(parts, rows, stage=stage, strict=True)
 

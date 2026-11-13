@@ -49,7 +49,9 @@ Live results from a probe that bypassed the refusal (Isaac Sim 6.2.0.0, Newton 1
 What works, once the scene is adapted in the session layer:
 
 - [x] The bench's 385 triangle-mesh colliders (1.63 M triangles) overflow Newton's triangle-pair buffer ("7500052 > 1000000");
-  convex hulls per bench mesh avoid it.
+  convex hulls per bench mesh avoid it. `assets__mesh action=split` now writes a bench with a separate box or hull collision
+  layer, the work cell keeps such a layer, and `assets__validate` checks for this and the faults below from the file. Pack
+  `v2` with that layer is not built or tried live yet.
 - [x] The RG2's passive joints author a drive with `maxForce` 0, which MuJoCo rejects ("actfrcrange[0] should be smaller than
   actfrcrange[1]"); removing those drives avoids it.
 - [x] One articulation for the arm and gripper (the RG2 mount joint included in the arm, the RG2 articulation root removed)

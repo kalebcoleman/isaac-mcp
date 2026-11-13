@@ -127,6 +127,57 @@ take down the server), else the selected Kit through `assets__dependencies`. URD
 host. A URDF pack is checked with the same rules as a build: `package://` is looked for inside the pack only (a `package.xml`
 naming it, a folder of that name, or the folder itself), and nothing outside is searched.
 
+## Preparing meshes and checking an asset
+
+Two more host tools read a USD file under an approved root or the asset root, or a pack's file by `asset_id`. They need the
+optional `mesh` extra in the server's environment. Without it, they answer `MESH_EXTRA_MISSING` with the command to add it:
+
+```bash
+UV_PROJECT_ENVIRONMENT=<repo>/mcp/.venv uv sync --project <repo>/mcp --locked --extra isaaclab --extra mesh --no-dev
+```
+
+The work runs in a subprocess of the server's interpreter, so `pxr`, trimesh and CoACD never load in the server itself.
+
+**`assets__validate`** answers whether an asset will load on Newton or on PhysX, from the file alone. It returns `ok`, and
+for every rule its level, the prim, a detail and a fix. On `engine="physx"` the Newton-only rules are `info`.
+
+| Id | Level on Newton | Rule | Evidence |
+|---|---|---|---|
+| `UNITS` | error | `metersPerUnit` and `upAxis` are authored | Import contract |
+| `TRI_COLLIDER` | error | Triangle-mesh colliders hold at most `triangle_budget` triangles (200,000) | The bench's 1.63 M collider triangles needed 7.5 M triangle pairs against Newton's 1 M |
+| `COLLIDER_RENDERED` | warning | A collision-only shape has purpose `guide` | The split contract below |
+| `DRIVE_ZERO_FORCE` | error | No joint drive has `maxForce` 0 | MuJoCo: "actfrcrange[0] should be smaller than actfrcrange[1]" |
+| `NESTED_ARTICULATION` | error | No articulation root lies inside another or is jointed into one | Newton's importer mis-lists the bodies |
+| `MASS_MIN` | error | Every moving body has a mass source above MuJoCo's `mjMINVAL` | "mass and inertia of moving bodies must be larger than mjMINVAL" |
+| `DRIVE_GAIN` | warning | `sqrt(k / I) <= 2 / dt` at 500 Hz, with `k` in SI per radian or metre and `I` from the driven body, else 0.01 | 9400 N m per degree went non-finite |
+| `LOOP_JOINT` | warning | A joint excluded from its articulation has a mimic or equality constraint | The RG2 fingers did not move |
+
+`kit=true`, which would add Isaac Sim's own Asset Validator, is refused for now: it has not been confirmed in Isaac Sim 6.2.
+
+**`assets__mesh`** prepares meshes. `inspect` reports every mesh's triangles, bounds, whether it is closed, and its collider
+approximation, and answers directly. The other actions write a **new** folder under an approved root, never inside the asset
+root. They run as a job: wait with `jobs(action="lab_status", job_id=..., wait_s=60)`, and the result is in
+`mesh_report.json` in that folder.
+
+- `decimate`: a copy whose render meshes are decimated. This lowers render cost; it does not fix a collider overflow.
+- `hulls`: a collision layer only. Each mesh gets `<parent>/<mesh>_collision` holding an oriented `box`, one `convex` hull,
+  `coacd` pieces, or `auto` (the box unless it is more than twice the hull's volume, then CoACD). The shapes have purpose
+  `guide` and `CollisionAPI`, and are in the mesh parent's frame, so bodies and joints are untouched.
+- `split`: the asset as two layers and the file that composes them:
+
+```text
+bench/
+  bench.usda             sublayers the two below; keeps units, up axis and default prim. Point the asset at this file.
+  bench_collision.usdc   the explicit collision shapes
+  bench_render.usdc      the source's root layer; the replaced meshes lose their collision schemas, other colliders stay
+```
+
+Which meshes get shapes: those under `prims`. Without `prims`, the file's mesh colliders get them, or every mesh when none of
+them is a collider; the bench is the second case, because the work cell adds its colliders at build time. A work-cell bench
+that brings its own collision layer keeps it, and one without gets triangle-mesh colliders as before. Paths are written
+relative, through the USD API, so a home folder with `@` in its name (as on some university logins) still resolves. To make
+the result a pack version, run `assets__pack action=build` on `<output>/bench.usda`.
+
 ## Converting an old pack
 
 The old model kept flat folders `<store>/<pack>/` with a `SHA256SUMS` and, for builds, a build-description file. Nothing reads

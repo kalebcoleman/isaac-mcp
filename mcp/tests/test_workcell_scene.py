@@ -268,3 +268,24 @@ def test_unsaved_stage_refused_without_replacement(modules, monkeypatch, tmp_pat
     monkeypatch.setitem(sys.modules, "pxr", pxr)
     with pytest.raises(RuntimeError, match="UNSAVED_CHANGES"):
         asyncio.run(scene.Workcell().quick_start())
+
+
+def test_bench_keeps_its_own_collision_layer_and_else_gets_triangle_meshes(modules):
+    Usd = pytest.importorskip("pxr.Usd")
+    from pxr import UsdGeom, UsdPhysics
+
+    scene, _ = modules
+    plain = Usd.Stage.CreateInMemory()
+    mesh = UsdGeom.Mesh.Define(plain, "/World/Bench/Frame/Mesh_0")
+    assert scene.bench_colliders(plain) == "triangle meshes"
+    assert mesh.GetPrim().GetAttribute("physics:approximation").Get() == "none"
+
+    split = Usd.Stage.CreateInMemory()
+    render = UsdGeom.Mesh.Define(split, "/World/Bench/Frame/Mesh_0")
+    box = UsdGeom.Cube.Define(split, "/World/Bench/Frame/Mesh_0_collision/box")
+    UsdPhysics.CollisionAPI.Apply(box.GetPrim())
+    assert scene.bench_colliders(split) == "own"
+    assert not render.GetPrim().HasAPI(UsdPhysics.CollisionAPI)
+
+    with pytest.raises(ValueError):
+        scene.bench_colliders(Usd.Stage.CreateInMemory())

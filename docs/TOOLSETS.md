@@ -20,7 +20,7 @@ rows for the server you have installed, with the current state of each.
 | `scene`: Create and edit scenes and primitives | on | `sim__light`, `sim__material`, `sim__prim`, `sim__quick_start`, `sim__stage`, `sim__timeline__control` |
 | `physics`: Physics, joints, arms and simulation | on | `sim__arm`, `sim__joints`, `sim__physics`, `sim__simulation` |
 | `sensors`: Cameras, LiDAR and viewport framing | on | `sim__camera`, `sim__lidar`, `sim__viewport__frame` |
-| `assets`: Import and manage robot and scene assets | on | `assets__import_path`, `assets__library`, `assets__pack` |
+| `assets`: Import and manage robot and scene assets | on | `assets__import_path`, `assets__library`, `assets__mesh`, `assets__pack`, `assets__validate` |
 | `code`: Execute code and scripts, transfer files | on | `files`, `reload_tools`, `run_python`, `run_script`, `sim__controller` |
 | `screen`: Capture, record and arrange desktop windows | on | `doctor`, `join_videos`, `screen_recording`, `screenshot`, `windows` |
 | `lab`: Isaac Lab training and evaluation | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics` |
@@ -124,17 +124,17 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 | Profile | Toolsets | Listed tools |
 |---|---|--:|
 | `minimal` | `core` | 6 |
-| `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 32 |
-| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 49 |
-| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 51 |
+| `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 34 |
+| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 51 |
+| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 53 |
 <!-- /generated -->
 
 | Selection | Listed tools | Characters | Estimated tokens |
 |---|--:|--:|--:|
 | `minimal` | 6 | 6,346 | 1,586 |
-| `default` | 32 | 61,863 | 15,465 |
-| `all` | 49 | 92,518 | 23,129 |
-| `all,+input,+launch` | 51 | 97,491 | 24,372 |
+| `default` | 34 | 65,094 | 16,273 |
+| `all` | 51 | 95,749 | 23,937 |
+| `all,+input,+launch` | 53 | 100,722 | 25,180 |
 | `core,lab,code` | 15 | 22,027 | 5,506 |
 | `core,workcell` | 13 | 10,470 | 2,617 |
 
