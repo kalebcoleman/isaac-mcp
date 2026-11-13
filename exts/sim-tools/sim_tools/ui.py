@@ -1,7 +1,7 @@
 """Kit-native UI computer use: find Isaac Sim widgets by name and drive them through Kit's input.
 
 Why: on a machine that is used remotely, the X11 session is often locked. The lock screen holds the X
-keyboard and pointer grabs, so X11 input (window_click/window_type) would reach the lock screen,
+keyboard and pointer grabs, so X11 input (the computer tool) would reach the lock screen,
 not Isaac Sim, and monitor screenshots are black. Kit's own input provider (``carb.input``, the
 path ``omni.kit.ui_test`` uses) feeds events straight into the app, so these tools keep working
 while the desktop is locked, and window screenshots (XComposite) still show the result.
@@ -27,6 +27,11 @@ MAX_TEXT = 500
 MAX_WIDGETS_PER_WINDOW = 6000
 ACTIONS = ("click", "double_click", "right_click", "move", "drag", "scroll", "type", "keypress", "menu", "tab", "close",
            "wait")
+POINTER_ACTIONS = ("click", "double_click", "right_click", "move", "drag", "scroll")
+# The arguments one action takes; in a batch each step carries its own, and none may be given at the top level.
+STEP_FIELDS = ("ref", "x", "y", "end_x", "end_y", "text", "keys", "window", "menu", "scroll_x", "scroll_y")
+MAX_BATCH = 10
+MAX_BATCH_FRAMES = 600  # a whole batch waits at most this many frames, well inside the bridge's 300 s timeout
 
 # Key names (OpenAI-style, case-insensitive) -> carb.input.KeyboardInput attribute names.
 KEY_NAMES = {
@@ -44,9 +49,24 @@ MODIFIER_KEYS = {"CONTROL": "LEFT_CONTROL", "SHIFT": "LEFT_SHIFT", "ALT": "LEFT_
 
 
 class UIRefusal(ValueError):
-    def __init__(self, code, message):
+    """``effects`` overrides what the bridge says about input already sent; ``details`` join the error envelope."""
+
+    def __init__(self, code, message, effects=None, **details):
         super().__init__(message)
-        self.code = code
+        self.code, self.effects, self.details = code, effects, details
+
+
+# Refusals raised before the first event: the action sent nothing.
+NO_INPUT_CODES = ("INVALID_VALUE", "LIMIT", "STALE_WIDGET", "NOT_VISIBLE", "OUT_OF_WINDOW", "NO_UI", "DISABLED",
+                  "NO_WINDOW")
+
+
+def refusal(name, exc):
+    """The bridge's error envelope for a UIRefusal from sim.ui.find or sim.ui.act. A failed batch step
+    says itself what the steps before it sent (exc.effects)."""
+    sent_nothing = name == "sim.ui.find" or exc.code in NO_INPUT_CODES
+    return dict(status="error", code=exc.code, message=str(exc), **exc.details, effects=exc.effects or (
+        "No input was sent." if sent_nothing else "Inspect the UI before retrying."))
 
 
 def parse_keys(keys):
@@ -177,7 +197,7 @@ def windows():
     dpi = ui.Workspace.get_dpi_scale()
     out = []
     for win in ui.Workspace.get_windows():
-        if not win.visible or not win.title:
+        if not win.visible or not win.title or win.title == BADGE_TITLE:
             continue
         try:  # a docked window behind another tab reports visible but cannot be clicked
             if win.docked and not win.is_selected_in_dock():
@@ -272,9 +292,11 @@ def _widget_fingerprint(widget, path, ui_test):
     return fp
 
 
-def _shown(path, center, ui_test):
+def _shown(path, center, ui_test, cache=None):
     """None when the centre point (UI points) is really clickable, else why not: inside the owning
-    Kit window, inside every enclosing ScrollingFrame, and not under a floating Kit window."""
+    Kit window, under no hidden container (a panel keeps the rows of a view it has switched away from),
+    inside every enclosing ScrollingFrame, and not under a floating Kit window. ``cache`` (a dict) keeps
+    what was read about each container for the widgets of one find."""
     import omni.ui as ui
 
     title = path.split("//", 1)[0]
@@ -284,19 +306,30 @@ def _shown(path, center, ui_test):
     if not inside(center, (win.position_x, win.position_y, win.width, win.height)):
         return f"it is outside the visible part of the '{title}' window"
     parts = path.split("/")
-    for i, part in enumerate(parts):
-        if part.startswith("ScrollingFrame["):
+    cache = {} if cache is None else cache
+    for i in range(3, len(parts) - 1):  # every container between the window's root frame and the widget
+        prefix = "/".join(parts[: i + 1])
+        if prefix not in cache:
             try:
-                frame = ui_test.find("/".join(parts[: i + 1]))
+                frame = ui_test.find(prefix)
                 pos, size = frame.position, frame.size
+                cache[prefix] = (bool(getattr(frame.widget, "visible", True)), (pos.x, pos.y, size.x, size.y))
             except Exception:  # noqa: BLE001
+                cache[prefix] = None
+        scrolling = parts[i].startswith("ScrollingFrame[")
+        if cache[prefix] is None:
+            if scrolling:
                 return "its scrolling panel could not be measured"
-            if not inside(center, (pos.x, pos.y, size.x, size.y)):
-                return "it is scrolled out of view; scroll its panel first"
+            continue
+        visible, rect = cache[prefix]
+        if not visible:
+            return "it is inside a hidden part of its panel"
+        if scrolling and not inside(center, rect):
+            return "it is scrolled out of view; scroll its panel first"
     if getattr(win, "docked", False):
         for other in ui.Workspace.get_windows():
             if (other is not win and other.visible and not getattr(other, "docked", False) and other.title
-                    and other.title not in ("Main ToolBar", "Status Bar")
+                    and other.title not in ("Main ToolBar", "Status Bar", BADGE_TITLE)
                     and inside(center, (other.position_x, other.position_y, other.width, other.height))):
                 return f"the floating window '{other.title}' covers it"
     return None
@@ -345,21 +378,29 @@ def _menu_bar():
         return []
 
 
+def menu_walk(path):
+    """The menu widgets along *path* from the menu bar, as far as they exist (the menu bar first)."""
+    import omni.ui as ui
+
+    found = [_ui_test().get_menubar().widget]
+    for part in (p for p in path.split("/") if p):
+        named = [c for c in ui.Inspector.get_children(found[-1]) if getattr(c, "text", "") == part]
+        if not named:
+            break
+        found.append(next((c for c in named if getattr(c, "visible", True)), named[0]))  # the one a person sees
+    return found
+
+
 def menu_children(path, inside=False):
-    """Items available under the deepest existing level of *path* ("" = the menu bar); with ``inside``
+    """Items a person sees under the deepest existing level of *path* ("" = the menu bar); with ``inside``
     the last level is walked too, so this lists what the menu *path* itself contains."""
     import omni.ui as ui
 
-    level = _ui_test().get_menubar().widget
-    walked = []
     parts = [p for p in path.split("/") if p]
-    for part in parts if inside else parts[:-1]:
-        nxt = next((c for c in ui.Inspector.get_children(level) if getattr(c, "text", "") == part), None)
-        if nxt is None:
-            break
-        level, walked = nxt, walked + [part]
-    items = [getattr(c, "text", "") for c in ui.Inspector.get_children(level)]
-    return "/".join(walked), [t for t in items if t][:40]
+    found = menu_walk("/".join(parts if inside else parts[:-1]))
+    items = [getattr(c, "text", "") for c in ui.Inspector.get_children(found[-1])
+             if getattr(c, "visible", True) and "Separator" not in type(c).__name__]
+    return "/".join(parts[: len(found) - 1]), [t for t in items if t][:40]
 
 
 def find(a):
@@ -369,8 +410,12 @@ def find(a):
 
     from .graph import _headless
 
+    if a.get("readiness"):  # internal: the host's doctor tool; reads, never enables anything
+        return readiness()
     if _headless():  # no layout to report, and walking every widget took about 38 s per call on 6.1
         raise UIRefusal("NO_UI", "This Kit has no application window (headless); finding widgets needs a windowed Isaac Sim.")
+    if a.get("zoom_ref"):
+        return zoom_rect(a["zoom_ref"])
     query = a.get("query", "") or ""
     window = a.get("window", "") or ""
     limit = a.get("limit", 40)
@@ -382,6 +427,7 @@ def find(a):
     dpi = ui.Workspace.get_dpi_scale()
     widgets, matched, budget, hidden, examined = [], 0, 48_000, 0, 0  # stay well under the 64 KiB cap
     rects = {w.title: (w.position_x, w.position_y, w.width, w.height) for w in ui.Workspace.get_windows()}
+    containers = {}
     for title, ref, widget, cheap in _candidates(window or None, bool(query), query):
         matched += 1
         if len(widgets) >= limit or budget <= 0 or examined >= 4 * limit:
@@ -396,7 +442,7 @@ def find(a):
         except Exception:  # noqa: BLE001 - stale or not yet laid out
             hidden += 1
             continue
-        if _shown(path, (center.x, center.y), ui_test) is not None:
+        if _shown(path, (center.x, center.y), ui_test, containers) is not None:
             hidden += 1
             continue
         record = widget_record(cheap["type"], f"{path}|{_widget_fingerprint(widget, path, ui_test)}", title, cheap["name"],
@@ -405,8 +451,7 @@ def find(a):
         budget -= len(json.dumps(record))
         widgets.append(record)
     return dict(
-        main_window=dict(width=round(ui.Workspace.get_main_window_width()),
-                         height=round(ui.Workspace.get_main_window_height()), dpi_scale=dpi),
+        main_window=dict(zip(("width", "height"), main_window_pixels()), dpi_scale=dpi),
         windows=windows() if not window else [w for w in windows() if window.lower() in w["title"].lower()],
         hidden_tabs=[t for t in hidden_tabs() if not window or window.lower() in t.lower()],
         menu_bar=_menu_bar(),
@@ -418,6 +463,32 @@ def find(a):
                     "screenshot(window_id=<Isaac Sim window>). Pass ref to sim__ui__act to target a widget; "
                     "widgets scrolled out of view, outside their window or under a floating window are left out.",
     )
+
+
+def readiness():
+    """What the host's doctor tool reports about Kit's UI. Reads only: never enables an extension."""
+    import omni.kit.app
+    import omni.ui as ui
+
+    from .graph import _headless
+
+    def read(getter):
+        try:
+            return getter()
+        except Exception:  # noqa: BLE001 - a headless Kit may have no workspace to ask
+            return None
+
+    em = omni.kit.app.get_app().get_extension_manager()
+    width, height = read(main_window_pixels) or (None, None)
+    return dict(ui_test_enabled=bool(em.is_extension_enabled("omni.kit.ui_test")), headless=bool(_headless()),
+                dpi_scale=read(ui.Workspace.get_dpi_scale), main_window=dict(width=width, height=height))
+
+
+def zoom_rect(ref):
+    """The widget's centre (x, y, as find reports it) and size in window pixels, for the host to crop
+    around. The ref is checked as for an action: a stale, hidden or covered widget is refused."""
+    x, y, hit = _resolve({"ref": ref})
+    return dict(ref=ref, type=hit["type"], name=hit["name"], x=x, y=y, width=hit["width"], height=hit["height"])
 
 
 def _resolve(a):
@@ -464,20 +535,289 @@ def _resolve(a):
             except Exception:  # noqa: BLE001
                 pass
         return round(c.x * dpi), round(c.y * dpi), dict(ref=ref, type=type(found.widget).__name__,
-                                                          name=getattr(found.widget, "name", ""), enabled=enabled)
+                                                          name=getattr(found.widget, "name", ""), enabled=enabled,
+                                                          width=round(s.x * dpi), height=round(s.y * dpi))
     x, y = a.get("x"), a.get("y")
     if type(x) is not int or type(y) is not int:
         raise UIRefusal("INVALID_VALUE", "Give ref (from sim__ui__find) or integer x and y window pixels.")
     return x, y, None
 
 
-def _check_point(x, y):
+def main_window_pixels():
+    """The Isaac Sim window's size in pixels: the unit of x and y, of screenshots and of the X11 window.
+    omni.ui measures the workspace in UI points, so at a display scale of 1.5 a 1440x900 window says 960x600."""
     import omni.ui as ui
 
-    w, h = ui.Workspace.get_main_window_width(), ui.Workspace.get_main_window_height()
+    dpi = ui.Workspace.get_dpi_scale() or 1.0
+    return round(ui.Workspace.get_main_window_width() * dpi), round(ui.Workspace.get_main_window_height() * dpi)
+
+
+def _check_point(x, y):
+    w, h = main_window_pixels()
     if not (0 <= x < w and 0 <= y < h):
-        raise UIRefusal("OUT_OF_WINDOW", f"({x}, {y}) is outside the Isaac Sim window ({round(w)}x{round(h)} pixels).")
+        raise UIRefusal("OUT_OF_WINDOW", f"({x}, {y}) is outside the Isaac Sim window ({w}x{h} pixels).")
     return w, h
+
+
+def check_step(a):
+    """Refuse a malformed action before anything is sent (pure, no Kit). Returns the frames it waits."""
+    action = a.get("action")
+    if action not in ACTIONS:
+        raise UIRefusal("INVALID_VALUE", f"action must be one of {', '.join(ACTIONS)}.")
+    frames = a.get("frames", 3)
+    if type(frames) is not int or not 0 <= frames <= 600:
+        raise UIRefusal("INVALID_VALUE", "frames: 0..600 frames to wait after the action.")
+    if action == "type":
+        text = a.get("text")
+        if not isinstance(text, str) or not 1 <= len(text) <= MAX_TEXT or any(c in "\r\n\t" or ord(c) < 32 for c in text):
+            raise UIRefusal("INVALID_VALUE", f"text: 1..{MAX_TEXT} characters without control characters; "
+                                             "send enter or tab with action=keypress.")
+    elif action == "keypress":
+        parse_keys(a.get("keys"))
+    elif action == "scroll":
+        sx, sy = a.get("scroll_x", 0), a.get("scroll_y", 0)
+        if type(sx) is not int or type(sy) is not int or not (sx or sy) or abs(sx) > 20 or abs(sy) > 20:
+            raise UIRefusal("INVALID_VALUE", "scroll_x/scroll_y: wheel steps, -20..20, not both 0 (negative "
+                                             "scroll_y scrolls down).")
+    elif action == "drag" and (type(a.get("end_x")) is not int or type(a.get("end_y")) is not int):
+        raise UIRefusal("INVALID_VALUE", "drag needs integer end_x and end_y window pixels.")
+    elif action == "menu":
+        menu_path(a.get("menu"))
+    elif action in ("tab", "close"):
+        window_title(a.get("window"), action)
+    if action in POINTER_ACTIONS and not a.get("ref") and (type(a.get("x")) is not int or type(a.get("y")) is not int):
+        raise UIRefusal("INVALID_VALUE", "Give ref (from sim__ui__find) or integer x and y window pixels.")
+    return frames
+
+
+def _batch_steps(a):
+    """The batch's steps, every one checked before the first is run (its x/y points too; a ref or a window
+    title is resolved when its step runs, since an earlier step may open it). The top-level ``frames`` is
+    each step's wait unless the step gives its own; other top-level keys that are not an action's own
+    (internal flags the host adds) are passed to each step."""
+    steps = a["actions"]
+    if not isinstance(steps, list) or not 1 <= len(steps) <= MAX_BATCH:
+        raise UIRefusal("INVALID_VALUE", f"actions: 1..{MAX_BATCH} action objects.")
+    # scroll_x/scroll_y arrive as 0 when unset (their default); a top-level action is ignored here.
+    given = [k for k in STEP_FIELDS if a.get(k) is not None and not (k in ("scroll_x", "scroll_y") and a[k] == 0)]
+    if given:
+        raise UIRefusal("INVALID_VALUE", f"With actions, give {', '.join(given)} inside each step, not at the top level.")
+    shared = {k: v for k, v in a.items() if k not in STEP_FIELDS + ("action", "actions", "find_after")}
+    out, frames = [], 0
+    for i, step in enumerate(steps):
+        if not isinstance(step, dict) or set(step) - set(STEP_FIELDS + ("action", "frames")):
+            raise UIRefusal("INVALID_VALUE", f"actions[{i}]: an object with action (inside a step the key is "
+                                             f"action, not sub_action) and its own arguments "
+                                             f"({', '.join(STEP_FIELDS)}, frames) only.")
+        step = {**shared, **step}
+        try:
+            frames += max(check_step(step), 2)
+            if step["action"] in POINTER_ACTIONS and not step.get("ref"):
+                _check_point(step["x"], step["y"])
+            if step["action"] == "drag":
+                _check_point(step["end_x"], step["end_y"])
+        except UIRefusal as exc:
+            raise UIRefusal(exc.code, f"actions[{i}]: {exc}") from None
+        out.append(step)
+    if frames > MAX_BATCH_FRAMES:
+        raise UIRefusal("INVALID_VALUE", f"actions wait {frames} frames in all (a step counts as at least 2); "
+                                         f"keep the batch at {MAX_BATCH_FRAMES} or less, or split it.")
+    return out
+
+
+def _find_after(query):
+    """Up to 10 widgets matching *query*, compactly. A failure is a note: the action already happened."""
+    try:
+        found = find(dict(query=query, limit=10))
+    except Exception as exc:  # noqa: BLE001
+        return dict(query=query, note=f"find_after failed: {exc}")
+    keys = ("ref", "type", "name", "text", "value", "x", "y")
+    return dict(query=query, matches=found["matches"],
+                widgets=[{k: w[k] for k in keys if k in w} for w in found["widgets"]])
+
+
+# ---------------------------------------------------------------- cursor badge (opt-in: the host passes badge=True)
+# The protocol of the host's mcp/twinsmith/cursor_badge.py, which Kit cannot import: in the folder the host
+# names (its own, so both use the same whatever their environments say), the shown badge keeps the flag file
+# badge-<pid>-kit.shown (holding this process's start time, as cursor_badge.process_start reads it), hides
+# while a host screenshot holds capture.lock (probed with a non-blocking exclusive flock) and deletes the
+# flag once the hidden frame is drawn, so no screenshot shows it. Recordings take no lock and show it.
+
+BADGE_TITLE = "twinsmith cursor badge"
+BADGE_SIZE, BADGE_OFFSET = 14, 6  # UI points; its corner sits below and right of the hotspot, never on it
+BADGE_GLIDE_S, BADGE_LINGER_S = 0.15, 1.5
+BADGE_LOCK = "capture.lock"
+_badge_state = []  # [the _KitBadge], or [None] once it failed
+
+
+def _capture_held(fd):
+    import fcntl
+
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    fcntl.flock(fd, fcntl.LOCK_UN)
+    return False
+
+
+class _KitBadge:
+    """A borderless omni.ui window without inputs, moved over frames by an update subscription that
+    exists only while it is shown."""
+
+    def __init__(self, directory):
+        import os
+        import stat
+        from pathlib import Path
+
+        import omni.ui as ui
+
+        # Without these it could take the next click or the keyboard focus (_shown() ignores it): stay off.
+        missing = [n for n in ("NO_MOUSE_INPUTS", "NO_FOCUS_ON_APPEARING") if not hasattr(ui, f"WINDOW_FLAGS_{n}")]
+        if missing:
+            raise RuntimeError(f"omni.ui has no WINDOW_FLAGS_{' or WINDOW_FLAGS_'.join(missing)}")
+        flags = ui.WINDOW_FLAGS_NO_MOUSE_INPUTS | ui.WINDOW_FLAGS_NO_FOCUS_ON_APPEARING
+        for name in ("NO_TITLE_BAR", "NO_RESIZE", "NO_MOVE", "NO_SCROLLBAR", "NO_SCROLL_WITH_MOUSE", "NO_COLLAPSE",
+                     "NO_CLOSE", "NO_SAVED_SETTINGS", "NO_BACKGROUND", "NO_DOCKING"):
+            flags |= getattr(ui, f"WINDOW_FLAGS_{name}", 0)  # cosmetic
+        self.directory = directory = Path(directory)
+        # The host made the folder; nothing is created from a path that arrives over the bridge. As the
+        # host's cursor_badge.trusted: a private folder of this account, in a folder of the same kind.
+        if not (directory.is_absolute() and directory.name == "twinsmith-desktop" and all(
+                stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022
+                for info in (os.lstat(directory), os.lstat(directory.parent)))):
+            raise RuntimeError(f"{directory} is not a private twinsmith-desktop folder of this account")
+        self.flag = directory / f"badge-{os.getpid()}-kit.shown"
+        try:  # the host's cursor_badge.process_start: a reused PID is then not mistaken for this Kit
+            self.started = Path(f"/proc/{os.getpid()}/stat").read_bytes().rsplit(b")", 1)[1].split()[19].decode()
+        except (OSError, IndexError, ValueError):
+            self.started = ""
+        self.fd = os.open(directory / BADGE_LOCK, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        self.window = ui.Window(BADGE_TITLE, width=BADGE_SIZE, height=BADGE_SIZE, flags=flags, visible=False)
+        for attr in ("padding_x", "padding_y"):
+            try:
+                setattr(self.window, attr, 0)
+            except Exception:  # noqa: BLE001 - cosmetic
+                pass
+        with self.window.frame:
+            ui.Circle(style={"background_color": 0xFF008CFF, "border_color": 0xFFFFFFFF, "border_width": 1})
+        self.sub, self.pos, self.hiding = None, None, 0
+        self.start = self.end = (0.0, 0.0)
+        self.t0 = self.last = 0.0
+
+    def glide_to(self, x, y, jump=False):
+        """Glide over the next frames (or with ``jump`` move at once) to window pixel (x, y)."""
+        import time
+
+        import omni.ui as ui
+
+        dpi = ui.Workspace.get_dpi_scale() or 1.0
+        end = (x / dpi + BADGE_OFFSET, y / dpi + BADGE_OFFSET)
+        start = end if jump or self.pos is None else self.pos
+        if not self.window.visible or self.hiding:
+            self.window.position_x, self.window.position_y = start
+            if not self._show():
+                return
+        self.start, self.end = start, end
+        self.t0 = self.last = time.monotonic()
+
+    def _show(self):
+        """Flag, then probe, then show: a capture that locks after the probe still sees the flag."""
+        import os
+
+        draft = self.flag.with_suffix(".draft")
+        draft.write_text(self.started)
+        os.replace(draft, self.flag)  # put in place whole: a capture never reads it half written
+        if _capture_held(self.fd):
+            if not self.hiding:  # while hiding, the last shown frame may still be on screen: _update drops the flag
+                self.flag.unlink(missing_ok=True)
+            return False
+        self.hiding = 0
+        self.window.visible = True
+        if self.sub is None:
+            import omni.kit.app
+
+            self.sub = omni.kit.app.get_app().get_update_event_stream().create_subscription_to_pop(
+                self._update, name="twinsmith cursor badge")
+        return True
+
+    def close(self):
+        """After a failure, or when another host's folder takes over: no badge left on screen, no flag
+        left to hold up every screenshot, and nothing kept open."""
+        import os
+
+        self.sub = None
+        try:
+            self.window.visible = False
+            getattr(self.window, "destroy", lambda: None)()
+        finally:
+            self.flag.unlink(missing_ok=True)
+            os.close(self.fd)
+
+    def _update(self, _event=None):
+        import time
+
+        if self.hiding:  # hidden: drop the flag once that frame has been drawn
+            self.hiding -= 1
+            if not self.hiding:
+                self.flag.unlink(missing_ok=True)
+                self.sub = None
+            return
+        now = time.monotonic()
+        if now - self.last > BADGE_LINGER_S or _capture_held(self.fd):
+            self.window.visible = False
+            self.hiding = 2
+            return
+        t = min(1.0, (now - self.t0) / BADGE_GLIDE_S)
+        self.pos = tuple(a + (b - a) * t for a, b in zip(self.start, self.end))
+        self.window.position_x, self.window.position_y = self.pos
+
+
+def badge(x, y, directory, jump=False):
+    """Show the cursor badge at window pixel (x, y), hiding for the screenshots of the host whose folder
+    ``directory`` is. Best effort: a failure turns it off, never the act."""
+    if _badge_state and _badge_state[0] is None:
+        return
+    try:
+        if _badge_state and str(_badge_state[0].directory) != directory:  # another host asks: follow its lock
+            _badge_state.pop().close()
+        if not _badge_state:
+            _badge_state.append(_KitBadge(directory))
+        _badge_state[0].glide_to(x, y, jump)
+    except Exception as exc:  # noqa: BLE001
+        failed, _badge_state[:] = (_badge_state or [None])[0], [None]
+        try:
+            if failed is not None:
+                failed.close()
+            import carb
+
+            carb.log_warn(f"twinsmith cursor badge off: {exc}")
+        except Exception:  # noqa: BLE001
+            pass
+
+
+async def run_act(a):
+    """What sim.ui.act runs: one action, or a batch of up to MAX_BATCH (``actions``) that stops at the first
+    failure, then optionally up to 10 widgets matching ``find_after``. Internal flags such as ``badge``
+    reach every step."""
+    query = a.get("find_after")
+    if query is not None and (not isinstance(query, str) or not 1 <= len(query) <= 120):
+        raise UIRefusal("INVALID_VALUE", "find_after: text of 1..120 characters, matched like sim__ui__find query.")
+    if a.get("actions") is None:
+        result = await act(a)
+        return dict(result, find_after=_find_after(query)) if query else result
+    steps = _batch_steps(a)
+    done = []
+    for i, step in enumerate(steps):
+        try:
+            done.append(await act(step))
+        except Exception as exc:  # noqa: BLE001 - reported with the steps that ran
+            extra = dict(find_after=_find_after(query)) if query else {}
+            raise UIRefusal(getattr(exc, "code", "ACT_FAILED"), f"actions[{i}] ({step['action']}): {exc}",
+                            effects=f"The {i} step(s) before it ran and sent input; inspect the UI before retrying." if i else None,
+                            completed=i, failed_index=i, steps=done, **extra) from exc
+    result = dict(action="batch", completed=len(done), steps=done)
+    return dict(result, find_after=_find_after(query)) if query else result
 
 
 async def act(a):
@@ -487,12 +827,8 @@ async def act(a):
     import omni.kit.app
     from carb.input import KeyboardEventType, MouseEventType
 
-    action = a.get("action")
-    if action not in ACTIONS:
-        raise UIRefusal("INVALID_VALUE", f"action must be one of {', '.join(ACTIONS)}.")
-    frames = a.get("frames", 3)
-    if type(frames) is not int or not 0 <= frames <= 600:
-        raise UIRefusal("INVALID_VALUE", "frames: 0..600 frames to wait after the action.")
+    frames = check_step(a)  # everything checkable without Kit, before the first event
+    action = a["action"]
     app = omni.kit.app.get_app()
     appwin = omni.appwindow.get_default_app_window()
     if appwin is None:
@@ -508,32 +844,22 @@ async def act(a):
         provider.buffer_mouse_event(mouse, kind, (x / w, y / h), 0, (float(x), float(y)))
 
     # Validate everything before the first event, so a refusal really means nothing was sent.
-    text = keys = target = end = scroll = None
-    if action == "type":
-        text = a.get("text")
-        if not isinstance(text, str) or not 1 <= len(text) <= MAX_TEXT or any(c in "\r\n\t" or ord(c) < 32 for c in text):
-            raise UIRefusal("INVALID_VALUE", f"text: 1..{MAX_TEXT} characters without control characters; "
-                                             "send enter or tab with action=keypress.")
-    if action == "keypress":
-        keys = parse_keys(a.get("keys"))
-    if action == "scroll":
-        scroll = a.get("scroll_x", 0), a.get("scroll_y", 0)
-        sx, sy = scroll
-        if type(sx) is not int or type(sy) is not int or not (sx or sy) or abs(sx) > 20 or abs(sy) > 20:
-            raise UIRefusal("INVALID_VALUE", "scroll_x/scroll_y: wheel steps, -20..20, not both 0 (negative "
-                                             "scroll_y scrolls down).")
-    if action == "drag":
-        end = a.get("end_x"), a.get("end_y")
-        if type(end[0]) is not int or type(end[1]) is not int:
-            raise UIRefusal("INVALID_VALUE", "drag needs integer end_x and end_y window pixels.")
+    target = None
+    text = a.get("text") if action == "type" else None
+    keys = parse_keys(a.get("keys")) if action == "keypress" else None
+    scroll = (a.get("scroll_x", 0), a.get("scroll_y", 0)) if action == "scroll" else None
+    end = (a.get("end_x"), a.get("end_y")) if action == "drag" else None
+    if end:
         _check_point(*end)
     focus_first = action in ("type", "keypress") and (a.get("ref") or a.get("x") is not None)
-    if action in ("click", "double_click", "right_click", "move", "drag", "scroll") or focus_first:
+    if action in POINTER_ACTIONS or focus_first:
         target = _resolve(a)
         _check_point(target[0], target[1])
         hit = target[2]
         if hit is not None and not hit["enabled"] and action != "move":
             raise UIRefusal("DISABLED", "That widget is disabled (greyed out); it would ignore the input.")
+        if a.get("badge"):  # internal: the host's [screen] cursor_badge; adds no wait to the action
+            badge(target[0], target[1], a["badge"])
 
     menu = menu_path(a.get("menu")) if action == "menu" else None
     result = dict(action=action)
@@ -545,7 +871,7 @@ async def act(a):
 
         win = ui.Workspace.get_window(title)
         if win is None:
-            names = sorted({w.title for w in ui.Workspace.get_windows() if w.title})
+            names = sorted({w.title for w in ui.Workspace.get_windows() if w.title and w.title != BADGE_TITLE})
             raise UIRefusal("NO_WINDOW", f"No Kit window titled {title!r}. Known windows: {', '.join(names[:40])}. "
                                          "Closed windows open from the Window menu (action=menu).")
         if action == "close":
@@ -570,43 +896,62 @@ async def act(a):
         return dict(result, frames_waited=max(frames, 1))
 
     if action == "menu":
+        import omni.ui as ui
+
         path = menu
         ui_test = _ui_test()
-        try:
-            await ui_test.menu_click(path)
-        except Exception as exc:  # noqa: BLE001
+        top = path.split("/")[0]
+
+        async def close():
+            """Close the menu this action opened (Kit menus ignore an Escape keypress sent this way), so
+            none is left covering the viewport. True when it is closed."""
+            try:
+                await ui_test.menu_click(top, show=False)
+                await tick(2)
+                menu_ref = ui_test.get_menubar().find_menu(top)
+                return not getattr(getattr(menu_ref, "widget", None), "shown", False)
+            except Exception:  # noqa: BLE001
+                return False
+
+        def not_found(closed, effects, hint=""):
             try:
                 level, items = menu_children(path)
             except Exception:  # noqa: BLE001
                 level, items = "", []
             where = f"under '{level}'" if level else "on the menu bar"
-            hint = (f" Items {where}: {', '.join(items)}." if items else
-                    f" Nothing is listed {where}: its extension may not be loaded yet (for the Action Graph "
-                    "editor use sim__graph__show).")
-            raise UIRefusal("MENU_NOT_FOUND", f"Could not open menu {path!r}.{hint} If a menu was left open, "
-                                              "action=menu with its top-level name (e.g. 'Window') opens and "
-                                              "closes it.") from exc
+            hint = hint or (f" Items {where}: {', '.join(items)}." if items else
+                            f" Nothing is listed {where}: its extension may not be loaded yet (for the Action "
+                            "Graph editor use sim__graph__show).")
+            state = "" if closed else (" A menu may still be open: action=menu with its top-level name "
+                                       "(e.g. 'Window') opens and closes it.")
+            return UIRefusal("MENU_NOT_FOUND", f"Could not open menu {path!r}.{hint}{state}", effects=effects)
+
+        levels = menu_walk(path)[1:]
+        item = next((name for name, level in zip(path.split("/")[:-1], levels) if not isinstance(level, ui.Menu)), None)
+        if item:  # a walk down the path would click it on its way
+            raise not_found(True, "No input was sent.", f" '{item}' is an item, not a menu: nothing is under it.")
+        if any(not getattr(level, "visible", True) for level in levels):
+            # A hidden entry (its extension or layout is off): nothing is opened.
+            raise not_found(True, "No input was sent.")
+        try:
+            await ui_test.menu_click(path)
+        except Exception as exc:  # noqa: BLE001
+            if not levels:
+                raise not_found(True, "No input was sent.") from exc
+            closed = await close()
+            raise not_found(closed, "The menu was opened, and closed again." if closed else None) from exc
         await tick(frames)
-        if "/" not in path:
-            # A top-level menu: clicking it only opens it. Report what it offers, then close it again (Kit
-            # menus ignore an Escape keypress sent this way), so no menu is left covering the viewport.
+        if len(levels) == path.count("/") + 1 and isinstance(levels[-1], ui.Menu):
+            # A menu, not an item: clicking it only opens it. Report what it offers, then close it again.
             try:
                 _, items = menu_children(path, inside=True)
             except Exception:  # noqa: BLE001
                 items = []
             items = [t for t in items if t != "placeholder"]
-            left_open = None
-            try:
-                await ui_test.menu_click(path, show=False)
-                await tick(2)
-                menu_ref = ui_test.get_menubar().find_menu(path)
-                left_open = bool(getattr(getattr(menu_ref, "widget", None), "shown", False))
-            except Exception:  # noqa: BLE001
-                pass
-            return dict(result, menu=path, items=items, closed_again=left_open is False, frames_waited=frames,
-                        note=f"'{path}' is a top-level menu: it was opened to list its items" +
-                             (" and closed again" if left_open is False else
-                              "; it may still be open, check with a screenshot") +
+            closed = await close()
+            return dict(result, menu=path, items=items, closed_again=closed, frames_waited=frames,
+                        note=f"'{path}' is a menu, not an item: it was opened to list its items" +
+                             (" and closed again" if closed else "; it may still be open, check with a screenshot") +
                              f". Run an item with menu='{path}/<item>'.")
         return dict(result, menu=path, frames_waited=frames,
                     note="menu clicks move Kit's cursor through the menu; verify with a screenshot")
@@ -666,8 +1011,9 @@ async def act(a):
         return dict(result, frames_waited=frames)
     if action == "scroll":
         sx, sy = scroll
-        # Same encoding as omni.kit.ui_test.emulate_mouse_scroll: the delta goes in both coordinate slots.
-        provider.buffer_mouse_event(mouse, MouseEventType.SCROLL, (sx / w, sy / h), 0, (float(sx), float(sy)))
+        # Kit reads the wheel steps from the first (normalised) slot as they are. Dividing them by the
+        # window size, as omni.kit.ui_test.emulate_mouse_scroll does, scrolls a hundredth of a step.
+        provider.buffer_mouse_event(mouse, MouseEventType.SCROLL, (float(sx), float(sy)), 0, (float(sx), float(sy)))
         await tick(frames)
         return dict(result, scroll=dict(x=sx, y=sy), frames_waited=frames)
     # drag
@@ -675,7 +1021,10 @@ async def act(a):
     mouse_event(MouseEventType.LEFT_BUTTON_DOWN, x, y, w, h)
     await tick(2)
     for i in range(1, 13):
-        mouse_event(MouseEventType.MOVE, round(x + (ex - x) * i / 12), round(y + (ey - y) * i / 12), w, h)
+        px, py = round(x + (ex - x) * i / 12), round(y + (ey - y) * i / 12)
+        mouse_event(MouseEventType.MOVE, px, py, w, h)
+        if a.get("badge"):
+            badge(px, py, a["badge"], jump=True)
         await tick(1)
     mouse_event(MouseEventType.LEFT_BUTTON_UP, ex, ey, w, h)
     await tick(frames)

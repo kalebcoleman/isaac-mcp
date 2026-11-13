@@ -23,7 +23,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Callable, Iterable
+from typing import Annotated, Any, Callable, Iterable
 
 from pydantic import Field
 
@@ -35,6 +35,8 @@ from Xlib.protocol import event as xevent
 
 from mcp.server.fastmcp import FastMCP, Image
 
+from . import cursor_badge, toolsets
+from .client import BridgeClient, BridgeError
 from .local_tools import ADDITIVE, IDEMPOTENT_WRITE, READ_ONLY, ScopedTools
 
 _WindowTitle = Annotated[str | None, Field(description="Window title or WM class substring, from list_windows.")]
@@ -42,7 +44,8 @@ _WindowId = Annotated[int | None, Field(description="Window id from list_windows
 _ExpectedPid = Annotated[int | None, Field(description="Refuse unless the window belongs to this PID, from list_windows.")]
 _Monitor = Annotated[int | None, Field(description="1-based monitor index from screen_info; 0 means all monitors combined.")]
 
-DISPLAY = os.environ.get("DISPLAY") or ":0"
+ENV_DISPLAY = os.environ.get("DISPLAY")  # as the session gave it, before the default below
+DISPLAY = ENV_DISPLAY or ":0"
 os.environ.setdefault("DISPLAY", DISPLAY)
 
 MAX_WINDOW_WAIT_S = 600
@@ -50,6 +53,7 @@ WINDOW_WAIT_POLL_S = 0.5
 MAX_LOG_MARKER_CHARS = 256
 LOG_MARKER_WARN_S = 30.0
 SHOT_DIR = Path.home() / "Pictures" / "twinsmith"
+SHOT_MAX_WIDTH = 1600  # screenshot's inline width cap
 VIDEO_DIR = Path.home() / "Videos" / "twinsmith"
 
 
@@ -1009,7 +1013,7 @@ LOCKED_RECORD_NOTE = ("\nnote: the screen is locked or blanked, so each frame is
                       "few windows, window_id=... or window_ids=[...] is cheaper and sharper.")
 COMPOSITE_NOTE = ("\nnote: the screen is locked or blanked (the PC is probably used remotely), so this image "
                   "was composed from the visible windows' own pixels in stacking order; window decorations, "
-                  "panels and the wallpaper are not shown. Desktop input (window_*) is refused while locked; "
+                  "panels and the wallpaper are not shown. Desktop input (computer) is refused while locked; "
                   "for Isaac Sim's UI use sim__ui__find and sim__ui__act.")
 
 
@@ -1402,6 +1406,310 @@ def _stamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
 
 
+_TOKEN = re.compile(r"img:(\d+)x(\d+)@(\d+),(\d+),(\d+)x(\d+)/(\d+)x(\d+)")
+
+
+def coord_token(image_w: int, image_h: int, rect: tuple[int, int, int, int], window_w: int, window_h: int) -> str:
+    """The coord_space a window capture prints: an image of ``image_w`` x ``image_h`` showing ``rect``
+    (x, y, width, height in window pixels) of a ``window_w`` x ``window_h`` window."""
+    x, y, w, h = rect
+    return f"img:{image_w}x{image_h}@{x},{y},{w}x{h}/{window_w}x{window_h}"
+
+
+def _token(coord_space: str, width: int, height: int) -> tuple[int, int, int, int, int, int]:
+    """A coord_space token's image size and window rectangle (iw, ih, rx, ry, rw, rh), checked against a
+    window that must still be ``width`` x ``height`` (the size it had when the token was printed)."""
+    match = _TOKEN.fullmatch(str(coord_space).strip())
+    if not match:
+        raise ValueError("coord_space must be 'window' or the coord_space token a screenshot printed, "
+                         "e.g. img:1600x900@0,0,2560x1440/2560x1440")
+    iw, ih, rx, ry, rw, rh, ww, wh = map(int, match.groups())
+    if (ww, wh) != (width, height):
+        raise ValueError(f"that screenshot showed a {ww}x{wh} window, but this one is {width}x{height}: it was "
+                         "resized, or the token is another window's; capture this window again")
+    if not (iw and ih and rw and rh) or rx + rw > ww or ry + rh > wh:
+        raise ValueError("coord_space token is inconsistent; capture the window again")
+    return iw, ih, rx, ry, rw, rh
+
+
+def map_point(coord_space: str | None, x: int, y: int, width: int, height: int) -> tuple[int, int]:
+    """The one place image pixels become window pixels: (x, y) in ``coord_space`` -> original window pixels.
+
+    ``window`` (or None) means x and y already are window pixels. Any other value is the coord_space
+    token a capture printed; the window must still be ``width`` x ``height`` (the size it had then)."""
+    if coord_space in (None, "", "window"):
+        return x, y
+    iw, ih, rx, ry, rw, rh = _token(coord_space, width, height)
+    if type(x) is not int or type(y) is not int:
+        raise ValueError(f"x and y must be integer pixels of that image, not {x!r} and {y!r}")
+    if not (0 <= x < iw and 0 <= y < ih):
+        raise ValueError(f"({x}, {y}) is outside that {iw}x{ih} image")
+    # Pixel centres: the last image pixel lands inside the rectangle, never on its far edge.
+    return rx + int((x + 0.5) * rw / iw), ry + int((y + 0.5) * rh / ih)
+
+
+ZOOM_MAX = 4  # a crop is enlarged at most this much; beyond it pixels only get blurrier
+
+
+def region_rect(region, coord_space: str | None, width: int, height: int) -> tuple[int, int, int, int]:
+    """[x, y, width, height] in ``coord_space`` -> (x, y, width, height) in pixels of a ``width`` x
+    ``height`` window: every window pixel the region's image pixels show, so a region read off a
+    downscaled screenshot or an earlier zoom loses nothing at its edges."""
+    if not (isinstance(region, (list, tuple)) and len(region) == 4 and all(type(v) is int for v in region)):
+        raise ValueError("region must be [x, y, width, height] as integers")
+    x, y, w, h = region
+    if w < 1 or h < 1:
+        raise ValueError("region width and height must be at least 1")
+    x0, y0, x1, y1 = x, y, x + w, y + h  # half-open, in window pixels
+    if coord_space not in (None, "", "window"):
+        iw, ih, rx, ry, rw, rh = _token(coord_space, width, height)
+        if not (0 <= x and x + w <= iw and 0 <= y and y + h <= ih):
+            raise ValueError(f"region {region} is outside that {iw}x{ih} image")
+        x0, x1 = rx + x * rw // iw, rx + -(-(x + w) * rw // iw)
+        y0, y1 = ry + y * rh // ih, ry + -(-(y + h) * rh // ih)
+    if not (0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height):
+        raise ValueError(f"region {region} is outside the {width}x{height} window")
+    return x0, y0, x1 - x0, y1 - y0
+
+
+def zoom_size(width: int, height: int, max_width: int) -> tuple[int, int]:
+    """Inline size of a width x height crop: as large as fits a max_width square, at most ZOOM_MAX times."""
+    scale = min(ZOOM_MAX, max_width / width, max_width / height)
+    return max(1, round(width * scale)), max(1, round(height * scale))
+
+
+SETTLE_S = 1.0        # after an action, wait at most this long for the window to stop changing
+SETTLE_POLL_S = 0.12
+
+
+def _settled(win: dict) -> tuple[PILImage.Image, bool]:
+    """The window's image once two grabs SETTLE_POLL_S apart are equal, and whether it settled within
+    SETTLE_S. An app repaints some frames after its input arrives; a grab taken at once shows the old state."""
+    deadline = time.monotonic() + SETTLE_S
+    image = None
+    while True:
+        time.sleep(SETTLE_POLL_S)
+        with cursor_badge.capture_hold():  # every cursor badge is hidden while the pixels are read
+            latest = _grab_window_image(win)
+        if image is not None and latest.size == image.size and latest.tobytes() == image.tobytes():
+            return latest, True
+        if time.monotonic() > deadline:
+            return latest, False
+        image = latest
+
+
+def capture(monitor: int | None = None, window: str | None = None, window_id: int | None = None,
+            max_width: int = SHOT_MAX_WIDTH, label: str | None = None, region: list[int] | None = None,
+            coord_space: str = "window", auto: Callable[[], dict | None] | None = None,
+            settle: bool = False) -> list:
+    """What the screenshot tool returns: [Image, caption]. Also used after an action (screenshot_after,
+    with ``settle``: the window is read once it has stopped changing) and for zooms, so there is one
+    capture path. ``auto`` picks the default window when none is named."""
+    SHOT_DIR.mkdir(parents=True, exist_ok=True)
+    max_width = max(320, min(int(max_width), 3840))
+    target = None
+    composed = False
+    if window or window_id is not None:
+        target = _match_window(window, window_id)
+    elif monitor is None:
+        target = auto() if auto else None
+    if region is not None and target is None:
+        raise ValueError("region zooms into a window: name one with window or window_id")
+    if target is not None:
+        win = target
+        changing = False
+        if settle:
+            full, still = _settled(win)
+            changing = not still
+        else:
+            with cursor_badge.capture_hold():  # every cursor badge is hidden while the pixels are read
+                full = _grab_window_image(win)
+        window_size = full.size
+        rect = (0, 0, *window_size)
+        if region is not None:
+            rect = region_rect(region, coord_space, *window_size)
+            full = full.crop((rect[0], rect[1], rect[0] + rect[2], rect[1] + rect[3]))
+        source = f"{win['width']}x{win['height']}+{win['x']}+{win['y']}"
+        target_label = f"{win['title']} (id={win['id']})"
+    else:
+        bbox = _bbox(1 if monitor is None else monitor)
+        composed = _screen_locked()
+        with cursor_badge.capture_hold():
+            if composed:
+                full, painted = _composite(bbox)
+            else:
+                with mss.MSS() as sct:
+                    raw = sct.grab(bbox)
+                full = PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+        source = f"{bbox['width']}x{bbox['height']}+{bbox['left']}+{bbox['top']}"
+        target_label = f"monitor {1 if monitor is None else monitor}" + (
+            f" (composed from {painted} window(s))" if composed else "")
+    path = SHOT_DIR / f"screen-{_stamp()}{_label_tag(label)}.png"
+    full.save(path, "PNG", optimize=True)
+    inline = full
+    if region is not None:
+        size = zoom_size(full.width, full.height, max_width)
+        if size != full.size:
+            inline = full.resize(size, PILImage.LANCZOS)
+    elif full.width > max_width:
+        height = max(1, round(full.height * max_width / full.width))
+        inline = full.resize((max_width, height), PILImage.LANCZOS)
+    caption = (
+        f"saved: {path}\n"
+        f"saved size: {full.width}x{full.height}\n"
+        f"inline size: {inline.width}x{inline.height}\n"
+        f"source: {source}\n"
+        f"window: {target_label}"
+    )
+    if target is not None:
+        # Input tools map points in this image back to window pixels themselves (OpenAI's computer-use
+        # guide: map coordinates from a downscaled screenshot to the environment's pixels).
+        if region is not None:
+            caption += (f"\nregion: {rect[0]},{rect[1]},{rect[2]}x{rect[3]} of the {window_size[0]}x{window_size[1]} "
+                        f"window, shown {inline.width / full.width:.2f}x")
+        token = coord_token(inline.width, inline.height, rect, *window_size)
+        caption += f"\ncoord_space: {token} (pass it with x/y measured in this image)"
+        if changing:
+            caption += (f"\nnote: the window was still changing after {SETTLE_S:g} s (an animation or a running "
+                        "simulation); this is one moment of it")
+    elif inline.width != full.width:
+        caption += "\ninput: screenshot the window (window_id) for a coord_space token; input tools map its points"
+    if target is None and composed:
+        caption += COMPOSITE_NOTE
+    buf = io.BytesIO()
+    inline.save(buf, "PNG", optimize=True)
+    return [Image(data=buf.getvalue(), format="png"), caption]
+
+
+# ---------------------------------------------------------------- readiness (doctor)
+
+BRIDGE_PROBE_S = 3.0
+
+
+def display_backend(session_type: str | None, wayland: str | None, x_opens: bool) -> str:
+    """x11, xwayland (an X server inside a Wayland session), wayland (no X server) or none."""
+    if (session_type or "").lower() == "wayland" or wayland:
+        return "xwayland" if x_opens else "wayland"
+    return "x11" if x_opens else "none"
+
+
+def _x_extensions() -> dict:
+    """Whether the X server has XTEST (synthetic input) and SHAPE (the cursor badge), and whether a
+    compositing manager runs. Never raises."""
+    try:
+        disp = _xdisplay()
+    except RuntimeError:
+        return {"error": f"cannot open X display {DISPLAY}"}
+    try:
+        # A compositing manager owns _NET_WM_CM_S<screen>; without one a covered window's pixels are lost.
+        compositor = disp.get_selection_owner(disp.intern_atom(f"_NET_WM_CM_S{disp.get_default_screen()}"))
+        return {"xtest": bool(disp.has_extension("XTEST")), "shape": bool(disp.has_extension("SHAPE")),
+                "compositing": compositor != X.NONE}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"X server query failed: {type(exc).__name__}"}
+    finally:
+        disp.close()
+
+
+def _kit_window(port: int | None) -> dict:
+    """The selected bridge's own window, by its PID (never by title). Never raises."""
+    pid = _bridge_pid(port)
+    if not pid:
+        return {"found": False, "reason": "no live Kit advertises this bridge's port"}
+    win = window_for_pid(pid)
+    if not win:
+        return {"found": False, "pid": pid, "reason": "the Kit process has no visible window"}
+    return {"found": True, "id": win["id"], "pid": pid}
+
+
+def _bridge_reason(exc: Exception) -> str:
+    """A short cause, without the runtime paths some messages carry."""
+    if isinstance(exc, ConnectionRefusedError):
+        return "connection refused: no Kit listens on this port (stale or stopped bridge)"
+    if isinstance(exc, TimeoutError):
+        return f"no reply within {BRIDGE_PROBE_S:g} s: Kit is busy or still starting"
+    if isinstance(exc, RuntimeError):
+        return ("several bridges are advertised: pick one with use_bridge" if "multiple" in str(exc)
+                else "no bridge is advertised and no port is set")
+    return f"{type(exc).__name__}: {str(exc)[:100]}"
+
+
+def kit_readiness(host: str | None, port: int | None) -> dict:
+    """Kit's UI readiness from ``sim.ui.find(readiness=true)`` on a connection of its own, so a long call
+    on the shared one cannot hold it up. Never raises."""
+    try:
+        with BridgeClient(host=host, port=port, timeout=BRIDGE_PROBE_S) as client:
+            # limit=0: a sim-tools that predates readiness refuses LIMIT before it walks the widgets or
+            # enables omni.kit.ui_test, so the probe stays read-only on any version.
+            answer = client.call("sim.ui.find", {"readiness": True, "limit": 0})
+    except BridgeError as exc:
+        answer = {"status": "error", "code": exc.details.get("code"), "message": str(exc)}
+    except Exception as exc:  # noqa: BLE001 - no bridge, stale portfile, refused, timed out
+        return {"reachable": False, "reason": _bridge_reason(exc)}
+    answer = answer if isinstance(answer, dict) else {}
+    if answer.get("code") == "NO_UI":   # an older sim-tools checks headless first
+        return {"reachable": True, "headless": True, "ui_test_enabled": "unknown"}
+    if answer.get("status") == "error" and answer.get("code") != "LIMIT":
+        code, message = answer.get("code") or "error", str(answer.get("message", ""))
+        return {"reachable": True, "readiness": "unknown",
+                "reason": (message if message.startswith(code) else f"{code}: {message}")[:200]}
+    if "ui_test_enabled" not in answer:
+        return {"reachable": True, "readiness": "unknown",
+                "reason": "this Kit's sim-tools predates the readiness probe: restart Kit from this checkout"}
+    keep = ("ui_test_enabled", "dpi_scale", "main_window", "headless")
+    return {"reachable": True, **{key: answer.get(key) for key in keep}}
+
+
+def doctor_report(port: int | None, host: str | None, enabled: Iterable[str], runtime_enable: bool,
+                  cursor_badge: bool) -> dict:
+    """What the doctor tool answers: each probe's value or short reason, and what to fix first."""
+    enabled = frozenset(enabled)
+    x11 = _x_extensions()   # opens DISPLAY, or :0 when unset, as the screen and input tools do
+    backend = display_backend(os.environ.get("XDG_SESSION_TYPE"), os.environ.get("WAYLAND_DISPLAY"), "error" not in x11)
+    locked = _probe_locked()
+    bridge = kit_readiness(host, port)
+    if "error" in x11:
+        computer = ("pure Wayland: computer needs an X11 or XWayland session" if backend == "wayland"
+                    else f"{x11['error']}: computer needs a desktop session")
+    elif not x11["xtest"]:
+        computer = "the X server lacks XTEST, so computer cannot send input"
+    elif locked:
+        computer = "the screen is locked, so X11 input reaches the lock screen: use sim__ui for Isaac Sim"
+    elif "input" not in enabled:
+        computer = "the input toolset is off. " + toolsets.enable_hint(["input"], runtime_enable)
+    else:
+        computer = True
+    if not bridge["reachable"]:
+        sim_ui = f"no bridge answers, {bridge['reason']}. Start Isaac Sim or pick a bridge with use_bridge"
+    elif bridge.get("headless"):
+        sim_ui = "this Kit is headless: sim__ui needs a windowed Isaac Sim"
+    elif "reason" in bridge:
+        sim_ui = bridge["reason"]
+    elif "kit_debug" not in enabled:
+        sim_ui = "the kit_debug toolset is off. " + toolsets.enable_hint(["kit_debug"], runtime_enable)
+    else:
+        sim_ui = True
+    blockers = [f"{name}: {why.rstrip('.')}" for name, why in (("computer", computer), ("sim__ui", sim_ui)) if why is not True]
+    notes = []  # what works, with a limit an agent should know
+    if "error" not in x11:
+        if locked is None:
+            notes.append("lock state unknown (no screen saver service answered): computer input is sent unless "
+                         "another client holds the keyboard, as a lock screen does")
+        if backend == "xwayland":
+            notes.append("XWayland: computer reaches X11 windows only, and cannot see a native Wayland window "
+                         "that covers its target")
+        if not x11["compositing"]:
+            notes.append("no compositing manager: the part of a window that another covers is black in "
+                         "screenshot(window_id=...); raise the window first")
+    if sim_ui is True and bridge.get("ui_test_enabled") is False:
+        notes.append("omni.kit.ui_test is off in this Kit: the first sim__ui call turns it on")
+    return {"backend": backend, "display": ENV_DISPLAY, "x11": x11, "locked": locked,
+            "input_toolset": "input" in enabled, "cursor_badge": bool(cursor_badge), "kit_window": _kit_window(port),
+            "bridge": {"port": port, **bridge}, "screenshot_max_width": SHOT_MAX_WIDTH,
+            "ready": {"computer": computer is True, "sim__ui": sim_ui is True},
+            "next": "; ".join(blockers) or "computer and sim__ui are ready", "notes": notes}
+
+
 # -------------------------------------------------------------------- tools
 
 
@@ -1409,11 +1717,13 @@ def register_screen_tools(
     server: FastMCP,
     port_provider: Callable[[], int | None] | None = None,
     groups: Iterable[str] | None = None,
+    state: Any = None,
 ) -> None:
     """Register screen tools when the screen toolset is enabled.
 
-    The capture directories are created only when ``screen`` is enabled, so a profile
-    without it leaves the filesystem alone."""
+    ``state`` is the server's bridge state: doctor reads its toolsets, client and config when called,
+    since toolsets can change at run time. The capture directories are created only when ``screen``
+    is enabled, so a profile without it leaves the filesystem alone."""
     mcp = ScopedTools(server, groups)
     if mcp.enabled("screen"):
         SHOT_DIR.mkdir(parents=True, exist_ok=True)
@@ -1475,6 +1785,20 @@ def register_screen_tools(
         if _last:
             lines.append(f"last recording: {_last.get('path')} ({_last.get('duration_s')}s)")
         return "\n".join(lines)
+
+    @mcp.tool(annotations=READ_ONLY)
+    def doctor() -> str:
+        """Check whether desktop input (computer) and Isaac Sim UI control (sim__ui) can work here, and what to fix."""
+        port = host = None
+        try:
+            port = port_provider() if port_provider else None
+            client = getattr(state, "client", None)
+            host = client.host if client is not None else None
+        except Exception:  # noqa: BLE001 - nothing pinned and discovery found none or several
+            pass
+        return json.dumps(doctor_report(port, host, getattr(state, "toolsets", mcp.groups),
+                                        getattr(state, "runtime_enable", True),
+                                        getattr(getattr(state, "config", None), "cursor_badge", False)))
 
     @mcp.tool(annotations=READ_ONLY)
     def list_windows(filter: Annotated[str | None, Field(description="Keep windows whose title or WM class contains this.")] = None) -> str:
@@ -1622,8 +1946,10 @@ def register_screen_tools(
         monitor: _Monitor = None,
         window: _WindowTitle = None,
         window_id: _WindowId = None,
-        max_width: Annotated[int, Field(description="Inline image width cap in pixels, 320-3840. The saved PNG stays full size.")] = 1600,
+        max_width: Annotated[int, Field(description="Inline image width cap in pixels, 320-3840. The saved PNG stays full size.")] = SHOT_MAX_WIDTH,
         label: Annotated[str | None, Field(description="Short name added to the saved file, e.g. 'push_done'. Letters, digits, - and _ only; other characters become _; max 40.")] = None,
+        region: Annotated[list[int] | None, Field(description="Zoom: [x, y, width, height] of the window to crop, in the space coord_space names; returned enlarged.")] = None,
+        coord_space: Annotated[str, Field(description="window (default) or a coord_space token from an earlier screenshot, for region.")] = "window",
     ):
         """Capture the screen, a monitor or a window to see the result of your work. Returns the image
         and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise
@@ -1631,53 +1957,7 @@ def register_screen_tools(
 
         Privacy: the image (and any text visible in it) is sent to the model and saved on this machine.
         """
-        max_width = max(320, min(int(max_width), 3840))
-        target = None
-        composed = False
-        if window or window_id is not None:
-            target = _match_window(window, window_id)
-        elif monitor is None:
-            target = auto_target()
-        if target is not None:
-            win = target
-            full = _grab_window_image(win)
-            source = f"{win['width']}x{win['height']}+{win['x']}+{win['y']}"
-            target_label = f"{win['title']} (id={win['id']})"
-        else:
-            bbox = _bbox(1 if monitor is None else monitor)
-            composed = _screen_locked()
-            if composed:
-                full, painted = _composite(bbox)
-            else:
-                with mss.MSS() as sct:
-                    raw = sct.grab(bbox)
-                full = PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
-            source = f"{bbox['width']}x{bbox['height']}+{bbox['left']}+{bbox['top']}"
-            target_label = f"monitor {1 if monitor is None else monitor}" + (
-                f" (composed from {painted} window(s))" if composed else "")
-        path = SHOT_DIR / f"screen-{_stamp()}{_label_tag(label)}.png"
-        full.save(path, "PNG", optimize=True)
-        inline = full
-        if full.width > max_width:
-            height = max(1, round(full.height * max_width / full.width))
-            inline = full.resize((max_width, height), PILImage.LANCZOS)
-        caption = (
-            f"saved: {path}\n"
-            f"saved size: {full.width}x{full.height}\n"
-            f"inline size: {inline.width}x{inline.height}\n"
-            f"source: {source}\n"
-            f"window: {target_label}"
-        )
-        if inline.width != full.width:
-            # OpenAI's computer-use guide: map coordinates from a downscaled screenshot back to the
-            # environment's pixels. Input tools take original pixels.
-            caption += (f"\nscale: input tools take original pixels; multiply a point in this image by "
-                        f"{full.width / inline.width:.3f}")
-        if target is None and composed:
-            caption += COMPOSITE_NOTE
-        buf = io.BytesIO()
-        inline.save(buf, "PNG", optimize=True)
-        return [Image(data=buf.getvalue(), format="png"), caption]
+        return capture(monitor, window, window_id, max_width, label, region, coord_space, auto=auto_target)
 
     @mcp.tool(annotations=ADDITIVE)
     def start_screen_recording(

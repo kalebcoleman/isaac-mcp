@@ -117,7 +117,7 @@ def test_destructive_tools_say_so(single):
     listed = single
     hints = {t.name: t.annotations for t in listed}
     for name in ("run_python", "put_file", "workcell__workcell_quick_start", "workcell__jenga_build", "job_cancel",
-                 "window_click", "sim__stop"):
+                 "computer_click", "sim__stop"):
         assert hints[name].destructiveHint is True, name
     for name in ("status", "get_file", "stat_file", "workcell__workcell_status", "screen_info"):
         assert hints[name].readOnlyHint is True and hints[name].destructiveHint is False, name
@@ -180,7 +180,7 @@ def test_the_recording_tool_says_it_ends_with_its_server_process(single):
 def test_a_client_is_shown_groups_and_no_single_purpose_member(listed, single):
     names = {t.name for t in listed}
     old = {t.name for t in single}
-    assert len(names) < len(old) / 2.5 and len(names) <= 50
+    assert len(names) < len(old) / 2.5 and len(names) <= 51
     assert set(tool_groups.GROUPS) <= names
     assert not names & set(tool_groups.members())
     assert names - set(tool_groups.GROUPS) == old - set(tool_groups.members()), "ungrouped tools are listed as they were"
@@ -266,7 +266,7 @@ def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
 
 
 def test_names_in_paths_keys_and_file_names_are_left_alone():
-    same = ["/out/20261111-job_status.png", '"/World/get_file"', '{"window_type": 1}', "a/sim__prim__get/b", "x get_file.txt"]
+    same = ["/out/20261111-job_status.png", '"/World/get_file"', '{"computer_type": 1}', "a/sim__prim__get/b", "x get_file.txt"]
     assert [tool_groups.listed_form(text) for text in same] == same
     assert tool_groups.listed_form("stop it with job_cancel.") == \
         "stop it with jobs action=cancel."
@@ -278,12 +278,12 @@ def test_a_grouped_argument_takes_every_kind_its_actions_take_and_text_stays_tex
     assert kinds == {"array", "object"}, "command takes a list, teleport a mapping"
     server = gw.build_server({"TWINSMITH_TOOLSETS": ALL_GROUPS})
     seen = []
-    server._tool_manager._tools["window_type"].fn = lambda **given: seen.append(given) or "typed"
+    server._tool_manager._tools["computer_type"].fn = lambda **given: seen.append(given) or "typed"
 
     async def run():
         async with create_connected_server_and_client_session(server._mcp_server) as client:
             await client.initialize()
-            return [await client.call_tool("window_input", {"action": "type", "text": text, "window_id": 1, "expected_pid": 1}) for text in ('{"a": 1}', "null")]
+            return [await client.call_tool("computer", {"action": "type", "text": text, "window_id": 1, "expected_pid": 1}) for text in ('{"a": 1}', "null")]
 
     results = asyncio.run(run())
     assert [r.isError for r in results] == [False, False], results[0].content[0].text
