@@ -272,7 +272,7 @@ def _jenga_stage():
 def test_the_tower_on_physx_authors_no_newton_settings(monkeypatch):
     monkeypatch.setattr(ns, "collision_settings", lambda *a: pytest.fail("PhysX must not author Newton settings"))
     report = jenga.build(_jenga_stage())
-    assert not any(key.startswith("newton") for key in report) and "untuned" not in report["note"]
+    assert not any(key.startswith("newton") for key in report) and "live tower check" not in report["note"] and report["physics_hz"] == 120
 
 
 def test_the_tower_on_newton_keeps_the_physx_settings_and_adds_buffers_and_collider_settings(newton, monkeypatch):
@@ -282,11 +282,11 @@ def test_the_tower_on_newton_keeps_the_physx_settings_and_adds_buffers_and_colli
     stage = _jenga_stage()
     report = jenga.build(stage, backend="newton", timeline=Timeline())
     assert len(colliders) == 55 and colliders[0].endswith("/Table")  # the table and every block
-    assert scenes == [(120, True)] and report["newton_settings"] == {"rate": 120}
+    assert scenes == [(jenga.NEWTON_HZ, True)] and report["newton_settings"] == {"rate": 500} and report["physics_hz"] == 500
     buffers = report["newton_buffers"]
     assert (buffers["rigid_bodies"], buffers["nconmax"], buffers["njmax"]) == (54, 1728, 13824)
     assert newton.configured and newton.configured[0].solver_cfg.nconmax == 1728
-    assert "untuned" in report["note"] and report["blocks"] == 54
+    assert "live tower check" in report["note"] and report["blocks"] == 54
     bodies = [p for p in stage.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI)]
     assert len(bodies) == 54
 
