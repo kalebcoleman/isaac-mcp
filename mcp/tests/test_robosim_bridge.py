@@ -1056,14 +1056,15 @@ def test_image_axes_say_which_way_the_table_goes_in_the_picture():
         plan.image_axes((0, 0, 1), (0, 0, 0))
 
 
-def test_transform_push_scales_and_turns_about_the_object():
+def test_transform_push_turns_about_the_object_and_stretches_from_the_pusher_start():
     pivot = (0.0, -0.075)
-    same = plan.transform_push(PUSH0, pivot, 1.0, 0.0)
-    assert same["waypoints"] == PUSH0["waypoints"]
+    assert plan.transform_push(PUSH0, pivot, 1.0, 0.0)["waypoints"] == PUSH0["waypoints"]
     double = plan.transform_push(PUSH0, pivot, 2.0, 0.0)
-    assert double["waypoints"] == [[0.0, 0.0, -0.325], [6.0, 0.0, 0.075]]  # times keep, the object start stays fixed
+    assert double["waypoints"] == [[0.0, 0.0, -0.2], [6.0, 0.0, 0.2]]  # the start stays, the travel past the object grows
     turned = plan.transform_push(PUSH0, pivot, 1.0, math.pi / 2)
     assert turned["waypoints"][0][1:] == [0.125, -0.075] and turned["waypoints"][1][1:] == [-0.075, -0.075]
+    both = plan.transform_push(PUSH0, pivot, 2.0, math.pi / 2)
+    assert both["waypoints"][0][1:] == [0.125, -0.075] and both["waypoints"][1][1:] == [-0.275, -0.075]
     aimed = plan.aimed_push(PUSH0, pivot, math.pi / 2)
     assert aimed["waypoints"] == [[0.0, 0.0, -0.225], [6.0, 0.0, 0.025]]
 

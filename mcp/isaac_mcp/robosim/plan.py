@@ -318,17 +318,21 @@ def wrap_angle(angle):
 
 
 def transform_push(push, pivot, scale, rotation):
-    """The push with every waypoint scaled by ``scale`` and turned by ``rotation`` (radians) about ``pivot``.
+    """The push turned by ``rotation`` (radians) about ``pivot`` (the object's start), then stretched by ``scale``
+    about its own first waypoint.
 
-    The pivot is the object's start position, so the whole path, the approach and the travel past the
-    object alike, grows or shrinks together and the pusher still passes through the object.
+    Turning about the object keeps the pusher passing through it with the new heading. Stretching about the
+    pusher's start keeps where the run begins and lengthens the travel past the object, which is what moves
+    the object further (stretching about the object would leave the end of the push on the object).
     """
     c, s = math.cos(rotation), math.sin(rotation)
-    waypoints = []
+    turned = []
     for t, x, y in push["waypoints"]:
         dx, dy = x - pivot[0], y - pivot[1]
-        waypoints.append([t, round(pivot[0] + scale * (c * dx - s * dy), 5), round(pivot[1] + scale * (s * dx + c * dy), 5)])
-    return {"waypoints": waypoints, "object_velocity": push.get("object_velocity")}
+        turned.append([t, pivot[0] + c * dx - s * dy, pivot[1] + s * dx + c * dy])
+    x0, y0 = turned[0][1], turned[0][2]
+    return {"waypoints": [[t, round(x0 + scale * (x - x0), 5), round(y0 + scale * (y - y0), 5)] for t, x, y in turned],
+            "object_velocity": push.get("object_velocity")}
 
 
 def aimed_push(push, pivot, angle, reach=0.10, run_up=0.15):
@@ -366,7 +370,7 @@ def within_tolerance(m):
 def search_push(push, pivot, axes, evaluate, *, max_trials=TUNE_DEFAULT_TRIALS):
     """Bounded search over the pusher path; ``evaluate(push, trial)`` returns ``{"clip_px", "sim_px", ...}``.
 
-    Trial 1 runs ``push`` as given. Each next trial rescales the path about ``pivot`` by the measured length
+    Trial 1 runs ``push`` as given. Each next trial stretches the path from the pusher's start by the measured length
     ratio (using the exponent seen so far, since displacement is not exactly proportional to travel) and
     turns it by the measured direction error. A trial that did not move re-aims a straight push through the
     pivot along the clip's direction. ``pivot`` is the object's start xy; an ``evaluate`` result's ``pivot`` replaces

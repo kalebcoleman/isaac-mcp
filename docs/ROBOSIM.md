@@ -20,48 +20,101 @@ not fit mass or friction**, and the report says so.
 
 ## A worked sequence
 
-The calls below are the real argument names. Times are seconds, lengths are metres.
+The whole flow is data: no scene file is written by hand. Times are seconds, lengths are metres.
 
-1. `status()` — lists runs; says `bridge_needed: false`. If your client loads tools lazily,
-   search for the tool by name (for example `robosim`) before calling it.
+1. `status()` — live servers and the five most recent runs, one line each (name, state, device, engine,
+   age); says `bridge_needed: false`. `status(run=...)` gives one run in full, `status(all=true)` every run in
+   full. If your client loads tools lazily, search for the tool by name (for example `robosim`) first.
 2. `toolsets(action="enable", names=["robosim"])` — only if the toolset is off.
-3. `scene_template(shape="tee")` (or `"box"`) — returns trusted Python (`scene`) with a static table,
-   one red object named `block` (a T of two boxes in one rigid body, or a box), a small cylinder
-   `pusher`, one camera, and a working push. Save it to a file; edit the plain-data constants at the
-   top (`OBJECT_XY_YAW`, `TEE_BAR_HALF`, `CAMERA_EYE`, `PUSH`, ...).
-4. `start(name="trial", scene="<abs>/scene.py", device="cpu")` — copies the scene as `scene-v1.py` (and
-   `scene.py`, the file RSS loads) and starts RSS held, **without file watching: the scene is frozen
-   until `update_scene`**. With no `port` it picks a free one and reports it (`port_chosen`, `url`).
-   RSS's viewer listens on all interfaces; RSS offers no localhost-only option.
-5. `reference(run=..., video="<abs>/clip.mp4", start_s=0, end_s=6)` — extracts anchors at 0, 3 and 6 s
-   (override with `at="0:start,2:a,6:end"`) and a contact sheet of the whole clip. Anchor times stay in
-   original clip seconds. Without `start_s`/`end_s`, `at` defaults to `0:start,end`.
-6. `compare(run=..., keys=["block=red"])` — the live render against the first anchor: IoU, centre
-   offset, `width_ratio`, `height_ratio`, `area_ratio` (sim pixels / photo pixels) and
-   `linear_scale_ratio` (RSS's own `size_ratio`, the square root of the area ratio; RSS's report text
-   calls it "size"). The mask for `block` covers every shape of the compound body.
-7. `update_scene(run=..., scene="<abs>/scene2.py")` — replaces the scene **in the same run**: saves
-   `scene-v2.py` (older versions stay), copies it to `scene.py`, and asks the running server (same
-   process, not restarted) to reload. The result says what happened, the RSS generation before and
-   after, the names, routines and cameras. If the build fails RSS keeps the old scene, `scene.py` is put
-   back, and the version is recorded as not loaded. Also fixes a `start` whose scene did not build.
-8. `rollout(run=..., take="t1", push={"waypoints": [[0, 0.10, -0.20], [1, 0.04, -0.14], [6, -0.12, 0.05]]},
-   duration_s=6, record_fps=10)` — resets the scene to its start state, then plays the template's
-   `push` routine and records it. The result gives `steps`, `duration_s`, `control_hz`, `every`,
-   `record_fps` (what was really recorded), `video_fps`, `frames`, `frames_expected`, the push as applied
-   (`push_applied`, including the pusher's tracking error) and `warnings`.
-9. `compare_take(run=..., take="t1", keys=["block=red"], start_s=0, end_s=6, sim_start_s=0, sim_end_s=6)` —
-   see below. Reports `displacement_px`: the object's image-centroid displacement from the first to the
-   last anchor for the clip and the sim, their difference, whether x and y have the same sign, and
-   `magnitude_ratio`.
-10. `report(run=...)` — writes `REPORT.md` (engine, scene versions, a summary, every operation's JSON).
-11. `stop(run=...)` — quits only this run's server and waits up to 15 s for the process to exit; the result
-    has `stopped`, `waited_s` and `final_state`. It never force-kills. Stop every run you start.
+3. `scene_template(shape="tee")` (or `"box"`, `"jenga"`) — optional. Writes the scene file (into the run
+   folder when `run` is given, else `<workspace>/runs/robosim/_templates/`) and returns its **path**, the
+   resolved template data, a compact parameter list, `size_meaning`, the `mask_key` and the coordinate frame.
+   It does not return the source.
+4. `start(name="trial", device="cpu", template={"shape": "tee"})` — builds the scene from plain data and writes
+   `scene-v1.py` (and `scene.py`, the file RSS loads) into the run folder, then starts RSS held, **without file
+   watching: the scene is frozen until `update_scene`**. `template={}` is the default T. A caller-supplied
+   `scene="<abs>/scene.py"` (advanced, trusted Python) still works instead of `template`, never together.
+   With no `port` it picks a free one (`port_chosen`, `url`). RSS's viewer listens on all interfaces.
+5. `reference(run=..., video="<abs>/clip.mp4", start_s=0, end_s=6)` — with `start_s`/`end_s` the clip is
+   **cut with ffmpeg into the run folder** (`reference-N-trim.<ext>`, one extra frame so the frame at `end_s`
+   is in it) and that cut is what RSS reads: the contact sheet and the reported `duration` cover the trimmed
+   span, and the result's `trimmed` block says so. Anchors default to the start, the middle and `end_s`
+   (override with `at="0:start,2:a,6:end"`). Times you give and read (anchors, `start_s`, `end_s`) stay in
+   original clip seconds. RSS cannot trim, so ffmpeg must be on `PATH` for a window; `at` alone needs none.
+6. `compare(run=..., keys=["block=red"])` — the live render against the first anchor: IoU, centre offset,
+   `width_ratio`, `height_ratio`, `area_ratio` (sim pixels / photo pixels) and `linear_scale_ratio` (RSS's own
+   `size_ratio`, the square root of the area ratio). The mask for `block` covers every shape of the compound body.
+7. `update_scene(run=..., template={"position": [-0.003, -0.072], "yaw": -0.25})` — rebuilds the scene **in the
+   same run**: saves `scene-v2.py` (older versions stay), copies it to `scene.py` and asks the running server
+   (same process) to reload. Keys you leave out keep the loaded template's values (a default push follows the
+   object); an explicit `push` is kept. If the build fails RSS keeps the old scene, `scene.py` is put back and
+   the version is recorded as not loaded. `scene="<abs>/scene2.py"` works as before.
+8. `tune_push(run=..., keys=["block=red"], take="tune")` — see below. Returns the trial table and `best_push`.
+9. `rollout(run=..., take="final", push=<best_push>, duration_s=6, record_fps=10)` — resets the scene to its
+   start state, plays the template's `push` routine and records it. The result gives `steps`, `duration_s`,
+   `control_hz`, `every`, `record_fps` (what was really recorded), `video_fps`, `frames`, `frames_expected`, the
+   push as applied (`push_applied`, with the pusher's tracking error and the object's start and end) and `warnings`.
+10. `compare_take(run=..., take="final", keys=["block=red"], start_s=0, end_s=6)` — see below.
+11. `report(run=...)` — writes `REPORT.md` (engine, scene versions, a summary, every operation's JSON).
+12. `stop(run=...)` — quits only this run's server and waits up to 15 s for the process to exit. It never
+    force-kills. Stop every run you start.
+
+### The template
+
+`template` is plain data; every key is optional:
+
+| key | meaning |
+|---|---|
+| `shape` | `tee` (default), `box` or `jenga` |
+| `size` | tee `[bar_length, stem_length, thickness, height]`; box and jenga `[x, y, height]`; metres |
+| `position`, `yaw` | `[x, y]` on the table (metres) and radians about +z; tee yaw 0 has the bar far, the stem toward the camera |
+| `color` | `red`, `orange`, `yellow`, `green`, `blue`, `wood`, `"#rrggbb"` or `[r, g, b]` in 0–1 |
+| `mass`, `friction` | kg (0.1; jenga 0.02) and the object–table coefficient (0.4) |
+| `camera` | `{"eye": [x, y, z], "target": [x, y, z]}` |
+| `push` | `{"waypoints": [[seconds, x, y], ...], "object_velocity": [vx, vy, wz]}`, the pusher path |
+
+**Frame.** In the default camera image `+x` is right and `+y` is up (away from the camera); image y points down,
+so a block that moves up-left in the picture has negative dx, dy pixels and moves toward −x, +y on the table.
+`shape="jenga"` is one wooden block, 72 x 24 x 14 mm, lying flat (long side along x), with the same pusher, a
+closer default camera and a default push that moves it about 6 cm. **Mask it with `keys=["block=wood"]`**
+(RSS's `wood` colour word; `scene_template` returns the right key for any colour as `mask_key`; a custom colour
+gets `block=#rrggbb~0.1`). Checked on the CPU render: the key picks out the block and nothing of the table.
+
+**The table.** The table top is 3 mm above z = 0. RSS draws a ground plane at z = 0, and a table top at exactly
+z = 0 is coplanar with it: the two fight per pixel and every render is black and white speckle. That was a
+rendering artefact (z-fighting), not the table's material or the CPU path; it appeared with shadows on and off.
+The table is plain light grey, so masks and pictures are clean.
+
+### tune_push
+
+`tune_push(run, keys, take, max_trials=6, push=None, duration_s=None, record_fps=10)` runs a bounded search over
+the **pusher path** so that the simulated block's image displacement (first to last anchor) matches the clip's.
+It starts from `push` (default the loaded template's push, else the scene's own `PUSH`), runs the existing
+rollout and comparison for each trial (takes `<take>-1`, `<take>-2`, ...), and keeps the best. After a trial
+it turns the path about the object's start by the measured direction error and stretches it from the
+pusher's start by the measured length ratio (with the exponent seen so far); a trial where the block did not
+move re-aims a straight push through the object along the clip's direction. It stops at the first trial with a
+magnitude ratio of 0.8 to 1.25 and a direction error under 15 degrees, else after `max_trials` (at most 12).
+The result has `trials` (scale, rotation, the push, `sim_px`, `clip_px`, `magnitude_ratio`,
+`direction_error_deg`, start and end overlap, take), `best_push` (plain data for `rollout(push=...)` or
+`update_scene(template={"push": ...})`), `within_tolerance`, `stopped_because` and `scope`. **It tunes the push
+path, not mass or friction, and it matches displacement only, not the block's rotation.**
+
+### compare_take verdicts
+
+`compare_take` keeps RSS's own score and verdict, labelled `rss_score` and `rss_verdict` (they are an overlap
+score and a did-it-move count and do not measure how far the block went). `verdict` and `bridge_verdict` are the
+bridge's own, per object, from the image-centroid displacement and the end-frame overlap, with the thresholds
+in the result (`bridge_verdict.thresholds`):
+
+- `matches`: `magnitude_ratio` 0.5 to 2.0, `direction_error_deg` under 30 and end-frame overlap above 0.2;
+- `moved, but not like the clip`: moved 3 px or more but a test failed; `failed` lists the numbers that did;
+- `did not move`: the simulated displacement is under 3 px.
 
 All long actions return quickly by default. Supply `wait_s` (0–120), or poll
 `status(run=..., wait_s=120)` until `operation.state` is `completed` or `failed`.
-Only one action operates a run at a time. `status` without a run lists persisted
-runs and identity-checked live servers. Runs are referenced by the exact name
+Only one action operates a run at a time. `status` without a run lists
+identity-checked live servers and the five newest runs, one line each. Runs are referenced by the exact name
 returned by start. A different host can inspect completed runs and stop their
 owned servers; an in-flight worker cannot resume after its host exits.
 
@@ -96,8 +149,8 @@ between them; times strictly increase; x and y within 2 m; speeds above 1 m/s gi
 `object_velocity` is an optional initial `[vx, vy, yaw_rate]` in m/s and rad/s; friction stops the object
 again quickly (a box given 0.9 m/s travelled about 4 cm in the CPU test). Give one or both. Without `push`, `rollout` uses the scene's own
 `PUSH` constant. `routine="settle"` steps with no push and is the control run: the block should stay.
-Table frame: `+x` right, `+y` away from the camera, yaw `0` has the T's bar far and its stem toward the
-camera.
+Table frame: `+x` right and `+y` up in the default camera image (away from the camera), yaw `0` has the T's bar
+far and its stem toward the camera.
 
 If a routine does not apply `push` (no `push-<take>.json` is written), `rollout` fails and says to use
 the template's `push` routine or to read `ROLLOUT['push']` in your own routine. Your own routine reads
@@ -107,8 +160,8 @@ the template's `push` routine or to read `ROLLOUT['push']` in your own routine. 
 
 `shape="tee"` draws two boxes (bar and stem) on **one** rigid body. RSS draws an object's shape through
 `ShapeSpec.add_to(...)` (`specs/asset.py`); the template's `TeeShape` overrides it. Mass is rescaled
-for the whole compound (`scene/build/bodies.py` `set_body_mass`). `shape="box"` is one box. Dimensions
-are the `TEE_*` and `BOX_HALF` constants.
+for the whole compound (`scene/build/bodies.py` `set_body_mass`). `shape="box"` is one box and `shape="jenga"` a
+flat 72 x 24 x 14 mm block. Dimensions are the template's `size`, written as the `TEE_*` and `BOX_HALF` constants.
 
 ## Timing
 
@@ -139,8 +192,8 @@ are the `TEE_*` and `BOX_HALF` constants.
 
 Each run is `<workspace>/runs/robosim/<YYYYMMDD-HHMMSS>-<name>/`:
 
-- `scene-vN.py` (every version), `scene.py` (the loaded one), `reference-*.mp4` (or original extension):
-  copied inputs and hashes.
+- `scene-vN.py` (every version), `scene.py` (the loaded one), `reference-*.mp4` (or original extension), `reference-N-trim.*`
+  (the ffmpeg cut): copied inputs and hashes. A template-built scene records its data in `run.json`.
 - `run.json`: device, checkout commit, inputs, scene versions, command argv/logs/results and timings.
 - `serve.log`, `serve.pid`, `command-*.stdout/.stderr`: process evidence.
 - `ref/`: extracted frames, contact sheet, `timeline.json`, and `timeline-map-N.json` per `compare_take`.
