@@ -10,7 +10,7 @@ and when to stop and ask.
 
 ```
 .agents/skills/twinsmith/          canonical copy (Codex, OpenCode, Antigravity)
-├── SKILL.md                       ground rules, first calls, Lab and Sim workflows, troubleshooting
+├── SKILL.md                       ground rules, first calls, Lab and Sim workflows, computer use, troubleshooting
 └── references/
     ├── isaac-lab.md               train/eval/play, Isaac Lab 3 conventions, guards, reading metrics
     ├── isaac-sim.md               bridge selection, generic scene/assets, run_python, capture, work cell
