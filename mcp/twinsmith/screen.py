@@ -35,6 +35,7 @@ from Xlib.protocol import event as xevent
 
 from mcp.server.fastmcp import FastMCP, Image
 
+from . import cursor_badge
 from .local_tools import ADDITIVE, IDEMPOTENT_WRITE, READ_ONLY, ScopedTools
 
 _WindowTitle = Annotated[str | None, Field(description="Window title or WM class substring, from list_windows.")]
@@ -1480,7 +1481,8 @@ def capture(monitor: int | None = None, window: str | None = None, window_id: in
         raise ValueError("region zooms into a window: name one with window or window_id")
     if target is not None:
         win = target
-        full = _grab_window_image(win)
+        with cursor_badge.capture_hold():  # every cursor badge is hidden while the pixels are read
+            full = _grab_window_image(win)
         window_size = full.size
         rect = (0, 0, *window_size)
         if region is not None:
@@ -1491,12 +1493,13 @@ def capture(monitor: int | None = None, window: str | None = None, window_id: in
     else:
         bbox = _bbox(1 if monitor is None else monitor)
         composed = _screen_locked()
-        if composed:
-            full, painted = _composite(bbox)
-        else:
-            with mss.MSS() as sct:
-                raw = sct.grab(bbox)
-            full = PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+        with cursor_badge.capture_hold():
+            if composed:
+                full, painted = _composite(bbox)
+            else:
+                with mss.MSS() as sct:
+                    raw = sct.grab(bbox)
+                full = PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
         source = f"{bbox['width']}x{bbox['height']}+{bbox['left']}+{bbox['top']}"
         target_label = f"monitor {1 if monitor is None else monitor}" + (
             f" (composed from {painted} window(s))" if composed else "")

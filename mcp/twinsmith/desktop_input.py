@@ -27,7 +27,7 @@ from Xlib.ext import xtest
 from mcp.server.fastmcp import FastMCP, Image
 from mcp.types import CallToolResult, TextContent
 
-from . import screen
+from . import cursor_badge, screen
 from .local_tools import DESKTOP_INPUT, ScopedTools
 
 _input_lock = threading.Lock()
@@ -162,7 +162,7 @@ def _keyboard_grabbed(disp) -> bool:
 
 
 @contextmanager
-def _target(window_id: int, expected_pid: int):
+def _target(window_id: int, expected_pid: int, badge_at: tuple[int, int] | None = None):
     if window_id <= 0 or expected_pid <= 0:
         raise ValueError("window_id and expected_pid must be positive")
     locked = _lock_state()  # fresh for this call: it guards where keystrokes go
@@ -172,6 +172,9 @@ def _target(window_id: int, expected_pid: int):
     visible = screen._match_window(None, window_id)
     if visible.get("pid") != expected_pid:
         raise ValueError("target window PID is missing or changed; list windows again")
+    if badge_at is not None and cursor_badge.enabled():
+        # Before the server grab: the badge's own X connection would block under it.
+        cursor_badge.glide(visible["x"] + badge_at[0], visible["y"] + badge_at[1])
     disp = screen._xdisplay()
     grabbed = False
     try:
@@ -308,15 +311,15 @@ def _key_symbol(key: str, modifiers: list[str]) -> int:
 def _step_click(window_id: int, pid: int, x: int, y: int, width: int, height: int,
                 button: str = "left", clicks: int = 1) -> str:
     _check_click(button, clicks)
-    for _ in range(clicks):
-        with _target(window_id, pid) as (disp, window, geom):
+    for i in range(clicks):  # glide once: a pause between the clicks would break a double-click
+        with _target(window_id, pid, None if i else (x, y)) as (disp, window, geom):
             _point(disp, window, geom, x, y, width, height)
             _click(disp, _BUTTONS[button])
-    return f"sent click to window {window_id} at ({x}, {y})"
+    return f"sent click to window {window_id} at ({x}, {y}){cursor_badge.note()}"
 
 
 def _step_drag(window_id: int, pid: int, x: int, y: int, end_x: int, end_y: int, width: int, height: int) -> str:
-    with _target(window_id, pid) as (disp, window, geom):
+    with _target(window_id, pid, (x, y)) as (disp, window, geom):
         # Check the entire sampled path before pressing, including any covered areas.
         for i in range(1, 13):
             px = round(x + (end_x - x) * i / 12)
@@ -335,21 +338,22 @@ def _step_drag(window_id: int, pid: int, x: int, y: int, end_x: int, end_y: int,
                 py = round(y + (end_y - y) * i / 12) + geom[1]
                 xtest.fake_input(disp, X.MotionNotify, root=root.id, x=px, y=py)
                 disp.sync()
+                cursor_badge.follow(px, py)
                 time.sleep(0.01)
         finally:
             xtest.fake_input(disp, X.ButtonRelease, 1)
             disp.sync()
-    return f"sent drag in window {window_id} from ({x}, {y}) to ({end_x}, {end_y})"
+    return f"sent drag in window {window_id} from ({x}, {y}) to ({end_x}, {end_y}){cursor_badge.note()}"
 
 
 def _step_scroll(window_id: int, pid: int, x: int, y: int, width: int, height: int,
                  direction: str, steps: int = 1) -> str:
     button = _scroll_button(direction, steps)
-    for _ in range(steps):
-        with _target(window_id, pid) as (disp, window, geom):
+    for i in range(steps):
+        with _target(window_id, pid, None if i else (x, y)) as (disp, window, geom):
             _point(disp, window, geom, x, y, width, height)
             _click(disp, button)
-    return f"sent {steps} scroll step(s) {direction} to window {window_id}"
+    return f"sent {steps} scroll step(s) {direction} to window {window_id}{cursor_badge.note()}"
 
 
 def _step_type(window_id: int, pid: int, text: str) -> str:
