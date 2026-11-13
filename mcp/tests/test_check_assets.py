@@ -1,7 +1,6 @@
 """The repository must stay code-only: no assets tracked anywhere."""
 
 import importlib.util
-import json
 from pathlib import Path
 import subprocess
 
@@ -15,15 +14,7 @@ def asset_guard(tmp_path, monkeypatch):
     guard = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(guard)
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    manifest = tmp_path / "exts/ur5e-dt/assets-manifest.json"
-    manifest.parent.mkdir(parents=True)
-    manifest.write_text(json.dumps({
-        "fetch": [{"files": [{"target": "robot/x.usd", "source": "Isaac/x.usd", "sha256": "0" * 64}]}],
-        "manual": [{"target": "workstation/vention.usd"}],
-        "local": [{"path": "gripper", "licence": "Apache-2.0"}],
-    }))
     monkeypatch.setattr(guard, "REPO", tmp_path)
-    monkeypatch.setattr(guard, "MANIFEST", manifest)
     return guard
 
 
@@ -76,11 +67,8 @@ def test_untracked_local_files_are_ignored(asset_guard):
     assert asset_guard.main() == 0
 
 
-def test_malformed_manifest_entries_are_reported(asset_guard, capsys):
-    data = json.loads(asset_guard.MANIFEST.read_text())
-    data["fetch"][0]["files"][0].pop("sha256")
-    data["local"].append({"path": "objects"})
-    asset_guard.MANIFEST.write_text(json.dumps(data))
-    assert asset_guard.main() == 1
-    out = capsys.readouterr().out
-    assert "without sha256" in out and "needs path and licence" in out
+def test_the_repository_ships_no_assets():
+    repo = Path(__file__).resolve().parents[2]
+    tracked = subprocess.run(["git", "ls-files", "exts/ur5e-dt/assets"], cwd=repo, capture_output=True, text=True,
+                             check=True).stdout.split()
+    assert tracked == []

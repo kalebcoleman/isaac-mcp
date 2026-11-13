@@ -757,23 +757,26 @@ class Extension(omni.ext.IExt):
         return run
 
     def _asset_dependencies(self, paths):
-        """Closures for files this Kit may parse: under its approved roots or user stores.
+        """Closures for files this Kit may parse: under its approved roots or the asset root.
 
         Not project stores: a project file found from the working directory is not an approval."""
-        from isaac_mcp import assets
+        from isaac_mcp import pack_manifest
         from isaac_mcp.project_assets import refuse
         from isaac_mcp.usd_closure import closures, split_runtime
 
         self.scene.broker.require_profile()
         folders = [root for root, _ in self.scene.broker.roots.values()]
-        folders += assets.user_stores()
+        try:
+            folders.append(pack_manifest.resolve_asset_root().path)
+        except pack_manifest.RootError:
+            pass  # no asset root: only approved roots count
         folders = [folder.resolve() for folder in folders]
         if not isinstance(paths, list) or not 1 <= len(paths) <= 64:
             refuse("LIMIT", "paths must list 1..64 USD files.")
         for path in paths:
             real = Path(str(path)).resolve()
             if not any(real.is_relative_to(folder) for folder in folders):
-                refuse("ROOT_NOT_APPROVED", "This Kit's approved roots and user stores do not include: " + str(real))
+                refuse("ROOT_NOT_APPROVED", "This Kit's approved roots and asset root do not include: " + str(real))
         import isaacsim
 
         return dict(results=split_runtime(closures(paths), Path(isaacsim.__file__).parent.resolve()))
@@ -792,13 +795,15 @@ class Extension(omni.ext.IExt):
         if seen is not None and time.monotonic() - at < cls._ASSET_ENVIRONMENT_TTL_S:
             return dict(seen)
         try:
-            from isaac_mcp import assets
+            from isaac_mcp import pack_manifest
 
-            resolver = assets.resolver()
-            project = assets.project_file()
-            seen = dict(project_file=str(project) if project else None,
-                        stores=[str(p) for p in resolver.stores()],
-                        packs=list(resolver.packs()), strict=bool(resolver.offline()))
+            project = pack_manifest.project_file()
+            try:
+                root = pack_manifest.resolve_asset_root()
+                found = dict(asset_root=str(root.path), asset_root_source=root.source)
+            except pack_manifest.RootError as exc:
+                found = dict(asset_root=None, asset_root_error=str(exc)[:200])
+            seen = dict(project_file=str(project) if project else None, **found)
         except Exception as exc:  # noqa: BLE001 - reporting must never break stage_info
             return dict(error=str(exc)[:200])
         cls._asset_environment_seen = (time.monotonic(), seen)

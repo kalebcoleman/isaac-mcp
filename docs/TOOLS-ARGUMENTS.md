@@ -1241,7 +1241,7 @@ Set a static pose on any Xformable prim. Local or world, in the session layer; r
 
 One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer; sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns IDs, paths and next steps; on Newton a newton field (rate, buffers). For the RISE lab UR5e twin, use ur5e_dt__quick_start.
 
-- `robot` (string, optional): Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.
+- `robot` (string, optional): Optional robot: a public name, <pack id>/<version>/<file.usd> or <pack id>/<version>/<file.urdf> (a verified file of a pack in the asset root), or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Public names come from the simulator's own assets root: ur5e, franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3.
 - `fixed_base` (boolean, optional): Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.
 - `xacro_args` (object, optional): With a xacro robot: values for its $(arg name), e.g. {"ur_type": "ur10e"}.
 - `sdf_model` (string, optional): With an SDF that holds several models (a Gazebo world): the model to import.
@@ -1443,7 +1443,7 @@ Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 11 tools.
 
 Listed as `assets__pack(action="dependencies")`.
 
-Compute dependency closures of asset files. For files under an approved root or a user asset store. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.
+Compute dependency closures for files under an approved root or the asset root. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.
 
 - `paths` (array, required): Absolute USD or URDF file paths, 1 to 64.
 
@@ -1453,7 +1453,7 @@ The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJo
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `source_path` (string, optional): Absolute path of the file, or of a folder that holds one, inside an approved root or a pack of your asset folder. Or use root_id with relative_path.
+- `source_path` (string, optional): Absolute path of the file, or of a folder that holds one, inside an approved root or a pack version of your asset root. Or use root_id with relative_path.
 - `root_id` (string, optional): Approved root ID from assets__roots, with relative_path, instead of source_path.
 - `relative_path` (string, optional): Path of the file or folder inside that root.
 - `prim_path` (string, required): New absolute wrapper prim path; parent must exist.
@@ -1487,55 +1487,58 @@ Inspect a USER-TRUSTED project on the selected Kit. Takes a snapshot of it. Nati
 
 Listed as `assets__pack(action="adopt")`.
 
-Create or fill a pack from a folder. Creates a pack in the primary asset folder, or copies a folder's asset files into it and pins them. The source must be under a user-approved root; no tool can approve folders. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in skipped_symlinks with a note. A different file already there is refused unless force=true; nothing is written inside the repository.
+Copy a folder into a new pack version. Copies a folder's asset files into a NEW pack version <id>/<version> in the asset root and write its pack.yaml (sha256 of every file, plus the source and license you give; redistributable is false unless you say so). The source must be under a user-approved root. A version that exists is never modified: give a new one. Symlinks are never followed. With from_old, converts an old-format pack folder of the asset root into <id>/v1, leaving the old files in place.
 
-- `pack` (string, required): Pack name: one folder name, no path separators.
-- `source_path` (string, optional): Absolute folder under an approved root. Omit to create an empty pack.
+- `pack` (string, required): The new pack as "<pack id>/<version>", for example my-robot/v1.
+- `source` (string, required): Where the files came from, one line (a vendor, repository URL and commit, or file hash). Recorded for every file.
+- `license` (string, required): The licence or terms, one line (for example "private lab use only"). Recorded for every file.
+- `source_path` (string, optional): Absolute folder under an approved root. Give this or from_old.
+- `from_old` (string, optional): Name of an old-format pack folder in the asset root to convert; pack must be <that name>/<version>.
+- `redistributable` (boolean, default `false`): The files may be redistributed. Default false.
 - `include` (array, optional): Extra file extensions to copy.
 - `files` (array, optional): Copy only these files or folders, relative to source_path. A named file is copied whatever its type.
-- `entries` (array, optional): Root USD files, relative to the pack, for assets__pack_doctor. Default: a sole top-level USD.
 - `dry_run` (boolean, default `false`): Report the plan and write nothing.
-- `force` (boolean, default `false`): Replace files that differ from the source.
 
 ### `assets__pack_build`
 
 Listed as `assets__pack(action="build")`.
 
-Copy asset files and their dependencies into a pack. USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on, keeping layout, and pins them. A URDF brings its meshes, textures and package.xml; an MJCF its includes and meshes; a glTF its buffers and images; a map its image. Sources must be under an approved root or a user asset store. Unresolved or remote references refuse the build unless allow_unresolved=true (then importable=false). Differing files need force=true. For xacro use assets__import_path.
+Copy asset files and their dependencies into a new pack version. USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on go into a NEW pack version in the asset root, keeping layout, and write its pack.yaml. A file copied out of from_pack keeps that pack's source, license and redistributable; any other file needs source and license. Sources must be under an approved root or the asset root. Unresolved or remote references refuse the build unless allow_unresolved=true. An existing version is never modified. For xacro use assets__import_path.
 
-- `pack` (string, required): Destination pack name: one folder name.
+- `pack` (string, required): Destination as "<pack id>/<version>"; the version must not exist.
 - `sources` (array, required): USD, URDF, MJCF (.xml), SDF, mesh or map (.yaml) files, 1 to 64: absolute paths, or paths inside from_pack. A USD scene outside from_pack and layout_root is read for its references and not copied.
-- `from_pack` (string, optional): Pack that source names and logical references such as robot/ur5e.usd come from.
+- `from_pack` (string, optional): Pack as "<pack id>/<version>" that source names and logical references come from. It must verify.
 - `layout_root` (string, optional): Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for.
-- `origin` (string, optional): Where these files came from, one line (for example a repository URL and commit). Recorded in the pack's isaac-mcp-pack.json and listed by assets__packs, so you can see later what a pack used.
-- `allow_unresolved` (boolean, default `false`): Build despite missing or remote references, and record them.
+- `source` (string, optional): Where files that do not come from from_pack came from, one line.
+- `license` (string, optional): Licence or terms of those files, one line.
+- `redistributable` (boolean, default `false`): Those files may be redistributed. Default false.
+- `allow_unresolved` (boolean, default `false`): Build despite missing or remote references, and record them in pack.yaml.
 - `dry_run` (boolean, default `false`): Report the closure and write nothing.
-- `force` (boolean, default `false`): Replace files that differ from the source.
 
 ### `assets__pack_doctor`
 
 Listed as `assets__pack(action="doctor")`.
 
-Check a pack without changing it. Reports corrupt, missing and unpinned files, then the dependencies of its entry files (unresolved, unreadable, remote, outside the pack). A file accepted at build time with allow_unresolved is still missing, so it is reported and ok is false until the file is added: assets__import_path refuses it for the same reason. Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.
+Check a pack without changing it. Every file listed in pack.yaml exists and matches its sha256, nothing unlisted or symlinked is in the folder, then the dependencies of its USD, URDF, MJCF, SDF, mesh and map files must all be files of the same pack (unresolved, unreadable, remote and outside-pack references are problems). Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.
 
-- `pack` (string, optional): Pack name. Default: the selected pack.
-- `entries` (array, optional): Files in the pack that are its roots. Default: recorded in the pack, or the twin's known names for ur5e-dt.
+- `pack` (string, optional): Pack as "<pack id>/<version>". Default: the project file's pack.
 
 ### `assets__pack_pin`
 
 Listed as `assets__pack(action="pin")`.
 
-Pin a pack's files by SHA-256. Records the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true.
+Rewrite the sha256 values of an existing pack.yaml to match its files, and show what changed. A version that already verifies is not modified. A changed hash accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true. Missing or unlisted files cannot be fixed by a hash: write a new version with adopt or build.
 
-- `pack` (string, optional): Pack name. Default: the selected pack.
+- `pack` (string, optional): Pack as "<pack id>/<version>". Default: the project file's pack.
 - `files` (array, optional): Pin only these relative paths, accepting their changes.
-- `force` (boolean, default `false`): Accept every changed and removed file.
+- `force` (boolean, default `false`): Accept every changed file.
+- `dry_run` (boolean, default `false`): Show what would change and write nothing.
 
 ### `assets__packs`
 
 Listed as `assets__pack(action="list")`.
 
-List the asset packs in every store. Also the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs. With a Kit connected it also lists kit_environment and warns when Kit and this host use different project files, stores or strict mode.
+List the asset packs in the asset root. Every <id>/<version> pack in the asset root (ISAAC_MCP_ASSET_ROOT, else <workspace>/assets) with its file count, size and whether it verifies against its pack.yaml, and any old-format pack with a hint to convert it with adopt. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_ROOT. With a Kit connected it also lists kit_environment and warns when Kit and this host use a different asset root or project file.
 
 No arguments.
 

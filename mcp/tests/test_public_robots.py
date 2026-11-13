@@ -53,13 +53,10 @@ def test_a_file_this_build_lacks_is_refused_with_the_names():
     assert "franka" in str(exc.value) and "ur5e" in str(exc.value) and "create_3.usd" in str(exc.value)
 
 
-def test_no_root_strict_mode_and_an_unreachable_server_are_each_told_apart():
+def test_no_root_and_an_unreachable_server_are_told_apart():
     with pytest.raises(AssetError) as exc:
         _locate("franka", root=None)
-    assert exc.value.code == "ASSETS_UNAVAILABLE"
-    with pytest.raises(AssetError) as exc:
-        _locate("franka", offline=True, existing={f"{ROOT}/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"})
-    assert exc.value.code == "ASSET_MISSING" and "strict" in str(exc.value)
+    assert exc.value.code == "ASSETS_UNAVAILABLE" and "<pack id>/<version>/<file.usd>" in str(exc.value)
 
     async def down(url):
         raise asyncio.TimeoutError()
@@ -81,9 +78,16 @@ def test_only_not_found_means_absent():
     assert exc.value.code == "ASSETS_UNAVAILABLE"
 
 
-def test_strict_mode_keeps_a_local_assets_root():
+def test_a_local_assets_root_works_the_same_way():
     url = "/data/isaac/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
-    assert _locate("franka", root="/data/isaac", existing={url}, offline=True)["uri"] == url
+    assert _locate("franka", root="/data/isaac", existing={url})["uri"] == url
+
+
+def test_nothing_is_downloaded_by_this_package_and_no_name_has_a_remote_url_of_its_own():
+    source = (REPO / "exts/sim-tools/sim_tools/public_robots.py").read_text()
+    assert "amazonaws" not in source
+    for entry in pr.NVIDIA_ROBOTS.values():
+        assert all(not path.startswith(("http", "/")) for path in entry["paths"])
 
 
 @pytest.mark.parametrize("robot", ["bogus", "https://example.test/robot.usd", "turtlebot"])
@@ -95,8 +99,22 @@ def test_a_robot_that_is_not_a_name_lists_the_names(robot):
         assert name in str(exc.value)
 
 
-def test_the_ur5e_stays_local_first_and_outside_the_nvidia_table():
-    assert "ur5e" in qs.PUBLIC_ROBOTS and "ur5e" not in pr.NVIDIA_ROBOTS
+def test_the_ur5e_comes_from_this_builds_assets_root_like_every_other_public_name():
+    """It used to be the one name that went through the old pack resolver (local copy, then NVIDIA's pinned URL)."""
+    url = f"{ROOT}/Isaac/Robots/UniversalRobots/ur5e/ur5e.usd"
+    found = _locate("ur5e", existing={url})
+    assert found["uri"] == url and found["name"] == "UR5e" and found["assets"][0]["source"] == "nvidia_assets_root"
+    assert found["wheels"] is None and found["lift_to_ground"] is False and found["spawn_height"] is None
+    assert not hasattr(qs, "PUBLIC_ROBOTS") and not hasattr(qs, "PUBLIC_PACK")
+
+
+def test_the_public_names_are_exactly_these():
+    assert sorted(pr.NVIDIA_ROBOTS) == sorted(["ur5e", "franka", "turtlebot3_burger", "carter_v1", "nova_carter",
+                                               "unitree_h1", "unitree_g1", "jetbot", "create3"])
+    # the franka, ur5e and unitree_g1 files, and the warehouse, are what sim__quick_start must keep placing
+    assert pr.NVIDIA_ROBOTS["franka"]["paths"] == ["Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"]
+    assert pr.NVIDIA_ROBOTS["unitree_g1"]["paths"] == ["Isaac/Robots/Unitree/G1/g1.usd"] and pr.NVIDIA_ROBOTS["unitree_g1"]["lift_to_ground"]
+    assert pr.NVIDIA_ROBOTS["ur5e"]["paths"] == ["Isaac/Robots/UniversalRobots/ur5e/ur5e.usd"]
 
 
 def test_every_wheeled_robot_has_a_complete_table_entry():

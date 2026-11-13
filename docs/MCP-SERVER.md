@@ -62,10 +62,9 @@ The generic tools are catalog-listed by default. `assets__roots`, `assets__scan`
 See [scene tools](TOOLS-SCENE.md) for trusted-root configuration and runtime prerequisites,
 and [the agent tier map](../AGENTS.md#what-you-can-reach-by-tier) for counts and filters.
 
-The twin's own robot, sensor and bench files are resolved separately from these tools.
-Set `ISAAC_MCP_ASSET_PATH` (deprecated alias `UR5E_DT_ASSET_CACHE`) and optionally
-`ISAAC_MCP_ASSET_STRICT=1` (alias `UR5E_DT_OFFLINE`) in the **Kit** environment. See
-[Assets: stores, project file and doctor](ASSETS.md).
+The work cell's robot, sensor and bench files are packs in the asset root, which the host and Kit each resolve themselves.
+Set `ISAAC_MCP_ASSET_ROOT` in the **Kit** environment too, or Kit looks in `<workspace>/assets`. See
+[Asset packs](ASSET-PACKS.md).
 
 ### RISE lab's UR5e twin (`ur5e_dt__*`)
 The host lists a packaged catalog of UR5e tools even before a simulator is running. Calls require an Isaac Sim

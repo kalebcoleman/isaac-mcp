@@ -308,29 +308,45 @@ def test_the_source_must_be_one_approved_absolute_path(tmp_path, extra, code):
     assert out["code"] == code and not seen
 
 
+def _urdf_pack(store, files):
+    """A pack bot/v1 in the asset root that verifies against its pack.yaml."""
+    import hashlib
+
+    directory = store / "bot" / "v1"
+    records = []
+    for rel, text in sorted(files.items()):
+        (directory / rel).parent.mkdir(parents=True, exist_ok=True)
+        (directory / rel).write_text(text)
+        records.append(dict(path=rel, sha256=hashlib.sha256(text.encode()).hexdigest(), source="t", license="t", redistributable=False))
+    (directory / "pack.yaml").write_text(json.dumps(dict(id="bot", version="v1", files=records)))
+
+
 def test_quick_start_sends_a_pack_urdf_through_the_host(tmp_path, monkeypatch):
     store = tmp_path / "store"
-    (store / "bot").mkdir(parents=True)
-    (store / "bot" / "r.urdf").write_text('<robot name="r"><link name="a"/></robot>')
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
+    _urdf_pack(store, {"r.urdf": '<robot name="r"><link name="a"/></robot>'})
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(store))
     monkeypatch.setenv("ISAAC_MCP_PROJECT", str(tmp_path / "none"))
     state, _, seen = _urdf_state(tmp_path)
-    assert json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/r.urdf"), state))["status"] == "ok"
-    assert seen[0][0] == "sim.quick_start" and seen[0][1]["robot"] == "bot/r.urdf" and seen[0][2]["root_name"] == "bot"
-    out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/none.urdf"), state))
-    assert out["code"] == "ASSET_MISSING" and len(seen) == 1
-    out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bad..name/r.urdf"), state))
+    assert json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/v1/r.urdf"), state))["status"] == "ok"
+    assert seen[0][0] == "sim.quick_start" and seen[0][1]["robot"] == "bot/v1/r.urdf" and seen[0][2]["root_name"] == "v1"
+    out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/v1/none.urdf"), state))
+    assert out["code"] == "ASSET_MISSING" and len(seen) == 1  # not listed in pack.yaml
+    out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/r.urdf"), state))  # a version is required
+    assert out["code"] == "INVALID_VALUE" and len(seen) == 1
+    out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bad..name/v1/r.urdf"), state))
     assert out["code"] in ("INVALID_VALUE", "ASSET_MISSING") and len(seen) == 1
+    (store / "bot/v1/r.urdf").write_text('<robot name="changed"/>')  # no longer what pack.yaml says
+    out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/v1/r.urdf"), state))
+    assert out["code"] == "ASSET_MISSING" and "Checksum mismatch" in out["message"] and len(seen) == 1
 
 
 def test_quick_start_refuses_a_pack_xacro_with_the_guidance(tmp_path, monkeypatch):
     store = tmp_path / "store"
-    (store / "bot").mkdir(parents=True)
-    (store / "bot" / "r.urdf.xacro").write_text("<robot/>")
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
+    _urdf_pack(store, {"r.urdf.xacro": "<robot/>"})
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(store))
     monkeypatch.setenv("ISAAC_MCP_PROJECT", str(tmp_path / "none"))
     state, _, seen = _urdf_state(tmp_path)
-    out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/r.urdf.xacro"), state))
+    out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/v1/r.urdf.xacro"), state))
     assert out["code"] == "XACRO" and not seen
 
 

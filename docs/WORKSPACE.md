@@ -14,9 +14,9 @@ untested.
 - **Reproducible.** One root holds everything the setup needs. You can write down what is
   in it and rebuild it.
 - **Projects never edit the MCP checkout.** The checkout is code only. Your scenes, notes and
-  asset changes live in `projects/` and `isaac-mcp-assets/`, so updating or re-cloning the checkout
+  asset changes live in `projects/` and the asset root, so updating or re-cloning the checkout
   cannot lose them.
-- **Easy to copy.** Moving to a second machine means copying `isaac-mcp-assets/` and checking hashes
+- **Easy to copy.** Moving to a second machine means copying the asset root and running `doctor` on each pack
   (see [Move to a second machine](#move-to-a-second-machine)).
 
 ## Layout
@@ -24,7 +24,7 @@ untested.
 ```text
 <workspace>/
   isaac-mcp/     the checkout (code only, never edited by projects)
-  isaac-mcp-assets/  your local asset database (isaac-mcp-assets/ur5e-dt/..., SHA256SUMS); never pushed
+  isaac-mcp-assets/  your asset root: packs as <pack id>/<version>/pack.yaml; never pushed (the name `assets/` is preferred)
   envs/          Isaac Sim / Isaac Lab Python environments (e.g. sim-6.2/, lab-3.0/)
   projects/      your projects, each may hold an isaac-mcp.json
   runs/          logs, job outputs, captures
@@ -83,14 +83,14 @@ To see at the start of every session whether a bridge is up, add a Claude Code h
    `<repo>/.venv`, which is found automatically. If you already have Isaac Sim, see
    [I already have Isaac Sim installed](#i-already-have-isaac-sim-installed).
 
-5. **Add your assets and check.** `<workspace>/isaac-mcp-assets` is the asset folder when
-   `ISAAC_MCP_WORKSPACE` is set (otherwise `isaac-mcp-assets` next to the checkout, which is
-   the same folder in this layout). Fill it with `scripts/isaac_assets.py add`, `adopt` or
-   `migrate` and `scripts/fetch_ur5e_assets.py` (see [ASSETS.md](ASSETS.md)).
+5. **Add your assets and check.** The asset root is `ISAAC_MCP_ASSET_ROOT`, else `<workspace>/assets`, else
+   `<workspace>/isaac-mcp-assets` (what `init` creates; found with a warning that the name is transitional, so
+   set `ISAAC_MCP_ASSET_ROOT` to it). Fill it with `scripts/isaac_assets.py adopt` or by copying a pack folder
+   in (see [ASSET-PACKS.md](ASSET-PACKS.md)).
 
    ```bash
-   python3 scripts/isaac_assets.py add /path/to/lab-assets.tar.gz --store "$ISAAC_MCP_WORKSPACE/isaac-mcp-assets"
-   python3 scripts/isaac_assets.py doctor
+   export ISAAC_MCP_ASSET_ROOT="$ISAAC_MCP_WORKSPACE/isaac-mcp-assets"
+   python3 scripts/isaac_assets.py list
    python3 scripts/isaac_env.py where
    ./run.sh --port 8766   # not if a Kit already holds this port; choose another with --port
    ```
@@ -162,11 +162,9 @@ list; the version only filters. `run.sh` asks for any Isaac Sim 6.x
    `~/isaac-sim`, `~/.local/share/ov/pkg/isaac-sim-*`, `/opt/nvidia/isaac-sim*`,
    `/isaac-sim`.
 
-The asset stores are searched in this order (see [ASSETS.md](ASSETS.md#lookup-order)):
-project stores, then either `ISAAC_MCP_ASSET_PATH` (when set, it **replaces** the defaults) or
-the asset folder (`<workspace>/isaac-mcp-assets`, or `isaac-mcp-assets` next to the checkout)
-followed by older locations that still exist (`<workspace>/assets`,
-`~/.cache/ur5e-dt/assets`), read only. `isaac_assets.py migrate` moves them.
+The asset root is found in this order (see [ASSET-PACKS.md](ASSET-PACKS.md#the-asset-root-and-how-it-is-found)):
+`ISAAC_MCP_ASSET_ROOT`, then `<workspace>/assets`, then `<workspace>/isaac-mcp-assets` (with a warning), else an error
+that names the setting.
 
 ## What is not auto-detected
 
@@ -185,12 +183,12 @@ followed by older locations that still exist (`<workspace>/assets`,
 
 | Variable | What it does | Default |
 |---|---|---|
-| `ISAAC_MCP_WORKSPACE` | The workspace folder for `isaac_env.py` and the asset-store lookup. | `~/isaac-workspace` for `isaac_env.py`. The asset folder becomes `<workspace>/isaac-mcp-assets`. |
+| `ISAAC_MCP_WORKSPACE` | The workspace folder for `isaac_env.py` and the asset-root lookup. | `~/isaac-workspace` for `isaac_env.py`; for the asset root, the folder that holds the checkout. |
 | `ISAAC_MCP_PYTHON` | Simulator interpreter for `run.sh`. Highest priority. | unset (auto-detect) |
 | `UR5E_DT_PYTHON` | Deprecated alias of `ISAAC_MCP_PYTHON`. | unset |
 | `ISAAC_SIM_PYTHON` | Lowest-priority explicit interpreter. Honoured by `scripts/isaac_env.py` auto-detection only: `run.sh` itself checks `ISAAC_MCP_PYTHON`, `UR5E_DT_PYTHON` and `<repo>/.venv` first, so an existing `.venv` wins over it. | unset |
 | `ISAACSIM_PATH`, `ISAAC_SIM_PATH`, `ISAAC_PATH` | A standalone Isaac Sim install folder to search. | unset |
-| `ISAAC_MCP_ASSET_PATH` | Asset stores, separated by `:`. Alias `UR5E_DT_ASSET_CACHE`. | `isaac-mcp-assets` next to the checkout (or `<workspace>/isaac-mcp-assets`) |
+| `ISAAC_MCP_ASSET_ROOT` | The one asset root holding `<pack id>/<version>/pack.yaml`. | `<workspace>/assets`, else `<workspace>/isaac-mcp-assets` |
 | `ISAAC_MCP_PROJECT` | A project directory, or its `isaac-mcp.json`. | walk up from the working directory |
 | `ISAAC_MCP_SIM_ROOT` | Checkout (with `run.sh`) that managed `sim__launch` sessions use. Set it when the host is installed outside a checkout. | the repository root when available |
 
@@ -202,16 +200,17 @@ Setting one only in the client does not change an already-running Kit process.
 Paths differ between machines. The bytes must not.
 
 1. On the second machine, do [the setup above](#set-up-a-new-machine) steps 1 to 4.
-2. Copy the asset folder `isaac-mcp-assets/` (it includes the `SHA256SUMS` pin files) to the same place.
-   Keep each pack folder whole.
-3. Run on both machines and compare:
+2. Copy the pack folders (each `<pack id>/<version>/` with its `pack.yaml`) to the asset root there.
+   Keep each version whole.
+3. Run on the second machine:
 
    ```bash
-   python3 scripts/isaac_assets.py doctor --json > doctor-$(hostname).json
+   python3 scripts/isaac_assets.py list
+   python3 scripts/isaac_assets.py doctor <pack id>/<version>
    ```
 
-   For each `relpath`, `status` and `sha256` must match. Ignore `path`. See
-   [ASSETS.md](ASSETS.md#verify-on-two-machines).
+   Every version must say `verified`: `pack.yaml` carries the hashes, so a file that differs fails. See
+   [ASSET-PACKS.md](ASSET-PACKS.md#moving-packs-between-machines).
 4. Environments are not copied. Install the same Sim version on the second machine and check
    it with the version one-liner above.
 
@@ -226,9 +225,9 @@ Paths differ between machines. The bytes must not.
 with `ISAAC_MCP_PYTHON`. `python3 scripts/isaac_env.py where` shows the effective workspace
 and interpreter.
 
-**Assets are not found.** The asset folder must be the one the Kit process sees: check
-`ISAAC_MCP_ASSET_PATH` / `ISAAC_MCP_WORKSPACE` in the Kit process's environment. Run
-`python3 scripts/isaac_assets.py where` to see the stores in order.
+**Assets are not found.** The asset root must be the one the Kit process sees: check
+`ISAAC_MCP_ASSET_ROOT` / `ISAAC_MCP_WORKSPACE` in the Kit process's environment. Run
+`python3 scripts/isaac_assets.py where` to see the root and how it was found.
 
 **Found but broken.** An interpreter listed by `find` can still be incompatible. Run the
 version one-liner and `uv pip check` shown above.

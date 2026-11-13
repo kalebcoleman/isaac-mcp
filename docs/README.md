@@ -13,7 +13,7 @@ over both.
 | [Linux setup](LINUX-SETUP.md) | Prerequisites, install paths, build selection, assets, first-connection troubleshooting |
 | [MCP server](MCP-SERVER.md) | Client configuration (Claude Code and Desktop, Codex, OpenCode, Antigravity), limiting what a client can reach |
 | [Workspace](WORKSPACE.md) | One folder for the checkout, assets and environments; what is auto-detected |
-| [Assets](ASSETS.md) | Asset stores, project file, doctor, moving assets between machines |
+| [Asset packs](ASSET-PACKS.md) | The one pack model: `pack.yaml`, the asset root, list/doctor/adopt/pin/build, converting an old pack, moving packs between machines |
 | [Importing any asset](ASSET-IMPORT.md) | One import for USD, URDF, xacro, SDF, MJCF and robot folders: formats, safety, physics after import |
 | [Environment variables](ENVIRONMENT.md) | Every setting, and which process reads it |
 | [Compatibility](COMPATIBILITY.md) | Tested simulator builds, modes and open issues |
@@ -54,7 +54,7 @@ over both.
 |---|---|
 | [Working checklist](CHECKLIST.md) | Current priorities and open work |
 | [Publishing](PUBLISHING.md) | PyPI release steps |
-| [Vendoring](VENDORING.md) · [Asset provenance](provenance/ASSETS.md) · [Third-party notices](../THIRD-PARTY-NOTICES.md) | Licenses and origins |
+| [Vendoring](VENDORING.md) · [Third-party notices](../THIRD-PARTY-NOTICES.md) | Licenses and origins |
 | [Media](media/README.md) | Provenance of the images in the README |
 
 ## NVIDIA resources
@@ -75,7 +75,7 @@ away. Scripts that import `mcp` need `uv run --locked --isolated --project mcp -
 
 | Purpose | Scripts |
 |---|---|
-| Find and prepare | `isaac_env.py` (find an install, create a workspace), `isaac_assets.py` (asset stores), `fetch_ur5e_assets.py` (NVIDIA assets), `install.py` (register the bridge in a Kit app), `check_machine.sh` (6.2 preflight; can use the GPU) |
+| Find and prepare | `isaac_env.py` (find an install, create a workspace), `isaac_assets.py` (asset packs), `install.py` (register the bridge in a Kit app), `check_machine.sh` (6.2 preflight; can use the GPU) |
 | Start | `run_ur5e_dt.py` (what `run.sh` runs) |
 | Project checks (CPU, also in CI) | `check_docs.py`, `check_assets.py`, `check_portable_paths.py`, `check_private_paths.py`, `gen_host_catalog.py`, `gen_tool_reference.py` |
 | UR5e checks (live, disposable) | `workcell_smoke.py` (requires an explicitly selected disposable bridge and lab config) |

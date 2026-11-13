@@ -13,7 +13,7 @@ and required uv to be installed anyway. Check PyPI name availability before publ
 4. Verify the bundled-asset cleanup with `python3 scripts/check_assets.py`. The NVIDIA robot,
    sensor and material files, the Vention bench, the unused Kawasaki/RG2 scene and the Poliigon oak
    textures must not be in the public tree or its history. The Apache-2.0 and CC BY 4.0 notices are
-   in `THIRD-PARTY-NOTICES.md`; see [`provenance/ASSETS.md`](provenance/ASSETS.md) for the audit.
+   in `THIRD-PARTY-NOTICES.md`.
 5. Fill in `project.urls` (repository, issues) in `mcp/pyproject.toml`; the repository is public.
 
 ## PyPI (Python host server)

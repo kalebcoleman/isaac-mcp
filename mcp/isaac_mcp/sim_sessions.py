@@ -137,9 +137,9 @@ def _domain_start(env: Mapping[str, str]) -> int:
 def _host_project_file():
     """The isaac-mcp.json this host resolves, or None (an unreadable or invalid one is not passed on)."""
     try:
-        from . import assets
+        from . import pack_manifest
 
-        return assets.project_file()
+        return pack_manifest.project_file()
     except Exception:  # noqa: BLE001 - a launch must not fail because of a project file problem
         return None
 
@@ -796,7 +796,7 @@ def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | N
             if env.get(key):
                 child_env[key] = env[key]
         # The project file this host sees is the one Kit must see: Kit starts in another folder, so without this it would
-        # never read the project's pack or asset_path, and the same call would resolve differently in host and Kit.
+        # never read the project's pack, and the same call would resolve differently in host and Kit.
         project = _host_project_file()
         if project is not None:
             child_env.setdefault("ISAAC_MCP_PROJECT", str(project))
@@ -840,8 +840,8 @@ def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | N
         threading.Thread(target=proc.wait, daemon=True).start()
         claim.handover({"pid": proc.pid, "start_ticks": identity[1], "boot_id": boot_id})
         return {**_public(record), "managed": True, "state": "starting",
-                # Inherited, and deliberately not an argument: a pack in a store imports without approval.
-                "asset_stores": os.environ.get("ISAAC_MCP_ASSET_PATH") or "default; set ISAAC_MCP_ASSET_PATH in the MCP server's environment",
+                # Inherited, and deliberately not an argument: a pack in the asset root imports without approval.
+                "asset_root": os.environ.get("ISAAC_MCP_ASSET_ROOT") or "default: <workspace>/assets; set ISAAC_MCP_ASSET_ROOT in the MCP server's environment",
                 "note": (f"Use sim__status to confirm bridge readiness, then use_bridge(port={port}) "
                          "to send tool calls to this simulator. If this is the only managed session "
                          "and the configured port does not answer, refresh_tools(wait_s=120) waits "

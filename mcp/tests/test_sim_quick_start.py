@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import os
 import math
 import sys
 import types
@@ -18,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts" / "sim-tools
 
 from isaac_mcp.project_assets import AssetError, Broker  # noqa: E402
 from isaac_mcp.scene_contracts import REGISTRY  # noqa: E402
-from sim_tools import quick_start as qs  # noqa: E402
+from sim_tools import public_robots, quick_start as qs  # noqa: E402
 from sim_tools.core import Scene  # noqa: E402
 
 ROBOT_USDA = """#usda 1.0
@@ -56,7 +57,7 @@ class Timeline:
 
 @pytest.fixture()
 def kit(monkeypatch, tmp_path):
-    """Fake omni.usd/omni.kit.app around a real stage; asset folder in tmp; no project file."""
+    """Fake omni.usd/omni.kit.app around a real stage; asset root and the simulator's assets root in tmp; no project file."""
     state = SimpleNamespace(stage=Usd.Stage.CreateInMemory(), new_stages=0)
 
     class Context:
@@ -86,17 +87,24 @@ def kit(monkeypatch, tmp_path):
     sys.modules["omni"].usd = usd
     sys.modules["omni"].kit = sys.modules["omni.kit"]
     sys.modules["omni.kit"].app = app_module
-    store = tmp_path / "store"
-    (store / "ur5e-dt" / "robot").mkdir(parents=True)
-    (store / "ur5e-dt" / "robot" / "ur5e.usd").write_text(ROBOT_USDA)
-    # A lab-modified robot: its own pin decides, not the manifest's NVIDIA hash.
-    digest = hashlib.sha256(ROBOT_USDA.encode()).hexdigest()
-    (store / "ur5e-dt" / "SHA256SUMS").write_text(f"{digest}  robot/ur5e.usd\n")
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
-    monkeypatch.delenv("ISAAC_MCP_PROJECT", raising=False)
-    monkeypatch.delenv("ISAAC_MCP_ASSET_STRICT", raising=False)
+    store = tmp_path / "store"  # the asset root: packs as <id>/<version>/pack.yaml
+    store.mkdir()
+    # The simulator's own assets root, as a folder: the public names (ur5e included) come from here.
+    nvidia = tmp_path / "nvidia-root"
+    (nvidia / "Isaac/Robots/UniversalRobots/ur5e").mkdir(parents=True)
+    (nvidia / "Isaac/Robots/UniversalRobots/ur5e/ur5e.usd").write_text(ROBOT_USDA)
+
+    async def stat(url):
+        return os.path.exists(url)
+
+    monkeypatch.setattr(public_robots, "assets_root", lambda: str(nvidia))
+    monkeypatch.setattr(public_robots, "client_stat", stat)
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(store))
+    for name in ("ISAAC_MCP_PROJECT", "ISAAC_MCP_ASSET_PATH", "ISAAC_MCP_ASSET_STRICT", "ISAAC_MCP_WORKSPACE"):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.chdir(tmp_path)
     state.store = store
+    state.nvidia = nvidia
     state.timeline = Timeline()
     state.scene = Scene(lambda: state.stage, state.timeline, output=tmp_path / "out")
     state.played = []
@@ -107,6 +115,21 @@ def kit(monkeypatch, tmp_path):
 
     state.ext = SimpleNamespace(scene=state.scene, _timeline_control=control)
     state.run = lambda **args: asyncio.run(qs.run(state.ext, args))
+
+    def pack(pack_id, version, files):
+        """A verifying pack in the asset root: ``files`` maps a path to its text."""
+        directory = store / pack_id / version
+        records = []
+        for rel, text in sorted(files.items()):
+            path = directory / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+            records.append(dict(path=rel, sha256=hashlib.sha256(text.encode()).hexdigest(), source="test", license="test",
+                                redistributable=False))
+        (directory / "pack.yaml").write_text(json.dumps(dict(id=pack_id, version=version, files=records)))
+        return directory
+
+    state.pack = pack
     return state
 
 
@@ -179,66 +202,118 @@ def test_public_robot_reports_root_and_source_and_expands_visuals(kit):
     out = kit.run(robot="ur5e")
     assert out["robot"]["prim"] == "/World/UR5e" and out["robot"]["articulation_root"] == "/World/UR5e/root_joint"
     assert out["robot"]["expanded_visuals"] == 1
-    assert out["assets"][0]["source"] == "store" and out["assets"][0]["location"].endswith("robot/ur5e.usd")
+    assert out["assets"][0]["source"] == "nvidia_assets_root" and out["assets"][0]["location"].endswith("UniversalRobots/ur5e/ur5e.usd")
     assert any('path="/World/UR5e/root_joint"' in step for step in out["next_steps"])
     assert not kit.stage.GetPrimAtPath("/World/UR5e/link1/visuals").IsInstance()
 
 
-def test_public_robot_without_a_local_copy_uses_nvidia(kit, monkeypatch, tmp_path):
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path / "empty"))
-    found = qs.resolve_robot("ur5e")
-    assert found["assets"][0]["source"] == "remote" and found["uri"].startswith("https://")
+@pytest.mark.parametrize("name,prim,path", [
+    ("franka", "Franka", "Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"),
+    ("unitree_g1", "UnitreeG1", "Isaac/Robots/Unitree/G1/g1.usd"),
+    ("ur5e", "UR5e", "Isaac/Robots/UniversalRobots/ur5e/ur5e.usd"),
+])
+def test_the_public_names_still_resolve_through_the_simulators_assets_root(kit, name, prim, path):
+    """franka, unitree_g1 and ur5e must place exactly as before: the file is found under the build's own root."""
+    target = kit.nvidia / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(ROBOT_USDA)
+    out = kit.run(robot=name)
+    assert out["robot"]["prim"] == f"/World/{prim}" and kit.stage.GetPrimAtPath(f"/World/{prim}")
+    report = out["assets"][0]
+    assert report == dict(asset=path, source="nvidia_assets_root", location=str(target))
 
 
-def test_strict_mode_refuses_before_changing_anything(kit, monkeypatch, tmp_path):
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path / "empty"))
-    monkeypatch.setenv("ISAAC_MCP_ASSET_STRICT", "1")
+def test_the_warehouse_and_its_default_robot_do_not_touch_the_pack_model():
+    """environment=warehouse builds plain USD in code; its default robot is carter_v1, a public name from the
+    simulator's assets root. Neither goes through the pack reader, so removing the old resolver changes nothing for them."""
+    root = Path(qs.__file__).parent
+    for module in ("warehouse.py", "jenga.py", "quick_start.py", "public_robots.py"):
+        source = (root / module).read_text()
+        assert "isaac_mcp import assets" not in source and "asset_packs" not in source, module
+    assert 'robot = "carter_v1" if environment == "warehouse" else "franka"' in (root / "quick_start.py").read_text()
+    assert {"carter_v1", "franka"} <= set(public_robots.NVIDIA_ROBOTS)
+
+
+def test_public_robot_the_simulators_root_lacks_is_refused_with_the_names(kit):
+    (kit.nvidia / "Isaac/Robots/UniversalRobots/ur5e/ur5e.usd").unlink()
     error = refused(kit, robot="ur5e")
-    assert error.code == "ASSET_MISSING" and "strict" in str(error)
+    assert error.code == "ROBOT_NOT_ON_THIS_BUILD" and "franka" in str(error)
     assert not kit.stage.GetPrimAtPath("/World")
 
 
-def test_a_robot_from_a_project_file_is_not_an_approval(kit, monkeypatch, tmp_path):
+def test_nothing_is_downloaded_whatever_the_old_settings_say(kit, monkeypatch):
+    monkeypatch.setenv("ISAAC_MCP_ASSET_STRICT", "0")
+    monkeypatch.setenv("UR5E_DT_ASSET_ROOT", "https://example.invalid/mirror")
+    monkeypatch.setenv("ISAAC_MCP_ASSET_REMOTE_ROOT", "https://example.invalid/mirror")
+    out = kit.run(robot="ur5e")
+    assert out["assets"][0]["location"].startswith(str(kit.nvidia)) and "example.invalid" not in json.dumps(out["assets"])
+
+
+def test_a_project_file_does_not_name_a_robot_or_a_folder(kit, tmp_path, monkeypatch):
     repo = tmp_path / "cloned"
-    (repo / "assets" / "ur5e-dt" / "robot").mkdir(parents=True)
-    (repo / "assets" / "ur5e-dt" / "robot" / "ur5e.usd").write_text(ROBOT_USDA)
-    (repo / "isaac-mcp.json").write_text(json.dumps({"asset_path": ["assets"]}))
+    repo.mkdir()
+    (repo / "isaac-mcp.json").write_text(json.dumps({"pack": "mine/v1"}))
     monkeypatch.chdir(repo)
-    assert refused(kit, robot="ur5e").code == "ROOT_NOT_APPROVED"
-    assert not kit.stage.GetPrimAtPath("/World")
+    kit.pack("mine", "v1", {"arm.usd": ROBOT_USDA})
+    out = kit.run(robot="ur5e")  # a public name is still the simulator's file, never the project's
+    assert out["assets"][0]["source"] == "nvidia_assets_root"
 
 
 def test_pack_file_is_verified_and_named(kit):
-    pack = kit.store / "mine"
-    pack.mkdir()
-    (pack / "arm.usd").write_text(ROBOT_USDA)
-    out = kit.run(robot="mine/arm.usd")
+    pack = kit.pack("mine", "v1", {"arm.usd": ROBOT_USDA})
+    out = kit.run(robot="mine/v1/arm.usd")
     assert out["robot"]["prim"] == "/World/arm" and out["robot"]["articulation_root"] == "/World/arm/root_joint"
-    assert out["assets"][0]["location"].endswith("mine/arm.usd")
-    kit2 = pack / "SHA256SUMS"
-    kit2.write_text("0" * 64 + "  arm.usd\n")
-    assert refused(kit, robot="mine/arm.usd", discard_changes=True).code == "ASSET_INVALID"
+    assert out["assets"][0]["source"] == "pack" and out["assets"][0]["location"].endswith("mine/v1/arm.usd")
+    assert out["assets"][0]["asset"] == "mine/v1/arm.usd"
+    (pack / "arm.usd").write_text(ROBOT_USDA + "\n# edited by hand\n")  # now it no longer matches pack.yaml
+    assert refused(kit, robot="mine/v1/arm.usd", discard_changes=True).code == "ASSET_MISSING"
+    assert "Checksum mismatch" in str(refused(kit, robot="mine/v1/arm.usd", discard_changes=True))
 
 
 @pytest.mark.parametrize("robot,code", [
     ("nobody", "INVALID_VALUE"),
-    ("mine/../../etc/passwd.usd", "INVALID_VALUE"),
-    ("mine/notes.txt", "INVALID_VALUE"),
-    ("../x/arm.usd", "INVALID_VALUE"),
-    ("mine/absent.usd", "ASSET_MISSING"),
+    ("mine/arm.usd", "INVALID_VALUE"),  # a version is required
+    ("mine/v1/../../etc/passwd.usd", "INVALID_VALUE"),
+    ("mine/v1/notes.txt", "INVALID_VALUE"),
+    ("../x/v1/arm.usd", "INVALID_VALUE"),
+    ("mine/v1/absent.usd", "ASSET_MISSING"),  # not listed in pack.yaml
+    ("mine/v2/arm.usd", "ASSET_MISSING"),
     ("/etc/hostile.usd", "ROOT_NOT_APPROVED"),  # not through the host: no snapshot, so never read
     ("~/hostile.usd", "ROOT_NOT_APPROVED"),
 ])
 def test_robot_refusals_change_nothing(kit, robot, code):
+    kit.pack("mine", "v1", {"arm.usd": ROBOT_USDA, "notes.txt": "n"})
     assert refused(kit, robot=robot).code == code
     assert not kit.stage.GetPrimAtPath("/World")
 
 
+def test_a_file_in_a_pack_that_pack_yaml_does_not_list_is_never_loaded(kit):
+    directory = kit.pack("mine", "v1", {"arm.usd": ROBOT_USDA})
+    (directory / "extra.usd").write_text(ROBOT_USDA)
+    error = refused(kit, robot="mine/v1/extra.usd")
+    assert error.code == "ASSET_MISSING" and "not listed" in str(error) and not kit.stage.GetPrimAtPath("/World")
+
+
+def test_a_symlinked_pack_file_is_never_followed(kit, tmp_path):
+    directory = kit.pack("mine", "v1", {"arm.usd": ROBOT_USDA})
+    outside = tmp_path / "outside.usd"
+    outside.write_text(ROBOT_USDA)
+    (directory / "arm.usd").unlink()
+    (directory / "arm.usd").symlink_to(outside)
+    assert refused(kit, robot="mine/v1/arm.usd").code == "ASSET_MISSING"
+    assert not kit.stage.GetPrimAtPath("/World")
+
+
+def test_without_an_asset_root_a_pack_file_says_which_setting_to_make(kit, monkeypatch, tmp_path):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_ROOT")
+    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(tmp_path / "empty-workspace"))
+    error = refused(kit, robot="mine/v1/arm.usd")
+    assert error.code == "ASSET_MISSING" and "ISAAC_MCP_ASSET_ROOT" in str(error)
+
+
 def test_a_robot_file_that_composes_to_nothing_is_refused(kit):
-    pack = kit.store / "mine"
-    pack.mkdir()
-    (pack / "empty.usd").write_text('#usda 1.0\n(\n    defaultPrim = "x"\n    metersPerUnit = 1\n    upAxis = "Z"\n)\ndef Xform "x" {}\n')
-    error = refused(kit, robot="mine/empty.usd")
+    kit.pack("mine", "v1", {"empty.usd": '#usda 1.0\n(\n    defaultPrim = "x"\n    metersPerUnit = 1\n    upAxis = "Z"\n)\ndef Xform "x" {}\n'})
+    error = refused(kit, robot="mine/v1/empty.usd")
     assert error.code == "IMPORT_FAILED" and not kit.stage.GetPrimAtPath("/World/empty")
 
 
@@ -389,9 +464,7 @@ def test_distances_scale_with_units(kit):
 
 
 def y_up_file(kit, name="scene.usd"):
-    pack = kit.store / "chess"
-    pack.mkdir(exist_ok=True)
-    (pack / name).write_text('''#usda 1.0
+    kit.pack("chess", "v1", {name: '''#usda 1.0
 (
     defaultPrim = "set"
     metersPerUnit = 0.01
@@ -404,8 +477,8 @@ def Xform "set" {
         uniform token[] xformOpOrder = ["xformOp:translate"]
     }
 }
-''')
-    return f"chess/{name}"
+'''})
+    return f"chess/v1/{name}"
 
 
 def test_a_matching_file_works_and_frames_at_its_size(kit):
@@ -435,17 +508,17 @@ def test_the_public_robot_on_a_y_up_stage_refuses_rather_than_lying_on_its_side(
 
 
 def test_an_unreadable_local_file_refuses_before_changing_anything(kit):
-    pack = kit.store / "chess"
-    pack.mkdir()
-    (pack / "broken.usda").write_text("#usda 1.0\ndef Oops {")
-    assert refused(kit, robot="chess/broken.usda").code == "IMPORT_FAILED"
+    kit.pack("chess", "v1", {"broken.usda": "#usda 1.0\ndef Oops {"})
+    assert refused(kit, robot="chess/v1/broken.usda").code == "IMPORT_FAILED"
     assert not kit.stage.GetPrimAtPath("/World")
 
 
-def test_a_remote_file_that_cannot_be_read_first_is_noted_not_refused(kit, monkeypatch):
+def test_a_file_that_cannot_be_read_is_refused_whatever_its_source(kit, monkeypatch):
     monkeypatch.setattr(qs, "file_units", lambda uri: (_ for _ in ()).throw(RuntimeError("no network")))
-    wanted = dict(uri="https://x/y.usd", assets=[dict(source="remote")])
-    assert qs.check_resolved_units(wanted, "Z", 1.0) is False
+    wanted = dict(uri="https://x/y.usd", assets=[dict(source="nvidia_assets_root")])
+    with pytest.raises(AssetError) as error:
+        qs.check_resolved_units(wanted, "Z", 1.0)
+    assert error.value.code == "IMPORT_FAILED"
 
 
 @pytest.mark.parametrize("args", [{"up_axis": "X"}, {"up_axis": "y"}, {"up_axis": 1}, {"meters_per_unit": 0},

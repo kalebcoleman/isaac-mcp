@@ -85,16 +85,17 @@ def test_the_refusals_for_an_unapproved_path_carry_the_command(tmp_path, monkeyp
 
 def test_pack_tools_refuse_with_the_command_too(tmp_path, monkeypatch):
     monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path / "store"))
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(tmp_path / "store"))
     (tmp_path / "outside").mkdir()
     with pytest.raises(packs.PackError) as error:
-        packs.run_tool("assets.pack_adopt", dict(pack="mine", source_path=str(tmp_path / "outside")), a.Broker())
+        packs.run_tool("assets.pack_adopt", dict(pack="mine/v1", source_path=str(tmp_path / "outside"), source="s", license="l"),
+                       a.Broker())
     assert error.value.code == "ROOT_NOT_APPROVED" and "ask the user to run" in str(error.value)
 
 
 # ---- host and Kit seeing the same project -------------------------------------------------------------------------
 
-HOST = dict(project_file="/p/isaac-mcp.json", stores=["/p/assets", "/w/store"], strict=False)
+HOST = dict(project_file="/p/isaac-mcp.json", asset_root="/w/assets")
 
 
 def test_no_warning_when_host_and_kit_agree():
@@ -102,27 +103,28 @@ def test_no_warning_when_host_and_kit_agree():
 
 
 def test_a_kit_that_does_not_see_the_project_is_named():
-    warnings = packs.environment_warnings(HOST, dict(HOST, project_file=None, stores=["/w/store"]))
+    warnings = packs.environment_warnings(HOST, dict(HOST, project_file=None, asset_root="/other"))
     assert any("project file" in w and "sim__launch" in w and "ISAAC_MCP_PROJECT" in w for w in warnings)
-    assert any("stores" in w for w in warnings)
+    assert any("asset root" in w and "ISAAC_MCP_ASSET_ROOT" in w for w in warnings)
 
 
-def test_strict_differences_are_reported():
-    assert any("Strict mode" in w for w in packs.environment_warnings(HOST, dict(HOST, strict=True)))
+def test_a_different_asset_root_is_reported_on_its_own():
+    warnings = packs.environment_warnings(HOST, dict(HOST, asset_root="/kit/assets"))
+    assert len(warnings) == 1 and "/w/assets" in warnings[0] and "/kit/assets" in warnings[0]
 
 
 def test_packs_lists_a_warning_when_kit_disagrees(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path / "store"))
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(tmp_path / "store"))
     monkeypatch.delenv("ISAAC_MCP_PROJECT", raising=False)
     monkeypatch.chdir(tmp_path)
     (tmp_path / "store").mkdir()
-    kit = lambda tool, args: {"asset_environment": dict(project_file="/elsewhere/isaac-mcp.json", stores=["/other"], strict=True)}
+    kit = lambda tool, args: {"asset_environment": dict(project_file="/elsewhere/isaac-mcp.json", asset_root="/other")}
     out = packs.run_tool("assets.packs", {}, a.Broker(), kit_call=kit)
-    assert out["kit_environment"]["project_file"] == "/elsewhere/isaac-mcp.json" and len(out["warnings"]) == 3
+    assert out["kit_environment"]["project_file"] == "/elsewhere/isaac-mcp.json" and len(out["warnings"]) == 2
 
 
 def test_packs_without_a_kit_is_unchanged(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path / "store"))
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(tmp_path / "store"))
     (tmp_path / "store").mkdir()
     out = packs.run_tool("assets.packs", {}, a.Broker())
     assert "warnings" not in out and "kit_environment" not in out
@@ -131,7 +133,7 @@ def test_packs_without_a_kit_is_unchanged(tmp_path, monkeypatch):
 
 
 def test_a_kit_that_predates_the_report_gives_no_warning(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(tmp_path / "store"))
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(tmp_path / "store"))
     (tmp_path / "store").mkdir()
     out = packs.run_tool("assets.packs", {}, a.Broker(), kit_call=lambda t, x: {"status": "ok"})
     assert "warnings" not in out

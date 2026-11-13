@@ -41,8 +41,8 @@ in the `env` of the client's server entry. Relative paths start at that file's f
 
 A file found only by searching up from the working directory is ignored for these two keys, and `isaaclab__install_info`
 reports `project_setting_ignored` with what to set. Lab tools run this interpreter, and starting a client inside a cloned
-repository must not let that repository choose what runs. The same rule applies to a project file's `asset_path`, which
-is not an approval.
+repository must not let that repository choose what runs. The same rule applies to a project file's `pack`, which
+is not an approval: no tool trusts a path because a project file names it.
 
 The interpreter must be a virtual environment with Isaac Lab installed, which is checked from its files before anything
 runs it. An invalid setting is an error, not a fallback. That check catches mistakes; it does not stop a deliberately

@@ -1,12 +1,11 @@
 # Third-party notices
 
 This repository ships **no assets**. The twin is designed to use the third-party assets
-below, which each user keeps in their local asset folder (paths are relative to
-`<asset-folder>/ur5e-dt/`; see `docs/ASSETS.md`). Older revisions of the repository carried
-them; these notices apply to anyone who obtains or redistributes them. The
-provenance audit is in [`docs/provenance/ASSETS.md`](docs/provenance/ASSETS.md).
+below, which each user keeps in packs in their local asset root (see `docs/ASSET-PACKS.md`; each
+pack's `pack.yaml` records the source and licence of every file). Older revisions of the repository
+carried them; these notices apply to anyone who obtains or redistributes them.
 NVIDIA Isaac Sim assets and the Vention workstation are **not** redistributed;
-they are fetched from their official source or supplied by the operator.
+they come from their official source or are supplied by the operator.
 
 ## Husarion OnRobot RG2 description — Apache-2.0
 
@@ -64,9 +63,8 @@ copyrightable.
 
 - **NVIDIA Isaac Sim** — the UR5e robot, RealSense D455 model and NVIDIA
   material libraries remain under the NVIDIA Isaac Sim Additional Software and
-  Materials License. `scripts/fetch_ur5e_assets.py` downloads them into the
-  operator's cache, or the extension references NVIDIA's public asset root
-  directly. They are not part of this repository.
+  Materials License. The simulator's own asset root supplies them by name; the
+  repository does not download or ship them.
 - **Vention workstation** — the Vention MachineBuilder export is not
   redistributed. An operator may supply their own copy in the asset cache; the
   twin otherwise builds a simple placeholder bench.

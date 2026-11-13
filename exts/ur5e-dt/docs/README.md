@@ -40,7 +40,7 @@ restoring realized initial poses without resetting velocities or solver state.
 - Tools and behavior: [workcell tools](../../../docs/TOOLS-UR5E.md)
 - Arguments: [tool arguments](../../../docs/TOOLS-ARGUMENTS.md#ur5e-twin-ur5e_dt__)
 - Generic scenes: [scene tools](../../../docs/TOOLS-SCENE.md)
-- Asset policy: [assets](../../../docs/ASSETS.md)
+- Asset policy: [asset packs](../../../docs/ASSET-PACKS.md)
 
 The repository ships no pack binaries. Set `ISAAC_MCP_ASSET_ROOT` to override the asset
 root; the loader appends `ur5e-jenga-workcell/v1`. Configuration uses logical asset IDs,

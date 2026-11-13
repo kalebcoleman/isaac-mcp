@@ -47,7 +47,7 @@ explicitly selected disposable Kit bridge and an absolute lab config path on the
 It requires `--port`, `--config` and `--mutate-stage`; it rebuilds the workcell, so do not
 run it against a scene you need to preserve. It checks the ready/stopped PhysX report,
 units, gravity, Jenga dimensions/counts and part metadata. It does not replace the old
-workstation verifier’s joint-motion or checkpoint checks. See [assets](ASSETS.md) for lab files.
+workstation verifier’s joint-motion or checkpoint checks. See [asset packs](ASSET-PACKS.md) for lab files.
 
 ## Live checks
 
@@ -194,4 +194,4 @@ process and verify the properties and effects you need; see [save contracts](TOO
 Before sharing evidence, replace personal paths with neutral placeholders and visually inspect
 screenshots. Preserve original private records; publish a separate redacted summary with hashes.
 Keep USD/user assets, large logs and videos out of Git. See [media publication](media/README.md#video-access-and-publication)
-and [asset notices](provenance/ASSETS.md).
+and [third-party notices](../THIRD-PARTY-NOTICES.md).

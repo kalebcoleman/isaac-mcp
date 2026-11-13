@@ -1,27 +1,22 @@
 #!/usr/bin/env python3
 """Fail when an asset is tracked in the repository.
 
-The repository is code-only: every asset the twin uses (robot, sensor, workstation,
-gripper, objects, layouts) lives in each user's local asset folder (see
-``docs/ASSETS.md``), so nothing with a redistribution question is ever pushed. This
+The repository is code-only: every asset (robot, sensor, workstation, gripper,
+objects, layouts) lives in each user's asset root as a pack (see
+``docs/ASSET-PACKS.md``), so nothing with a redistribution question is ever pushed. This
 check fails when:
 
-* anything is tracked under ``exts/ur5e-dt/assets/`` (that folder is git-ignored and
-  only exists in old checkouts; ``scripts/isaac_assets.py migrate`` moves it out);
+* anything is tracked under ``exts/ur5e-dt/assets/`` (a folder old checkouts kept; it is git-ignored);
 * a 3D, robot-description or material file is tracked anywhere;
-* an image is tracked outside the documentation and the extensions' UI ``data/`` folders;
-* the manifest is malformed.
+* an image is tracked outside the documentation and the extensions' UI ``data/`` folders.
 """
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-ASSETS = REPO / "exts" / "ur5e-dt" / "assets"
-MANIFEST = REPO / "exts" / "ur5e-dt" / "assets-manifest.json"
 
 ASSET_SUFFIXES = {
     ".usd", ".usda", ".usdc", ".usdz", ".urdf", ".xacro", ".sdf", ".mjcf",
@@ -41,11 +36,6 @@ def tracked_files() -> set[str]:
 
 def main() -> int:
     errors: list[str] = []
-    try:
-        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        manifest = {}
-        errors.append(f"cannot read the asset manifest: {exc}")
     tracked = tracked_files()
     folder = "exts/ur5e-dt/assets/"
 
@@ -60,26 +50,12 @@ def main() -> int:
         ):
             errors.append(f"image tracked outside docs/ or an extension data/ folder: {path}")
 
-    for group in manifest.get("fetch", []):
-        for entry in group.get("files", []):
-            for key in ("target", "source", "sha256"):
-                if not entry.get(key):
-                    errors.append(f"manifest fetch entry without {key}: {entry}")
-    for item in manifest.get("local", []):
-        if not item.get("path") or not item.get("licence"):
-            errors.append(f"manifest local entry needs path and licence: {item}")
-
     if errors:
         print("Asset checks failed:")
         for error in errors:
             print(f"  - {error}")
         return 1
-    print(
-        "Asset checks passed (repository is code-only: "
-        f"{len(tracked)} tracked files, no assets; "
-        f"{sum(len(g.get('files', [])) for g in manifest.get('fetch', []))} fetchable and "
-        f"{len(manifest.get('local', []))} locally supplied asset groups described)."
-    )
+    print(f"Asset checks passed (repository is code-only: {len(tracked)} tracked files, no assets).")
     return 0
 
 

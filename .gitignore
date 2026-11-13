@@ -7,14 +7,14 @@ node_modules/
 *.npz
 outputs/
 logs/
-# The repository is code-only: assets live in each user's local asset folder
-# (isaac-mcp-assets next to the checkout; see docs/ASSETS.md) and are never committed.
+# The repository is code-only: assets live in each user's asset root as packs
+# (see docs/ASSET-PACKS.md) and are never committed.
 *.usd
 *.usda
 *.usdc
 *.usdz
 resources/*
-# Old checkouts kept assets here; `python3 scripts/isaac_assets.py migrate` moves them out.
+# Old checkouts kept assets here; nothing reads this folder any more.
 exts/ur5e-dt/assets/
 
 # screenshots saved by sessions while testing; not part of the repo

@@ -64,7 +64,7 @@ The captures show licensed, operator-approved NVIDIA/Vention workstation assets 
 Husarion gripper. They do not include USD, URDF, textures or composed geometry. Selection
 of these captures for the user's demo request is **not a new license grant** or permission
 to redistribute the underlying assets. See [vendoring](../VENDORING.md) and
-[per-asset provenance](../provenance/ASSETS.md). The wider task used the BSD-3-Clause
+[third-party notices](../../THIRD-PARTY-NOTICES.md). The wider task used the BSD-3-Clause
 Agilebot fixture ([notice](../provenance/agilebot-LICENSE)) and an original CC0 test fixture;
 those facts do not change the workstation's separate terms.
 
