@@ -63,7 +63,7 @@ def enabled() -> bool:
 
 
 def desktop_dir() -> Path:
-    """Where the desktop lock, the capture lock and the flag files live (as desktop_input._desktop_lock)."""
+    """Where the desktop input lock, the capture lock and the flag files live."""
     runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/twinsmith-desktop-{os.getuid()}"
     return Path(runtime) / "twinsmith-desktop"
 

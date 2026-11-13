@@ -12,7 +12,6 @@ import os
 import threading
 import time
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Annotated, Any, Iterable
 
 from pydantic import Field
@@ -73,8 +72,7 @@ def _desktop_lock():
     """Serialize cooperating MCP servers on this user's X display."""
     if fcntl is None:
         raise RuntimeError("desktop input requires a supported X11 Unix environment")
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/twinsmith-desktop-{os.getuid()}"
-    directory = Path(runtime) / "twinsmith-desktop"
+    directory = cursor_badge.desktop_dir()
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     name = hashlib.sha256(screen.DISPLAY.encode()).hexdigest()[:16] + ".lock"
     flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)

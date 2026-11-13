@@ -12,8 +12,6 @@ import json
 from typing import Any, Callable, Dict, Optional
 
 KIT_UI = frozenset({"sim.ui.act", "sim.ui.find"})
-# Arguments this host consumes; Kit never sees them.
-HOST_ONLY = ("coord_space", "screenshot_after")
 
 
 def kit_window(state: Any) -> Optional[dict]:
@@ -118,10 +116,12 @@ def kit_ui(canonical: str, params: Dict[str, Any], state: Any,
     coord_space = params.pop("coord_space", "window")
     screenshot_after = bool(params.pop("screenshot_after", False))
     try:
-        params = badge_args(map_coords(params, coord_space, state), state)
+        params = map_coords(params, coord_space, state)
     except ValueError as error:
         raise ToolError(json.dumps({"status": "error", "code": "INVALID_VALUE", "message": str(error),
                                     "effects": "No input was sent."})) from None
+    if canonical == "sim.ui.act":
+        params = badge_args(params, state)
     result = dispatch(canonical, params, state)
     failed = failed_of(result)
     if canonical == "sim.ui.find" and params.get("zoom_ref"):
