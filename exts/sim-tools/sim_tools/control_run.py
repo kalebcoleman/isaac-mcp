@@ -254,14 +254,20 @@ class BodyIO:
             return torch.from_numpy(data).to(device=self._device)
         return data
 
-    def apply(self, force, torque, frame):
+    def apply(self, force, torque, frame, at=None):
+        """Apply a wrench for the next physics step only: at the centre of mass, or at the world position *at* (world frame)."""
         if not any(force) and not any(torque):
             return
         apply = getattr(self.view, "apply_forces_and_torques_at_position", None)
         if not callable(apply):
             refuse("WRENCH_UNSUPPORTED", f"The {self.backend} rigid-body view on this build cannot apply forces; "
                    "no fallback was used.")
-        # For the next physics step only, at the centre of mass.
+        if at is not None:
+            if frame != "world":
+                refuse("INVALID_VALUE", "A world position needs a world-frame wrench.")
+            apply(self._data([list(force)]), self._data([list(torque)]), self._data([list(at)]),
+                  self._data([0], integer=True), True)
+            return
         at = None
         if self.com is not None and any(force):
             at = list(self.com)  # in the body frame

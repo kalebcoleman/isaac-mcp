@@ -337,18 +337,10 @@ class PrimTools:
 
     def physics_push(self, stage, a):
         """A one-off impulse on a body in the running simulation: edits nothing and needs no stopped timeline."""
-        from .physics import manager
-
-        if manager().get_active_physics_engine() == "newton":
-            refuse("IMPULSE_UNSUPPORTED", "Newton exposes tensor forces, not an atomic one-shot impulse. "
-                   "Use sim__simulation(action='run') with a force controller and explicit duration; "
-                   "no force, velocity change, or physics step was applied.", backend="newton")
-        import carb
-        import omni.physx
-        import omni.usd
-        from pxr import PhysicsSchemaTools, UsdGeom, UsdPhysics
+        from pxr import UsdGeom, UsdPhysics
 
         s = self.s
+        engine = self.physics_manager().get_active_physics_engine()
         path = a["path"]
         prim = s.prim(stage, path)
         if s.timeline.is_stopped():
@@ -360,6 +352,22 @@ class PrimTools:
             if value is not None and (not isinstance(value, (list, tuple)) or len(value) != 3
                                       or not all(type(v) in (int, float) and math.isfinite(v) for v in value)):
                 refuse("INVALID_VALUE", f"{label} must be three finite numbers.")
+        if engine == "newton":
+            from .newton_support import push
+
+            sent = push(stage, path, [float(v) for v in impulse], None if at is None else [float(v) for v in at],
+                        self.physics_manager())
+            return dict(path=path, impulse=[float(v) for v in impulse], at=None if at is None else [float(v) for v in at],
+                        unit="N s (kg m/s)", backend="newton", applied=any(sent["force"]), applied_force_n=sent["force"],
+                        force_duration_s=sent["duration_s"], timestep=sent["timestep"],
+                        note="Newton has no atomic impulse call: this is a force of impulse/duration applied for the first substep of "
+                             "the next physics step, at the centre of mass unless at is given (world position). It takes effect on "
+                             "the next step, whether stepped or played.")
+        import carb
+        import omni.physx
+        import omni.usd
+        from pxr import PhysicsSchemaTools
+
         if at is None:
             box = UsdGeom.BBoxCache(s.timeline.get_current_time() * stage.GetTimeCodesPerSecond(), [UsdGeom.Tokens.default_]).ComputeWorldBound(prim)
             at = list(box.ComputeAlignedRange().GetMidpoint())
@@ -367,7 +375,7 @@ class PrimTools:
         omni.physx.get_physx_simulation_interface().apply_force_at_pos(
             stage_id, PhysicsSchemaTools.sdfPathToInt(prim.GetPath()), carb.Float3(*[float(v) for v in impulse]), carb.Float3(*[float(v) for v in at]), "Impulse")
         return dict(path=path, impulse=list(impulse), at=[float(v) for v in at], unit="N s (kg m/s)",
-                    backend="physx", note="One push; it takes effect on the next physics step.")
+                    backend=engine, note="One push; it takes effect on the next physics step.")
 
     def physics_apply(self, stage, a):
         from pxr import UsdPhysics
@@ -726,12 +734,17 @@ class PrimTools:
         dt = scalar(a.get("dt", 1 / 60), 0.001, 0.1)
         engine = sm.get_active_physics_engine()
         buffer_config, buffer_report = None, None
+        explicit = any(a.get(key) is not None for key in ("nconmax", "njmax"))
         if engine == "newton":
             from .newton_support import prepare_buffers
 
-            buffer_config, buffer_report = prepare_buffers(stage, prim, s.timeline, a.get("nconmax"), a.get("njmax"))
-        elif any(a.get(key) is not None for key in ("nconmax", "njmax")):
-            refuse("NEWTON_CONFIG_UNSUPPORTED", "nconmax/njmax are Newton MuJoCo settings, not PhysX settings.")
+            if s.timeline.is_stopped() or explicit:  # explicit values on a running timeline are refused, not ignored
+                buffer_config, buffer_report = prepare_buffers(stage, prim, s.timeline, a.get("nconmax"), a.get("njmax"))
+            else:
+                buffer_report = dict(skipped="The timeline is not stopped, and Newton can only take new solver buffers on a Stop. "
+                                             "Stop, then run configure again to size them; the scene's rate and gravity were still set.")
+        elif explicit:
+            refuse("NEWTON_CONFIG_UNSUPPORTED", "nconmax/njmax are Newton MuJoCo-Warp settings, not PhysX settings.")
         length = math.sqrt(sum(x * x for x in gravity))
         direction = (
             Gf.Vec3f(*[x / length for x in gravity])
@@ -757,6 +770,7 @@ class PrimTools:
             from .newton_support import apply_buffers
 
             apply_buffers(buffer_config)
+        if buffer_report is not None:
             result["newton_buffers"] = buffer_report
         return result
 

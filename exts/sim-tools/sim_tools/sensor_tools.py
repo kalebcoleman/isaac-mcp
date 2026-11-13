@@ -14,6 +14,14 @@ CAPTURE_NAME = r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}\.png"
 CAPTURE_NAME_RULE = "Use a new name of letters, digits, _ and -, ending .png (<=64 characters). No spaces or folders."
 
 
+def _render_report():
+    """``physics_render``: how Newton's poses reach this capture (nothing on PhysX, which writes USD)."""
+    from .physics import render_publication
+
+    info = render_publication()
+    return {} if info is None else dict(physics_render=info)
+
+
 class SensorTools:
     """Mixed into Advanced: uses its scene (``self.s``), sensors and ``physics_manager``."""
 
@@ -246,7 +254,7 @@ class SensorTools:
                 )
             from .sensors import lidar_points
 
-            return dict(path=a["path"], **adoption, **lidar_points(sensor, limit))
+            return dict(path=a["path"], **adoption, **lidar_points(sensor, limit), **_render_report())
         h, w = sensor["resolution"]
         if not 64 <= h <= 1024 or not 64 <= w <= 1024:
             refuse(
@@ -308,6 +316,7 @@ class SensorTools:
             file = s.output / filename
             return dict(
                 **adoption,
+                **_render_report(),
                 file=str(file),
                 width=array.shape[1],
                 height=array.shape[0],

@@ -887,12 +887,12 @@ class Extension(omni.ext.IExt):
                 truncated=truncated,
             )
             if name == "sim.physics.inspect":
-                from .physics import manager
+                from .newton_support import diagnostics, engine_name
 
-                if manager().get_active_physics_engine() == "newton":
-                    from .newton_support import diagnostics
-
+                if engine_name() == "newton":
                     result["newton"] = diagnostics(stage)
+                    if result["newton"]["warnings"]:
+                        result["warnings"] = result["newton"]["warnings"]
             return result
         if name == "sim.prim.find":
             contains = a.get("contains", "")

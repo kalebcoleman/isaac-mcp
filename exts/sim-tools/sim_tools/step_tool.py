@@ -8,6 +8,24 @@ from .values import finite_clock
 class StepTool:
     """Mixed into Advanced: uses its scene (``self.s``), sensors and ``physics_manager``."""
 
+    def newton_timestep(self, sm, stage):
+        """``(native stage, report)``: Newton's two timestep sources compared, and its own clocks noted, before anything steps.
+
+        A disagreement refuses (STEP_DT_SOURCES_DISAGREE). Where Newton's stage cannot be reached the check is reported as
+        not run, never as passed."""
+        from .newton_support import clocks, dt_sources
+        from .physics import newton_stage
+
+        try:
+            native = newton_stage(stage)
+        except ImportError:
+            return None, dict(timestep_check=dict(ran=False, reason="isaacsim.physics.newton is not importable here"))
+        except AssetError as exc:
+            if exc.code != "PHYSICS_NOT_READY":
+                raise
+            return None, dict(timestep_check=dict(ran=False, reason=str(exc)[:200]))
+        return native, dict(timestep_check=dict(ran=True, **dt_sources(sm, native)), clocks_before=clocks(native))
+
     def tool_simulation_step(self, name, stage, a, camera_frame=None):
         s = self.s
         if s.timeline.is_stopped() or s.timeline.is_playing():
@@ -42,6 +60,9 @@ class StepTool:
         from .physics import step as backend_step, sync_fabric
 
         backend = sm.get_active_physics_engine()
+        native, newton = None, {}
+        if backend == "newton":
+            native, newton = self.newton_timestep(sm, stage)
         after = None
         fabric_updated = False
         phase = "native_step"
@@ -52,6 +73,10 @@ class StepTool:
             if not finite_clock(after) or not math.isclose(
                 after - before, steps * dt, rel_tol=1e-5, abs_tol=1e-7
             ):
+                if native is not None:
+                    from .newton_support import clocks
+
+                    newton["clocks_after"] = clocks(native)
                 refuse(
                     "STEP_TIMING_MISMATCH",
                     "Observed physics time does not match the requested step interval; inspect state before retrying.",
@@ -88,6 +113,8 @@ class StepTool:
                 rendered=False,
             )
             effects = "Stepping was attempted and may have changed runtime state. No rollback or automatic retry was performed; inspect solver diagnostics before continuing."
+            if newton:
+                details["newton"] = newton
             if isinstance(exc, AssetError):
                 exc.details.update(step=details, effects=effects)
                 raise
@@ -108,7 +135,12 @@ class StepTool:
                     effects="GPU context may be unusable. Do not retry runtime/sensor operations; inspect/save/Stop, then restart the disposable Kit.",
                 )
             refuse("STEP_FAILED", message, step=details, effects=effects)
+        if native is not None:
+            from .newton_support import clocks
+
+            newton["clocks_after"] = clocks(native)
         return dict(
+            **({"newton": newton} if newton else {}),
             steps=steps,
             physics_dt=dt,
             physics_time_before=before,

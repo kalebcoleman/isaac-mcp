@@ -395,6 +395,35 @@ def render_check(stage, path, position, orientation_wxyz):
         "visuals can also stay behind (import with assets__import_path, which expands them).")
 
 
+def render_publication():
+    """How the engine's body poses reach the renderer, for a result that carries a picture or a scan; None on PhysX.
+
+    PhysX writes USD, which every renderer reads. Newton writes only Fabric and leaves USD at the authored pose, so a picture
+    shows the simulated pose only while Newton's Fabric updates are on, and after a paused step only once that step has been
+    published (sim__simulation action=step and action=run do it; an exact step in your own code does not)."""
+    from .newton_support import engine_name
+
+    if engine_name() != "newton":
+        return None
+    try:
+        from isaacsim.physics.newton import acquire_stage
+
+        native = acquire_stage()
+        enabled = bool(native.cfg.update_fabric) if native is not None else None
+    except Exception:  # noqa: BLE001 - evidence for a caption; never worth failing the capture
+        enabled = None
+    info = dict(backend="newton", poses_published_to="Fabric (USD keeps the authored pose)", fabric_updates=enabled)
+    if enabled is False:
+        info["warning"] = ("Newton's Fabric updates are off, so this picture shows the authored poses, not the simulated ones. "
+                           "Enable update_fabric in Newton's configuration before Play.")
+    elif enabled is None:
+        info["note"] = "Could not read Newton's Fabric setting; compare the picture with sim__body__state, which reports render_pose."
+    else:
+        info["note"] = ("Follows physics while playing, and after sim__simulation action=step or action=run. A paused change "
+                        "made another way shows the last published pose.")
+    return info
+
+
 def physics_ready():
     """True once the selected engine's tensor view exists (a few frames after the first Play), False
     while it does not, None when this build cannot say (no simulation manager, an unqualified engine)."""
