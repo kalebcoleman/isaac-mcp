@@ -1229,7 +1229,7 @@ def _register_host_tools(server: FastMCP, state: _BridgeState, groups: Iterable[
     """Register the host tools of the given toolsets (all of them at startup, only the newly enabled
     ones at run time). A toolset that is not in ``groups`` registers nothing."""
     groups = frozenset(groups)
-    register_screen_tools(server, port_provider=lambda: _screen_port(state), groups=groups)
+    register_screen_tools(server, port_provider=lambda: _screen_port(state), groups=groups, state=state)
     register_desktop_input_tools(server, groups=groups)
     register_sim_session_tools(server, groups=groups, env=env,
                                on_launch=lambda record: state.launched_sessions.add(record["id"]))

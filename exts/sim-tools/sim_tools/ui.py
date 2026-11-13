@@ -432,8 +432,24 @@ def find(a):
 
 
 def readiness():
-    """Item 4 (doctor): omni.kit.ui_test enabled?, dpi scale, main window size, headless. Read-only."""
-    raise UIRefusal("NOT_SUPPORTED", "readiness is not implemented yet.")
+    """What the host's doctor tool reports about Kit's UI. Reads only: never enables an extension."""
+    import omni.kit.app
+    import omni.ui as ui
+
+    from .graph import _headless
+
+    def read(getter):
+        try:
+            return getter()
+        except Exception:  # noqa: BLE001 - a headless Kit may have no workspace to ask
+            return None
+
+    em = omni.kit.app.get_app().get_extension_manager()
+    width, height = read(ui.Workspace.get_main_window_width), read(ui.Workspace.get_main_window_height)
+    return dict(ui_test_enabled=bool(em.is_extension_enabled("omni.kit.ui_test")), headless=bool(_headless()),
+                dpi_scale=read(ui.Workspace.get_dpi_scale),
+                main_window=dict(width=None if width is None else round(width),
+                                 height=None if height is None else round(height)))
 
 
 def zoom_rect(ref):
