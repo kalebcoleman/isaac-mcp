@@ -659,16 +659,12 @@ class Extension(omni.ext.IExt):
                         result = await quick_start(self, args)
                     elif name in ("sim.ui.find", "sim.ui.act"):
                         # Kit UI, not the stage: no session/stage target (the UI outlives stage changes).
-                        from .ui import UIRefusal, find, run_act
+                        from .ui import UIRefusal, find, refusal, run_act
 
                         try:
                             result = find(args) if name == "sim.ui.find" else await run_act(args)
                         except UIRefusal as exc:
-                            # A failed batch step says itself what the steps before it sent (exc.effects).
-                            return dict(status="error", code=exc.code, message=str(exc), **exc.details,
-                                        effects=exc.effects or ("No input was sent." if name == "sim.ui.find" or exc.code in (
-                                            "INVALID_VALUE", "LIMIT", "STALE_WIDGET", "NOT_VISIBLE",
-                                            "OUT_OF_WINDOW", "NO_UI", "DISABLED", "NO_WINDOW") else "Inspect the UI before retrying."))
+                            return refusal(name, exc)
                     elif name == "assets.import_path" and args.get("format") == "mesh":
                         from .mesh_import import run as import_mesh
 
