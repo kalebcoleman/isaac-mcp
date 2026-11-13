@@ -4613,7 +4613,7 @@
         },
         "coord_space": {
           "type": "string",
-          "description": "window (default): x/y are Isaac Sim window pixels. Or the coord_space token a screenshot printed: x/y are pixels of that image.",
+          "description": "window (Isaac Sim window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image).",
           "required": false,
           "default": "window"
         },
@@ -4776,7 +4776,7 @@
           "required": false,
           "default": "window",
           "has_default": true,
-          "description": "window (default): x/y are Isaac Sim window pixels. Or the coord_space token a screenshot printed: x/y are pixels of that image."
+          "description": "window (Isaac Sim window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image)."
         },
         {
           "name": "screenshot_after",

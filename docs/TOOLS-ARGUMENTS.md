@@ -1438,7 +1438,7 @@ Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI thro
 - `scroll_y` (integer, default `0`): Vertical wheel steps for action=scroll (-20..20; negative scrolls down).
 - `frames` (integer, default `3`): Frames to wait after the action so the UI updates (0..600).
 - `actions` (array, optional): Batch: up to 10 action objects (each with action and its own arguments) run in order, stopping at the first failure; replaces the top-level action fields.
-- `coord_space` (string, default `"window"`): window (default): x/y are Isaac Sim window pixels. Or the coord_space token a screenshot printed: x/y are pixels of that image.
+- `coord_space` (string, default `"window"`): window (Isaac Sim window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image).
 - `screenshot_after` (boolean, default `false`): Also return a screenshot of the Isaac Sim window after the action(s).
 - `find_after` (string, optional): Also return up to 10 widgets matching this text after the action(s), compactly (same matching as sim__ui__find query).
 
@@ -1589,12 +1589,12 @@ Listed as `computer(action="batch")`.
 
 Run 1-10 click, drag, scroll, type or key steps in one selected X11 window, in order.
 
-- `window_id` (int, required): Window id from windows(action="list").
+- `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
 - `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
 - `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
 - `actions` (list[dict[str, Any]], required): 1-10 steps run in order, each {action, ...that action's arguments}, e.g. {"action": "click", "x": 10, "y": 20}.
-- `coord_space` (str, default `'window'`): window: x/y are original window pixels. Or the coord_space token a screenshot printed: x/y are pixels of that image (also a zoomed crop).
+- `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).
 - `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
 ### `computer_click`
@@ -1603,7 +1603,7 @@ Listed as `computer(action="click")`.
 
 Click a visible point in one selected X11 window.
 
-- `window_id` (int, required): Window id from windows(action="list").
+- `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
 - `x` (int, required): X in window pixels (or image pixels, see coord_space), from a fresh screenshot.
 - `y` (int, required): Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.
@@ -1611,7 +1611,7 @@ Click a visible point in one selected X11 window.
 - `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
 - `button` (str, default `'left'`): left, middle or right.
 - `clicks` (int, default `1`): 1 or 2.
-- `coord_space` (str, default `'window'`): window: x/y are original window pixels. Or the coord_space token a screenshot printed: x/y are pixels of that image (also a zoomed crop).
+- `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).
 - `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
 ### `computer_drag`
@@ -1620,7 +1620,7 @@ Listed as `computer(action="drag")`.
 
 Drag with the left mouse button between two points in the same X11 window.
 
-- `window_id` (int, required): Window id from windows(action="list").
+- `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
 - `x` (int, required): X in window pixels (or image pixels, see coord_space), from a fresh screenshot.
 - `y` (int, required): Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.
@@ -1628,7 +1628,7 @@ Drag with the left mouse button between two points in the same X11 window.
 - `end_y` (int, required): Drag end Y, in the same space as y.
 - `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
 - `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
-- `coord_space` (str, default `'window'`): window: x/y are original window pixels. Or the coord_space token a screenshot printed: x/y are pixels of that image (also a zoomed crop).
+- `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).
 - `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
 ### `computer_key`
@@ -1637,7 +1637,7 @@ Listed as `computer(action="key")`.
 
 Send one navigation/editing key or ASCII letter/digit to the focused X11 window.
 
-- `window_id` (int, required): Window id from windows(action="list").
+- `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
 - `key` (str, required): A navigation or editing key name, or an ASCII letter or digit, e.g. enter, tab, a.
 - `modifiers` (list[str] | None, default `None`): Any of ctrl, shift, alt, super.
@@ -1649,7 +1649,7 @@ Listed as `computer(action="scroll")`.
 
 Scroll up, down, left or right at a visible window point, at most ten steps per call.
 
-- `window_id` (int, required): Window id from windows(action="list").
+- `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
 - `x` (int, required): X in window pixels (or image pixels, see coord_space), from a fresh screenshot.
 - `y` (int, required): Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.
@@ -1657,7 +1657,7 @@ Scroll up, down, left or right at a visible window point, at most ten steps per 
 - `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
 - `direction` (str, required): up, down, left or right.
 - `steps` (int, default `1`): Scroll steps, 1-10.
-- `coord_space` (str, default `'window'`): window: x/y are original window pixels. Or the coord_space token a screenshot printed: x/y are pixels of that image (also a zoomed crop).
+- `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).
 - `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
 ### `computer_type`
@@ -1666,7 +1666,7 @@ Listed as `computer(action="type")`.
 
 Type up to 200 printable ASCII characters into the focused selected X11 window.
 
-- `window_id` (int, required): Window id from windows(action="list").
+- `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
 - `text` (str, required): Up to 200 printable ASCII characters.
 - `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.

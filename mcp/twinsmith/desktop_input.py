@@ -30,14 +30,14 @@ from . import cursor_badge, screen
 from .local_tools import DESKTOP_INPUT, ScopedTools
 
 _input_lock = threading.Lock()
-_WindowId = Annotated[int, Field(description="Window id from windows(action=\"list\").")]
+_WindowId = Annotated[int, Field(description="Window id from list_windows.")]
 _Pid = Annotated[int, Field(description="The window's PID from list_windows; a different owner is refused.")]
 _X = Annotated[int, Field(description="X in window pixels (or image pixels, see coord_space), from a fresh screenshot.")]
 _Y = Annotated[int, Field(description="Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.")]
 _Width = Annotated[int, Field(description="The window width you inspected, in pixels; a changed size is refused.")]
 _Height = Annotated[int, Field(description="The window height you inspected, in pixels; a changed size is refused.")]
-_CoordSpace = Annotated[str, Field(description="window: x/y are original window pixels. Or the coord_space token a "
-                                               "screenshot printed: x/y are pixels of that image (also a zoomed crop).")]
+_CoordSpace = Annotated[str, Field(description="window (window pixels) or the coord_space token a screenshot "
+                                               "printed (x/y are then pixels of that image or crop).")]
 _ShotAfter = Annotated[bool, Field(description="Also return a screenshot of the window after the action.")]
 _Steps = Annotated[list[dict[str, Any]], Field(
     min_length=1, max_length=10,
