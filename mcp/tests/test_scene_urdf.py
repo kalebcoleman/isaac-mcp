@@ -10,7 +10,6 @@ from pxr import Gf, Usd, UsdGeom, UsdPhysics
 from isaac_mcp import urdf_physics, urdf_refs
 from isaac_mcp.project_assets import AssetError, Broker
 from sim_tools.advanced import Advanced
-import twin_source
 from sim_tools.urdf import (
     _author_drives,
     ground_height,
@@ -619,44 +618,6 @@ def test_no_importer_at_all_says_so(tmp_path, monkeypatch):
     assert error.value.code == "IMPORTER_UNAVAILABLE"
 
 
-def test_the_twin_puts_its_listener_back_unless_closing(monkeypatch):
-    """The method is read from the source, because importing the twin needs a running Kit."""
-    import ast
-    from pathlib import Path
-    from types import ModuleType
-
-    source = twin_source.SOURCE.read_text()
-    method = next(node for node in ast.walk(ast.parse(source))
-                  if isinstance(node, ast.FunctionDef) and node.name == "without_carb_log_capture")
-    lines = source.splitlines()[method.decorator_list[0].lineno - 1:method.end_lineno]
-    log = []
-
-    class Logging:
-        def remove_logger(self, handle):
-            log.append(("remove", handle))
-
-        def add_logger(self, callback):
-            log.append(("add", callback))
-            return "new"
-
-    namespace = dict(carb=SimpleNamespace(logging=SimpleNamespace(acquire_logging=Logging)), contextlib=__import__("contextlib"))
-    module = ModuleType("m")
-    exec("class T:\n" + "\n".join(lines), {**namespace, "__name__": "m"}, vars(module))
-    twin = module.T()
-    twin._carb_log_sub, twin._closing, twin._on_carb_log = "old", False, "callback"
-    with twin.without_carb_log_capture():
-        assert twin._carb_log_sub is None
-    assert log == [("remove", "old"), ("add", "callback")] and twin._carb_log_sub == "new"
-    log.clear()
-    twin._closing = True
-    with twin.without_carb_log_capture():
-        pass
-    assert log == [("remove", "new")] and twin._carb_log_sub is None
-    log.clear()
-    twin._closing = False
-    with twin.without_carb_log_capture():
-        pass
-    assert log == []  # nothing installed: nothing removed or added
 
 
 def test_a_robot_referenced_by_name_has_no_transform_and_is_still_lifted():

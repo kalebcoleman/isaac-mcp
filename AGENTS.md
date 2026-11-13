@@ -74,12 +74,12 @@ configured filters.
 | Isaac Lab (`isaaclab__*`, `run_script`) | 18 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
 | Bridge built-ins (`run_python`, `status`, `job_status`, `job_cancel`, `list_bridges`, `reload_tools`, file tools) | 9 | listed from a packaged catalog even with Kit down; execution needs a reachable bridge; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
 | Generic scene and assets | 71 (`sim__quick_start`, `assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, controller runs, trajectory replay, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots, scan, search and the pack tools run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
-| UR5e twin (`ur5e_dt__*`) | 23 | RISE lab's UR5e digital twin, Kaleb's work with that robot; every other tier is robot-agnostic. Listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
+| UR5e twin (`ur5e_dt__*`) | 10 | RISE lab's UR5e digital twin, Kaleb's work with that robot; every other tier is robot-agnostic. Listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With default groups and no namespace filter, the server registers exactly 134 tools from startup:
+With default groups and no namespace filter, the server registers exactly 121 tools from startup:
 the host, Isaac Lab, bridge built-in, generic and UR5e catalog tiers, whether or not Kit is running.
-A client is shown **45 tools**: related tools are listed as one grouped tool with an `action`
-argument (`sim__prim(action="create")`, `ur5e_dt__scene(action="quick_start")`, `jobs(action="status")`),
+A client is shown **48 tools**: related tools are listed as one grouped tool with an `action`
+argument (`sim__prim(action="create")`, `ur5e_dt__workcell(action="quick_start")`, `jobs(action="status")`),
 and `action="help"` describes each action. The single-purpose names used in this guide and the
 docs (`sim__prim__create`, `sim__stage__save`) are the tools behind those actions: each is still
 callable by that name with the same arguments, deprecated, and no longer listed.
@@ -97,15 +97,14 @@ find out. Fewer tools mean a filter:
   the server starts, so restart the MCP connection after starting Kit.
 
 The other 9 tools are the bridge built-ins, also listed from a snapshot. With the standard
-groups there are 134 tools in total; the optional desktop input and simulator session groups add 9 more.
-`ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 63 tools with otherwise standard settings.
+groups there are 121 tools in total; the optional desktop input and simulator session groups add 9 more.
+`ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 50 tools with otherwise standard settings.
 These filters control discovery, not security. Two things are enforced by the bridge itself: every
 connection must present the bridge's token (clients on the same account read it from a private
 file; `python3 mcp/isaac_mcp/client.py` does too), and a Kit started with `ISAAC_MCP_READ_ONLY=1`
 refuses every tool that changes something with the code `READ_ONLY`. Do not work around either.
 
-`ur5e_dt__quick_start*` leaves the timeline playing, and generic edits refuse with `TIMELINE_ACTIVE` until an
-explicit `sim__timeline__control` stop. Joint tools take the articulation root (for the twin, `/World/UR5e/root_joint`,
+`ur5e_dt__workcell_quick_start` builds a stopped scene. Joint tools take the articulation root (for the twin, `/World/UR5e/root_joint`,
 reported by `sim__ros2__tf_setup`), not the robot's parent Xform. See the [scene workflow](docs/TOOLS-SCENE.md#a-typical-session).
 
 After reopening a scene, its sensors and prims are not pack-owned: pass `adopt=true` to `sim__lidar__read` or `sim__camera__capture`, and
@@ -131,8 +130,7 @@ Cached pixels can predate Stop/reset or scene edits. See [TOOLS-SCENE.md](docs/T
    resource checks pass; use distinct ports, ROS domains and output directories. Headroom checks
    are snapshots, not reservations. Do not stop unrelated processes.
 4. Refresh again. Clients that ignore `tools/list_changed` may need a connection restart; the CLI
-   `list_tools --host <host> --port <port>` lists the verified bridge directly. Managed and plain
-   launches hide the twin panel by default; use `show_ur5e_panel=true` or `--ur5e-panel` to show it.
+   `list_tools --host <host> --port <port>` lists the verified bridge directly. The workcell extension has no UI panel.
 
 `isaaclab__train`, `eval` and `play` refuse to start while a Kit bridge runs unless the user
 knowingly permits `allow_concurrent_gpu=true`. See [Lab tools](docs/TOOLS-ISAACLAB.md) for guards.

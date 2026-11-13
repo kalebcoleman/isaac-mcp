@@ -1,7 +1,7 @@
 {
   "version": 1,
   "description": "Assets used by the UR5e twin. The repository ships none of them: every asset lives in the user's local asset folder (see docs/ASSETS.md). 'fetch' entries are NVIDIA's public files, downloaded by scripts/fetch_ur5e_assets.py and checked against these hashes; 'manual' entries have no public source; 'local' entries describe the gripper, objects and layouts the twin expects, with their origin and licence. Older checkouts carried them in exts/ur5e-dt/assets; scripts/isaac_assets.py migrate moves them into the asset folder.",
-  "asset_root": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1",
+  "asset_root": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.2",
   "cache_env": "ISAAC_MCP_ASSET_PATH",
   "remote": {
     "robot/ur5e.usd": "Isaac/Robots/UniversalRobots/ur5e/ur5e.usd",
@@ -16,14 +16,14 @@
         {
           "target": "robot/ur5e.usd",
           "source": "Isaac/Robots/UniversalRobots/ur5e/ur5e.usd",
-          "sha256": "d7a290e94f3de151fdf660007f6a53448cbda8cf558d83fd04a91c00eda5bbc7",
-          "size": 4830
+          "sha256": "81b2726a121272137a756aee52d7ce514f97abadb366e2a9a9afb9d9500cd0a6",
+          "size": 3648
         },
         {
           "target": "robot/configuration/ur5e_base.usd",
           "source": "Isaac/Robots/UniversalRobots/ur5e/configuration/ur5e_base.usd",
-          "sha256": "12347912499e3ead2c0fa1ba782dee8b87fa9255397baeba94d99480b01e3ea8",
-          "size": 6422847
+          "sha256": "b6f8db6ee1bdc9a3be7d39bc9780d19ef12bbb7f3ce7a65fc6ea6f2f01f4ae54",
+          "size": 6433328
         },
         {
           "target": "robot/configuration/ur5e_physics.usd",
@@ -53,8 +53,8 @@
         {
           "target": "sensors/rsd455.usd",
           "source": "Isaac/Sensors/Intel/RealSense/rsd455.usd",
-          "sha256": "0546588c4c33e54975ddb1ef5bb9924c75948e1f6da81e249ca844874f2ca0e1",
-          "size": 4463997,
+          "sha256": "521620b34d91b53793f6d928b4efade63482f6d831f41671eebb5546ff15fc98",
+          "size": 4470822,
           "cache_path": "Isaac/Sensors/Intel/RealSense/rsd455.usd"
         },
         {

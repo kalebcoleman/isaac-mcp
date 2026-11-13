@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import os
 import shutil
@@ -39,17 +38,8 @@ REPO = Path(__file__).resolve().parents[1]
 EXT_DIR = REPO / "exts" / "ur5e-dt"
 
 
-def _load_asset_cache():
-    spec = importlib.util.spec_from_file_location(
-        "ur5e_asset_cache", EXT_DIR / "ur5e_dt" / "asset_cache.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
-
-asset_cache = _load_asset_cache()
+sys.path.insert(0, str(REPO / "mcp"))
+from isaac_mcp import assets as asset_cache  # noqa: E402
 
 
 def sha256(path: Path) -> str:
@@ -114,13 +104,13 @@ def _rel(entry: dict) -> str:
 
 def _pinned(store: Path, entry: dict) -> bool:
     """True when the user pinned their own copy of this file in the store's pack folder."""
-    pins = asset_cache.pins(store / asset_cache.PACK)
+    pins = asset_cache.pins(store / asset_cache.DEFAULT_PACK)
     return _rel(entry) in pins or entry["target"] in pins
 
 
 def _existing(store: Path, entry: dict) -> Path:
     """The pack-folder copy, or the flat legacy copy when only that exists."""
-    pack = store / asset_cache.PACK / _rel(entry)
+    pack = store / asset_cache.DEFAULT_PACK / _rel(entry)
     flat = store / _rel(entry)
     return flat if not pack.is_file() and flat.is_file() else pack
 
@@ -158,10 +148,10 @@ def fetch(manifest: dict, cache: Path, root: str, force: bool) -> int:
     for group, entry in _iter_files(manifest):
         if _pinned(cache, entry):
             # Name it as SHA256SUMS does, so the unpin command printed below works.
-            kept.append(_rel(entry) if _rel(entry) in asset_cache.pins(cache / asset_cache.PACK) else entry["target"])
+            kept.append(_rel(entry) if _rel(entry) in asset_cache.pins(cache / asset_cache.DEFAULT_PACK) else entry["target"])
             # never replace a file the user pinned (e.g. a lab-modified robot)
             continue
-        destination = cache / asset_cache.PACK / _rel(entry)
+        destination = cache / asset_cache.DEFAULT_PACK / _rel(entry)
         if destination.is_file() and not force:
             if _verify(destination, entry) is None:
                 skipped += 1
@@ -188,7 +178,7 @@ def fetch(manifest: dict, cache: Path, root: str, force: bool) -> int:
         print(f"  {entry['target']}")
     print(
         f"Fetched {fetched} file(s), skipped {skipped} up-to-date file(s) into "
-        f"{cache / asset_cache.PACK} ({total_bytes / 1048576:.1f} MB downloaded)."
+        f"{cache / asset_cache.DEFAULT_PACK} ({total_bytes / 1048576:.1f} MB downloaded)."
     )
     if kept:
         print(f"Kept {len(kept)} file(s) you pinned yourself (not replaced by NVIDIA's copy; --force does not change this).")
@@ -221,14 +211,14 @@ def main() -> int:
     parser.add_argument("--force", action="store_true", help="re-download even over a changed, unpinned file, or when the cached copy matches")
     args = parser.parse_args()
 
-    manifest = asset_cache.manifest()
+    manifest = asset_cache.Resolver(asset_cache.DEFAULT_PACK).manifest()
     cache = (args.cache_dir or asset_cache.cache_dir()).expanduser().resolve()
-    root = args.asset_root or asset_cache.asset_root()
+    root = args.asset_root or asset_cache.Resolver(asset_cache.DEFAULT_PACK).asset_root()
     print(f"Cache: {cache}")
     print(f"Source: {root}")
     selected = asset_cache.selected_pack()
-    if selected != asset_cache.PACK:
-        print(f"Note: NVIDIA's files go to the twin's {asset_cache.PACK} pack, never to the selected pack {selected}.")
+    if selected != asset_cache.DEFAULT_PACK:
+        print(f"Note: NVIDIA's files go to the twin's {asset_cache.DEFAULT_PACK} pack, never to the selected pack {selected}.")
     if args.check:
         return check(manifest, cache)
     return fetch(manifest, cache, root, args.force)

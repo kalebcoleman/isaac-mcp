@@ -25,7 +25,6 @@ Nothing is ever written inside this repository checkout.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import bz2
 import gzip
 import io
@@ -48,19 +47,8 @@ EXT_DIR = REPO / "exts" / "ur5e-dt"
 ARCHIVE_SUFFIXES = (".tar.gz", ".tgz", ".tar", ".zip")
 
 
-def _load_asset_cache():
-    spec = importlib.util.spec_from_file_location(
-        "ur5e_asset_cache", EXT_DIR / "ur5e_dt" / "asset_cache.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
-
-asset_cache = _load_asset_cache()
-
-# Loading asset_cache put <repo>/mcp on sys.path. The install code is shared with the MCP tools.
+sys.path.insert(0, str(REPO / "mcp"))
+from isaac_mcp import assets as asset_cache  # noqa: E402
 from isaac_mcp import asset_packs as packs  # noqa: E402
 from isaac_mcp.asset_packs import (  # noqa: E402
     ADOPT_SUFFIXES,
@@ -179,7 +167,7 @@ def _print_pack_report(report: dict) -> None:
 
 def _doctor_pack(args, stores: list[Path] | None = None) -> int:
     pack = args.pack
-    manifest = asset_cache.manifest() if pack == asset_cache.PACK else None
+    manifest = asset_cache.Resolver(asset_cache.DEFAULT_PACK).manifest() if pack == asset_cache.DEFAULT_PACK else None
     closure = None if args.pins_only else packs.ClosureBackend(args.usd_python)
     report = packs.doctor_pack(pack, stores or asset_cache.stores(), closure=closure, entries=args.entry,
                                manifest=manifest)
@@ -872,7 +860,7 @@ def _store_files(store: Path) -> tuple[dict[str, tuple[Path, str | None]], list[
     which are not part of this twin and are left alone."""
     found: dict[str, tuple[Path, str | None]] = {}
     others: list[Path] = []
-    pack = store / asset_cache.PACK
+    pack = store / asset_cache.DEFAULT_PACK
     for root in (store, pack):
         if not root.is_dir():
             continue
@@ -882,7 +870,7 @@ def _store_files(store: Path) -> tuple[dict[str, tuple[Path, str | None]], list[
             keep = []
             for d in dirs:
                 sub = here / d
-                if sub.is_symlink() or (root == store and here == store and d == asset_cache.PACK):
+                if sub.is_symlink() or (root == store and here == store and d == asset_cache.DEFAULT_PACK):
                     continue
                 if root == store and here == store and (sub / asset_cache.PINS_FILE).is_file():
                     others.append(sub)
@@ -899,9 +887,9 @@ def _store_files(store: Path) -> tuple[dict[str, tuple[Path, str | None]], list[
 
 
 def cmd_migrate(args) -> int:
-    store, pack_dir = _pack_dir(args.store, asset_cache.PACK)
-    checkout = Path(args.from_checkout).expanduser().resolve() if args.from_checkout else asset_cache.REPO_ROOT
-    entries = [e for g in asset_cache.manifest().get("fetch", []) for e in g.get("files", [])]
+    store, pack_dir = _pack_dir(args.store, asset_cache.DEFAULT_PACK)
+    checkout = Path(args.from_checkout).expanduser().resolve() if args.from_checkout else REPO
+    entries = [e for g in asset_cache.Resolver(asset_cache.DEFAULT_PACK).manifest().get("fetch", []) for e in g.get("files", [])]
     expected = {e.get("cache_path", e["target"]): e.get("sha256") for e in entries}
     canonical = {e["target"]: e["cache_path"] for e in entries if e.get("cache_path", e["target"]) != e["target"]}
     sources: dict[str, Path] = {}
@@ -923,7 +911,7 @@ def cmd_migrate(args) -> int:
                         sources.pop(rel, None)
                         rel = canonical[rel]
                     sources[rel], origins[rel] = path, label  # the working tree comes last and wins
-        for old in [] if args.no_legacy_stores else asset_cache.legacy_stores():
+        for old in [] if args.no_legacy_stores else asset_cache.Resolver().legacy_stores():
             if old.resolve() == store.resolve():
                 continue
             files, others = _store_files(old)

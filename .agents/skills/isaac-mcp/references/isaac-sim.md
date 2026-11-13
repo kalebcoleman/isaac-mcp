@@ -16,7 +16,7 @@ MCP client ──stdio──► isaac-mcp (host process)
 ```
 
 Bridge tools appear in MCP as `<namespace>__<tool>` (dots are not allowed in MCP names), so
-`ur5e_dt.play_scene` is called as `ur5e_dt__play_scene`. The host and the bridge are separate
+`ur5e_dt.workcell_status` is called as `ur5e_dt__workcell_status`. The host and the bridge are separate
 processes: screen and Isaac Lab tools working says nothing about the bridge.
 
 ## Choosing the bridge
@@ -87,7 +87,6 @@ Rules of thumb:
 - `screenshot` without a selector picks the Isaac Sim / Isaac Lab window and captures it even when
   covered. `list_windows` with `{"filter": "Isaac"}` gives ids for `window_id`.
 - `start_screen_recording` / `stop_screen_recording` record a window or monitor to MP4 (no audio).
-  For a clean viewport without desktop chrome, use the twin's `ur5e_dt__start_recording`.
 - Optional `screen_input` tools (`window_click`, `window_drag`, `window_scroll`, `window_type`,
   `window_key`) act inside one window. They need `expected_width` / `expected_height` from a fresh
   screenshot, so take one first. Prefer `run_python` or a named tool over clicking UI.
@@ -96,9 +95,7 @@ Rules of thumb:
 
 The `sim`/`assets` pack is on by default (`run.sh` enables `sim-tools`). `ISAAC_MCP_SCENE_TOOLS=0`
 on the host hides all of them per server; it is a visibility preference, not access control.
-Arguments are in `docs/TOOLS-ARGUMENTS.md`. `ur5e_dt__quick_start` works from public files (check `gripper` and `assets` in its result; local files always win); the workstation and object tools need the user's lab files. `ur5e_dt__quick_start*` leaves the timeline playing, so call
-`sim__timeline__control` stop before generic edits. After reopening a scene, use `adopt=true` on `sim__lidar__read` and `sim__camera__capture`, and `allow_foreign=true` on `sim__prim__delete` (it deactivates; the path stays taken). In RAS545 Lab 3, the ground plane sits at z=-0.75, so a robot settling there after Play is not falling through the floor, and the starter reports `composition_errors: 2` on opening. Joint tools take the articulation root
-(`/World/UR5e/root_joint` on the twin), not the parent Xform, and a new stage needs `/World` created first.
+Arguments are in `docs/TOOLS-ARGUMENTS.md`. The workcell uses external assets and starts stopped. After reopening a scene, adopt cameras and LiDARs for capture; generic edits require a stopped timeline.
 
 - Call `sim__stage__info` first. Keep its `session_id` and `stage_id`; every call except discovery
   and stage-info needs them. A `STALE_TARGET` refusal returns `current_target`; resend those IDs
@@ -114,10 +111,8 @@ Arguments are in `docs/TOOLS-ARGUMENTS.md`. `ur5e_dt__quick_start` works from pu
   no URL input and no untrusted/hostile-USD isolation. Import needs matching units/up-axis, a
   stopped timeline and a free wrapper path.
   For an absolute USD path under an approved root, use `assets__import_path` with current
-  session/stage IDs. For the twin's workstation cache, `assets__prepare_workstation` prepares
-  a private copy but returns `loaded:false`; follow with `ur5e_dt__load_workstation` and inspect
-  `/World/Vention`. See [the main skill](../SKILL.md) and `docs/TOOLS-SCENE.md` for cache
-  precedence, approved-root setup and dependency limitations.
+  session/stage IDs. See `docs/TOOLS-SCENE.md` for approval and staging.
+
 - Runtime state: `sim__timeline__control`, `sim__simulation__step` while paused,
   `sim__body__state`, `sim__joints__state` and `sim__joints__command` after physics is initialized.
 - Capture and sensors: `sim__camera__create` / `sim__camera__capture` (RTX), `sim__lidar__*`
@@ -152,13 +147,7 @@ Arguments are in `docs/TOOLS-ARGUMENTS.md`. `ur5e_dt__quick_start` works from pu
 
 ## UR5e twin pack (`ur5e_dt__*`)
 
-The twin extension registers scene tools for a UR5e workstation: `ur5e_dt__quick_start*` variants
-build a scene, `ur5e_dt__play_scene` / `ur5e_dt__stop_scene` control playback, object tools add,
-move, randomise, save and restore objects, and `ur5e_dt__start_recording` captures the viewport.
-`ur5e_dt__start_ros_driver` brings a ROS 2 driver up or down; use `backend="fake"` (simulation
-only) and never `mode="real"` in a simulation task. Stop the fake driver before stopping its
-simulator. The catalog can be listed with Kit down; calls need a selected bridge running
-the twin.
+The workcell uses external pack assets. `ur5e_dt__workcell_quick_start` builds a stopped scene; status tools expose the build report. Real-to-sim, planning and evaluation are interface-only.
 
 ## Typical safe sequence
 

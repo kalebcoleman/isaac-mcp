@@ -50,8 +50,7 @@ def test_launcher_sets_shared_port_and_waits_for_twin_registration(tmp_path, por
     assert result.stdout.strip().splitlines()[-1] == f"{port} {port} 1"
 
 
-@pytest.mark.parametrize("panel_flag, expected", [(None, "0"), ("--ur5e-panel", "1"), ("--ur5e-dt", "1")])
-def test_launcher_always_enables_twin_tools_but_panel_is_optional(tmp_path, panel_flag, expected):
+def test_launcher_always_enables_twin_tools(tmp_path):
     root = tmp_path / "checkout"
     root.mkdir()
     repo = Path(__file__).resolve().parents[2]
@@ -64,18 +63,17 @@ def test_launcher_always_enables_twin_tools_but_panel_is_optional(tmp_path, pane
         '#!/bin/bash\n'
         'if [[ "$1" == "-c" ]]; then echo /tmp/mock-isaacsim; exit 0; fi\n'
         'printf "defer=%s\\n" "$ISAAC_MCP_DEFER_START"\n'
-        'printf "panel=%s\\n" "$UR5E_DT_SHOW_PANEL"\n'
         'printf "arg=%s\\n" "$@"\n'
     )
     fake_python.chmod(0o755)
     env = os.environ | {"UR5E_DT_PYTHON": str(fake_python), "ISAAC_MCP_DEFER_START": "1"}
     env.pop("UR5E_DT_SHOW_PANEL", None)
-    args = ["bash", str(launcher), "--port", "0"] + ([panel_flag] if panel_flag else [])
+    args = ["bash", str(launcher), "--port", "0"]
     result = subprocess.run(args,
                             env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stdout + result.stderr
     lines = result.stdout.strip().splitlines()
-    assert "defer=1" in lines and f"panel={expected}" in lines
+    assert "defer=1" in lines
     assert "arg=isaac.mcp.bridge" in lines
     assert "arg=ur5e-dt" in lines
 
@@ -91,4 +89,4 @@ def test_dedicated_twin_launcher_requests_extension(tmp_path):
     launcher.chmod(0o755)
     result = subprocess.run(["bash", str(shim), "--headless"], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
-    assert result.stdout.splitlines() == ["--ur5e-panel", "--headless"]
+    assert result.stdout.splitlines() == ["--headless"]

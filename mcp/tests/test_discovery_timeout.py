@@ -62,7 +62,7 @@ def test_stalled_bridge_keeps_sdk_initialization_and_host_tools_available(monkey
                 "sim__stop",
                 "sim__list",
                 "sim__stage__info",
-                "ur5e_dt__play_scene",
+                "ur5e_dt__workcell_status",
             } <= names
             response = await client.call_tool("sim__list", {})
             assert not response.isError

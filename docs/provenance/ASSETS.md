@@ -163,7 +163,7 @@ Add:
 
 The twin runs inside Isaac Sim, whose licence already lets the operator use NVIDIA's asset library,
 online or from a local mirror. The twin only needs to reference or fetch those files, not ship them.
-`exts/ur5e-dt/ur5e_dt/asset_cache.py` resolves an asset in this order (details in
+The generic host asset resolver searches in this order (details in
 [ASSETS.md](../ASSETS.md)):
 
 1. **Project stores** — `asset_path` of the nearest `isaac-mcp.json`.

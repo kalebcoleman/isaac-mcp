@@ -1,67 +1,67 @@
-"""Twin handler messages: a placeholder is not Vention, and asset refusals carry no traceback."""
+"""CPU-only Jenga handler and public tool contract checks."""
 
 import ast
-import asyncio
-import traceback
+import importlib.util
+import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
-import twin_source
+
+from isaac_mcp.tool_groups import GROUPS
+from isaac_mcp.tool_hints import CATALOG_HINTS
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _twin_function(name):
-    tree = ast.parse(twin_source.SOURCE.read_text())
-    return next(n for n in ast.walk(tree)
-                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name)
+def load_commands():
+    spec = importlib.util.spec_from_file_location(
+        "twin_commands", ROOT / "exts/ur5e-dt/ur5e_dt/commands.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.Commands()
 
 
-class AssetMissing(FileNotFoundError):
-    pass
-
-
-class AssetCorrupt(FileNotFoundError):
-    pass
-
-
-def _twin_namespace(*names):
-    module = ast.fix_missing_locations(ast.Module(body=[_twin_function(n) for n in names], type_ignores=[]))
-    namespace = {"Dict": dict, "Any": object, "traceback": traceback, "AssetMissing": AssetMissing,
-                 "AssetCorrupt": AssetCorrupt, "carb": SimpleNamespace(log_error=lambda *_: None)}
-    exec(compile(module, "extension.py", "exec"), namespace)
-    return namespace
-
-
-def test_load_workstation_message_does_not_claim_vention_for_a_placeholder():
-    ns = _twin_namespace("_cmd_load_workstation")
-
-    async def load():
-        return None
-
-    for label in ("a placeholder bench (no Vention workstation asset)", "the Vention workstation"):
-        owner = SimpleNamespace(load_workstation=load, _bench_label=lambda label=label: label)
-        result = asyncio.run(ns["_cmd_load_workstation"](owner))
-        assert result["status"] == "success" and result["message"].startswith(f"Loaded {label} at /World/Vention")
-
-
-@pytest.mark.parametrize("handler, method", [
-    ("_cmd_load_workstation", "load_workstation"),
-    ("_cmd_quick_start_with_workstation", "quick_start_with_workstation"),
-    ("_cmd_load_simple_room", "load_simple_room"),
+@pytest.mark.parametrize("arguments,expected", [
+    ({}, {"profile": None, "seed": None}),
+    ({"profile": "measured_pending", "seed": 42},
+     {"profile": "measured_pending", "seed": 42}),
+    ({"seed": 0}, {"profile": None, "seed": 0}),
 ])
-def test_asset_refusals_carry_no_traceback_but_bugs_do(handler, method):
-    ns = _twin_namespace(handler, "_failure_detail")
+def test_jenga_build_forwards_overrides(arguments, expected):
+    commands = load_commands()
+    report = {"jenga": {"variation_seed": expected["seed"]}}
+    build = Mock(return_value=report)
+    commands.workcell = SimpleNamespace(build_jenga=build)
+    assert commands._cmd_jenga_build(**arguments) is report
+    build.assert_called_once_with(**expected)
 
-    def result_for(exc):
-        async def fail():
-            raise exc
 
-        return asyncio.run(ns[handler](SimpleNamespace(**{method: fail})))
+def test_jenga_build_preserves_workcell_errors():
+    commands = load_commands()
+    commands.workcell = SimpleNamespace(build_jenga=Mock(side_effect=ValueError("invalid profile")))
+    with pytest.raises(ValueError, match="invalid profile"):
+        commands._cmd_jenga_build(profile="unknown")
 
-    refused = result_for(AssetMissing("add it with isaac_assets.py"))
-    assert refused["status"] == "error" and "isaac_assets.py" in refused["message"] and "traceback" not in refused
-    assert "AssetCorrupt" in result_for(AssetCorrupt("hash differs"))["traceback"]
-    assert "ZeroDivisionError" in result_for(ZeroDivisionError("bug"))["traceback"]
+
+def test_jenga_registry_catalog_group_and_hints_agree():
+    tree = ast.parse((ROOT / "exts/ur5e-dt/ur5e_dt/extension.py").read_text())
+    registry = next(ast.literal_eval(node.value) for node in tree.body
+                    if isinstance(node, ast.Assign)
+                    and any(isinstance(target, ast.Name) and target.id == "MCP_TOOL_REGISTRY"
+                            for target in node.targets))
+    assert len(registry) == 10
+    schema = registry["jenga_build"]["parameters"]
+    assert {name: field["type"] for name, field in schema.items()} == {
+        "profile": "string", "seed": "integer"}
+    assert not any(field.get("required", False) for field in schema.values())
+    catalog = json.loads((ROOT / "mcp/isaac_mcp/catalogs/ur5e_dt.json").read_text())
+    assert catalog["tools"]["ur5e_dt.jenga_build"]["parameters"] == schema
+    groups = {name: group for name, group in GROUPS.items() if name.startswith("ur5e_dt__")}
+    assert len(groups) == 7
+    assert groups["ur5e_dt__jenga"][1] == {
+        "build": "ur5e_dt__jenga_build", "status": "ur5e_dt__jenga_status"}
+    assert CATALOG_HINTS["ur5e_dt.jenga_build"]["destructiveHint"] is True
+    assert CATALOG_HINTS["ur5e_dt.jenga_build"]["readOnlyHint"] is False

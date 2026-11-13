@@ -109,14 +109,13 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     assert "PYTHONPATH" not in child
     assert "UR5E_DT_SHOW_PANEL" not in child
     assert "--headless" in captured["args"] and captured["start_new_session"] is True
-    assert "--ur5e-panel" not in captured["args"] and result["show_ur5e_panel_on_start"] is False
+    assert "--ur5e-panel" not in captured["args"]
     assert captured["args"][-1] == f"--/app/userConfigPath={result['user_config']}"
 
 
-@pytest.mark.parametrize("show_panel", [False, True])
 @pytest.mark.parametrize("motion_bvh", [False, True])
 @pytest.mark.parametrize("backend", ["physx", "newton"])
-def test_launch_selects_twin_panel_and_sensor_renderer(setup, monkeypatch, show_panel, motion_bvh, backend):
+def test_launch_selects_sensor_renderer(setup, monkeypatch, motion_bvh, backend):
     captured = {}
 
     def popen(args, **kwargs):
@@ -127,9 +126,7 @@ def test_launch_selects_twin_panel_and_sensor_renderer(setup, monkeypatch, show_
     monkeypatch.setattr(sim.subprocess, "Popen", popen)
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
     monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
-    result = sim._launch(setup, 18766, 197, False, False, show_panel, motion_bvh, backend)
-    assert ("--ur5e-panel" in captured["args"]) is show_panel
-    assert result["show_ur5e_panel_on_start"] is show_panel
+    result = sim._launch(setup, 18766, 197, False, False, motion_bvh, backend)
     assert ("--motion-bvh" in captured["args"]) is motion_bvh
     assert result["enable_motion_bvh"] is motion_bvh
     assert result["physics_backend"] == backend
@@ -624,7 +621,7 @@ def test_no_tool_argument_can_name_a_command(setup):
 
     server = _tool_server(setup)
     assert set(inspect.signature(server["sim__launch"]).parameters) == {
-        "port", "ros_domain", "headless", "allow_shared_domain", "show_ur5e_panel", "enable_motion_bvh", "physics_backend"}
+        "port", "ros_domain", "headless", "allow_shared_domain", "enable_motion_bvh", "physics_backend"}
 
 
 def test_launcher_setting_is_read_when_the_server_starts_not_at_each_call(setup, tmp_path, monkeypatch):

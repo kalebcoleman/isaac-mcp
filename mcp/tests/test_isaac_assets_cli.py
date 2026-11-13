@@ -43,7 +43,8 @@ def cli(tmp_path, monkeypatch):
     spec.loader.exec_module(module)
     # Point the "checkout" at a temp folder so the default asset folder (next to it) is
     # never created beside the real checkout.
-    module.asset_cache.REPO_ROOT = tmp_path / "isaac-mcp"
+    monkeypatch.setattr(module.asset_cache.Resolver, "default_store", lambda self: tmp_path / "isaac-mcp-assets")
+    monkeypatch.setattr(module.asset_cache.Resolver, "manifest_path", property(lambda self: REPO / "exts/ur5e-dt/assets-manifest.json"))
     return module
 
 
@@ -1331,7 +1332,7 @@ def test_migrate_moves_an_old_cache_and_keeps_nvidia_files_unpinned(cli, capsys,
     old = tmp_path / "home@host" / ".cache" / "ur5e-dt" / "assets"
     (old / "workstation").mkdir(parents=True)
     (old / "workstation" / "vention.usd").write_bytes(b"bench")
-    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache.Resolver, "legacy_stores", lambda self: [old])
     code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 0, err
     pack = store / "ur5e-dt"
@@ -1446,8 +1447,8 @@ def test_migrate_keeps_a_pinned_lab_robot_over_nvidias_cached_copy(cli, capsys, 
     manifest = tmp_path / "assets-manifest.json"
     manifest.write_text(_json.dumps({"fetch": [{"id": "g", "files": [
         {"target": "robot/ur5e.usd", "source": "x", "sha256": sha(b"nvidia robot"), "size": 12}]}]}))
-    monkeypatch.setattr(cli.asset_cache, "MANIFEST_PATH", manifest)
-    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache.Resolver, "manifest_path", property(lambda self: manifest))
+    monkeypatch.setattr(cli.asset_cache.Resolver, "legacy_stores", lambda self: [old])
     code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 0, err
     assert "keeping 1 file(s) you pinned yourself" in out
@@ -1460,7 +1461,7 @@ def _manifest_with_robot(cli, tmp_path, monkeypatch, nvidia=b"nvidia robot"):
     manifest = tmp_path / "assets-manifest.json"
     manifest.write_text(_json.dumps({"fetch": [{"id": "g", "files": [
         {"target": "robot/ur5e.usd", "source": "x", "sha256": sha(nvidia), "size": len(nvidia)}]}]}))
-    monkeypatch.setattr(cli.asset_cache, "MANIFEST_PATH", manifest)
+    monkeypatch.setattr(cli.asset_cache.Resolver, "manifest_path", property(lambda self: manifest))
 
 
 def test_migrate_pins_a_lab_modified_robot_from_the_checkout(cli, capsys, tmp_path, monkeypatch):
@@ -1496,7 +1497,7 @@ def test_migrate_keeps_a_pin_from_an_old_asset_folder(cli, capsys, tmp_path, mon
     (old / "ur5e-dt" / "robot").mkdir(parents=True)
     (old / "ur5e-dt" / "robot" / "ur5e.usd").write_bytes(b"lab robot")
     (old / "ur5e-dt" / "SHA256SUMS").write_text(f"{sha(b'lab robot')}  robot/ur5e.usd\n")
-    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache.Resolver, "legacy_stores", lambda self: [old])
     code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 0, err
     assert read_pins(store / "ur5e-dt")["robot/ur5e.usd"] == sha(b"lab robot")
@@ -1509,7 +1510,7 @@ def test_migrate_skips_a_file_that_no_longer_matches_its_old_pin(cli, capsys, tm
     (old / "workstation" / "vention.usd").write_bytes(b"damaged")
     (old / "workstation" / "ok.usd").write_bytes(b"fine")
     (old / "SHA256SUMS").write_text(f"{sha(b'bench')}  workstation/vention.usd\n")
-    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache.Resolver, "legacy_stores", lambda self: [old])
     code, _, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 1 and "does not match its pin" in err and "vention.usd" in err
     assert not (store / "ur5e-dt" / "workstation" / "vention.usd").exists()
@@ -1545,7 +1546,7 @@ def test_migrate_leaves_other_packs_in_an_old_folder_alone(cli, capsys, tmp_path
     (old / "mylab" / "SHA256SUMS").write_text(f"{sha(b'x')}  x.usd\n")
     (old / "workstation").mkdir()
     (old / "workstation" / "vention.usd").write_bytes(b"bench")
-    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache.Resolver, "legacy_stores", lambda self: [old])
     code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 0, err
     assert "separate asset pack" in out and "adopt" in out
@@ -1571,7 +1572,7 @@ def test_migrate_skips_an_unpinned_old_nvidia_file_with_the_wrong_bytes(cli, cap
     old = tmp_path / "old-cache"
     (old / "robot").mkdir(parents=True)
     (old / "robot" / "ur5e.usd").write_bytes(b"truncated")
-    monkeypatch.setattr(cli.asset_cache._TWIN, "legacy_stores", lambda: [old])
+    monkeypatch.setattr(cli.asset_cache.Resolver, "legacy_stores", lambda self: [old])
     code, out, err = run(cli, capsys, "migrate", "--from", str(tmp_path / "no-checkout"))
     assert code == 1 and "never pinned" in err  # nothing else to migrate, still an error
     assert not (store / "ur5e-dt" / "robot" / "ur5e.usd").exists()
@@ -1613,7 +1614,7 @@ def test_migrate_moves_nvidias_sensor_from_its_old_name_to_its_canonical_place(c
     manifest.write_text(_json.dumps({"fetch": [{"id": "g", "files": [
         {"target": "sensors/rsd455.usd", "source": "x", "sha256": sha(b"sensor"), "size": 6,
          "cache_path": "Isaac/Sensors/rsd455.usd"}]}]}))
-    monkeypatch.setattr(cli.asset_cache, "MANIFEST_PATH", manifest)
+    monkeypatch.setattr(cli.asset_cache.Resolver, "manifest_path", property(lambda self: manifest))
     checkout, assets = _old_checkout(tmp_path)
     (assets / "sensors").mkdir()
     (assets / "sensors" / "rsd455.usd").write_bytes(b"sensor")

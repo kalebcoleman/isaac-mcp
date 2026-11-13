@@ -46,10 +46,10 @@ def invoke(*, value=None, error=None):
         async with create_connected_server_and_client_session(server._mcp_server) as client:
             await client.initialize()
             before = next(t for t in (await client.list_tools()).tools
-                          if t.name == "ur5e_dt__play_scene")
-            result = await client.call_tool("ur5e_dt__play_scene", {})
+                          if t.name == "ur5e_dt__workcell_status")
+            result = await client.call_tool("ur5e_dt__workcell_status", {})
             after = next(t for t in (await client.list_tools()).tools
-                         if t.name == "ur5e_dt__play_scene")
+                         if t.name == "ur5e_dt__workcell_status")
             assert before == after
             return result, before
 

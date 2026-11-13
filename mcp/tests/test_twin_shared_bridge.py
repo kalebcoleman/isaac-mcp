@@ -9,7 +9,6 @@ import pytest
 from isaac_mcp_bridge.bridge import McpBridge, ToolDefinition
 from isaac_mcp.client import BridgeClient, BridgeError
 from bridge_testing import LiveBridge
-import twin_source
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,7 +18,7 @@ OWNER = binding["OWNER_ID"]
 
 
 def twin_registry():
-    tree = ast.parse(twin_source.SOURCE.read_text())
+    tree = ast.parse((ROOT / "exts/ur5e-dt/ur5e_dt/extension.py").read_text())
     return next(ast.literal_eval(node.value) for node in tree.body
                 if isinstance(node, ast.Assign) and any(
                     isinstance(target, ast.Name) and target.id == "MCP_TOOL_REGISTRY"
@@ -58,7 +57,7 @@ def test_twin_and_another_owner_share_one_socket_and_detach_independently(bridge
     # Re-register against the existing listener without opening a second socket.
     assert attach(bridge, twin_registry(), Twin(), ToolDefinition, requested_port=port) == port
     assert "sim.inspect" in bridge.get_registered_tools()
-    assert len([name for name in bridge.get_registered_tools() if name.startswith("ur5e_dt.")]) == 23
+    assert len([name for name in bridge.get_registered_tools() if name.startswith("ur5e_dt.")]) == 10
 
 
 def test_registration_failure_rolls_back_only_the_twin(bridge):
@@ -119,8 +118,8 @@ def test_both_owners_remain_callable_on_the_same_real_socket():
         attach(live.bridge, twin_registry(), Twin(), ToolDefinition, requested_port=live.port)
         with BridgeClient(port=live.port) as client:
             assert client.call("sim.inspect") == {"ok": True}
-            assert client.call("ur5e_dt.play_scene") == {"handler": "_cmd_play_scene"}
+            assert client.call("ur5e_dt.workcell_status") == {"handler": "_cmd_workcell_status"}
             live.bridge.unregister_owner(OWNER)
             assert client.call("sim.inspect") == {"ok": True}
             with pytest.raises(BridgeError, match="unknown tool"):
-                client.call("ur5e_dt.play_scene")
+                client.call("ur5e_dt.workcell_status")

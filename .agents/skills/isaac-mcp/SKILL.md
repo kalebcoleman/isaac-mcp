@@ -43,11 +43,11 @@ Pause before saving and check the exported scene after reopening in a fresh proc
 3. **Import your own robot or asset (USD, URDF, xacro, SDF, MuJoCo XML, a mesh, a ROS map, or a folder that holds one):** `assets__roots`, then `assets__import_path` (format auto). See `docs/ASSET-IMPORT.md` and the import workflow under "Generic scene and project assets" below. For a warehouse with a robot: `sim__quick_start environment=warehouse`.
 4. **Copy a USD or URDF and its files into your asset folder:** `assets__pack_build`, then `sim__quick_start robot="<pack>/<file>"`.
 5. **Train, evaluate or play a policy:** `isaaclab__install_info`, then `isaaclab__train`. No bridge is needed.
-6. **One lab's UR5e digital twin (RISE lab):** `ur5e_dt__quick_start`, only when that twin is what was asked for.
+6. **One lab's UR5e digital twin (RISE lab):** `ur5e_dt__workcell_quick_start`, only when that twin is what was asked for.
 7. **See the result:** `screenshot`; for video, `start_screen_recording`.
 
 **Tool names.** The server lists related tools as one tool with an `action` argument: `sim__stage__info` is
-`sim__stage` with `action="info"`, and `ur5e_dt__quick_start` is `ur5e_dt__scene` with `action="quick_start"`.
+`sim__stage` with `action="info"`, and `ur5e_dt__workcell_quick_start` is `ur5e_dt__workcell` with `action="quick_start"`.
 This guide writes the single-purpose name. When your tool list shows the grouped tool, call that: usually the
 last part of the name is the action, `action="help"` lists a group's actions, and the arguments are the same.
 The server's own messages already name tools the way your list shows them; the full mapping is the table in
@@ -180,10 +180,9 @@ Details: [references/isaac-sim.md](references/isaac-sim.md).
   window's own pixels, so covering windows, focus changes and a locked screen do not matter. Output
   is native size up to 1920 wide. Join clips with `join_videos` (`concat`, `hstack`, `vstack`; `sheet` makes a PNG contact sheet at matched times plus an attachment descriptor)
   instead of hand-written ffmpeg.
-- Prefer a pack's named tools (for example `ur5e_dt__play_scene`) over hand-written `run_python`
+- Prefer a pack's named tools (for example `sim__timeline__control`) over hand-written `run_python`
   when one exists; they carry the project's checks.
-- `screenshot` with no selector auto-targets the Isaac Sim / Isaac Lab window, even if covered. For
-  clean viewport video use the twin's `ur5e_dt__start_recording` instead of a screen recording.
+- `screenshot` with no selector auto-targets the Isaac Sim / Isaac Lab window, even if covered. Use the screen recording tools for video.
 - `put_file`, `get_file` and `stat_file` act on the bridge machine with Kit's permissions.
 
 ### Generic scene and project assets (`sim__*`, `assets__*`)
@@ -234,11 +233,7 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   For a user-supplied absolute USD path under an approved root, use `assets__import_path`
   with the current session/stage IDs. It preserves the source and copies the bounded project;
   inspect the returned prim and rendered result before assuming visual or physics readiness.
-  For the UR5e workstation workflow, use `assets__prepare_workstation` with those IDs and
-  `source_path`. It prepares `workstation/vention.usd` in the private asset cache and returns
-  `loaded:false`; then call `ur5e_dt__load_workstation` and inspect `/World/Vention`.
-  The twin and selected Kit must share the cache. Existing files are not overwritten, and a
-  project store (`isaac-mcp.json`) takes precedence over the asset folder; verify which file was loaded (`scripts/isaac_assets.py doctor`). The repository ships no assets.
+  The UR5e workcell uses an external asset pack; see `docs/TOOLS-UR5E.md`.
   See `docs/TOOLS-SCENE.md` for approval, staging, dependency limitations and cache placement.
 - **Playback and runtime state:** `sim__timeline__control` (play/pause/stop) and
   `sim__simulation__step` (1–120 exact steps while paused). `sim__body__state` and
@@ -386,7 +381,7 @@ worked while locked on GNOME.
 | `window_*` refused: "the desktop is locked" | The lock screen would get the input | For Isaac Sim use `sim__ui__find`/`sim__ui__act`; other apps need the desktop unlocked |
 | New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use the bridge CLI: `... list_tools --port <port>` |
 | Tools vanish, the client says the server "disconnected" and reconnected | Each client owns one server process; it ended (EOF, signal or crash) and a new one started | Read `~/.local/state/isaac-mcp/server-<pid>.log` (newest file first; the last lines say EOF, a signal, or a traceback). `status` shows `host.code_drift: true` when the checkout changed under a running server: reconnect |
-| Tool count differs from 134 | 45 are listed when tools are grouped (the default); `ISAAC_MCP_GROUP_TOOLS=0` lists all 134. Otherwise `ISAAC_MCP_LOCAL_TOOLS` etc. in the client entry: +5 `screen_input`, +4 `sim_launch` = 143 | Compare with the filters on the log's `process start` line |
+| Tool count differs from 121 | 48 are listed when tools are grouped (the default); `ISAAC_MCP_GROUP_TOOLS=0` lists all 121. Otherwise `ISAAC_MCP_LOCAL_TOOLS` etc. in the client entry: +5 `screen_input`, +4 `sim_launch` = 130 | Compare with the filters on the log's `process start` line |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
 | `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed (Kit restarted, stage opened) | The message names the current `session_id` and `stage_id`: resend with those, never the old ones |
