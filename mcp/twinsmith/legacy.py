@@ -170,6 +170,8 @@ def apply(environ: Optional[MutableMapping[str, str]] = None,
             copied.append((old, new))
         if old in PERMANENT or old in _WARNED:
             continue
+        if not used and environ.get(new) == environ.get(old):
+            continue        # the launcher copied it already (scripts/legacy_env.sh) and reported it there
         _WARNED.add(old)
         if used:
             warn(f"{old} is the old name of {new}; it still works in this release, so rename it. "

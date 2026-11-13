@@ -75,6 +75,14 @@ def test_the_new_name_wins_and_an_ignored_old_name_says_so():
     assert len(said) == 1 and "ignored" in said[0]
 
 
+def test_an_old_name_the_launcher_already_copied_is_not_reported_again():
+    # run.sh sources scripts/legacy_env.sh, which reports the old name and exports the new one; the process
+    # it starts then sees both with one value, and nothing is ignored.
+    environ, said = {"TWINSMITH_PORT": "8799", "UR5E_DT_PORT": "8799"}, []
+    assert legacy.apply(environ, said.append) == []
+    assert said == []
+
+
 def test_merged_old_names_resolve_in_the_order_the_old_code_read_them():
     environ = {"ISAAC_SIM_PORT": "3", "ISAAC_MCP_PORT": "2", "UR5E_DT_PORT": "1",
                "ISAAC_SIM_PYTHON": "/c", "UR5E_DT_PYTHON": "/b", "ISAAC_MCP_PYTHON": "/a"}

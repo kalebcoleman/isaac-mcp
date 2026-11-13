@@ -34,7 +34,6 @@ def parameters(port, toolsets=None):
             **({"TWINSMITH_TOOLSETS": toolsets} if toolsets else {}),
             "PYTHONPATH": str(ROOT / "mcp"),
             "TWINSMITH_PORT": str(port),
-            "TWINSMITH_PORT": str(port),
         },
     )
 
