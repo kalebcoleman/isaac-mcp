@@ -37,7 +37,7 @@ start. It offers three kinds of tool:
 They are separate on purpose. The host must start instantly and must never need the 20 GB simulator environment just
 to take a screenshot or manage a job. The bridge knows nothing about robots, so any Kit app and any tool pack can use
 it. The scene tools know nothing about the UR5e. The twin keeps its robot-specific logic to itself, and its USD assets
-are not in the repository; they live in the local [asset folder](ASSETS.md).
+are not in the repository; they live in packs in the local [asset root](ASSET-PACKS.md).
 
 ## How a client connects
 
@@ -135,11 +135,11 @@ GPU guards. See [Isaac Lab tools](TOOLS-ISAACLAB.md).
 
 ## Assets
 
-Assets are not in the repository. They live in an **asset folder** of named packs (`ISAAC_MCP_ASSET_PATH`), and in
+Assets are not in the repository. They live in an **asset root** of versioned packs (`ISAAC_MCP_ASSET_ROOT`), and in
 project folders the user has approved. The server will only read a file inside one of those; only the user can approve
 a folder. `assets__import_path` picks the format, converts URDF, xacro, SDF and MuJoCo files on the host without running
 any code from them, and hands Kit a verified snapshot in a staging folder both processes can read. Kit then references
-the snapshot into the scene's session layer, so source files never change. See [Assets](ASSETS.md) and
+the snapshot into the scene's session layer, so source files never change. See [Asset packs](ASSET-PACKS.md) and
 [importing](ASSET-IMPORT.md).
 
 ## Seeing and recording
@@ -164,7 +164,7 @@ Kit (set them where `run.sh` runs; `sim__launch` passes the server's on), or an 
 |---|---|---|
 | `ISAAC_MCP_PORT` | server, Kit | The bridge port to dial, and to listen on. |
 | `ISAAC_MCP_PYTHON` | `run.sh`, `sim__launch` | The Isaac Sim interpreter to start. |
-| `ISAAC_MCP_ASSET_PATH` | server, Kit | The asset folder. |
+| `ISAAC_MCP_ASSET_ROOT` | server, Kit | The asset root. |
 | `ISAAC_MCP_SCENE_OUTPUT` | Kit | Where scene tools write captures, saves and logs. |
 | `ISAACLAB_PYTHON`, `ISAACLAB_ROOT` | server | The default Isaac Lab install. |
 | `ISAAC_MCP_TOOLSETS` | server | Which tools a client is shown. These control visibility, not security. |

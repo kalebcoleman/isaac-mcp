@@ -1,6 +1,6 @@
 [[allow]]
 pattern = "ISAAC_MCP"
-path = "ASSETS.md"
+path = "docs/ASSET-PACKS.md"
 literal = "ISAAC_MCP_ASSET_ROOT"
 reason = "Permanent asset-root compatibility alias, not the product name."
 
@@ -48,11 +48,6 @@ reason = "Upstream project attribution and licence text must retain its original
 pattern = "isaac-sim-mcp"
 path = "docs/provenance/isaac-sim-mcp-LICENSE"
 reason = "Upstream project attribution and licence text must retain its original name."
-
-[[allow]]
-pattern = "omni-kit-mcp"
-path = "docs/provenance/ASSETS.md"
-reason = "Upstream project attribution and licence history must retain its original name."
 
 [[allow]]
 pattern = "isaac-mcp"

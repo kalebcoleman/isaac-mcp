@@ -101,7 +101,7 @@
 <text x="940.0" y="905" font-size="12.5" text-anchor="middle" fill="#333333">(config/ros_dds.env)</text>
 <rect x="1120" y="800" width="400" height="240" rx="8" fill="#fff2cc" stroke="#d6b656" stroke-width="1.5"/>
 <text x="1320.0" y="824" font-size="14" font-weight="bold" text-anchor="middle" fill="#222222">Files on this machine</text>
-<text x="1320.0" y="848" font-size="12.5" text-anchor="middle" fill="#333333">asset folder and packs  (ISAAC_MCP_ASSET_PATH)</text>
+<text x="1320.0" y="848" font-size="12.5" text-anchor="middle" fill="#333333">asset root and packs  (ISAAC_MCP_ASSET_ROOT)</text>
 <text x="1320.0" y="867" font-size="12.5" text-anchor="middle" fill="#333333">staging  (~/.cache/isaac-mcp/staging)</text>
 <text x="1320.0" y="886" font-size="12.5" text-anchor="middle" fill="#333333">scene output: captures, frames, CSV logs</text>
 <text x="1320.0" y="905" font-size="12.5" text-anchor="middle" fill="#333333">  (ISAAC_MCP_SCENE_OUTPUT)</text>

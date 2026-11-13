@@ -38,9 +38,9 @@ README = """\
 Created by `scripts/isaac_env.py init`.  Nothing here is deleted or overwritten
 by the tools.
 
-- `isaac-mcp-assets/`   your local asset database (USD, URDF, meshes, textures), shared by
+- `isaac-mcp-assets/`   your asset root: packs as <pack id>/<version>/pack.yaml, shared by
   every project and never pushed to GitHub. Fill it with `scripts/isaac_assets.py`
-  (`add`, `adopt`, `migrate`) and `scripts/fetch_ur5e_assets.py`.
+  (`adopt`, `build`; see docs/ASSET-PACKS.md).
 - `envs/`     Python environments, one folder each (`envs/<name>/bin/python`).
               `scripts/isaac_env.py find` picks them up automatically.
 - `projects/` one folder per project; put an `isaac-mcp.json` in each.
@@ -431,9 +431,9 @@ def cmd_init(args, env, repo=REPO):
     print(f"workspace ready: {ws}\n")
     print("Add to your shell profile:")
     print(f"  export ISAAC_MCP_WORKSPACE=\"{ws}\"")
-    print(f"  export ISAAC_MCP_ASSET_PATH=\"{ws}/isaac-mcp-assets\"\n")
+    print(f"  export ISAAC_MCP_ASSET_ROOT=\"{ws}/isaac-mcp-assets\"\n")
     print(f"Example {ws}/projects/<name>/isaac-mcp.json:")
-    print(json.dumps({"asset_path": ["./assets"], "strict": False}, indent=2))
+    print(json.dumps({"pack": "my-robot/v1"}, indent=2))
     return 0
 
 

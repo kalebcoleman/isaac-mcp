@@ -142,7 +142,7 @@
         },
         "source_path": {
           "type": "string",
-          "description": "Absolute path of the file, or of a folder that holds one, inside an approved root or a pack of your asset folder. Or use root_id with relative_path.",
+          "description": "Absolute path of the file, or of a folder that holds one, inside an approved root or a pack version of your asset root. Or use root_id with relative_path.",
           "required": false
         },
         "root_id": {
@@ -265,7 +265,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Absolute path of the file, or of a folder that holds one, inside an approved root or a pack of your asset folder. Or use root_id with relative_path."
+          "description": "Absolute path of the file, or of a folder that holds one, inside an approved root or a pack version of your asset root. Or use root_id with relative_path."
         },
         {
           "name": "root_id",
@@ -469,23 +469,18 @@
       "owner_id": "generic-assets"
     },
     "assets.packs": {
-      "description": "List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs. With a Kit connected it also lists kit_environment and warns when Kit and this host use different project files, stores or strict mode.",
+      "description": "List every <id>/<version> pack in the asset root (ISAAC_MCP_ASSET_ROOT, else <workspace>/assets) with its file count, size and whether it verifies against its pack.yaml, and any old-format pack with a hint to convert it with adopt. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_ROOT. With a Kit connected it also lists kit_environment and warns when Kit and this host use a different asset root or project file.",
       "parameters": {},
       "fields": [],
       "namespace": "assets",
       "owner_id": "generic-assets"
     },
     "assets.pack_doctor": {
-      "description": "Check a pack without changing it: corrupt, missing and unpinned files, then the dependencies of its entry files (unresolved, unreadable, remote, outside the pack). A file accepted at build time with allow_unresolved is still missing, so it is reported and ok is false until the file is added: assets__import_path refuses it for the same reason. Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.",
+      "description": "Check a pack without changing it: every file listed in pack.yaml exists and matches its sha256, nothing unlisted or symlinked is in the folder, then the dependencies of its USD, URDF, MJCF, SDF, mesh and map files must all be files of the same pack (unresolved, unreadable, remote and outside-pack references are problems). Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.",
       "parameters": {
         "pack": {
           "type": "string",
-          "description": "Pack name. Default: the selected pack.",
-          "required": false
-        },
-        "entries": {
-          "type": "array",
-          "description": "Files in the pack that are its roots. Default: recorded in the pack, or the twin's known names for ur5e-dt.",
+          "description": "Pack as \"<pack id>/<version>\". Default: the project file's pack.",
           "required": false
         }
       },
@@ -497,23 +492,14 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Pack name. Default: the selected pack."
-        },
-        {
-          "name": "entries",
-          "kind": "array",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Files in the pack that are its roots. Default: recorded in the pack, or the twin's known names for ur5e-dt."
+          "description": "Pack as \"<pack id>/<version>\". Default: the project file's pack."
         }
       ],
       "namespace": "assets",
       "owner_id": "generic-assets"
     },
     "assets.dependencies": {
-      "description": "Compute dependency closures for files under an approved root or a user asset store. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.",
+      "description": "Compute dependency closures for files under an approved root or the asset root. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.",
       "parameters": {
         "paths": {
           "type": "array",
@@ -536,17 +522,38 @@
       "owner_id": "generic-assets"
     },
     "assets.pack_adopt": {
-      "description": "Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in skipped_symlinks with a note. A different file already there is refused unless force=true; nothing is written inside the repository.",
+      "description": "Copy a folder's asset files into a NEW pack version <id>/<version> in the asset root and write its pack.yaml (sha256 of every file, plus the source and license you give; redistributable is false unless you say so). The source must be under a user-approved root. A version that exists is never modified: give a new one. Symlinks are never followed. With from_old, converts an old-format pack folder of the asset root into <id>/v1, leaving the old files in place.",
       "parameters": {
         "pack": {
           "type": "string",
-          "description": "Pack name: one folder name, no path separators.",
+          "description": "The new pack as \"<pack id>/<version>\", for example my-robot/v1.",
+          "required": true
+        },
+        "source": {
+          "type": "string",
+          "description": "Where the files came from, one line (a vendor, repository URL and commit, or file hash). Recorded for every file.",
+          "required": true
+        },
+        "license": {
+          "type": "string",
+          "description": "The licence or terms, one line (for example \"private lab use only\"). Recorded for every file.",
           "required": true
         },
         "source_path": {
           "type": "string",
-          "description": "Absolute folder under an approved root. Omit to create an empty pack.",
+          "description": "Absolute folder under an approved root. Give this or from_old.",
           "required": false
+        },
+        "from_old": {
+          "type": "string",
+          "description": "Name of an old-format pack folder in the asset root to convert; pack must be <that name>/<version>.",
+          "required": false
+        },
+        "redistributable": {
+          "type": "boolean",
+          "description": "The files may be redistributed. Default false.",
+          "required": false,
+          "default": false
         },
         "include": {
           "type": "array",
@@ -558,20 +565,9 @@
           "description": "Copy only these files or folders, relative to source_path. A named file is copied whatever its type.",
           "required": false
         },
-        "entries": {
-          "type": "array",
-          "description": "Root USD files, relative to the pack, for assets__pack_doctor. Default: a sole top-level USD.",
-          "required": false
-        },
         "dry_run": {
           "type": "boolean",
           "description": "Report the plan and write nothing.",
-          "required": false,
-          "default": false
-        },
-        "force": {
-          "type": "boolean",
-          "description": "Replace files that differ from the source.",
           "required": false,
           "default": false
         }
@@ -584,7 +580,25 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Pack name: one folder name, no path separators."
+          "description": "The new pack as \"<pack id>/<version>\", for example my-robot/v1."
+        },
+        {
+          "name": "source",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Where the files came from, one line (a vendor, repository URL and commit, or file hash). Recorded for every file."
+        },
+        {
+          "name": "license",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "The licence or terms, one line (for example \"private lab use only\"). Recorded for every file."
         },
         {
           "name": "source_path",
@@ -593,7 +607,25 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Absolute folder under an approved root. Omit to create an empty pack."
+          "description": "Absolute folder under an approved root. Give this or from_old."
+        },
+        {
+          "name": "from_old",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Name of an old-format pack folder in the asset root to convert; pack must be <that name>/<version>."
+        },
+        {
+          "name": "redistributable",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "The files may be redistributed. Default false."
         },
         {
           "name": "include",
@@ -614,15 +646,6 @@
           "description": "Copy only these files or folders, relative to source_path. A named file is copied whatever its type."
         },
         {
-          "name": "entries",
-          "kind": "array",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Root USD files, relative to the pack, for assets__pack_doctor. Default: a sole top-level USD."
-        },
-        {
           "name": "dry_run",
           "kind": "boolean",
           "enum": null,
@@ -630,26 +653,17 @@
           "default": false,
           "has_default": true,
           "description": "Report the plan and write nothing."
-        },
-        {
-          "name": "force",
-          "kind": "boolean",
-          "enum": null,
-          "required": false,
-          "default": false,
-          "has_default": true,
-          "description": "Replace files that differ from the source."
         }
       ],
       "namespace": "assets",
       "owner_id": "generic-assets"
     },
     "assets.pack_pin": {
-      "description": "Record the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true.",
+      "description": "Rewrite the sha256 values of an existing pack.yaml to match its files, and show what changed. A version that already verifies is not modified. A changed hash accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true. Missing or unlisted files cannot be fixed by a hash: write a new version with adopt or build.",
       "parameters": {
         "pack": {
           "type": "string",
-          "description": "Pack name. Default: the selected pack.",
+          "description": "Pack as \"<pack id>/<version>\". Default: the project file's pack.",
           "required": false
         },
         "files": {
@@ -659,7 +673,13 @@
         },
         "force": {
           "type": "boolean",
-          "description": "Accept every changed and removed file.",
+          "description": "Accept every changed file.",
+          "required": false,
+          "default": false
+        },
+        "dry_run": {
+          "type": "boolean",
+          "description": "Show what would change and write nothing.",
           "required": false,
           "default": false
         }
@@ -672,7 +692,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Pack name. Default: the selected pack."
+          "description": "Pack as \"<pack id>/<version>\". Default: the project file's pack."
         },
         {
           "name": "files",
@@ -690,18 +710,27 @@
           "required": false,
           "default": false,
           "has_default": true,
-          "description": "Accept every changed and removed file."
+          "description": "Accept every changed file."
+        },
+        {
+          "name": "dry_run",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Show what would change and write nothing."
         }
       ],
       "namespace": "assets",
       "owner_id": "generic-assets"
     },
     "assets.pack_build": {
-      "description": "Copy USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on into a pack in the primary asset folder, keeping layout, and pin them. A URDF brings its meshes, textures and package.xml; an MJCF its includes and meshes; a glTF its buffers and images; a map its image. Sources must be under an approved root or a user asset store. Unresolved or remote references refuse the build unless allow_unresolved=true (then importable=false). Differing files need force=true. For xacro use assets__import_path.",
+      "description": "Copy USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on into a NEW pack version in the asset root, keeping layout, and write its pack.yaml. A file copied out of from_pack keeps that pack's source, license and redistributable; any other file needs source and license. Sources must be under an approved root or the asset root. Unresolved or remote references refuse the build unless allow_unresolved=true. An existing version is never modified. For xacro use assets__import_path.",
       "parameters": {
         "pack": {
           "type": "string",
-          "description": "Destination pack name: one folder name.",
+          "description": "Destination as \"<pack id>/<version>\"; the version must not exist.",
           "required": true
         },
         "sources": {
@@ -711,7 +740,7 @@
         },
         "from_pack": {
           "type": "string",
-          "description": "Pack that source names and logical references such as robot/ur5e.usd come from.",
+          "description": "Pack as \"<pack id>/<version>\" that source names and logical references come from. It must verify.",
           "required": false
         },
         "layout_root": {
@@ -719,26 +748,31 @@
           "description": "Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for.",
           "required": false
         },
-        "origin": {
+        "source": {
           "type": "string",
-          "description": "Where these files came from, one line (for example a repository URL and commit). Recorded in the pack's isaac-mcp-pack.json and listed by assets__packs, so you can see later what a pack used.",
+          "description": "Where files that do not come from from_pack came from, one line.",
           "required": false
+        },
+        "license": {
+          "type": "string",
+          "description": "Licence or terms of those files, one line.",
+          "required": false
+        },
+        "redistributable": {
+          "type": "boolean",
+          "description": "Those files may be redistributed. Default false.",
+          "required": false,
+          "default": false
         },
         "allow_unresolved": {
           "type": "boolean",
-          "description": "Build despite missing or remote references, and record them.",
+          "description": "Build despite missing or remote references, and record them in pack.yaml.",
           "required": false,
           "default": false
         },
         "dry_run": {
           "type": "boolean",
           "description": "Report the closure and write nothing.",
-          "required": false,
-          "default": false
-        },
-        "force": {
-          "type": "boolean",
-          "description": "Replace files that differ from the source.",
           "required": false,
           "default": false
         }
@@ -751,7 +785,7 @@
           "required": true,
           "default": null,
           "has_default": false,
-          "description": "Destination pack name: one folder name."
+          "description": "Destination as \"<pack id>/<version>\"; the version must not exist."
         },
         {
           "name": "sources",
@@ -769,7 +803,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Pack that source names and logical references such as robot/ur5e.usd come from."
+          "description": "Pack as \"<pack id>/<version>\" that source names and logical references come from. It must verify."
         },
         {
           "name": "layout_root",
@@ -781,13 +815,31 @@
           "description": "Absolute folder the pack layout is relative to. Default: from_pack; for a USD the source's folder; for a URDF the approved root or pack holding it, which is also where its ROS packages are looked for."
         },
         {
-          "name": "origin",
+          "name": "source",
           "kind": "string",
           "enum": null,
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Where these files came from, one line (for example a repository URL and commit). Recorded in the pack's isaac-mcp-pack.json and listed by assets__packs, so you can see later what a pack used."
+          "description": "Where files that do not come from from_pack came from, one line."
+        },
+        {
+          "name": "license",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Licence or terms of those files, one line."
+        },
+        {
+          "name": "redistributable",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Those files may be redistributed. Default false."
         },
         {
           "name": "allow_unresolved",
@@ -796,7 +848,7 @@
           "required": false,
           "default": false,
           "has_default": true,
-          "description": "Build despite missing or remote references, and record them."
+          "description": "Build despite missing or remote references, and record them in pack.yaml."
         },
         {
           "name": "dry_run",
@@ -806,15 +858,6 @@
           "default": false,
           "has_default": true,
           "description": "Report the closure and write nothing."
-        },
-        {
-          "name": "force",
-          "kind": "boolean",
-          "enum": null,
-          "required": false,
-          "default": false,
-          "has_default": true,
-          "description": "Replace files that differ from the source."
         }
       ],
       "namespace": "assets",

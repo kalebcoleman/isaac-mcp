@@ -1105,23 +1105,22 @@ def _quick_start_needs_host(robot) -> bool:
 
 
 def _quick_start_robot_path(robot: str) -> str:
-    """An absolute path as given, or the first copy of ``<pack>/<file>`` in the user's asset stores."""
+    """An absolute path as given, or the verified file ``<pack id>/<version>/<file>`` in the asset root."""
     if os.path.isabs(os.path.expanduser(robot)):
         return robot
-    from . import assets
-    from .project_assets import AssetError, approval_help
+    from . import pack_manifest
+    from .project_assets import AssetError
 
-    pack, _, rel = robot.partition("/")
     try:
-        assets.validate_pack_name(pack)
-    except assets.InvalidPackName as exc:
-        raise AssetError("INVALID_VALUE", str(exc)[:300]) from exc
-    stores = assets.Resolver(assets.DEFAULT_PACK).user_stores()
-    for store in stores:
-        if (store / pack / rel).is_file():
-            return str(store / pack / rel)
-    raise AssetError("ASSET_MISSING", f"{rel} is not in pack {pack} in your asset folder ({[str(s) for s in stores]}). "
-                     "A pack named only by a project file's asset_path is not an approval. List packs with assets__packs." + approval_help(next(iter(assets.project_stores()), None)))
+        root = pack_manifest.resolve_asset_root().path
+    except pack_manifest.RootError as exc:
+        raise AssetError("ASSET_MISSING", str(exc)) from exc
+    try:
+        return str(pack_manifest.resolve_pack_file(root, robot))
+    except pack_manifest.ManifestError as exc:
+        code = "INVALID_VALUE" if str(exc).startswith(("Invalid pack identifier", f"{robot!r} must be")) else "ASSET_MISSING"
+        raise AssetError(code, f"{str(exc)[:300]} Name a file as <pack id>/<version>/<file>; assets__pack action=list shows what the "
+                         f"asset root {root} holds.") from exc
 
 
 def register_dynamic_tool(server: FastMCP, name: str, canonical: str,

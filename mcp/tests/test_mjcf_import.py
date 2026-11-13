@@ -93,9 +93,10 @@ def test_dependencies_reads_an_mjcf_on_the_host_without_a_usd_parser(tmp_path):
     assert str(root / "assets" / "link.stl") in results[0]["assets"]
 
 
-def test_pack_build_refuses_an_unapproved_mujoco_model_and_a_xacro_with_a_pointer(tmp_path):
+def test_pack_build_refuses_an_unapproved_mujoco_model_and_a_xacro_with_a_pointer(tmp_path, monkeypatch):
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(tmp_path / "assets"))
     with pytest.raises(packs.PackError) as caught:
-        packs.run_tool("assets.pack_build", dict(pack="p", sources=[str(tmp_path / "arm.xml")]), Broker())
+        packs.run_tool("assets.pack_build", dict(pack="p/v1", sources=[str(tmp_path / "arm.xml")]), Broker())
     assert caught.value.code in ("ROOT_NOT_APPROVED", "NOT_FOUND", "USD_UNAVAILABLE")
 
 

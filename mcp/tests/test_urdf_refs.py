@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -9,11 +10,11 @@ from pathlib import Path
 import pytest
 
 from isaac_mcp import asset_packs as packs
-from isaac_mcp import assets, urdf_physics, urdf_refs
+from isaac_mcp import pack_manifest as pm, urdf_physics, urdf_refs
 from isaac_mcp.project_assets import AssetError, Broker
 
-ENV = ("ISAAC_MCP_ASSET_PATH", "ISAAC_MCP_ASSET_PACK", "ISAAC_MCP_ASSET_STRICT", "ISAAC_MCP_PROJECT",
-       "ISAAC_MCP_WORKSPACE", "UR5E_DT_ASSET_CACHE", "ISAAC_MCP_USD_PYTHON")
+ENV = ("ISAAC_MCP_ASSET_ROOT", "ISAAC_MCP_PROJECT", "ISAAC_MCP_WORKSPACE", "ISAAC_MCP_USD_PYTHON", *pm.REMOVED_ENVIRONMENT)
+PROVENANCE = dict(source="unit test", license="test fixture")
 
 
 def put(root: Path, rel: str, data="x") -> Path:
@@ -21,6 +22,18 @@ def put(root: Path, rel: str, data="x") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data if isinstance(data, bytes) else data.encode())
     return path
+
+
+def make_pack(root: Path, pack_id: str, version: str, files: dict) -> Path:
+    """A pack that verifies, written by hand: ``files`` maps a relative path to its content."""
+    directory = root / pack_id / version
+    records = []
+    for rel, data in sorted(files.items()):
+        path = put(directory, rel, data)
+        records.append(dict(path=rel, sha256=hashlib.sha256(path.read_bytes()).hexdigest(), source="lab", license="lab",
+                            redistributable=False))
+    (directory / "pack.yaml").write_text(json.dumps(dict(id=pack_id, version=version, files=records)))
+    return directory
 
 
 def urdf(*meshes, extra="") -> str:
@@ -46,7 +59,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_PROJECT", str(tmp_path / "no-project"))
     store = tmp_path / "store"
     store.mkdir()
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(store))
     return store
 
 
@@ -307,42 +320,39 @@ def test_a_dae_without_a_unit_gets_the_default_one():
 # ---------------------------------------------------------------- the host route
 
 
-def test_a_urdf_in_a_store_pack_can_be_located_and_snapshotted(env):
-    put(env / "bot", "m.stl")
-    path = put(env / "bot", "r.urdf", urdf("m.stl"))
+def test_a_urdf_in_a_pack_can_be_located_and_snapshotted(env):
+    directory = make_pack(env, "bot", "v1", {"m.stl": "x", "r.urdf": urdf("m.stl")})
     made = Broker("")
-    root_id, rel = made.locate(str(path), kind="urdf")
+    root_id, rel = made.locate(str(directory.resolve() / "r.urdf"), kind="urdf")
     assert rel == "r.urdf"
     made.staging = env.parent / "staging"
     made.staging.mkdir(mode=0o700)
     snap = made.snapshot(root_id, rel, kind="urdf")
     _, manifest = made.verify(snap["snapshot_id"], snap["manifest_sha256"], kind="urdf")
-    assert manifest["root_name"] == "bot"
+    assert manifest["root_name"] == "v1"
 
 
 def test_a_corrupt_urdf_pack_is_refused(env):
-    path = put(env / "bot", "r.urdf", urdf())
-    packs.pin_pack(env / "bot")
-    path.write_text(urdf("x.stl"))
+    directory = make_pack(env, "bot", "v1", {"r.urdf": urdf()})
+    (directory / "r.urdf").write_text(urdf("x.stl"))
     with pytest.raises(AssetError) as caught:
-        Broker("").locate(str(path), kind="urdf")
+        Broker("").locate(str(directory.resolve() / "r.urdf"), kind="urdf")
     assert caught.value.code == "PACK_CORRUPT"
 
 
-def test_a_symlink_in_a_urdf_pack_is_refused_by_the_snapshot(env, tmp_path):
-    path = put(env / "bot", "r.urdf", urdf("m.stl"))
-    (env / "bot/m.stl").symlink_to(put(tmp_path, "secret.stl"))
+def test_a_symlink_in_a_urdf_pack_is_refused(env, tmp_path):
+    directory = make_pack(env, "bot", "v1", {"r.urdf": urdf("m.stl")})
+    (directory / "m.stl").symlink_to(put(tmp_path, "secret.stl"))
     made = Broker("")
     made.staging = tmp_path / "staging"
     made.staging.mkdir(mode=0o700)
-    root_id, rel = made.locate(str(path), kind="urdf")
-    with pytest.raises(AssetError, match="symlink"):
-        made.snapshot(root_id, rel, kind="urdf")
+    with pytest.raises(AssetError, match="[Ss]ymlink"):
+        made.locate(str(directory.resolve() / "r.urdf"), kind="urdf")
 
 
-def test_a_project_files_asset_path_is_not_approval_for_a_urdf(env, tmp_path, monkeypatch):
+def test_a_project_file_is_not_approval_for_a_urdf(env, tmp_path, monkeypatch):
     project = tmp_path / "cloned"
-    put(project, "isaac-mcp.json", json.dumps(dict(asset_path=str(tmp_path / "elsewhere"))))
+    put(project, "isaac-mcp.json", json.dumps(dict(pack="bot/v1")))
     path = put(tmp_path / "elsewhere" / "bot", "r.urdf", urdf())
     monkeypatch.setenv("ISAAC_MCP_PROJECT", str(project))
     with pytest.raises(AssetError) as caught:
@@ -351,16 +361,15 @@ def test_a_project_files_asset_path_is_not_approval_for_a_urdf(env, tmp_path, mo
 
 
 def test_kinds_are_told_apart_with_the_tool_to_use(env, broker):
-    usd = put(env / "bot", "s.usda", "#usda 1.0\n")
+    directory = make_pack(env, "bot", "v1", {"s.usda": "#usda 1.0\n", "r.urdf": urdf(), "r.urdf.xacro": "<robot/>"})
+    here = directory.resolve()
     with pytest.raises(AssetError) as caught:
-        broker.locate(str(usd), kind="urdf")
+        broker.locate(str(here / "s.usda"), kind="urdf")
     assert caught.value.code == "UNSUPPORTED_FORMAT"
-    path = put(env / "bot", "r.urdf", urdf())
     with pytest.raises(AssetError, match="assets__import_path"):
-        broker.locate(str(path))
-    xacro = put(env / "bot", "r.urdf.xacro", "<robot/>")
+        broker.locate(str(here / "r.urdf"))
     with pytest.raises(AssetError) as caught:
-        broker.locate(str(xacro), kind="urdf")
+        broker.locate(str(here / "r.urdf.xacro"), kind="urdf")
     assert caught.value.code == "XACRO"
 
 
@@ -374,7 +383,7 @@ def test_scan_lists_urdf_files(broker):
 
 
 def build(broker, *sources, **options):
-    return packs.run_tool("assets.pack_build", dict(pack="bot", sources=list(sources), **options), broker)
+    return packs.run_tool("assets.pack_build", dict(pack="bot/v1", sources=list(sources), **PROVENANCE, **options), broker)
 
 
 def test_a_urdf_build_needs_no_usd_parser_and_copies_only_what_it_names(env, broker, monkeypatch):
@@ -391,12 +400,12 @@ def test_a_urdf_build_needs_no_usd_parser_and_copies_only_what_it_names(env, bro
     assert report["status"] == "ok" and report["backend"] is None
     assert report["entries"] == ["urdf/r.urdf"] and report["copied"] == 4
     assert report["urdf_packages"] == {"pkg": dict(folder=".", found_by="package.xml")}
-    assert report["verified"]["self_contained"] is True
-    folder = env / "bot"
+    assert report["verified"]["self_contained"] is True, json.dumps(report["verified"])
+    folder = env / "bot/v1"
     assert (folder / "package.xml").is_file() and (folder / "meshes/tex.png").is_file()
     assert not (folder / "meshes/unused.stl").exists() and not (folder / "launch").exists()
     assert (folder / "urdf/r.urdf").read_bytes() == before and path.read_bytes() == before
-    assert "urdf/r.urdf" in assets.pins(folder)
+    assert "urdf/r.urdf" in {r["path"] for r in pm.AssetPack(env, "bot", "v1").manifest["files"]}
 
 
 def test_a_package_named_only_by_the_root_folder_stays_findable_in_the_pack(env, tmp_path):
@@ -408,12 +417,13 @@ def test_a_package_named_only_by_the_root_folder_stays_findable_in_the_pack(env,
     put(root, "robots/m.stl")
     path = put(root, "robots/r.urdf", urdf("package://example-robot-data/robots/m.stl"))
     made = Broker(str(config))
-    report = packs.run_tool("assets.pack_build", dict(pack="bot", sources=[str(path)]), made)
+    report = packs.run_tool("assets.pack_build", dict(pack="bot/v1", sources=[str(path)], **PROVENANCE), made)
     assert report["entries"] == ["example-robot-data/robots/r.urdf"]
+    assert report["load_as"] == ["bot/v1/example-robot-data/robots/r.urdf"]
     assert report["verified"]["self_contained"] is True
-    assert (env / "bot/example-robot-data/robots/m.stl").is_file()
-    doctor = packs.run_tool("assets.pack_doctor", dict(pack="bot"), made)
-    assert doctor["ok"] is True and doctor["folders"][0]["dependencies"]["self_contained"] is True
+    assert (env / "bot/v1/example-robot-data/robots/m.stl").is_file()
+    doctor = packs.run_tool("assets.pack_doctor", dict(pack="bot/v1"), made)
+    assert doctor["ok"] is True and doctor["dependencies"]["self_contained"] is True
 
 
 def test_a_build_with_a_missing_mesh_copies_nothing_unless_allowed(env, broker):
@@ -426,7 +436,7 @@ def test_a_build_with_a_missing_mesh_copies_nothing_unless_allowed(env, broker):
     report = build(broker, str(path), allow_unresolved=True)
     assert report["verified"]["self_contained"] is False and report["verified"]["accepted_unresolved"]
     assert report["importable"] is False and "package://nowhere/x.stl" in " ".join(report["import_blockers"])
-    assert (env / "bot/r.urdf").is_file()
+    assert (env / "bot/v1/r.urdf").is_file()
 
 
 def test_a_mesh_outside_the_root_is_not_copied(env, broker, tmp_path):
@@ -437,7 +447,7 @@ def test_a_mesh_outside_the_root_is_not_copied(env, broker, tmp_path):
         build(broker, str(path))
     assert caught.value.details["outside"][0]["reference"] == "../secret.stl"
     build(broker, str(path), allow_unresolved=True)
-    assert sorted(p.name for p in (env / "bot").iterdir() if p.suffix == ".stl") == []
+    assert sorted(p.name for p in (env / "bot/v1").iterdir() if p.suffix == ".stl") == []
 
 
 def test_a_symlinked_mesh_is_not_copied(env, broker, tmp_path):
@@ -456,7 +466,7 @@ def test_a_missing_texture_builds_but_is_not_self_contained(env, broker):
     report = build(broker, str(path))
     assert report["status"] == "ok" and report["missing_textures"][0]["reference"] == "gone.png"
     assert report["verified"]["self_contained"] is False and report["notes"]
-    doctor = packs.run_tool("assets.pack_doctor", dict(pack="bot"), broker)["folders"][0]
+    doctor = packs.run_tool("assets.pack_doctor", dict(pack="bot/v1"), broker)
     assert "gone.png" in doctor["warnings"][0] and doctor["dependencies"]["self_contained"] is False
 
 
@@ -479,17 +489,17 @@ def test_doctor_finds_a_urdf_pack_broken_later(env, broker):
     put(root, "m.stl")
     path = put(root, "r.urdf", urdf("m.stl"))
     build(broker, str(path))
-    (env / "bot/m.stl").unlink()
-    report = packs.run_tool("assets.pack_doctor", dict(pack="bot"), broker)["folders"][0]
+    (env / "bot/v1/m.stl").unlink()
+    report = packs.run_tool("assets.pack_doctor", dict(pack="bot/v1"), broker)
     assert report["ok"] is False and any("m.stl" in p for p in report["problems"])
 
 
 def test_a_build_from_a_pack_keeps_packages_findable(env, broker):
-    put(env / "first", "pkg/package.xml", package_xml("pkg"))
-    put(env / "first", "pkg/m.stl")
-    put(env / "first", "r.urdf", urdf("package://pkg/m.stl"))
-    report = packs.run_tool("assets.pack_build", dict(pack="second", sources=["r.urdf"], from_pack="first"), broker)
-    assert report["verified"]["self_contained"] is True and (env / "second/pkg/package.xml").is_file()
+    make_pack(env, "first", "v1", {"pkg/package.xml": package_xml("pkg"), "pkg/m.stl": "x",
+                                   "r.urdf": urdf("package://pkg/m.stl")})
+    report = packs.run_tool("assets.pack_build", dict(pack="second/v1", sources=["r.urdf"], from_pack="first/v1"), broker)
+    assert report["verified"]["self_contained"] is True and (env / "second/v1/pkg/package.xml").is_file()
+    assert {r["source"] for r in pm.AssetPack(env, "second", "v1").manifest["files"]} == {"lab"}  # inherited
 
 
 # ---------------------------------------------------------------- physics
@@ -611,20 +621,16 @@ def test_one_missing_mesh_does_not_condemn_the_packages_other_meshes(tmp_path):
 
 
 def test_doctor_names_only_the_missing_package_mesh(tmp_path):
-    root = tmp_path / "bot"
-    put(root, "pkg/package.xml", package_xml("pkg"))
-    put(root, "pkg/meshes/a.stl", "a")
-    put(root, "pkg/meshes/b.stl", "b")
-    put(root, "urdf/r.urdf", urdf(
-        "package://pkg/meshes/a.stl", "package://pkg/meshes/b.stl", "package://pkg/meshes/gone.stl"))
-    packs.pin_pack(root)
+    make_pack(tmp_path, "bot", "v1", {
+        "pkg/package.xml": package_xml("pkg"), "pkg/meshes/a.stl": "a", "pkg/meshes/b.stl": "b",
+        "urdf/r.urdf": urdf("package://pkg/meshes/a.stl", "package://pkg/meshes/b.stl", "package://pkg/meshes/gone.stl")})
     calls = []
 
     def no_usd(paths):
         calls.append(paths)
         raise AssertionError("a URDF-only pack needs no USD parser")
 
-    report = packs.doctor_folder(root, closure=no_usd)
+    report = packs.doctor_pack(tmp_path, "bot", "v1", closure=no_usd)
     assert not calls
     unresolved = report["dependencies"]["unresolved"]
     assert [u["reference"] for u in unresolved] == ["package://pkg/meshes/gone.stl"]
@@ -677,19 +683,19 @@ def test_packs_hold_mjcf_sdf_meshes_and_maps_with_exactly_what_they_name(env, br
     put(root, "m/assets/unused.stl")
     report = build(broker, str(root / "m/arm.xml"))
     assert report["status"] == "ok" and report["entries"] == ["arm.xml"] or "m/arm.xml" in report["entries"]
-    folder = env / "bot"
+    folder = env / "bot/v1"
     assert any(p.name == "a.stl" for p in folder.rglob("*")) and not any(p.name == "unused.stl" for p in folder.rglob("*"))
     put(root, "gl/duck.gltf", json.dumps({"buffers": [{"uri": "d.bin"}], "images": [{"uri": "t.png"}]}))
     put(root, "gl/d.bin")
     put(root, "gl/t.png")
     put(root, "gl/other.png")
-    second = packs.run_tool("assets.pack_build", dict(pack="duck", sources=[str(root / "gl/duck.gltf")]), broker)
-    names = {p.name for p in (env / "duck").rglob("*") if p.is_file()}
+    second = packs.run_tool("assets.pack_build", dict(pack="duck/v1", sources=[str(root / "gl/duck.gltf")], **PROVENANCE), broker)
+    names = {p.name for p in (env / "duck/v1").rglob("*") if p.is_file()}
     assert {"duck.gltf", "d.bin", "t.png"} <= names and "other.png" not in names and second["status"] == "ok"
     put(root, "map/m.yaml", "image: m.pgm\nresolution: 0.05\norigin: [0, 0, 0]\n")
     put(root, "map/m.pgm")
-    third = packs.run_tool("assets.pack_build", dict(pack="maps", sources=[str(root / "map/m.yaml")]), broker)
-    assert third["status"] == "ok" and {p.name for p in (env / "maps").rglob("*") if p.is_file()} >= {"m.yaml", "m.pgm"}
+    third = packs.run_tool("assets.pack_build", dict(pack="maps/v1", sources=[str(root / "map/m.yaml")], **PROVENANCE), broker)
+    assert third["status"] == "ok" and {p.name for p in (env / "maps/v1").rglob("*") if p.is_file()} >= {"m.yaml", "m.pgm"}
     with pytest.raises(packs.PackError) as caught:
-        packs.run_tool("assets.pack_build", dict(pack="x", sources=[str(put(root, "r.urdf.xacro", "<robot/>"))]), broker)
+        packs.run_tool("assets.pack_build", dict(pack="x/v1", sources=[str(put(root, "r.urdf.xacro", "<robot/>"))], **PROVENANCE), broker)
     assert caught.value.code == "XACRO" and "assets__import_path" in str(caught.value)

@@ -1,9 +1,10 @@
-"""Create, adopt, pin, check and build asset packs. Standard library only; runs without Kit.
+"""Adopt, convert, pin, check and build asset packs in the ``pack.yaml`` format. Standard library only; no Kit.
 
 ``scripts/isaac_assets.py`` (run by the user) and the host-side ``assets__pack_*`` MCP tools share
 this code. The tools add the trust rules in :func:`run_tool`; the rules are documented in
-``docs/ASSETS.md``. This module never prints from a tool path: stdout is the MCP protocol there.
-USD files are parsed only by the helper process or the selected Kit (``usd_closure``).
+``docs/ASSET-PACKS.md``. The reader and the asset root are in ``pack_manifest``. This module never
+prints from a tool path: stdout is the MCP protocol there. USD files are parsed only by the helper
+process or the selected Kit (``usd_closure``).
 """
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from . import asset_formats, assets, material_refs, mjcf_refs, urdf_refs
+from . import asset_formats, material_refs, mjcf_refs, pack_manifest, urdf_refs
+from .pack_manifest import MANIFEST_NAME
 
 
 def approval_help(folder=None):
@@ -28,8 +30,6 @@ def approval_help(folder=None):
 
     return _help(folder)
 
-PINS_FILE = assets.PINS_FILE
-PACK_FILE = assets.PACK_FILE
 USD_SUFFIXES = {".usd", ".usda", ".usdc", ".usdz"}
 USD_PYTHON_ENV = "ISAAC_MCP_USD_PYTHON"
 CLOSURE_TIMEOUT_S = 600
@@ -64,7 +64,7 @@ def sha256(path: Path) -> str:
 
 
 def inside_repo(path: Path) -> bool:
-    root = assets.checkout_root()
+    root = pack_manifest.checkout_root()
     if root is None:
         return False
     try:
@@ -92,27 +92,6 @@ def clean_relpath(raw: str, what: str) -> str:
             )
     return "/".join(parts)
 
-
-def pack_dir(store: Path, pack: str) -> tuple[Path, Path]:
-    """Validate a write destination; return ``(store, <store>/<pack>)``."""
-    try:
-        assets.validate_pack_name(pack)
-    except assets.InvalidPackName as exc:
-        raise PackError(str(exc), "INVALID_PACK") from exc
-    store = store.resolve()
-    if inside_repo(store):
-        raise PackError(
-            f"refusing store inside the repository checkout: {store}\n"
-            "Private assets must never land in git; choose a directory outside it "
-            "(see `isaac_assets.py where`).",
-            "INSIDE_REPOSITORY",
-        )
-    folder = store / pack
-    if inside_repo(folder):
-        raise PackError(
-            f"refusing pack folder that resolves inside the repository: {folder}", "INSIDE_REPOSITORY"
-        )
-    return store, folder
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +142,7 @@ def publish(dfd: int, tmp: str, name: str, force: bool) -> None:
         os.link(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd, follow_symlinks=False)
     except FileExistsError:
         os.unlink(tmp, dir_fd=dfd)
-        raise PackError(f"refusing to overwrite (use --force): {name}") from None
+        raise PackError(f"refusing to overwrite: {name}") from None
     except OSError:
         # No hard links on this filesystem: create the destination exclusively and copy.
         # O_EXCL means a file that appears in the meantime is never replaced.
@@ -171,7 +150,7 @@ def publish(dfd: int, tmp: str, name: str, force: bool) -> None:
             out_fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, 0o666, dir_fd=dfd)
         except FileExistsError:
             os.unlink(tmp, dir_fd=dfd)
-            raise PackError(f"refusing to overwrite (use --force): {name}") from None
+            raise PackError(f"refusing to overwrite: {name}") from None
         try:
             with os.fdopen(out_fd, "wb") as out, open(
                 tmp, "rb", opener=lambda path, flags: os.open(path, flags, dir_fd=dfd)
@@ -235,12 +214,6 @@ def _replace_text(pack_folder: Path, name: str, text: str) -> None:
         os.close(dfd)
 
 
-def write_pins(pack_folder: Path, entries: dict[str, str]) -> None:
-    _replace_text(
-        pack_folder, PINS_FILE, "".join(f"{digest}  {name}\n" for name, digest in sorted(entries.items()))
-    )
-
-
 def private_dirs(path: Path, notes: list | None = None) -> None:
     """Create *path* (and missing parents) as 0755 and make sure *path* itself, the pack
     folder, is not group- or world-writable when it is the user's own
@@ -267,15 +240,11 @@ def private_dirs(path: Path, notes: list | None = None) -> None:
             notes.append(note)
 
 
-def install_many(
-    sources: dict[str, Path], pack_folder: Path, force: bool, pin: bool, notes: list | None = None
-) -> tuple[int, int]:
-    """Copy ``rel -> source`` into ``pack_folder`` safely. Returns (added, identical).
+def install_many(sources: dict[str, Path], pack_folder: Path, notes: list | None = None) -> int:
+    """Copy ``rel -> source`` into the new, empty ``pack_folder`` safely. Returns the number of files.
 
-    A destination that already holds the same bytes is skipped. One that differs is a
-    conflict: everything is checked first, and nothing is copied unless ``force``.
+    Nothing is ever replaced: the folder is a version that did not exist a moment ago.
     """
-    conflicts, todo, identical = [], {}, 0
     for rel in sorted(sources):
         try:
             rel.encode("utf-8")
@@ -284,39 +253,13 @@ def install_many(
         target = pack_folder / rel
         if target.is_symlink() or inside_repo(target.parent):
             raise PackError(f"refusing unsafe destination: {target}")
-        if target.exists():
-            if not target.is_file():
-                raise PackError(f"refusing destination: {target} exists and is not a file")
-            if sha256(target) == sha256(sources[rel]):
-                identical += 1
-                continue
-            conflicts.append(rel)
-        todo[rel] = sources[rel]
-    if conflicts and not force:
-        shown = "\n".join(f"  {pack_folder / rel}" for rel in conflicts[:10])
-        more = f"\n  ... and {len(conflicts) - 10} more" if len(conflicts) > 10 else ""
-        raise PackError(
-            f"different files already in the asset folder (use --force to replace):\n{shown}{more}",
-            "CONFLICT",
-            conflicts=conflicts[:MAX_REPORTED],
-        )
-    private_dirs(pack_folder, notes)
-    pins = dict(assets.pins(pack_folder))
-    added = 0
-    try:
-        for rel in sorted(todo):
-            install_file(todo[rel], rel, pack_folder, force)
-            if pin:
-                pins[rel] = sha256(pack_folder / rel)
-            added += 1
-    finally:
-        if added and pin:
-            write_pins(pack_folder, pins)
-    return added, identical
+    for rel in sorted(sources):
+        install_file(sources[rel], rel, pack_folder, False)
+    return len(sources)
 
 
-def adopt_sources(root: Path, suffixes: set[str], skipped: list | None = None) -> dict[str, Path]:
-    """Every asset file below *root*, never following a symlink.
+def adopt_sources(root: Path, suffixes: set[str] | None, skipped: list | None = None) -> dict[str, Path]:
+    """Every asset file below *root* (every file when *suffixes* is None), never following a symlink.
 
     A symbolic link is not copied, and is named in *skipped* when the caller passes a list: a source
     folder silently missing part of its tree would produce a pack that is not what it looks like.
@@ -336,7 +279,7 @@ def adopt_sources(root: Path, suffixes: set[str], skipped: list | None = None) -
                 if skipped is not None:
                     skipped.append(rel)
                 continue
-            if path.suffix.lower() not in suffixes or not path.is_file():
+            if (suffixes is not None and path.suffix.lower() not in suffixes) or not path.is_file():
                 continue
             found[clean_relpath(rel, "file name")] = path
     return found
@@ -363,179 +306,6 @@ def _is_symlink_part(root: Path, rel: str):
     parts = PurePosixPath(rel).parts
     for depth in range(1, len(parts)):
         yield root.joinpath(*parts[:depth]).is_symlink()
-
-
-def adopted_entries(sources, entries: list | None) -> tuple[list[str], str]:
-    """Entry files to record: those named, or a sole top-level USD. Returns ``(names, how)``."""
-    if entries:
-        names = [clean_relpath(e, "entry") for e in entries]
-        unknown = [name for name in names if name not in sources]
-        if unknown:
-            raise PackError(f"entries are not among the files copied: {unknown[:10]}", "NOT_FOUND")
-        return names, "argument"
-    top = sorted(rel for rel in sources if "/" not in rel and PurePosixPath(rel).suffix.lower() in USD_SUFFIXES)
-    return (top, "inferred") if len(top) == 1 else ([], "none")
-
-
-# ---------------------------------------------------------------------------
-# Listing, pinning
-# ---------------------------------------------------------------------------
-
-
-def read_pack_file(folder: Path) -> dict:
-    """Return a pack's ``isaac-mcp-pack.json``, or an empty description. Invalid is an error."""
-    path = folder / PACK_FILE
-    if not path.is_file():
-        return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise PackError(f"cannot read {path}: {exc}", "INVALID_PACK_FILE") from exc
-    if not isinstance(data, dict) or not isinstance(data.get("entries", []), list):
-        raise PackError(f"{path} must be an object with an 'entries' list", "INVALID_PACK_FILE")
-    return data
-
-
-MAX_ORIGIN_CHARS = 300
-
-
-def clean_origin(value) -> str | None:
-    """A one-line note of where a pack's files came from, such as a repository URL and commit."""
-    if value is None or value == "":
-        return None
-    if not isinstance(value, str) or len(value) > MAX_ORIGIN_CHARS or any(ord(c) < 32 or ord(c) == 127 for c in value):
-        raise PackError(f"origin: one line of text, at most {MAX_ORIGIN_CHARS} characters", "INVALID_VALUE")
-    return value.strip() or None
-
-
-def write_pack_file(folder: Path, entries, accepted_unresolved=(), origin=None) -> None:
-    """Record a pack's entry files. Existing entries stay; this file holds no absolute path."""
-    old = read_pack_file(folder)
-    origins = [o for o in old.get("origin", []) if isinstance(o, str)]
-    if origin and origin not in origins:
-        origins.append(origin)
-    doc = dict(
-        version=1,
-        entries=sorted({*old.get("entries", []), *entries}),
-        accepted_unresolved=sorted({*old.get("accepted_unresolved", []), *accepted_unresolved}),
-        **({"origin": origins} if origins else {}),
-    )
-    _replace_text(folder, PACK_FILE, json.dumps(doc, indent=2) + "\n")
-
-
-def _pack_files(folder: Path) -> tuple[dict[str, Path], list[str]]:
-    """Regular files of a pack by relative path, and the symlinks or odd names left out."""
-    found: dict[str, Path] = {}
-    skipped: list[str] = []
-    for current, _dirs, files in os.walk(folder, followlinks=False):
-        for name in files:
-            path = Path(current) / name
-            rel = path.relative_to(folder).as_posix()
-            if rel in (PINS_FILE, PACK_FILE):
-                continue
-            if path.is_symlink() or not path.is_file():
-                skipped.append(rel)
-                continue
-            try:
-                clean_relpath(rel, "file name")
-            except PackError:
-                skipped.append(rel)
-                continue
-            found[rel] = path
-    return found, sorted(skipped)
-
-
-def list_packs(stores: list[Path]) -> list[dict]:
-    """Packs in each store: folders with pins or a pack file, and the twin's by name.
-
-    Other folders are listed as ``folders``: they may be flat legacy assets, not packs.
-    """
-    report = []
-    for store in stores:
-        entry: dict = dict(store=str(store), exists=store.is_dir(), packs=[], folders=[])
-        if entry["exists"]:
-            for child in sorted(store.iterdir(), key=lambda p: p.name):
-                if not child.is_dir() or child.name.startswith("."):
-                    continue
-                marked = (child / PINS_FILE).is_file() or (child / PACK_FILE).is_file()
-                if not marked and child.name != assets.DEFAULT_PACK:
-                    entry["folders"].append(child.name)
-                    entry["folders_note"] = ("A folder is not a pack until it is pinned, and sim__quick_start only loads from "
-                                             "packs: assets__pack_pin pack=<folder name> pins its files in place.")
-                    continue
-                item = dict(name=child.name, pinned=len(assets.pins(child)), symlink=child.is_symlink())
-                try:
-                    described = read_pack_file(child)
-                    item["entries"] = len(described.get("entries", []))
-                    if described.get("origin"):
-                        item["origin"] = described["origin"]
-                except PackError as exc:
-                    item["error"] = str(exc)
-                entry["packs"].append(item)
-        report.append(entry)
-    return report
-
-
-def pin_changes(folder: Path) -> dict:
-    """Compare a pack's files with its pins, hashing every file."""
-    pinned = assets.pins(folder)
-    files, skipped = _pack_files(folder)
-    current = {rel: sha256(path) for rel, path in files.items()}
-    return dict(
-        current=current,
-        new=sorted(rel for rel in current if rel not in pinned),
-        changed=[dict(file=rel, pinned=pinned[rel], actual=digest)
-                 for rel, digest in sorted(current.items()) if rel in pinned and pinned[rel] != digest],
-        removed=sorted(rel for rel in pinned if rel not in current),
-        skipped=skipped,
-    )
-
-
-def pin_pack(folder: Path, *, force: bool = False, files: list | None = None) -> dict:
-    """Pin a pack. A pin that would change needs ``force`` or the file named in *files*.
-
-    Re-pinning accepts whatever bytes are present, including damage, so it is never implicit.
-    Nothing is written when anything is refused.
-    """
-    report = pin_changes(folder)
-    named = set(files or [])
-    unknown = sorted(named - set(report["current"]) - set(report["removed"]))
-    if unknown:
-        raise PackError(f"not files of this pack: {unknown[:10]}", "NOT_FOUND")
-    changed = {item["file"] for item in report["changed"]}
-    blocked = sorted(rel for rel in changed | set(report["removed"]) if not force and rel not in named)
-    if blocked:
-        raise PackError(
-            "These pins would change. Check each file, then name it in files, or pass force=true "
-            "only if every change is intended.",
-            "PIN_CHANGED",
-            changed=[c for c in report["changed"] if c["file"] in blocked][:MAX_REPORTED],
-            removed=[r for r in report["removed"] if r in blocked][:MAX_REPORTED],
-        )
-    pins = dict(assets.pins(folder))
-    for rel in report["removed"]:
-        if force or rel in named:
-            pins.pop(rel, None)
-    for rel, digest in report["current"].items():
-        if not named or rel in named or force:
-            pins[rel] = digest
-    write_pins(folder, pins)
-    return dict(
-        pinned=len(pins), new=report["new"][:MAX_REPORTED], changed=report["changed"][:MAX_REPORTED],
-        removed=report["removed"][:MAX_REPORTED], skipped=report["skipped"][:MAX_REPORTED],
-    )
-
-
-def unpin_files(folder: Path, names: list[str]) -> list[str]:
-    """Remove pin lines; the files stay. Returns the names removed. Unknown names are an error."""
-    pins = dict(assets.pins(folder))
-    unknown = [name for name in names if name not in pins]
-    if unknown:
-        raise PackError(f"not pinned in {folder / PINS_FILE}: {', '.join(unknown)}", "NOT_FOUND")
-    for name in names:
-        del pins[name]
-    write_pins(folder, pins)
-    return list(names)
 
 
 # ---------------------------------------------------------------------------
@@ -615,8 +385,8 @@ class ClosureBackend:
             for path in paths:
                 if not self.trusted(Path(path)):
                     raise PackError(
-                        f"Will not parse USD outside approved roots and user stores: {path}. "
-                        "A project store needs approving as a root first." + approval_help(path),
+                        f"Will not parse USD outside approved roots and the asset root: {path}. "
+                        "A folder needs approving as a root first." + approval_help(path),
                         "ROOT_NOT_APPROVED",
                     )
         if self.python:
@@ -670,11 +440,11 @@ def _under(path: Path, folder: Path) -> str | None:
 
 
 def trusted_by_roots(broker, stores: list[Path]):
-    """Return a check that a real path is under an approved root or a given store.
+    """Return a check that a real path is under an approved root or the asset root (*stores*).
 
-    Pass user stores only. A project store comes from an ``isaac-mcp.json`` found by walking up
-    from the working directory, so a cloned repository could name any folder: that must not count
-    as an approval. A project's files stay usable by approving their folder as a root.
+    Pass the asset root only. A project file is found by walking up from the working directory, so a
+    cloned repository could name any folder: that must not count as an approval. A project's files
+    stay usable by approving their folder as a root.
     """
     folders = [root.resolve() for root, _ in (broker.roots.values() if broker else ())]
     folders += [store.resolve() for store in stores]
@@ -686,7 +456,9 @@ def trusted_by_roots(broker, stores: list[Path]):
 
 
 def build_pack(
-    pack_folder: Path,
+    root: Path,
+    pack_id: str,
+    version: str,
     sources: list[str],
     closure,
     *,
@@ -695,21 +467,30 @@ def build_pack(
     trusted=None,
     allow_unresolved: bool = False,
     dry_run: bool = False,
-    force: bool = False,
     notes: list | None = None,
     urdf_root=None,
-    source_note: str | None = None,
+    defaults: dict | None = None,
+    inherit: dict | None = None,
 ) -> dict:
-    """Copy USD or URDF files and only what they depend on into a pack, keeping relative layout, and pin.
+    """Copy USD or URDF files and only what they depend on into a new pack version, keeping relative layout.
 
     A source is an absolute path or, with *from_pack_dirs*, a path inside that pack. A source
     outside both *from_pack_dirs* and *layout_root* (a scene whose references are logical names)
     is read for its references and not copied. Those names are looked up in *from_pack_dirs*.
 
+    A file copied out of a pack keeps that pack's record (source, licence, ``redistributable``,
+    ``asset_id``): *inherit* maps each source pack folder to its records by path. Any other file takes
+    *defaults* (``source``, ``license``, ``redistributable``), which are then required.
+
     Anything unresolved, remote or out of bounds refuses the whole build unless
     *allow_unresolved*, which still copies nothing from outside. Runtime MDL names are reported
-    and never block. The copy is checked afterwards by computing the closure in the new pack.
+    and never block. The new version must not exist; the copy is checked afterwards by computing the
+    closure in the new pack.
     """
+    defaults = defaults or dict(redistributable=False)
+    inherit = {Path(k): v for k, v in (inherit or {}).items()}
+    new_version(root, pack_id, version)
+    file_layout: dict[str, Path | None] = {}  # relative path -> the layout folder it was found under
     notes = [] if notes is None else notes
     from_dirs = [Path(d) for d in from_pack_dirs]
     base_of: dict[str, Path | None] = {}  # queued real path -> layout folder, None = read only
@@ -742,7 +523,7 @@ def build_pack(
             path = found[0].resolve()
         if trusted is not None and not trusted(path):
             raise PackError(
-                f"source is outside approved roots and user stores: {path}. Put it in a folder under your asset store, or "
+                f"source is outside approved roots and the asset root: {path}. Put it in a pack under your asset root, or "
                 "have the user approve its folder once, outside the tools: docs/TOOLS-SCENE.md, One-time approval. "
                 "assets__roots lists what is approved.",
                 "ROOT_NOT_APPROVED",
@@ -812,6 +593,7 @@ def build_pack(
                     raise PackError(f"two different files map to {rel}: {files[rel]} and {real}", "CONFLICT")
                 files[rel] = real
                 file_base[real] = base
+                file_layout[rel] = base
             for reference in result["unresolved"]:
                 kind = classify_reference(reference)
                 holder = result.get("referenced_by", {}).get(reference, str(origin))
@@ -846,18 +628,26 @@ def build_pack(
             if rel in files and files[rel] != real:
                 raise PackError(f"two different files map to {rel}: {files[rel]} and {real}", "CONFLICT")
             files[rel] = real
+            file_layout[rel] = base
     if not files:
         raise PackError("nothing to copy: no source is inside the layout or the source pack", "NOT_FOUND")
     if missing_textures or urdf_unfollowable:
         notes.append("Some meshes name files that are absent or could not be read: see missing_textures and "
                      "unfollowable. Geometry still imports, and self_contained is false.")
     for rel in files:
-        if rel in (PINS_FILE, PACK_FILE):
-            raise PackError(f"{rel} in the closure would collide with the pack's own files", "CONFLICT")
+        if rel == MANIFEST_NAME:
+            raise PackError(f"{rel} in the closure would collide with the pack's own manifest", "CONFLICT")
+    records = {rel: inherit.get(file_layout.get(rel), {}).get(rel) for rel in files if file_layout.get(rel) in inherit}
+    if "source" not in defaults or "license" not in defaults:
+        lacking = sorted(rel for rel in files if rel not in records or records[rel] is None)
+        if lacking:
+            raise PackError("source and license are required for files that do not come from a pack, so a record "
+                            "can say where they came from: " + ", ".join(lacking[:10]) + (" ..." if len(lacking) > 10 else ""),
+                            "MISSING_PROVENANCE")
     report = dict(
         files=len(files), bytes=sum(p.stat().st_size for p in files.values()), entries=sorted(entries),
-        # What to pass as sim__quick_start's robot: a pack keeps the source's folder layout, so it isn't just <pack>/<file>.
-        load_as=[f"{pack_folder.name}/{entry}" for entry in sorted(entries)
+        # What to pass as sim__quick_start's robot: a pack keeps the source's folder layout, so it isn't just <pack>/<file>: it is <id>/<version>/<entry>.
+        load_as=[f"{pack_id}/{version}/{entry}" for entry in sorted(entries)
                  if entry.lower().endswith((".urdf", ".xml", ".sdf", ".world", ".gltf", ".glb", ".obj", ".stl", ".fbx", ".ply", ".yaml", ".yml", ".usd", ".usda", ".usdc", ".usdz"))],
         unresolved=blocked["unresolved"][:MAX_REPORTED], remote=blocked["remote"][:MAX_REPORTED],
         outside=blocked["outside"][:MAX_REPORTED], unreadable=blocked["unreadable"][:MAX_REPORTED],
@@ -883,15 +673,12 @@ def build_pack(
         )
     if dry_run:
         return {**report, "dry_run": True, "copied": 0, "planned": sorted(files)[:MAX_REPORTED]}
-    added, identical = install_many(files, pack_folder, force, pin=True, notes=notes)
-    pins = dict(assets.pins(pack_folder))
-    for rel in files:  # an identical file that was already there still belongs to the closure
-        pins.setdefault(rel, sha256(pack_folder / rel))
-    write_pins(pack_folder, pins)
     accepted = sorted({_accepted_name(item["reference"], base_of) for item in blocked["unresolved"]})
-    write_pack_file(pack_folder, entries, accepted, source_note)
+    written = write_version(root, pack_id, version, files, records, defaults, notes,
+                            extra=dict(accepted_unresolved=accepted) if accepted else None)
+    folder = Path(written["pack_dir"])
     try:
-        verified = check_closure(pack_folder, sorted(entries), closure)
+        verified = check_closure(folder, _root_files([dict(path=rel) for rel in files]), closure, accepted)
         verified.pop("used", None)
     except PackError as exc:
         verified = dict(checked=False, reason=str(exc))
@@ -901,7 +688,7 @@ def build_pack(
             "This pack will not import with assets__import_path until these files are added: "
             + ", ".join(blockers[:10]) + (" ..." if len(blockers) > 10 else "")
         )
-    return {**report, "dry_run": False, "copied": added, "identical": identical, "pack_dir": str(pack_folder),
+    return {**report, "dry_run": False, "copied": written["files"], "pack": written["pack"], "pack_dir": written["pack_dir"],
             "verified": verified, "importable": None if blockers is None else not blockers,
             **({"import_blockers": blockers} if blockers else {})}
 
@@ -936,13 +723,13 @@ UNFOLLOWABLE_NOTE = (
 )
 
 
-def check_closure(folder: Path, entries: list[str], closure) -> dict:
+def check_closure(folder: Path, entries: list[str], closure, accepted=()) -> dict:
     """Compute the closure of a pack's entries and sort every dependency into what it means."""
     root = folder.resolve()
     used: set[str] = set()
     out: dict[str, list] = dict(unresolved=[], remote=[], outside_pack=[], unreadable=[])
     runtime: set[str] = set()
-    accepted = set(read_pack_file(folder).get("accepted_unresolved", []))
+    accepted = set(accepted)
     accepted_found: set[str] = set()
     present = [rel for rel in entries if (folder / rel).is_file()]
     missing = [rel for rel in entries if not (folder / rel).is_file()]
@@ -1007,6 +794,10 @@ def check_closure(folder: Path, entries: list[str], closure) -> dict:
             used.add(rel)
         else:
             add_unresolved(str(item["target"]), holder)
+    # A mesh or map is also a root of its own check. One that a URDF or another root names is checked as part
+    # of that file, and an importer's refusal to take it as a prop on its own (a .dae) is not a problem.
+    out["unreadable"] = [u for u in out["unreadable"] if "detail" not in u or u["reference"] not in used
+                         or PurePosixPath(u["reference"]).suffix.lower() in USD_SUFFIXES]
     out["unfollowable"] = [dict(file=_short(i["file"], root), reason=i["reason"]) for i in followed["unfollowable"]]
     out["unfollowable"] += [item for result in results for item in result.get("unfollowable", [])]
     out["missing_textures"] = missing_textures
@@ -1024,145 +815,357 @@ def _short(path: str, root: Path) -> str:
     return _under(Path(plain_path(path)), root) or path
 
 
-def twin_entries(folder: Path, manifest: dict) -> list[str]:
-    """The USD files the twin loads by name that are in this pack, at their stored layout."""
-    canonical = {
-        e["target"]: e.get("cache_path", e["target"])
-        for group in manifest.get("fetch", []) for e in group.get("files", []) if "target" in e
-    }
-    names = [*manifest.get("remote", {}), *(e["target"] for e in manifest.get("manual", []) if "target" in e),
-             *(e["path"] for e in manifest.get("local", []) if "path" in e),
-             "gripper/husarion_rg2/rg2_gripper_fixed.usd"]
-    found = []
-    for name in names:
-        stored = name if (folder / name).is_file() else canonical.get(name, name)
-        if PurePosixPath(stored).suffix.lower() in USD_SUFFIXES and (folder / stored).is_file():
-            found.append(stored)
-    return sorted(set(found))
+# ---------------------------------------------------------------------------
+# Writing a new version. A version is written once, into a hidden staging folder under the asset root, checked
+# with the same verifier a reader uses, and renamed into place only if it verifies. An existing version is never
+# modified, and a failed write leaves nothing behind.
+# ---------------------------------------------------------------------------
+
+MAX_PROVENANCE_CHARS = 300
 
 
-def _pack_symlinks(folder: Path) -> list[str]:
-    """Symlinks anywhere in a pack, files or folders. An import refuses the pack for them."""
-    found = []
-    for current, dirs, files in os.walk(folder, followlinks=False):
-        found += [(Path(current) / name).relative_to(folder).as_posix() for name in [*dirs, *files]
-                  if (Path(current) / name).is_symlink()]
-    return sorted(found)
+def clean_text(value, what: str) -> str:
+    """A required one-line note (source or licence)."""
+    if (not isinstance(value, str) or not value.strip() or len(value) > MAX_PROVENANCE_CHARS
+            or any(ord(c) < 32 or ord(c) == 127 for c in value)):
+        raise PackError(f"{what}: one line of text, 1 to {MAX_PROVENANCE_CHARS} characters", "INVALID_VALUE")
+    return value.strip()
 
 
-def doctor_folder(folder: Path, *, closure=None, entries: list | None = None, manifest: dict | None = None) -> dict:
-    """Check one pack folder: pins, then the dependency closure of its entry files. Read only.
+def split_ref(value, what: str = "pack") -> tuple[str, str]:
+    try:
+        return pack_manifest.split_pack_ref(value, what)
+    except pack_manifest.ManifestError as exc:
+        raise PackError(str(exc), "INVALID_PACK") from exc
 
-    Entry files come from *entries*, the pack file, the twin's known names (for its pack), or
-    every USD. Only with known entries can a file be called unused: reached by no entry. That is
-    information, because code can load files by name.
+
+def pack_dir(root: Path, pack_id: str, version: str) -> tuple[Path, Path]:
+    """Validate a destination; return ``(root, <root>/<id>/<version>)``. Nothing may land in the repository."""
+    try:
+        root, folder = pack_manifest.pack_directory(root, pack_id, version)
+    except pack_manifest.ManifestError as exc:
+        raise PackError(str(exc), "UNSAFE_DESTINATION" if "escapes" in str(exc) else "INVALID_PACK") from exc
+    if inside_repo(root) or inside_repo(folder):
+        raise PackError(
+            f"refusing an asset root inside the repository checkout: {root}\n"
+            "Private assets must never land in git; choose a directory outside it (see `isaac_assets.py where`).",
+            "INSIDE_REPOSITORY",
+        )
+    return root, folder
+
+
+def new_version(root: Path, pack_id: str, version: str) -> Path:
+    """The destination of a write: a version that does not exist yet. Anything already there is refused."""
+    root, folder = pack_dir(root, pack_id, version)
+    if (root / pack_id).is_symlink():
+        raise PackError(f"refusing symlinked pack folder: {root / pack_id}", "UNSAFE_DESTINATION")
+    if folder.exists() or folder.is_symlink():
+        raise PackError(
+            f"{pack_id}/{version} already exists in {root}. A pack version is immutable once it exists: nothing "
+            f"was changed. Write a new version instead, for example {pack_id}/v2.", "VERSION_EXISTS")
+    return folder
+
+
+class Staging:
+    """``<root>/.staging-<token>/<id>/<version>``: the version as it will look, built where nothing reads it."""
+
+    def __init__(self, root: Path, pack_id: str, version: str, notes: list | None = None):
+        self.root, self.pack_id, self.version, self.notes = root, pack_id, version, notes
+        self.final = root / pack_id / version
+        self.base = root / f".staging-{secrets.token_hex(6)}"
+        self.path = self.base / pack_id / version
+
+    def __enter__(self) -> "Staging":
+        os.makedirs(self.root, mode=0o755, exist_ok=True)  # the root's own permissions are the user's business
+        os.mkdir(self.base, 0o755)
+        os.makedirs(self.path, mode=0o755)
+        return self
+
+    def verify(self) -> None:
+        """The pack must pass the strict reader before it is moved into place."""
+        try:
+            pack_manifest.AssetPack(self.base, self.pack_id, self.version)
+        except pack_manifest.ManifestError as exc:
+            raise PackError(f"the new pack does not verify, so nothing was written: {exc}", "NOT_VERIFIED") from exc
+
+    def commit(self) -> None:
+        private_dirs(self.final.parent, self.notes)
+        if self.final.exists() or self.final.is_symlink():
+            raise PackError(f"{self.pack_id}/{self.version} appeared while it was being written; nothing was replaced",
+                            "VERSION_EXISTS")
+        os.rename(self.path, self.final)
+        private_dirs(self.final, self.notes)
+
+    def __exit__(self, *exc) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+
+def defaults_from(source, license_, redistributable, *, required: bool) -> dict:
+    """What a file with no record of its own gets. ``redistributable`` is false unless said."""
+    if redistributable is not None and type(redistributable) is not bool:
+        raise PackError("redistributable must be true or false", "INVALID_VALUE")
+    if required and (source is None or license_ is None):
+        raise PackError("source and license are required: say where these files came from and under which terms "
+                        "(for example source=\"vendor CAD, 2026-11\", license=\"private lab use only\").",
+                        "MISSING_PROVENANCE")
+    out: dict = dict(redistributable=bool(redistributable))
+    if source is not None:
+        out["source"] = clean_text(source, "source")
+    if license_ is not None:
+        out["license"] = clean_text(license_, "license")
+    return out
+
+
+def make_record(rel: str, path: Path, base: dict | None, defaults: dict) -> dict:
+    """One manifest record. A file that came from a pack keeps that pack's record (source, licence,
+    ``redistributable``, ``asset_id``, extra fields); anything else takes the defaults."""
+    base = dict(base or {})
+    record: dict = {}
+    if "asset_id" in base:
+        record["asset_id"] = base["asset_id"]
+    record["path"], record["sha256"] = rel, sha256(path)
+    for key in ("source", "license", "redistributable"):
+        value = base.get(key, defaults.get(key))
+        if value is None:
+            raise PackError(f"{rel}: no source or license on record. Pass source and license.", "MISSING_PROVENANCE")
+        record[key] = value
+    record.update({k: v for k, v in base.items() if k not in record and k not in ("path", "sha256")})
+    return record
+
+
+def write_version(root: Path, pack_id: str, version: str, files: dict[str, Path], records: dict[str, dict],
+                  defaults: dict, notes: list, extra: dict | None = None) -> dict:
+    """Copy *files* into a new version, write its ``pack.yaml``, check it, and move it into place."""
+    if not files:
+        raise PackError("nothing to write: no files", "NOT_FOUND")
+    if len(files) > MAX_ADOPT_FILES:
+        raise PackError(f"more than {MAX_ADOPT_FILES} files; narrow the folder", "LIMIT")
+    folder = new_version(root, pack_id, version)
+    with Staging(folder.parent.parent, pack_id, version, notes) as staging:
+        install_many(files, staging.path)
+        manifest = dict(id=pack_id, version=version, **(extra or {}),
+                        files=[make_record(rel, staging.path / rel, records.get(rel), defaults) for rel in sorted(files)])
+        _replace_text(staging.path, MANIFEST_NAME, pack_manifest.manifest_text(manifest))
+        staging.verify()
+        staging.commit()
+    return dict(pack=f"{pack_id}/{version}", pack_dir=str(folder), files=len(files),
+                bytes=sum((folder / rel).stat().st_size for rel in files))
+
+
+def adopt_folder(root: Path, pack_id: str, version: str, source: Path, *, source_note, license_, redistributable=None,
+                 include=(), names=None, dry_run=False, notes: list | None = None, allow_all_types=False) -> dict:
+    """Copy a folder's asset files into a new ``<id>/<version>`` and write its ``pack.yaml``."""
+    notes = [] if notes is None else notes
+    defaults = defaults_from(source_note, license_, redistributable, required=True)
+    suffixes = None if allow_all_types else ADOPT_SUFFIXES | {("." + str(e).lstrip(".")).lower() for e in include}
+    skipped: list[str] = []
+    files = named_sources(source, names, suffixes or set(), skipped) if names else adopt_sources(source, suffixes, skipped)
+    if skipped:
+        notes.append(f"{len(skipped)} symbolic link(s) were not copied (they are never followed): "
+                     + ", ".join(sorted(skipped)[:10]) + (" ..." if len(skipped) > 10 else ""))
+    extra = {"skipped_symlinks": sorted(skipped)[:MAX_REPORTED]} if skipped else {}
+    if not files:
+        raise PackError(f"no asset files found in {source}", "NOT_FOUND", notes=notes)
+    new_version(root, pack_id, version)  # refuse before any work, and in a dry run too
+    if dry_run:
+        return dict(pack=f"{pack_id}/{version}", dry_run=True, files=len(files), planned=sorted(files)[:MAX_REPORTED],
+                    truncated=len(files) > MAX_REPORTED, notes=notes, **extra)
+    written = write_version(root, pack_id, version, files, {}, defaults, notes)
+    return dict(written, dry_run=False, notes=notes, **extra)
+
+
+OLD_FORMAT_FILES = ("SHA256SUMS", "isaac-mcp-pack.json")
+
+
+def convert_old(old_folder: Path, *, pack_id: str | None = None, version: str = "v1", source_note, license_,
+                redistributable=None, dry_run=False, notes: list | None = None) -> dict:
+    """Convert an old-format pack ``<store>/<pack>/`` into ``<store>/<pack>/<version>/`` with a ``pack.yaml``.
+
+    Hashes come from the files themselves, not from the old ``SHA256SUMS``, which is not copied (nor is
+    ``isaac-mcp-pack.json``). The old files stay where they are; nothing reads them once the new version exists.
     """
-    manifest = manifest or {}
-    tracked = {
-        e.get("cache_path", e["target"]): e
-        for group in manifest.get("fetch", []) for e in group.get("files", []) if "target" in e
-    }
-    report = pin_changes(folder)
-    verified, unpinned = [], []
-    corrupt = [dict(file=c["file"], expected=c["pinned"], actual=c["actual"], kind="pin") for c in report["changed"]]
-    for rel in report["new"]:
-        entry = tracked.get(rel)
-        if entry is None or not entry.get("sha256"):
-            unpinned.append(rel)
-        elif entry["sha256"] == report["current"][rel]:
-            verified.append(rel)
+    notes = [] if notes is None else notes
+    old_folder = Path(old_folder)
+    if old_folder.is_symlink() or not old_folder.is_dir():
+        raise PackError(f"not a pack folder (or it is a symlink): {old_folder}", "NOT_FOUND")
+    pack_id = pack_id or old_folder.name
+    root = old_folder.parent.resolve()
+    if (old_folder.resolve() != root / pack_id):
+        raise PackError(f"the pack id must be the folder's name ({old_folder.name}); the new version is written "
+                        f"inside it as {old_folder.name}/{version}", "INVALID_PACK")
+    defaults = defaults_from(source_note, license_, redistributable, required=True)
+    skipped: list[str] = []
+    files = {rel: path for rel, path in adopt_sources(old_folder.resolve(), None, skipped).items()
+             if rel not in OLD_FORMAT_FILES}
+    if skipped:
+        notes.append(f"{len(skipped)} symbolic link(s) were not copied (they are never followed): "
+                     + ", ".join(sorted(skipped)[:10]) + (" ..." if len(skipped) > 10 else ""))
+    new_version(root, pack_id, version)
+    if not files:
+        raise PackError(f"no files in {old_folder}", "NOT_FOUND")
+    if dry_run:
+        return dict(pack=f"{pack_id}/{version}", dry_run=True, files=len(files), planned=sorted(files)[:MAX_REPORTED],
+                    truncated=len(files) > MAX_REPORTED, notes=notes)
+    written = write_version(root, pack_id, version, files, {}, defaults, notes)
+    notes.append(f"The old files are still in {old_folder}; nothing reads them. Delete them yourself once "
+                 f"{pack_id}/{version} has passed `doctor`.")
+    return dict(written, dry_run=False, notes=notes, converted_from=str(old_folder))
+
+
+# ---------------------------------------------------------------------------
+# Pin: rewrite the sha256 values of an existing manifest
+# ---------------------------------------------------------------------------
+
+
+def pin_changes(root: Path, pack_id: str, version: str) -> dict:
+    """Compare a manifest's hashes with the files, hashing every file. Read only."""
+    try:
+        _, directory = pack_manifest.pack_directory(root, pack_id, version)
+        manifest = pack_manifest.read_manifest(directory, pack_id, version)
+    except pack_manifest.ManifestError as exc:
+        raise PackError(str(exc), "UNSAFE_DESTINATION" if "escapes" in str(exc) else "PACK_NOT_FOUND") from exc
+    checker = pack_manifest._Checker(directory)  # same path rules as the reader
+    changed, missing, unchanged = [], [], 0
+    for record in manifest["files"]:
+        try:
+            path = checker.check(record, hash_file=False)
+        except pack_manifest.ManifestError as exc:
+            if str(exc).startswith("Missing pack file"):
+                missing.append(record["path"])
+                continue
+            raise PackError(f"{exc}. pin only rewrites hashes; fix the manifest or write a new version.", "UNPINNABLE") from exc
+        digest = sha256(path)
+        if digest == record["sha256"]:
+            unchanged += 1
         else:
-            corrupt.append(dict(file=rel, expected=entry["sha256"], actual=report["current"][rel], kind="manifest"))
-    pinned_ok = len(report["current"]) - len(report["new"]) - len(report["changed"])
+            changed.append(dict(file=record["path"], pinned=record["sha256"], actual=digest))
+    unlisted = [p.relative_to(directory).as_posix() if p.is_relative_to(directory) else str(p) for p in checker.unlisted()]
+    return dict(manifest=manifest, directory=directory, changed=changed, missing=missing, unlisted=unlisted,
+                unchanged=unchanged)
 
-    declared = read_pack_file(folder).get("entries", [])
-    if entries:
-        chosen, entry_source = list(entries), "argument"
-    elif declared:
-        chosen, entry_source = list(declared), "pack_file"
-    elif manifest and twin_entries(folder, manifest):
-        chosen, entry_source = twin_entries(folder, manifest), "twin_manifest"
-    else:
-        chosen = sorted(rel for rel in report["current"]
-                        if PurePosixPath(rel).suffix.lower() in USD_SUFFIXES or urdf_refs.is_urdf(rel)
-                        or asset_formats.format_of(rel) in ("mjcf", "sdf", "mesh", "map"))
-        entry_source = "all_usd"
-    for rel in chosen:
-        clean_relpath(rel, "entry")
 
-    result = dict(
-        pack_dir=str(folder),
-        files=dict(total=len(report["current"]), pinned_ok=pinned_ok, manifest_ok=len(verified),
-                   unpinned=unpinned[:MAX_REPORTED], unpinned_count=len(unpinned), corrupt=corrupt[:MAX_REPORTED],
-                   missing=report["removed"][:MAX_REPORTED], skipped=report["skipped"][:MAX_REPORTED]),
-        entry_source=entry_source,
-    )
+def pin_pack(root: Path, pack_id: str, version: str, *, force: bool = False, files: list | None = None,
+             dry_run: bool = False, partial: bool = False) -> dict:
+    """Rewrite the ``sha256`` of changed files in an existing ``pack.yaml``.
+
+    A version that already verifies has nothing to pin. A changed hash accepts whatever bytes are there,
+    damage included, so it is refused unless the file is named in *files* or *force* is set (*partial*: the
+    caller's own decision, so changed files that are not named are left alone instead of refused). Files that
+    are missing or not listed cannot be fixed by a hash: write a new version with adopt or build.
+    """
+    report = pin_changes(root, pack_id, version)
+    directory = report["directory"]
+    if report["missing"] or report["unlisted"]:
+        raise PackError(
+            "pin only rewrites hashes of listed files that exist. Missing files and files the manifest does not "
+            "list need a new version: write one with adopt or build.", "UNPINNABLE",
+            missing=report["missing"][:MAX_REPORTED], unlisted=report["unlisted"][:MAX_REPORTED])
+    named = {clean_relpath(f, "file") for f in (files or [])}
+    changed = {item["file"] for item in report["changed"]}
+    unknown = sorted(named - changed)
+    if unknown:
+        raise PackError(f"not changed files of this pack: {unknown[:10]}", "NOT_FOUND")
+    blocked = [] if partial else sorted(rel for rel in changed if not force and rel not in named)
+    if blocked and not dry_run:
+        raise PackError(
+            "These hashes would change. Check each file, then name it in files, or pass force=true only if every "
+            "change is intended.", "PIN_CHANGED", changed=[c for c in report["changed"] if c["file"] in blocked][:MAX_REPORTED])
+    accepted = [c for c in report["changed"] if (force and not partial) or c["file"] in named or (partial and not named)]
+    if not report["changed"]:
+        return dict(pinned=0, changed=[], unchanged=report["unchanged"], verifies=True,
+                    note="Already verifies: nothing to pin. A verified version is not modified.", pack_dir=str(directory))
+    if dry_run:
+        return dict(dry_run=True, would_change=report["changed"][:MAX_REPORTED], pack_dir=str(directory))
+    by_path = {c["file"]: c["actual"] for c in accepted}
+    manifest = report["manifest"]
+    for record in manifest["files"]:
+        if record["path"] in by_path:
+            record["sha256"] = by_path[record["path"]]
+    _replace_text(directory, MANIFEST_NAME, pack_manifest.manifest_text(manifest))
+    return dict(pinned=len(accepted), changed=accepted[:MAX_REPORTED], verifies=len(accepted) == len(report["changed"]),
+                unchanged=report["unchanged"], pack_dir=str(directory),
+                note="pack.yaml was rewritten as JSON (valid YAML); comments in it are not kept.")
+
+
+# ---------------------------------------------------------------------------
+# Doctor
+# ---------------------------------------------------------------------------
+
+
+def _root_files(records: list[dict]) -> list[str]:
+    """Every listed USD, URDF, MuJoCo, SDF, mesh or map file: each is a root of the dependency check."""
+    return sorted(
+        rec["path"] for rec in records
+        if PurePosixPath(rec["path"]).suffix.lower() in USD_SUFFIXES or urdf_refs.is_urdf(rec["path"])
+        or asset_formats.format_of(rec["path"]) in ("mjcf", "sdf", "mesh", "map"))
+
+
+def doctor_pack(root: Path, pack_id: str, version: str, *, closure=None) -> dict:
+    """Verify a pack against its manifest, then check the dependency closure of its USD, URDF and MJCF files.
+
+    Read only. Every file must be listed and match its hash, and every dependency must be a listed file of
+    the same pack: a reference to something outside it, or to a missing file, is a problem. ``ok`` is false
+    when the dependency check could not run: a clean file listing proves nothing about it.
+    """
+    report = pack_manifest.inspect_pack(root, pack_id, version)
+    if report.get("directory") and not (Path(report["directory"]) / MANIFEST_NAME).exists():
+        raise PackError(f"pack {pack_id}/{version} is not in {root}: " + "; ".join(report["problems"]), "PACK_NOT_FOUND")
+    records = report.pop("records", [])
+    result = dict(pack=f"{pack_id}/{version}", pack_dir=report.get("directory"),
+                  files=dict(total=report["files"], bytes=report["bytes"], verified=report["verified"]))
+    problems = list(report["problems"])
+    accepted: list[str] = []
+    if report.get("directory"):
+        try:
+            manifest = pack_manifest.read_manifest(Path(report["directory"]), pack_id, version)
+            accepted = [a for a in manifest.get("accepted_unresolved", []) if isinstance(a, str)]
+        except pack_manifest.ManifestError:
+            pass
+    chosen = _root_files(records)
     dependencies = None
     reason = unavailable_message()
-    if closure is not None and getattr(closure, "available", lambda: True)():
+    if not report.get("directory"):
+        reason = "The pack could not be read, so its dependencies were not checked."
+    elif not chosen:
+        # Nothing to parse (textures, JSON): the closure is trivially complete.
+        dependencies = dict(checked=True, entries=[], missing_entries=[], unresolved=[], remote=[], outside_pack=[],
+                            unreadable=[], unfollowable=[], missing_textures=[], accepted_unresolved=[],
+                            runtime_materials=[], self_contained=True, used=[])
+        closure = None
+    elif closure is not None and (getattr(closure, "available", lambda: True)()
+                                  or not any(PurePosixPath(c).suffix.lower() in USD_SUFFIXES for c in chosen)):
+        # Only a USD file needs the parser: URDF, MJCF, SDF, meshes and maps are read here.
         try:
-            dependencies = check_closure(folder, chosen, closure)
+            dependencies = check_closure(Path(report["directory"]), chosen, closure, accepted)
         except PackError as exc:
             reason = str(exc)
     if dependencies is None:
         result["dependencies"] = dict(checked=False, reason=reason, entries=chosen[:MAX_REPORTED])
-        result["unused"] = None
     else:
+        dependencies.pop("used", None)
         result["dependencies"] = dependencies
         result["dependencies"]["backend"] = getattr(closure, "name", None)
-        used = set(result["dependencies"].pop("used")) | set(chosen)
-        if entry_source == "all_usd":
-            result["unused"] = None
-            result["unused_note"] = "Not computed: pass entries, or build the pack, to say which files are its roots."
-        else:
-            unused = sorted(set(report["current"]) - used)
-            result["unused"] = unused[:MAX_REPORTED]
-            result["unused_count"] = len(unused)
-            result["unused_note"] = (
-                "Information only: no entry reaches these through USD. Code can still load them by name."
-            )
-    problems = [f"{c['file']}: does not match its {c['kind']} hash" for c in corrupt]
-    problems += [f"{rel}: pinned but missing" for rel in report["removed"]]
-    deps = result["dependencies"]
-    if deps["checked"]:
-        problems += [f"{rel}: entry file is missing" for rel in deps["missing_entries"]]
+        problems += [f"{rel}: entry file is missing" for rel in dependencies["missing_entries"]]
         problems += [f"{u['reference']}: unresolved, referenced by {u['referenced_by']}"
                      + (f". {u['reason']}" if u.get("reason") else "")
                      + (" The pack needs a folder named " + u["reference"].split("/")[2]
                         + ", or a package.xml naming it"
                         if u.get("code") == "PACKAGE_UNRESOLVED" and u["reference"].startswith("package://") else "")
-                     for u in deps["unresolved"]]
-        problems += [f"{u['reference']}: unreadable USD" for u in deps["unreadable"]]
-        problems += [f"{u['reference']}: remote, referenced by {u['referenced_by']}" for u in deps["remote"]]
-        problems += [f"{u['file']}: outside the pack, referenced by {u['referenced_by']}" for u in deps["outside_pack"]]
-    if deps["checked"]:
+                     for u in dependencies["unresolved"]]
+        problems += [f"{u['reference']}: unreadable USD" for u in dependencies["unreadable"]]
+        problems += [f"{u['reference']}: remote, referenced by {u['referenced_by']}" for u in dependencies["remote"]]
+        problems += [f"{u['file']}: outside the pack, referenced by {u['referenced_by']}" for u in dependencies["outside_pack"]]
         problems += [f"{rel}: accepted as unresolved when the pack was built, so assets__import_path refuses "
-                     "this pack until the file is added" for rel in deps["accepted_unresolved"]]
-    problems += [f"{rel}: symlink; an import refuses this pack" for rel in _pack_symlinks(folder)]
-    if deps["checked"] and deps["unfollowable"]:
-        result["warnings"] = [UNFOLLOWABLE_NOTE]
-    if deps["checked"] and deps["missing_textures"]:
-        result.setdefault("warnings", []).append(
-            "Meshes name files that are absent: " + ", ".join(i["reference"] for i in deps["missing_textures"][:10]))
+                     "this pack until a new version holds the file" for rel in dependencies["accepted_unresolved"]]
+        if dependencies["unfollowable"]:
+            result["warnings"] = [UNFOLLOWABLE_NOTE]
+        if dependencies["missing_textures"]:
+            result.setdefault("warnings", []).append(
+                "Meshes name files that are absent: " + ", ".join(i["reference"] for i in dependencies["missing_textures"][:10]))
     result["problems"] = problems[:MAX_REPORTED]
-    # Never "ok" when the dependency check did not run: a folder listing proves nothing about it.
-    result["ok"] = not problems and deps["checked"]
+    result["ok"] = not problems and dependencies is not None
+    result["dependencies_checked"] = dependencies is not None
     return result
-
-
-def doctor_pack(pack: str, stores: list[Path], *, closure=None, entries=None, manifest=None) -> dict:
-    """Check a pack in every store holding it; the first copy of a file is the one that loads."""
-    assets.validate_pack_name(pack)
-    folders = [store / pack for store in stores if (store / pack).is_dir()]
-    if not folders:
-        raise PackError(
-            f"pack {pack!r} is in no store: " + ", ".join(str(s) for s in stores), "PACK_NOT_FOUND"
-        )
-    reports = [doctor_folder(f, closure=closure, entries=entries, manifest=manifest) for f in folders]
-    checked = all(r["dependencies"]["checked"] for r in reports)
-    return dict(
-        pack=pack, ok=all(r["ok"] for r in reports), dependencies_checked=checked, folders=reports,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1170,14 +1173,20 @@ def doctor_pack(pack: str, stores: list[Path], *, closure=None, entries=None, ma
 # ---------------------------------------------------------------------------
 
 
-def _context(resolver: assets.Resolver) -> dict:
+def _context(root: "pack_manifest.AssetRoot | None", error: str | None = None) -> dict:
     """What this process resolved; the host and Kit can differ if their settings differ."""
-    project = assets.project_file()
-    pack, source = assets.selected_pack_info()
-    return dict(
-        project_file=str(project) if project else None, selected_pack=pack, pack_source=source,
-        stores=[str(s) for s in resolver.stores()], write_store=str(resolver.cache_dir()),
-    )
+    project = pack_manifest.project_file()
+    try:
+        selected = pack_manifest.project_pack()
+    except ValueError as exc:  # an unreadable project file, or a pack that is not <id>/<version>
+        raise PackError(str(exc), "INVALID_PACK") from exc
+    out = dict(project_file=str(project) if project else None, selected_pack=selected,
+               asset_root=str(root.path) if root else None, asset_root_source=root.source if root else None)
+    if root and root.warnings:
+        out["warnings"] = list(root.warnings)
+    if error:
+        out["asset_root_error"] = error
+    return out
 
 
 def _absolute(path, what: str) -> Path:
@@ -1204,16 +1213,6 @@ def _approved_root(path: Path, broker) -> Path:
     )
 
 
-def _write_pack(pack: str, resolver: assets.Resolver) -> Path:
-    """The destination of a write tool: always the primary user store, never a chosen path."""
-    if not isinstance(pack, str):
-        raise PackError("pack must be a string", "INVALID_PACK")
-    _, folder = pack_dir(resolver.cache_dir(), pack)
-    if folder.is_symlink():
-        raise PackError(f"refusing symlinked pack folder: {folder}", "UNSAFE_DESTINATION")
-    return folder
-
-
 def _kit_closure(kit_call):
     if kit_call is None:
         return None
@@ -1230,14 +1229,8 @@ def _kit_closure(kit_call):
     return call
 
 
-def _host_environment(resolver) -> dict:
-    project = assets.project_file()
-    return dict(project_file=str(project) if project else None, stores=[str(p) for p in resolver.stores()],
-                packs=list(resolver.packs()), strict=bool(resolver.offline()))
-
-
 def _kit_environment(kit_call):
-    """What the connected Kit's resolver uses, or None when there is no Kit or it predates the report."""
+    """What the connected Kit resolves, or None when there is no Kit or it predates the report."""
     if kit_call is None:
         return None
     try:
@@ -1251,50 +1244,59 @@ def _kit_environment(kit_call):
 def environment_warnings(host: dict, kit: dict) -> list[str]:
     """Differences between the host's and Kit's asset settings that make the same call resolve differently."""
     out = []
+    if host.get("asset_root") != kit.get("asset_root"):
+        out.append(f"This host uses the asset root {host.get('asset_root')!r} but the connected Kit uses "
+                   f"{kit.get('asset_root')!r}. Give both the same {pack_manifest.ROOT_ENV}, or Kit will not "
+                   "see the packs the host lists.")
     if host.get("project_file") != kit.get("project_file"):
         out.append(f"This host uses the project file {host.get('project_file')!r} but the connected Kit uses {kit.get('project_file')!r}. "
-                   "Calls Kit resolves itself (public robot names, the UR5e twin, sim__quick_start names) ignore the project's pack "
-                   "and asset_path. Start Kit with sim__launch from this host, or set ISAAC_MCP_PROJECT to the project for Kit.")
-    if list(host.get("stores") or []) != list(kit.get("stores") or []):
-        out.append(f"The host searches the stores {host.get('stores')} but Kit searches {kit.get('stores')}. Give both the same "
-                   "ISAAC_MCP_ASSET_PATH, or Kit will not see the packs the host lists.")
-    if bool(host.get("strict")) != bool(kit.get("strict")):
-        out.append(f"Strict mode is {'on' if host.get('strict') else 'off'} for the host and {'on' if kit.get('strict') else 'off'} for Kit.")
+                   "Start Kit with sim__launch from this host, or set ISAAC_MCP_PROJECT to the project for Kit.")
     return out
+
+
+def _pack_argument(params: dict, key: str, selected: str | None, what: str = "pack") -> tuple[str, str]:
+    value = params.get(key) or (selected if key == "pack" else None)
+    if not value:
+        raise PackError(f"{what}: name it as \"<pack id>/<version>\" (the project file's 'pack' key also selects one).",
+                        "INVALID_PACK")
+    return split_ref(value, what)
 
 
 def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
     """Run one host-side pack tool. Raises :class:`PackError` for refusals."""
-    resolver = assets.Resolver(assets.DEFAULT_PACK)
-    context = _context(resolver)
     params = dict(params)
+    try:
+        root = pack_manifest.resolve_asset_root()
+        root_error = None
+    except pack_manifest.RootError as exc:
+        root, root_error = None, str(exc)
+    context = _context(root, root_error)
 
-    def named_pack(key: str = "pack") -> str:
-        value = params.get(key) or context["selected_pack"]
-        try:
-            return assets.validate_pack_name(value)
-        except assets.InvalidPackName as exc:
-            raise PackError(str(exc), "INVALID_PACK") from exc
+    def need_root() -> Path:
+        if root is None:
+            raise PackError(root_error, "NO_ASSET_ROOT")
+        return root.path
 
-    # Reads may report on any store; parsing USD and copying files need real approval.
-    trusted = trusted_by_roots(broker, resolver.user_stores())
+    # Reads may report on the asset root; parsing USD and copying files need real approval.
+    trusted = trusted_by_roots(broker, [root.path] if root else [])
     closure = ClosureBackend(kit_call=_kit_closure(kit_call), trusted=trusted)
 
     if canonical == "assets.packs":
-        report = dict(status="ok", **context, listing=list_packs(resolver.stores()))
+        if root is None:
+            return dict(status="ok", **context, listing=dict(root=None, packs=[], old_format=[]))
+        report = dict(status="ok", **context, listing=pack_manifest.list_packs(root.path))
+        host = dict(asset_root=context["asset_root"], project_file=context["project_file"])
         kit = _kit_environment(kit_call)
         if kit is not None:
             report["kit_environment"] = kit
-            warnings = environment_warnings(_host_environment(resolver), kit)
+            warnings = environment_warnings(host, kit)
             if warnings:
-                report["warnings"] = warnings
+                report["warnings"] = [*report.get("warnings", []), *warnings]
         return report
 
     if canonical == "assets.pack_doctor":
-        pack = named_pack()
-        manifest = resolver.manifest() if pack == assets.DEFAULT_PACK else None
-        report = doctor_pack(pack, resolver.stores(), closure=closure, entries=params.get("entries"), manifest=manifest)
-        return dict(status="ok", **context, **report)
+        pack_id, version = _pack_argument(params, "pack", context["selected_pack"])
+        return dict(status="ok", **context, **doctor_pack(need_root(), pack_id, version, closure=closure))
 
     if canonical == "assets.dependencies":
         paths = params.get("paths") or []
@@ -1305,16 +1307,16 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
         for path in checked:
             if not trusted(path):
                 raise PackError(
-                    f"path is outside approved roots and user stores: {path}", "ROOT_NOT_APPROVED"
+                    f"path is outside approved roots and the asset root: {path}", "ROOT_NOT_APPROVED"
                 )
 
         def urdf_folder(path: str) -> Path:
-            """Where a URDF's packages are looked for: its pack, its approved root, or its own folder."""
+            """Where a URDF's packages are looked for: its pack version, its approved root, or its own folder."""
             resolved = Path(path).resolve()
-            for store in resolver.user_stores():
-                rel = _under(resolved, store.resolve())
-                if rel and "/" in rel:
-                    return store.resolve() / rel.split("/")[0]
+            if root is not None:
+                rel = _under(resolved, root.path.resolve())
+                if rel and len(rel.split("/")) > 2:
+                    return root.path.resolve() / "/".join(rel.split("/")[:2])
             try:
                 return _approved_root(resolved, broker).resolve()
             except PackError:
@@ -1325,75 +1327,59 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
         return dict(status="ok", backend=backend, results=results)
 
     if canonical == "assets.pack_adopt":
-        folder = _write_pack(params.get("pack"), resolver)
-        source = params.get("source_path")
+        pack_id, version = _pack_argument(params, "pack", None)
         dry_run = bool(params.get("dry_run", False))
-        force = bool(params.get("force", False))
-        notes: list = []
-        if source is None:
-            created = not folder.exists()
-            if not dry_run:
-                private_dirs(folder, notes)
-                if not (folder / PACK_FILE).exists():
-                    write_pack_file(folder, [])
-            return dict(status="ok", **context, pack_dir=str(folder), created=created, dry_run=dry_run, notes=notes)
-        src = _absolute(source, "source_path")
+        notes: list = list(context.get("warnings", []))
+        common = dict(source_note=params.get("source"), license_=params.get("license"),
+                      redistributable=params.get("redistributable"), dry_run=dry_run, notes=notes)
+        if bool(params.get("from_old")) == bool(params.get("source_path")):
+            raise PackError("Give exactly one of source_path (a folder under an approved root) or from_old "
+                            "(the name of an old-format pack in the asset root).", "INVALID_VALUE")
+        if params.get("from_old"):
+            try:
+                old_id = pack_manifest.identifier(params["from_old"])
+            except pack_manifest.ManifestError as exc:
+                raise PackError(f"from_old: the name of a pack folder in the asset root. {exc}", "INVALID_VALUE") from exc
+            if old_id != pack_id:
+                raise PackError(f"from_old={old_id!r} is written inside its own folder, so pack must start with "
+                                f"{old_id}/, for example {old_id}/v1.", "INVALID_PACK")
+            report = convert_old(need_root() / old_id, pack_id=old_id, version=version, **common)
+            return dict(status="ok", **context, **{k: v for k, v in report.items() if k != "notes"}, notes=notes)
+        src = _absolute(params["source_path"], "source_path")
         _approved_root(src, broker)
         real = src.resolve()
         if not real.is_dir():
             raise PackError(f"not a folder: {real}", "NOT_FOUND")
-        target = folder.resolve()
-        if _under(target, real) is not None or _under(real, target) is not None:
+        target = need_root() / pack_id / version
+        if _under(target.resolve(), real) is not None or _under(real, target.resolve()) is not None:
             raise PackError("source and pack folder overlap", "OVERLAP")
-        extra = params.get("include") or []
-        suffixes = ADOPT_SUFFIXES | {("." + str(e).lstrip(".")).lower() for e in extra}
-        named = params.get("files")
-        skipped: list[str] = []
-        sources = named_sources(real, named, suffixes, skipped) if named else adopt_sources(real, suffixes, skipped)
-        if len(sources) > MAX_ADOPT_FILES:
-            raise PackError(f"more than {MAX_ADOPT_FILES} files; narrow the folder", "LIMIT")
-        entries, entries_how = adopted_entries(sources, params.get("entries"))
-        if skipped:
-            notes.append(
-                f"{len(skipped)} symbolic link(s) were not copied (they are never followed): "
-                + ", ".join(sorted(skipped)[:10]) + (" ..." if len(skipped) > 10 else ""))
-        if dry_run:
-            return dict(status="ok", **context, pack_dir=str(folder), dry_run=True, files=len(sources),
-                        planned=sorted(sources)[:MAX_REPORTED], truncated=len(sources) > MAX_REPORTED,
-                        entries=entries, entries_source=entries_how,
-                        **({"skipped_symlinks": sorted(skipped)} if skipped else {}))
-        if not sources:
-            return dict(status="ok", **context, pack_dir=str(folder), added=0, identical=0,
-                        notes=[f"no asset files found in {real}", *notes],
-                        **({"skipped_symlinks": sorted(skipped)} if skipped else {}))
-        added, identical = install_many(sources, folder, force, pin=True, notes=notes)
-        if entries:
-            write_pack_file(folder, entries)
-        else:
-            notes.append("No entry files recorded: pass entries so assets__pack_doctor can tell what is unused.")
-        return dict(status="ok", **context, pack_dir=str(folder), added=added, identical=identical,
-                    entries=entries, entries_source=entries_how, notes=notes,
-                    **({"skipped_symlinks": sorted(skipped)} if skipped else {}))
+        report = adopt_folder(need_root(), pack_id, version, real, include=params.get("include") or (),
+                              names=params.get("files"), **common)
+        return dict(status="ok", **context, **{k: v for k, v in report.items() if k != "notes"}, notes=notes)
 
     if canonical == "assets.pack_pin":
-        folder = _write_pack(params.get("pack") or context["selected_pack"], resolver)
-        if not folder.is_dir():
-            raise PackError(f"pack folder does not exist in the write store: {folder}", "PACK_NOT_FOUND")
-        return dict(status="ok", **context, pack_dir=str(folder),
-                    **pin_pack(folder, force=bool(params.get("force", False)), files=params.get("files")))
+        pack_id, version = _pack_argument(params, "pack", context["selected_pack"])
+        report = pin_pack(need_root(), pack_id, version, force=bool(params.get("force", False)),
+                          files=params.get("files"), dry_run=bool(params.get("dry_run", False)))
+        return dict(status="ok", **context, **report)
 
     if canonical == "assets.pack_build":
-        folder = _write_pack(params.get("pack"), resolver)
+        dest_id, dest_version = _pack_argument(params, "pack", None)
         sources = params.get("sources") or []
         if not sources or len(sources) > 64:
             raise PackError("sources must list 1..64 USD or URDF files", "LIMIT")
         broker.require_profile()
-        from_dirs = []
+        asset_root = need_root()
+        from_dirs, inherit = [], {}
         if params.get("from_pack"):
-            source_pack = named_pack("from_pack")
-            from_dirs = [(s / source_pack).resolve() for s in resolver.user_stores() if (s / source_pack).is_dir()]
-            if not from_dirs:
-                raise PackError(f"source pack {source_pack!r} is in no user store", "PACK_NOT_FOUND")
+            source_id, source_version = _pack_argument(params, "from_pack", None, "from_pack")
+            _, source_dir = pack_dir(asset_root, source_id, source_version)
+            report = pack_manifest.inspect_pack(asset_root, source_id, source_version)
+            if not report["verified"]:
+                raise PackError(f"source pack {source_id}/{source_version} does not verify, so nothing is copied from it: "
+                                + "; ".join(report["problems"][:3]), "PACK_NOT_VERIFIED")
+            from_dirs = [source_dir]
+            inherit = {source_dir: {r["path"]: r for r in pack_manifest.read_manifest(source_dir, source_id, source_version)["files"]}}
         for source in sources:
             if source.startswith("/"):
                 _absolute(source, "source")
@@ -1401,27 +1387,24 @@ def run_tool(canonical: str, params: dict, broker, kit_call=None) -> dict:
         if params.get("layout_root"):
             layout = _absolute(params["layout_root"], "layout_root").resolve()
             if not trusted(layout):
-                raise PackError(f"layout_root is outside approved roots and user stores: {layout}", "ROOT_NOT_APPROVED")
-        if any(_under(folder.resolve(), d) is not None or _under(d, folder.resolve()) is not None for d in from_dirs):
-            raise PackError("source pack and destination pack overlap", "OVERLAP")
+                raise PackError(f"layout_root is outside approved roots and the asset root: {layout}", "ROOT_NOT_APPROVED")
+        defaults = defaults_from(params.get("source"), params.get("license"), params.get("redistributable"), required=False)
         # A URDF is read here, so a URDF-only build needs no USD parser.
         if not closure.available() and not all(urdf_refs.is_urdf(s) or urdf_refs.is_xacro(s) or asset_formats.format_of(s) in ("mjcf", "sdf", "mesh", "map") for s in sources):
             raise PackError(unavailable_message(), "USD_UNAVAILABLE")
 
         def urdf_root(path: Path) -> Path:
-            """The approved root or pack holding *path*, which is as far as its packages are looked for."""
-            for store in resolver.user_stores():
-                pack_rel = _under(path, store.resolve())
-                if pack_rel and "/" in pack_rel:
-                    return store.resolve() / pack_rel.split("/")[0]
+            """The pack version or approved root holding *path*, which is as far as its packages are looked for."""
+            rel = _under(path, asset_root.resolve())
+            if rel and len(rel.split("/")) > 2:
+                return asset_root.resolve() / "/".join(rel.split("/")[:2])
             return _approved_root(path, broker).resolve()
 
-        notes = []
+        notes = list(context.get("warnings", []))
         report = build_pack(
-            folder, sources, closure, from_pack_dirs=from_dirs, layout_root=layout, trusted=trusted,
-            allow_unresolved=bool(params.get("allow_unresolved", False)), dry_run=bool(params.get("dry_run", False)),
-            force=bool(params.get("force", False)), notes=notes, urdf_root=urdf_root,
-            source_note=clean_origin(params.get("origin")),
+            asset_root, dest_id, dest_version, sources, closure, from_pack_dirs=from_dirs, layout_root=layout,
+            trusted=trusted, allow_unresolved=bool(params.get("allow_unresolved", False)),
+            dry_run=bool(params.get("dry_run", False)), notes=notes, urdf_root=urdf_root, defaults=defaults, inherit=inherit,
         )
         return dict(status="ok", **context, backend=closure.name, notes=notes, **report)
 

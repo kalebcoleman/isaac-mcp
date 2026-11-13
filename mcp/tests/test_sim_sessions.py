@@ -692,7 +692,7 @@ def test_listing_never_omits_a_live_session(setup, monkeypatch):
 
 
 def test_a_launch_inherits_the_servers_environment_and_scrubs_the_documented_keys(setup, monkeypatch):
-    """docs/TOOLS-HOST.md says ISAAC_MCP_ASSET_PATH and DISPLAY come from the server's environment."""
+    """docs/TOOLS-HOST.md says ISAAC_MCP_ASSET_ROOT and DISPLAY come from the server's environment."""
     seen = {}
     real = sim.subprocess.Popen
 
@@ -702,11 +702,11 @@ def test_a_launch_inherits_the_servers_environment_and_scrubs_the_documented_key
 
     monkeypatch.setattr(sim.subprocess, "Popen", popen)
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 1))
-    for key, value in {"ISAAC_MCP_ASSET_PATH": "/assets", "DISPLAY": ":7", "PYTHONPATH": "/x", "UR5E_DT_HEADLESS": "1",
+    for key, value in {"ISAAC_MCP_ASSET_ROOT": "/assets", "DISPLAY": ":7", "PYTHONPATH": "/x", "UR5E_DT_HEADLESS": "1",
                        "UR5E_DT_SHOW_PANEL": "1"}.items():
         monkeypatch.setenv(key, value)
     sim._launch(setup, 18766, 9, True, False)
-    assert seen["ISAAC_MCP_ASSET_PATH"] == "/assets" and seen["DISPLAY"] == ":7"
+    assert seen["ISAAC_MCP_ASSET_ROOT"] == "/assets" and seen["DISPLAY"] == ":7"
     for key in ("PYTHONPATH", "UR5E_DT_HEADLESS", "UR5E_DT_SHOW_PANEL"):
         assert key not in seen
     assert seen["ISAAC_MCP_PYTHON"] == setup["ISAAC_MCP_PYTHON"]  # scrubbed, then set from the server's settings

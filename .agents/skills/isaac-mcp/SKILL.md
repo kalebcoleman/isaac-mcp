@@ -41,7 +41,7 @@ Pause before saving and check the exported scene after reopening in a fresh proc
 2. **An existing scene:** `sim__stage__info` first. Other `sim__*` and `assets__*` tools need its
    `session_id` and `stage_id`.
 3. **Import your own robot or asset (USD, URDF, xacro, SDF, MuJoCo XML, a mesh, a ROS map, or a folder that holds one):** `assets__roots`, then `assets__import_path` (format auto). See `docs/ASSET-IMPORT.md` and the import workflow under "Generic scene and project assets" below. For a warehouse with a robot: `sim__quick_start environment=warehouse`.
-4. **Copy a USD or URDF and its files into your asset folder:** `assets__pack_build`, then `sim__quick_start robot="<pack>/<file>"`.
+4. **Copy a USD or URDF and its files into a pack in your asset root:** `assets__pack_build`, then `sim__quick_start robot="<pack id>/<version>/<file>"`.
 5. **Train, evaluate or play a policy:** `isaaclab__install_info`, then `isaaclab__train`. No bridge is needed.
 6. **One lab's UR5e digital twin (RISE lab):** `ur5e_dt__workcell_quick_start`, only when that twin is what was asked for.
 7. **See the result:** `screenshot`; for video, `start_screen_recording`.
@@ -199,15 +199,17 @@ These are the safe default for non-UR5e work. Prefer them over hand-written `run
   Changes go to the session layer; source USD files are not rewritten, and `sim__prim__revert`
   removes only what these tools recorded. `TIMELINE_ACTIVE` means stop the timeline first.
 - **Asset packs:** each project has a subfolder in the user's `isaac-mcp-assets`. `assets__packs` and
-  `assets__pack_doctor` read; `assets__pack_adopt`, `assets__pack_pin` and `assets__pack_build` write
-  only to the primary asset folder and need `force=true` to replace anything. Read refusals such as
-  `UNRESOLVED_DEPENDENCIES` before passing an override. See `docs/ASSETS.md`.
+  `assets__pack_doctor` read; `assets__pack_adopt` and `assets__pack_build` write only a new
+  `<id>/<version>` under the asset root and refuse a version that exists; `assets__pack_pin` rewrites hashes of a
+  pack that no longer verifies. Read refusals such as `UNRESOLVED_DEPENDENCIES` before passing an override.
+  See `docs/ASSET-PACKS.md`.
 - **Where assets come from:** use a source the user names (a link, or a public robot name such as
   `unitree_h1` for `sim__quick_start`). If they named none and you need one, propose a short list and wait; do
   not search for random repositories. Download into the project's `downloads/` folder, build a pack with
-  `assets__pack_build` and set `origin` to the repository URL and commit, and never run code from a download.
-  An agent with a shell can also copy files into the asset folder, which loads with no approval, so recording
-  `origin` is what lets the user see what was used. See `docs/ASSETS.md`.
+  `assets__pack_adopt` (or `assets__pack_build`) and set `source` to the repository URL and commit and `license`
+  to its terms, and never run code from a download. An agent with a shell can also copy files into the asset
+  root, but a pack that does not verify against its `pack.yaml` is refused, and the recorded `source` is what
+  lets the user see what was used. See `docs/ASSET-PACKS.md`.
 - **Import any robot or asset file with `assets__import_path`** (the one import tool; full guide: `docs/ASSET-IMPORT.md`).
   It reads USD, URDF, xacro, SDF, MuJoCo XML, meshes (glTF, GLB, OBJ, STL, FBX, PLY), ROS map YAML and a folder that holds
   one. Workflow: (1) use the source the user named, never search for repositories; (2) download into the project's
