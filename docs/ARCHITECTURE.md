@@ -369,6 +369,9 @@ twinsmith only reports them.
 
 Three Newton versions are in play and that is intended. `doctor` reports them side by side; nothing unifies them.
 
+Which machine runs which of these processes, and what each machine cannot run, is in the roadmap's
+[hardware and hosts](ROADMAP.md#hardware-and-hosts).
+
 ### Safety boundaries
 
 1. **No agent runs on the real robot.** No tool here connects to robot hardware. The simulator's ROS 2 traffic uses the

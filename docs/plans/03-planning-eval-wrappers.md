@@ -65,7 +65,8 @@ message "twinsmith does not run Graph-as-Policy on real hardware". The subproces
 `warmup` and `studio` are not wrapped in this pull request: `warmup` is a one-time setup the owner runs, and `studio` opens
 a network viewer.
 
-Checkout layout, all the owner's to create:
+Checkout layout, on the ASU PC, all the owner's to create. Graph-as-Policy is not set up on the home PC: its 16 GB GPU is
+below the 24 GB requirement, and `gap(action="status")` reports that shortfall rather than working around it.
 
 ```text
 <workspace>/tools/
@@ -109,9 +110,10 @@ A fake checkout is a temporary git repository with a `.venv/bin/python` shell sc
 ## Acceptance checks
 
 1. The CI commands in the [plans index](README.md) pass, and the existing `test_robosim_bridge.py` passes unchanged.
-2. On a machine with the checkouts (the owner's): `gap(action="status")` and `vabar(action="status")` report the pins;
+2. On the ASU PC, once the checkouts exist: `gap(action="status")` and `vabar(action="status")` report the pins;
    `vabar(action="list")` returns the task list.
-3. Recorded later, not required to merge: one VABAR cell run from the tool, its result beside the published number.
+3. Recorded later, not required to merge: one VABAR cell run from the tool on the ASU PC, scheduled around Jenga games, its
+   result beside the published number.
 
 ## Not in this pull request
 

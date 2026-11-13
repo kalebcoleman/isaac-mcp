@@ -45,6 +45,43 @@ What `origin/main` shows today. Each line is from the code or a recorded result,
 | Perception, planning, evaluation | Nothing. The work cell reads its camera configuration only. |
 | Real robot | Nothing in this repository drives one, by design. |
 
+## Hardware and hosts
+
+Two machines. The ASU PC is the main host and stays on; the home PC is normally off and is used only when the owner is at
+it. **Nothing on the critical path may depend on the home PC being reachable.** Machines are named by role here, not by
+hostname.
+
+| | ASU PC (main, always on) | Home PC (normally off) |
+|---|---|---|
+| Runs | RoboSimStudio, real-to-sim, `sysid`, heavy simulation, Graph-as-Policy and VABAR, and the Jenga games | Development and short checks while the owner is there |
+| GPU | NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition, 97,887 MiB, driver 595.99.02 | RTX 5080, 16 GB, as the repository's recorded test machine. Not re-verified from here |
+| System | Ubuntu 22.04.5, 32 CPU threads, 125 GiB of memory | Ubuntu 24.04.5, as recorded |
+| Installed | Isaac Sim 6.0.0.0 to 6.2.0.0, Isaac Lab 2.3.2 and 3.0.0, RoboSimStudio at `87b5e32`, work-cell pack `v1`, the twinsmith host | Not verified from here |
+
+The ASU column was read on that machine on 2026-11-13 (`nvidia-smi`, `scripts/env.py find`, the checkouts themselves).
+
+**Limits, stated plainly.**
+
+- **The ASU PC's GPU is shared with Jenga games.** One was running when this was written (an Isaac Sim 6.2 process holding
+  3.4 GiB). A running game is never disturbed: GPU runs are scheduled around games, and every GPU job uses the existing guards
+  (`min_free_vram_mb`, `wait_for_vram_s`, `allow_concurrent_gpu` only when the owner says so).
+- **The ASU PC's workspace is still in the old layout.** The move to `<home>/robotics-workspace` waits for a moment with no
+  game running. Until then `<workspace>` on that machine is the old folder and must be named with `TWINSMITH_WORKSPACE`;
+  without it `scripts/env.py find` finds no install.
+- **Graph-as-Policy does not run on the home PC.** It asks for 24 GB of GPU memory and the RTX 5080 has 16 GB. It runs on the
+  ASU PC only, and it and VABAR are not installed there yet.
+- **The home PC cannot host anything unattended:** no scheduled job, no long run, no service another step waits for.
+- **No recorded Newton result is from the ASU PC.** The work-cell probe names an RTX 5080; the tower hold does not record
+  its GPU. Each is rerun on the ASU PC's GPU, driver and Ubuntu release before it counts as that host's baseline.
+
+**Open.**
+
+- [ ] We'll refine this as we go: per-phase GPU memory and run times once measured, and a rule for booking the GPU around games.
+- [ ] Finish the ASU PC's workspace move when no game is running.
+- [ ] Verify the home PC's row on that machine the next time it is on.
+- [ ] Not established here: which machine the real robot and the D415s are attached to, and whether the ASU PC has a desktop
+  session for the `computer` group.
+
 ## The phases
 
 ```mermaid
@@ -199,8 +236,8 @@ own evaluated the same way.
 - One VABAR cell reruns from the tool with a result recorded next to the published number.
 - A Jenga skill graph runs in simulation and its results sit in the same table as the scripted baseline.
 
-**Depends on.** Phase 0 (the groups) and Phase 3 (the task). Note the hardware limit in
-[decisions needed](#decisions-needed), item 5.
+**Depends on.** Phase 0 (the groups) and Phase 3 (the task). It runs on the ASU PC only
+([hardware and hosts](#hardware-and-hosts)).
 
 ### Phase 7: parts beyond Jenga
 
@@ -276,8 +313,8 @@ Confirmed as the survey said, on 2026-11-13: RoboSimStudio `main` is `4e52e1a`, 
    VABAR's pins for both groups until a planning need forces a second.
 4. **`ros2` stays its own group** instead of joining `sim`, because DDS traffic is a boundary worth one explicit switch.
    Recommended: keep it separate.
-5. **Graph-as-Policy asks for 24 GB of GPU memory.** The GPU in this repository's recorded runs is an RTX 5080 (16 GB). Decide
-   where planning runs before Phase 6 starts; the wrapper reports the shortfall and does not work around it.
+5. **Decided: where Graph-as-Policy runs.** It asks for 24 GB of GPU memory, so it runs on the ASU PC (about 96 GB) and not
+   on the home PC's 16 GB RTX 5080. See [hardware and hosts](#hardware-and-hosts).
 6. **Old toolset names in user configurations** (`scene`, `physics`, `screen`, ...) stop the server at startup with the list of
    valid names, as any unknown name does today. Recommended: no aliases, one table in [MIGRATING.md](MIGRATING.md).
 7. **The `planned` list in `status`.** `planning`, `real2sim` and `eval` become real groups; `backend`, `params` and `compare`

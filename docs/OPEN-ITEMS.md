@@ -103,6 +103,8 @@ matched the clip within the tool's tolerance. What it does not do yet:
   before making broader compatibility claims.
 - [ ] Re-run BrickSim on Isaac Sim 5.1 after the rename; it was skipped because its launcher has no headless option on the
   test PC.
+- [ ] Hosts: the roadmap's [hardware and hosts](ROADMAP.md#hardware-and-hosts) section is a first statement; refine it as we go
+  (measured GPU memory and run times per phase, booking the GPU around Jenga games, the home PC's row).
 - [ ] Run the work-cell smoke once from the new workspace layout (`<home>/robotics-workspace` with `assets/`); the work cell's
   asset-root lookup for it is covered by unit tests only.
 - [ ] When a release is requested, review licensing and notices, name availability and PyPI installation using

@@ -11,7 +11,8 @@ later. The wrapper calls the script `examples/live/ctl` in the checkout; upstrea
 
 **Steps.**
 
-1. In an updated checkout (the owner's, or a scratch clone with its own `uv sync`), read the 13 commits and list any that
+1. On the ASU PC, in a scratch clone with its own `uv sync` (leave the checkout at `<workspace>/tools/robosimstudio`, which
+   is at `87b5e32`, untouched until step 5), read the 13 commits and list any that
    touch `examples/live/ctl`, `robosimstudio_real2sim_agent/`, `sim/scene.py` or `specs/arrangement.py`.
 2. Compare `examples/live/ctl --help` with `python -m robosimstudio_real2sim_agent --help` at the new commit. If the module
    takes the same subcommands, switch the wrapper to it and delete the `ctl` path and its executable-bit check. If it does
@@ -26,8 +27,8 @@ later. The wrapper calls the script `examples/live/ctl` in the checkout; upstrea
 **Files.** `mcp/twinsmith/robosim/bridge.py`, `template.py`, `mcp/tests/test_robosim_bridge.py`, `docs/ROBOSIM.md`,
 `docs/OPEN-ITEMS.md`, `docs/ARCHITECTURE.md` (the pin table).
 
-**Done when.** The host suite passes; the CPU sequence result is recorded in the pull request with both commits; a GPU run
-is listed as not done unless the owner ran one.
+**Done when.** The host suite passes; the CPU sequence result is recorded in the pull request with both commits; a `cuda:0`
+run on the ASU PC is recorded if the GPU was free of Jenga games, and otherwise listed as not done.
 
 ## Part B: `sysid`
 
@@ -43,7 +44,7 @@ own. First step of the work: confirm which released wheel contains `mujoco.sysid
 ### Design
 
 One grouped tool, `sysid`, in the `real2sim` toolset, on the [wrapper contract](../ARCHITECTURE.md#wrapped-native-beside).
-Its "checkout" is only an environment: `<workspace>/tools/sysid/.venv`, which the owner creates
+Its "checkout" is only an environment on the ASU PC: `<workspace>/tools/sysid/.venv`, which the owner creates
 (`uv venv` and `uv pip install mujoco==<pin>`; the tool prints these and never runs them). The pin is checked by asking that
 interpreter for `mujoco.__version__`. If plan 03 has merged, use `sibling.py`; if not, this plan creates it as specified
 there.

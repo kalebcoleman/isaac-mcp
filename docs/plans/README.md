@@ -4,7 +4,7 @@ One specification per upcoming pull request. Each is written to be handed to a f
 problem, the design, the files, the tests and the checks that say it is done. The phases they serve are in the
 [roadmap](../ROADMAP.md); the layout they build is in [How it works](../ARCHITECTURE.md#target-layout-planned).
 
-| Order | Plan | Adds | Needs a GPU or the private pack? |
+| Order | Plan | Adds | Needs the ASU PC's GPU or the private pack? |
 |--:|---|---|---|
 | 1 | [01-assets-mesh-collision](01-assets-mesh-collision.md) | `assets__mesh`, `assets__validate`, work-cell pack `v2` | Part A no. Part B yes, with the owner |
 | 2 | [02-toolset-groups](02-toolset-groups.md) | Off-by-default groups, three stubs deleted, the README table | No |
@@ -12,6 +12,11 @@ problem, the design, the files, the tests and the checks that say it is done. Th
 | 4 | [04-robosim-bump-and-sysid](04-robosim-bump-and-sysid.md) | RoboSimStudio at a newer pin, `sysid` | No |
 
 Plans 3 and 4 are independent of each other. Plan 1 does not wait for plan 2.
+
+**Hosts.** Every live, GPU or wrapped-tool step in these plans runs on the ASU PC, which stays on. No step may require the
+home PC. The ASU PC's GPU is shared with Jenga games: check for a running game first, never disturb one, and use the GPU
+guards. Its workspace is still the old folder, so name it with `TWINSMITH_WORKSPACE`. Details and limits:
+[hardware and hosts](../ROADMAP.md#hardware-and-hosts).
 
 ## Rules for whoever executes a plan
 

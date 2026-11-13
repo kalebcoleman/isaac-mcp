@@ -106,7 +106,9 @@ authoring, share one function rather than keep two.
 
 ## Part B: rebuild the pack (the owner, or an agent with the owner's go-ahead)
 
-Needs the private `ur5e-jenga-workcell/v1` pack and, for the last step, a free GPU.
+Runs on the ASU PC, which holds the private `ur5e-jenga-workcell/v1` pack (seen there on 2026-11-13). Steps 1 to 5 need no
+GPU. Steps 6 and 7 start a simulator: run them only when no Jenga game is using the GPU, on their own bridge port, and never
+stop a running game to make room.
 
 1. `assets__mesh(action="inspect", pack="ur5e-jenga-workcell/v1", asset_id="bench")`: confirm 385 colliders, 1.63 M triangles.
 2. `assets__mesh(action="split", ..., collision={"method": "box"})` into a staging folder. The bench is extrusions and
@@ -125,4 +127,5 @@ The refusal in `exts/workcell/workcell/scene.py` stays until [Phase 2](../ROADMA
 
 - Part A: all tests above pass; the CI commands in the [plans index](README.md) pass; `default` and `all` listing sizes are
   re-measured and written in `docs/TOOLSETS.md`.
-- Part B: steps 5 to 7 are recorded with the engine, the Isaac Sim build and the loaded Newton version.
+- Part B: steps 5 to 7 are recorded with the engine, the Isaac Sim build, the loaded Newton version and the GPU. The earlier
+  probe ran on an RTX 5080; this is the first work-cell result on the ASU PC's GPU, so say so in the record.
