@@ -517,6 +517,8 @@ class RoboSimBridge:
                          network=("RSS's viewer listens on all network interfaces; RSS offers no localhost-only option "
                                   "(robosimstudio_studio/session.py: the viewer has no host option)."),
                          scene_frozen="The scene is frozen at this copy (RSS runs with --no-watch). Edit it with update_scene.")
+            if ledger["device"] == "cuda:0":
+                reply["gpu_note"] = plan.GPU_FIRST_RUN_NOTE
             if reply.get("ok"):
                 status = self._command(path, ledger, ["status"], timeout=30)
                 if not status.get("ok") or status.get("last_error"):
@@ -806,7 +808,11 @@ class RoboSimBridge:
             applied = json.loads((path / f"push-{take}.json").read_text())
         except (OSError, ValueError):
             pass
-        result = {"ok": True, "take": take, "routine": play.get("playing"), **outputs,
+        untracked = plan.untracked_message(applied)
+        if untracked:
+            warnings.insert(0, untracked)
+        result = {**({"headline": untracked, "pusher_tracked": False} if untracked else {}), "ok": True,
+                  "take": take, "routine": play.get("playing"), **outputs,
                   "steps_asked": asked["steps"], "steps": executed, "duration_s": seconds,
                   "control_hz": meta.get("control_hz"), "every": meta.get("every"),
                   "record_fps_asked": asked["record_fps_asked"], "record_fps": asked["record_fps"],
@@ -822,8 +828,6 @@ class RoboSimBridge:
         if push is not None and not (applied and applied.get("applied")):
             result.update(ok=False, error="The routine did not apply push: it wrote no push result. Use the template's "
                           "'push' routine (rollout routine='push'), or read ROLLOUT['push'] in your own routine.")
-        elif applied and applied.get("pusher_tracked") is False:
-            warnings.append(f"The pusher missed its path by up to {applied.get('pusher_tracking_error_max_m')} m.")
         return result
 
     def _starting_push(self, path, ledger, push):
@@ -877,14 +881,18 @@ class RoboSimBridge:
             applied = rolled.get("push_applied") or {}
             return {"clip_px": moved["clip_px"], "sim_px": moved["sim_px"], "start_overlap": iou(rows[0]), "end_overlap": iou(rows[-1]),
                     "take": trial_take, "video": rolled.get("mp4"), "bridge_verdict": compared.get("verdict"),
-                    "pivot": applied.get("object_start_xy_m"), "warnings": rolled.get("warnings")}
+                    "pivot": applied.get("object_start_xy_m"), "warnings": rolled.get("warnings"),
+                    **({"pusher_tracked": False, "pusher_message": rolled.get("headline")} if rolled.get("pusher_tracked") is False else {})}
 
         initial_pivot = template["position"] if template else None
         trials, best, stopped = plan.search_push(start_push, initial_pivot, axes, evaluate, max_trials=max_trials)
         best_push = {"waypoints": best["push"]["waypoints"], "object_velocity": best["push"].get("object_velocity")}
         within = stopped == "within tolerance"
         low, high = plan.TUNE_RATIO_OK
-        return {"ok": True, "object": name, "trials": [{k: v for k, v in row.items() if k != "warnings"} for row in trials],
+        untracked = stopped == "pusher did not track"
+        failure = ({"headline": trials[-1]["pusher_message"], "ok": False, "pusher_tracked": False,
+                    "error": trials[-1]["pusher_message"]} if untracked else {"ok": True})
+        return {**failure, "object": name, "trials": [{k: v for k, v in row.items() if k != "warnings"} for row in trials],
                 "best_trial": best["trial"], "best_push": best_push, "within_tolerance": within, "stopped_because": stopped,
                 "tolerance": {"magnitude_ratio": [low, high], "direction_error_deg_below": plan.TUNE_DIRECTION_OK_DEG},
                 "clip_px": best["clip_px"], "best_sim_px": best["sim_px"], "best_magnitude_ratio": best["magnitude_ratio"],
@@ -892,7 +900,9 @@ class RoboSimBridge:
                 "scope": plan.TUNE_SCOPE,
                 "use": {"rollout": "rollout(run, take=NEW, push=best_push, duration_s=..., record_fps=10), then compare_take",
                         "update_scene": "update_scene(run, template={'push': best_push}) writes it into the scene"},
-                "note": ("Each trial is a full rollout plus the comparison, on the take named <take>-<n>. The search rescales the push about the "
+                "note": (f"Stopped after trial {len(trials)} of {max_trials}: the pusher did not follow its path, so the trials say "
+                         "nothing about the push. Fix the simulation setup (see headline) and start again." if untracked else
+                         "Each trial is a full rollout plus the comparison, on the take named <take>-<n>. The search rescales the push about the "
                          "object's start and turns it by the measured direction error; it stops early within tolerance." if within else
                          f"Not within tolerance after {len(trials)} trials; best_push is the best seen (trial {best['trial']}). "
                          "Run tune_push again from it (push=best_push) or change the scene; this tunes the push path only.")}
@@ -928,8 +938,12 @@ class RoboSimBridge:
             if operation["action"] == "rollout" and result.get("take"):
                 lines.append(f"- rollout `{result['take']}`: {result.get('steps')} steps = {result.get('duration_s')} s simulated at "
                              f"{result.get('control_hz')} Hz, {result.get('frames')} frames at {result.get('record_fps')} per simulated second"
-                             f"{'' if operation['state'] == 'completed' else ' (failed: ' + str(result.get('error')) + ')'}.")
+                             f"{'' if operation['state'] == 'completed' else ' (failed: ' + str(result.get('error')) + ')'}"
+                             f"{', solver ' + str((result.get('push_applied') or {}).get('solver')) if (result.get('push_applied') or {}).get('solver') else ''}"
+                             f"{'. ' + result['headline'].rstrip('.') if result.get('headline') else ''}.")
             if operation["action"] == "tune_push" and result.get("trials"):
+                if result.get("headline"):
+                    lines.append(f"- tune_push stopped early: {result['headline']}")
                 lines.append(f"- tune_push `{result.get('object')}`: {len(result['trials'])} trials, {result.get('stopped_because')}; best trial "
                              f"{result.get('best_trial')} gave sim {result.get('best_sim_px')} px against the clip's {result.get('clip_px')} px "
                              f"(ratio {result.get('best_magnitude_ratio')}, direction error {result.get('best_direction_error_deg')} degrees). "

@@ -14,8 +14,14 @@ Set `TWINSMITH_ROBOSIM_ROOT` to the RSS checkout. Default:
 (otherwise the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace`). No changes to RSS tracked source are needed.
 
 **Which physics ran.** `device="cpu"` runs plain MuJoCo (MuJoCo's C library); `device="cuda:0"` runs
-Newton's MuJoCo-Warp solver (RSS `sim/scene.py`, `build` docstring; `specs/arrangement.py`, `CPU`).
-Every run's status, every result and `REPORT.md` say which. This tool **compares images; it does
+Newton's MuJoCo-Warp solver, for the template scene (RSS `sim/scene.py`, `build` docstring;
+`specs/arrangement.py`, `MUJOCO_500HZ`). The template names that arrangement itself, 50 Hz control over 10
+substeps, so both devices run the same MuJoCo physics. A scene that leaves RSS's default (`GENERIC`) puts
+free rigid bodies on the **VBD** solver on a GPU, which ignores the pusher's coordinate writes: the pusher
+never moves (this was the `cuda:0` failure before this change). Every run's status, every result and
+`REPORT.md` say which device; the push result (`push_applied.solver`) names the solver class that stepped
+the scene (`SolverMuJoCo` on both devices for the template). The first action on `cuda:0` can take minutes
+while Warp compiles its kernels (`start` says so in `gpu_note`; later runs reuse the cache). This tool **compares images; it does
 not fit mass or friction**, and the report says so.
 
 ## A worked sequence
@@ -53,7 +59,11 @@ The whole flow is data: no scene file is written by hand. Times are seconds, len
 9. `rollout(run=..., take="final", push=<best_push>, duration_s=6, record_fps=10)` — resets the scene to its
    start state, plays the template's `push` routine and records it. The result gives `steps`, `duration_s`,
    `control_hz`, `every`, `record_fps` (what was really recorded), `video_fps`, `frames`, `frames_expected`, the
-   push as applied (`push_applied`, with the pusher's tracking error and the object's start and end) and `warnings`.
+   push as applied (`push_applied`, with the pusher's tracking error, the solver and the object's start and end)
+   and `warnings`. **If the pusher did not follow its path** (`pusher_tracked` false: more than 5 mm off), the
+   result starts with `headline` and `pusher_tracked: false`, and the first warning says so: that is a fault in
+   the simulation setup (for example a solver that ignores the coordinate writes), not a push-path problem, and
+   changing the waypoints will not help.
 10. `compare_take(run=..., take="final", keys=["block=red"], start_s=0, end_s=6)` — see below.
 11. `report(run=...)` — writes `REPORT.md` (engine, scene versions, a summary, every operation's JSON).
 12. `stop(run=...)` — quits only this run's server and waits up to 15 s for the process to exit. It never
@@ -75,7 +85,8 @@ The whole flow is data: no scene file is written by hand. Times are seconds, len
 
 **Frame.** In the default camera image `+x` is right and `+y` is up (away from the camera); image y points down,
 so a block that moves up-left in the picture has negative dx, dy pixels and moves toward −x, +y on the table.
-`shape="jenga"` is one wooden block, 72 x 24 x 14 mm, lying flat (long side along x), with the same pusher, a
+`shape="jenga"` is one wooden block, default `size` `[0.072, 0.024, 0.014]` (72 x 24 x 14 mm; **x is the long
+axis**), lying flat, with the same pusher, a
 closer default camera and a default push that moves it about 6 cm. **Mask it with `keys=["block=wood"]`**
 (RSS's `wood` colour word; `scene_template` returns the right key for any colour as `mask_key`; a custom colour
 gets `block=#rrggbb~0.1`). Checked on the CPU render: the key picks out the block and nothing of the table.
@@ -92,7 +103,9 @@ the **pusher path** so that the simulated block's image displacement (first to l
 It starts from `push` (default the loaded template's push, else the scene's own `PUSH`), runs the existing
 rollout and comparison for each trial (takes `<take>-1`, `<take>-2`, ...), and keeps the best. After a trial
 it turns the path about the object's start by the measured direction error and stretches it from the
-pusher's start by the measured length ratio (with the exponent seen so far); a trial where the block did not
+pusher's start by the measured length ratio (with the exponent seen so far); a trial whose pusher did not
+track its path stops the search at once (`stopped_because: "pusher did not track"`, `ok: false`, `headline`
+first); a trial where the block did not
 move re-aims a straight push through the object along the clip's direction. It stops at the first trial with a
 magnitude ratio of 0.8 to 1.25 and a direction error under 15 degrees, else after `max_trials` (at most 12).
 The result has `trials` (scale, rotation, the push, `sim_px`, `clip_px`, `magnitude_ratio`,
@@ -130,7 +143,13 @@ What RSS supports (pin 87b5e32; paths are in the checkout):
   records `coord_start` and `dof_start`; its `reset` writes `state.joint_q[coord_start:coord_start+7]`
   as `(x, y, z, qx, qy, qz, qw)`. The template's pusher is a free cylinder placed that way every control
   step, with its velocity written to `joint_qd[dof_start:dof_start+6]` as `(vx, vy, vz, wx, wy, wz)`,
-  so it pushes through real contacts. The object's optional initial velocity is the same write.
+  so it pushes through real contacts. The object's optional initial velocity is the same write. The pusher's
+  height and upright orientation are written too (`z=PUSHER_Z`, identity rotation): left free in z, the cylinder
+  drifted (up, then 1 cm into the table) under MuJoCo-Warp and rode over a Jenga block instead of pushing it.
+- **Which solver steps the body matters.** The coordinate write moves a body only under a MuJoCo solver. RSS's
+  default arrangement `GENERIC` runs free bodies on VBD on a GPU (`specs/arrangement.py`, the `"*"` backend),
+  which does not read `joint_q` / `joint_qd`; a CPU device swaps in MuJoCo (`scene/physics/devices.py`). The
+  template passes `physics=MUJOCO_500HZ` so one mechanism behaves the same on both devices.
 - Other mechanisms exist and were not used or run here: a kinematic/mocap channel that places welded
   fixtures once per episode at reset (`domains/static/welded.py`, not a per-step path), and a PD wrench on
   a dynamic body, `ObjectDragger` in `core/draggers.py`, a `rigid_force` substep hook that adds to
@@ -208,8 +227,9 @@ output paths; trusted scene Python can still write arbitrary paths.
 `start` **requires** `device="cpu"` or `device="cuda:0"`; subsequent calls inherit it.
 CPU hides CUDA. The bridge checks `nvidia-smi` compute workloads before a GPU start and refuses unrelated
 work unless `allow_concurrent_gpu=true` explicitly overrides that snapshot check. This is not
-a GPU reservation. No existing processes are killed to free resources. The GPU path is guarded in fake
-tests only; the pusher and tee were run on CPU.
+a GPU reservation (it can briefly count a server of your own that has just been stopped; retry). No
+existing processes are killed to free resources. The unit tests use a fake RSS; the pusher, tee and Jenga were
+also run live on `cuda:0` and `cpu`, with the same pusher tracking and block displacement on both.
 
 This is **image-space comparison, not inverse-physics fitting**. There is no
 automatic mass/friction estimation. Agents must supply a suitable scene and push and interpret imperfect

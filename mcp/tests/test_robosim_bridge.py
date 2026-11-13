@@ -150,7 +150,10 @@ elif action == "status":
             write(run / (take + ".json"), json.dumps({"name": take, "every": every, "fps": round(50 / every), "control_hz": 50.0,
                                                       "frames": frames, "push": data["rollout"].get("push")}))
             if data["rollout"].get("push") and "IGNORE_PUSH" not in (run / "scene.py").read_text():
-                write(run / ("push-" + take + ".json"), json.dumps({"applied": True, "pusher_tracked": True,
+                missed = "UNTRACKED_PUSHER" in (run / "scene.py").read_text()
+                write(run / ("push-" + take + ".json"), json.dumps({"applied": True, "pusher_tracked": not missed,
+                                                                    "pusher_tracking_error_max_m": 0.32423 if missed else 0.002,
+                                                                    "solver": "SolverVBD" if missed else "SolverMuJoCo",
                                                                     "object_start_xy_m": [0.0, -0.075]}))
             reply["last_take"] = take
         else:
@@ -1197,6 +1200,85 @@ def test_tune_push_validates_before_running(fake):
     assert not missing["ok"] and "no readable PUSH" in missing["error"]
     given = complete(bridge, "tune_push", from_file["run"], keys=["block=red"], push={"waypoints": [[0, 0, -0.2], [6, 0, 0]]}, max_trials=1)
     assert given["ok"] and given["trials"][0]["push"]["waypoints"][0] == [0.0, 0.0, -0.2]
+
+
+# ---- a pusher that did not track its path ----
+
+def untracked_scene(tmp_path):
+    scene = tmp_path / "untracked.py"
+    scene.write_text("UNTRACKED_PUSHER = True\nPUSH = {'waypoints': [[0, 0, -0.2], [2, 0, 0]], 'object_velocity': None}\n")
+    return scene
+
+
+def test_untracked_pusher_message_blames_the_setup_not_the_path():
+    assert plan.untracked_message({"pusher_tracked": True}) is None and plan.untracked_message(None) is None
+    assert plan.untracked_message({"applied": True}) is None  # unknown is not a failure
+    said = plan.untracked_message({"pusher_tracked": False, "pusher_tracking_error_max_m": 0.32423, "solver": "SolverVBD"})
+    assert said.startswith("PUSHER DID NOT TRACK ITS PATH") and "0.32423" in said and "SolverVBD" in said
+    assert "not in the push path" in said and "MUJOCO_500HZ" in said
+    mujoco = plan.untracked_message({"pusher_tracked": False, "pusher_tracking_error_max_m": 0.1, "solver": "SolverMuJoCo"})
+    assert "MUJOCO_500HZ" not in mujoco and "free body" in mujoco
+
+
+def test_rollout_says_first_that_the_pusher_did_not_track(fake, tmp_path):
+    bridge = fake[0]
+    run = bridge.call("start", name="test", scene=str(untracked_scene(tmp_path)), device="cpu", wait_s=10)["run"]
+    result = complete(bridge, "rollout", run, take="miss", duration_s=2, push={"waypoints": [[0, 0, -0.2], [2, 0, 0]]})
+    assert list(result)[0] == "headline" and result["pusher_tracked"] is False
+    assert result["headline"].startswith("PUSHER DID NOT TRACK ITS PATH") and result["warnings"][0] == result["headline"]
+    assert not any("did not move" in w or "change the path" in w for w in result["warnings"])
+    assert result["push_applied"]["solver"] == "SolverVBD"
+    report = Path(complete(bridge, "report", run)["report"]).read_text()
+    assert "PUSHER DID NOT TRACK ITS PATH" in report and "solver SolverVBD" in report
+    fine = complete(bridge, "rollout", start(fake)["run"], take="fine", duration_s=2, push={"waypoints": [[0, 0, -0.2], [2, 0, 0]]})
+    assert "headline" not in fine and "pusher_tracked" not in fine and fine["push_applied"]["pusher_tracked"] is True
+
+
+def test_search_push_stops_at_the_first_trial_whose_pusher_did_not_track():
+    seen = []
+
+    def evaluate(push, trial):
+        seen.append(trial)
+        return {"clip_px": [-53.8, -56.6], "sim_px": [0.0, 0.0], "pusher_tracked": False}
+
+    trials, best, why = plan.search_push(PUSH0, (0.0, -0.075), AXES, evaluate, max_trials=6)
+    assert seen == [1] and len(trials) == 1 and why == "pusher did not track" and best["trial"] == 1
+
+
+def test_tune_push_stops_after_one_trial_when_the_pusher_did_not_track(fake, tmp_path):
+    bridge = fake[0]
+    first = bridge.call("start", name="tune", device="cpu", scene=str(untracked_scene(tmp_path)), wait_s=10)
+    run, path = first["run"], Path(first["run_dir"])
+    (path / "physics.json").write_text("{}")
+    complete(bridge, "reference", run, video=str(fake[2]), at="0:start,3:middle,6:end")
+    result = bridge.call("tune_push", run=run, keys=["block=red"], take="t", max_trials=6,
+                       push={"waypoints": [[0, 0, -0.2], [6, 0, 0]]}, wait_s=10)["operation"]["result"]
+    assert list(result)[0] == "headline" and result["ok"] is False and result["pusher_tracked"] is False
+    assert result["stopped_because"] == "pusher did not track" and len(result["trials"]) == 1 and result["takes"] == ["t-1"]
+    assert result["headline"].startswith("PUSHER DID NOT TRACK ITS PATH") and result["error"] == result["headline"]
+    assert "Stopped after trial 1 of 6" in result["note"] and "Not within tolerance" not in result["note"]
+    assert not (path / "t-2.json").exists()
+    assert "tune_push stopped early: PUSHER DID NOT TRACK" in Path(bridge.call("report", run=run, wait_s=10)["operation"]["result"]["report"]).read_text()
+
+
+def test_template_moves_the_pusher_under_mujoco_so_cuda_matches_cpu():
+    text = template.scene_text("tee")
+    assert "from robosimstudio.specs.physics import MUJOCO_500HZ" in text and "physics=MUJOCO_500HZ" in text
+    assert '"solver": type(sim.pipeline.solver).__name__' in text
+    assert 'z=PUSHER_Z)' in text and "q[c + 3:c + 7] = [0.0, 0.0, 0.0, 1.0]" in text  # the pusher is held upright at its height
+    compile(text, "scene.py", "exec")
+
+
+def test_start_on_cuda_warns_that_the_first_run_compiles_kernels_and_cpu_does_not(fake):
+    bridge, scene, _, _ = fake
+    gpu = bridge.call("start", name="g", scene=str(scene), device="cuda:0", allow_concurrent_gpu=True, wait_s=10)
+    assert "compiles its kernels" in gpu["operation"]["result"]["gpu_note"] and "minutes" in gpu["operation"]["result"]["gpu_note"]
+    assert "gpu_note" not in start(fake)["operation"]["result"]
+
+
+def test_jenga_template_states_the_default_size_and_long_axis():
+    assert "x is the long axis" in template.SIZE_MEANING["jenga"] and "0.072 x 0.024 x 0.014" in template.SIZE_MEANING["jenga"]
+    assert "x is the long axis" in template.PARAMETERS["size"]
 
 
 def test_the_workspace_follows_the_shared_rule(tmp_path, monkeypatch):
