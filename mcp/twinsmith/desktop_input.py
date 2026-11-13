@@ -13,7 +13,7 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated, Iterable
+from typing import Annotated, Any, Iterable
 
 from pydantic import Field
 
@@ -24,7 +24,8 @@ except ImportError:  # The standard host tools can still import on non-Unix plat
 
 from Xlib import X, XK
 from Xlib.ext import xtest
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Image
+from mcp.types import CallToolResult, TextContent
 
 from . import screen
 from .local_tools import DESKTOP_INPUT, ScopedTools
@@ -39,6 +40,15 @@ _Height = Annotated[int, Field(description="The window height you inspected, in 
 _CoordSpace = Annotated[str, Field(description="window: x/y are original window pixels. Or the coord_space token a "
                                                "screenshot printed: x/y are pixels of that image (also a zoomed crop).")]
 _ShotAfter = Annotated[bool, Field(description="Also return a screenshot of the window after the action.")]
+_Steps = Annotated[list[dict[str, Any]], Field(
+    min_length=1, max_length=10,
+    description="1-10 steps run in order, each {action, ...that action's arguments}, e.g. "
+                "{\"action\": \"click\", \"x\": 10, \"y\": 20}.",
+    json_schema_extra={"items": {
+        "type": "object", "required": ["action"],
+        "properties": {"action": {"type": "string", "enum": ["click", "drag", "scroll", "type", "key"]}},
+        "description": "click: x, y, button, clicks; drag: x, y, end_x, end_y; scroll: x, y, direction, steps; "
+                       "type: text; key: key, modifiers. x/y in coord_space."}})]
 
 _MAX_TEXT = 200
 _MAX_SCROLL = 10
@@ -268,10 +278,36 @@ def _click(disp, button: int) -> None:
         disp.sync()
 
 
-def _step_click(window_id: int, pid: int, x: int, y: int, width: int, height: int,
-                button: str = "left", clicks: int = 1) -> str:
+def _check_click(button: str, clicks: int) -> None:
     if button not in _BUTTONS or clicks not in (1, 2):
         raise ValueError("button must be left, middle or right; clicks must be 1 or 2")
+
+
+def _scroll_button(direction: str, steps: int) -> int:
+    buttons = {"up": 4, "down": 5, "left": 6, "right": 7}
+    if direction not in buttons or not 1 <= steps <= _MAX_SCROLL:
+        raise ValueError("direction must be up, down, left or right and steps must be 1–10")
+    return buttons[direction]
+
+
+def _check_text(text: str) -> None:
+    if not text or len(text) > _MAX_TEXT or any(not 32 <= ord(c) <= 126 for c in text):
+        raise ValueError("text must contain 1–200 printable ASCII characters")
+
+
+def _key_symbol(key: str, modifiers: list[str]) -> int:
+    if len(set(modifiers)) != len(modifiers) or any(m not in _MODIFIERS for m in modifiers):
+        raise ValueError("modifiers may contain ctrl, shift, alt and super, at most once each")
+    if key.lower() in _KEYS:
+        return XK.string_to_keysym(_KEYS[key.lower()])
+    if len(key) == 1 and key.isascii() and key.isalnum():
+        return ord(key)
+    raise ValueError("unsupported key; use a navigation key, F1–F12, or a letter/digit")
+
+
+def _step_click(window_id: int, pid: int, x: int, y: int, width: int, height: int,
+                button: str = "left", clicks: int = 1) -> str:
+    _check_click(button, clicks)
     for _ in range(clicks):
         with _target(window_id, pid) as (disp, window, geom):
             _point(disp, window, geom, x, y, width, height)
@@ -308,19 +344,16 @@ def _step_drag(window_id: int, pid: int, x: int, y: int, end_x: int, end_y: int,
 
 def _step_scroll(window_id: int, pid: int, x: int, y: int, width: int, height: int,
                  direction: str, steps: int = 1) -> str:
-    buttons = {"up": 4, "down": 5, "left": 6, "right": 7}
-    if direction not in buttons or not 1 <= steps <= _MAX_SCROLL:
-        raise ValueError("direction must be up, down, left or right and steps must be 1–10")
+    button = _scroll_button(direction, steps)
     for _ in range(steps):
         with _target(window_id, pid) as (disp, window, geom):
             _point(disp, window, geom, x, y, width, height)
-            _click(disp, buttons[direction])
+            _click(disp, button)
     return f"sent {steps} scroll step(s) {direction} to window {window_id}"
 
 
 def _step_type(window_id: int, pid: int, text: str) -> str:
-    if not text or len(text) > _MAX_TEXT or any(not 32 <= ord(c) <= 126 for c in text):
-        raise ValueError("text must contain 1–200 printable ASCII characters")
+    _check_text(text)
     with _target(window_id, pid) as (disp, window, _):
         if _keyboard_grabbed(disp):  # a menu, or a lock screen the lock probe did not detect
             raise RuntimeError("another client holds the keyboard grab (an open menu or a lock screen), so "
@@ -348,16 +381,8 @@ def _step_type(window_id: int, pid: int, text: str) -> str:
 
 
 def _step_key(window_id: int, pid: int, key: str, modifiers: list[str] | None = None) -> str:
-    name = key.lower()
     modifiers = modifiers or []
-    if len(set(modifiers)) != len(modifiers) or any(m not in _MODIFIERS for m in modifiers):
-        raise ValueError("modifiers may contain ctrl, shift, alt and super, at most once each")
-    if name in _KEYS:
-        symbol = XK.string_to_keysym(_KEYS[name])
-    elif len(key) == 1 and key.isascii() and key.isalnum():
-        symbol = ord(key)
-    else:
-        raise ValueError("unsupported key; use a navigation key, F1–F12, or a letter/digit")
+    symbol = _key_symbol(key, modifiers)
     with _target(window_id, pid) as (disp, window, _):
         _focus(disp, window)
         if len(key) == 1 and key.isascii() and key.isalpha() and (
@@ -378,6 +403,60 @@ def _after(window_id: int, text: str, screenshot_after: bool):
     if not screenshot_after:
         return f"{text}; verify the resulting UI"
     return [text, *screen.capture(window_id=window_id)]
+
+
+# One batch step: action -> (required, optional) arguments, and every argument's type.
+_BATCH = {"click": (("x", "y"), ("button", "clicks")), "drag": (("x", "y", "end_x", "end_y"), ()),
+          "scroll": (("x", "y", "direction"), ("steps",)), "type": (("text",), ()), "key": (("key",), ("modifiers",))}
+_TYPES = {"x": int, "y": int, "end_x": int, "end_y": int, "clicks": int, "steps": int, "button": str,
+          "direction": str, "text": str, "key": str, "modifiers": list}
+_STEPS = {"click": _step_click, "drag": _step_drag, "scroll": _step_scroll, "type": _step_type, "key": _step_key}
+
+
+def _batch_plan(steps: list, coord_space: str, width: int, height: int) -> list[tuple[str, dict]]:
+    """Every step checked, and its points mapped to window pixels, before anything is sent."""
+    if not isinstance(steps, list) or not 1 <= len(steps) <= 10:
+        raise ValueError("actions must hold 1-10 steps; nothing was sent")
+    plan = []
+    for i, step in enumerate(steps):
+        try:
+            if not isinstance(step, dict) or step.get("action") not in _BATCH:
+                raise ValueError("action must be click, drag, scroll, type or key")
+            name = step["action"]
+            required, optional = _BATCH[name]
+            args = {key: value for key, value in step.items() if key != "action"}
+            if set(required) - set(args) or set(args) - set(required) - set(optional):
+                raise ValueError(f"{name} needs {', '.join(required)}"
+                                 + (f" and may take {', '.join(optional)}" if optional else "") + " only")
+            for key, value in args.items():
+                if type(value) is not _TYPES[key] or (key == "modifiers" and not all(isinstance(m, str) for m in value)):
+                    raise ValueError(f"{key} must be {'a list of strings' if key == 'modifiers' else _TYPES[key].__name__}")
+            if name == "click":
+                _check_click(args.get("button", "left"), args.get("clicks", 1))
+            elif name == "scroll":
+                _scroll_button(args["direction"], args.get("steps", 1))
+            elif name == "type":
+                _check_text(args["text"])
+            elif name == "key":
+                _key_symbol(args["key"], args.get("modifiers", []))
+            if "x" in args:
+                args["x"], args["y"] = screen.map_point(coord_space, args["x"], args["y"], width, height)
+            if "end_x" in args:
+                args["end_x"], args["end_y"] = screen.map_point(coord_space, args["end_x"], args["end_y"], width, height)
+        except ValueError as exc:
+            raise ValueError(f"actions[{i}]: {exc}; nothing was sent") from None
+        plan.append((name, args))
+    return plan
+
+
+def _failed_after(window_id: int, text: str, screenshot_after: bool):
+    """A failed action's answer: an error, with the window as it looks now when screenshot_after is set."""
+    if not screenshot_after:
+        raise RuntimeError(text)
+    shot = [block.to_image_content() if isinstance(block, Image) else TextContent(type="text", text=str(block))
+            for block in screen.capture(window_id=window_id)]
+    return CallToolResult(content=[TextContent(type="text", text=text), *shot],
+                          structuredContent={"result": text}, isError=True)
 
 
 def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None = None) -> None:
@@ -458,3 +537,30 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         with _action_lock():
             text = _step_key(window_id, expected_pid, key, modifiers)
         return _after(window_id, text, screenshot_after)
+
+    @mcp.tool(annotations=DESKTOP_INPUT)
+    def computer_batch(window_id: _WindowId, expected_pid: _Pid, expected_width: _Width, expected_height: _Height,
+                       actions: _Steps, coord_space: _CoordSpace = "window", screenshot_after: _ShotAfter = False):
+        """Run 1-10 click, drag, scroll, type or key steps in one selected X11 window, in order.
+
+        Every step is checked before any input is sent; each still checks the window, PID, size and
+        covering windows. It stops at the first failing step and says how many ran.
+        Input affects the shared desktop and can trigger destructive or external actions.
+        """
+        plan = _batch_plan(actions, coord_space, expected_width, expected_height)
+        done: list[str] = []
+        failure = None
+        with _action_lock():
+            for name, args in plan:
+                size = {"width": expected_width, "height": expected_height} if "x" in args else {}
+                try:
+                    done.append(_STEPS[name](window_id, expected_pid, **args, **size))
+                except Exception as exc:  # noqa: BLE001 - reported with the steps that ran
+                    failure = f"actions[{len(done)}] ({name}) failed: {exc}"
+                    break
+        ran = "; ".join(f"{i}: {text}" for i, text in enumerate(done))
+        if failure:
+            return _failed_after(window_id, f"batch stopped: {failure}. {len(done)} of {len(plan)} step(s) ran "
+                                            f"before it{': ' + ran if ran else ''}. Capture the window before "
+                                            "retrying.", screenshot_after)
+        return _after(window_id, f"batch ran all {len(plan)} step(s): {ran}", screenshot_after)
