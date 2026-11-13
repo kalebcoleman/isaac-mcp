@@ -20,7 +20,7 @@ import os
 import sys
 import time
 
-os.environ.setdefault("ISAAC_MCP_LOCAL_TOOLS", "all,sim_launch")
+os.environ.setdefault("ISAAC_MCP_TOOLSETS", "all,+launch")
 
 # Nothing listens on port 1 without root; a pin takes precedence over bridge discovery.
 OFFLINE_PORT = "1"

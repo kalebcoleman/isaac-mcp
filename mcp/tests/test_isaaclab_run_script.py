@@ -1,4 +1,4 @@
-"""isaaclab__run_script: managed user-script jobs (fake scripts, no GPU, nvidia-smi mocked)."""
+"""run_script: managed user-script jobs (fake scripts, no GPU, nvidia-smi mocked)."""
 
 import asyncio
 import json
@@ -251,21 +251,21 @@ def test_tool_layer_json_and_errors(tmp_path, monkeypatch):
     from mcp.server.fastmcp import FastMCP
 
     server = FastMCP("t")
-    tools.register_isaaclab_tools(server)
-    afn = server._tool_manager._tools["isaaclab__run_script"].fn
+    tools.register_isaaclab_tools(server, groups={"core", "lab", "code"})
+    afn = server._tool_manager._tools["run_script"].fn
 
     def fn(**kw):  # the tool is async so a VRAM wait cannot block the event loop
-        return asyncio.run(afn(**kw))
+        return asyncio.run(afn(uses_gpu=True, **kw))
 
     bad = json.loads(fn(script=str(tmp_path / "nope.py")))
     assert "existing .py" in bad["error"]
     ok = json.loads(fn(script=str(script(tmp_path, "print('hi')\n"))))
     assert "job_id" in ok
     wait_done(ok["job_id"])
-    ann = server._tool_manager._tools["isaaclab__run_script"].annotations
+    ann = server._tool_manager._tools["run_script"].annotations
     assert ann.readOnlyHint is False and ann.idempotentHint is False
     monkeypatch.setattr(tools._install, "locate_install", lambda: None)
-    assert "no Isaac Lab install" in json.loads(fn(script=str(tmp_path / "s.py")))["error"]
+    assert "job_id" in json.loads(fn(script=str(tmp_path / "s.py")))
 
 
 def test_wait_for_vram_needs_a_minimum(tmp_path):

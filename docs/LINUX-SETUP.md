@@ -356,15 +356,13 @@ A successful job launch is not a completed job: inspect status and logs. Jobs no
 alongside an active Kit bridge; coordinate GPU ownership instead of bypassing the guard by default.
 
 **Desktop input and managed sessions** are opt-in host groups. Set
-`ISAAC_MCP_LOCAL_TOOLS=all,screen_input,sim_launch` in the client server environment only
+`ISAAC_MCP_TOOLSETS=all,+input,+launch` in the client server environment only
 when both are needed. Desktop input acts on a shared X11 session; verify window/PID first.
 Managed launches require resource checks and distinct endpoints. See [host tools](TOOLS-HOST.md).
 
 **Your project assets** need an explicitly approved trusted folder and a host/Kit-accessible
 staging/cache location. Approval can include a bounded project copy, not just one USD file.
-Loading native assets is not sandboxed. `assets__prepare_workstation` prepares a private cache
-from the operator's approved workstation USD; it does not load the scene or overwrite an
-existing cached asset. Vention-specific routing is separate from generic project import.
+Loading native assets is not sandboxed. Use `assets__import_path` for generic project import.
 No private workstation or personal asset is required for the initial read-only connection check.
 Follow [project setup and exact tool parameters](TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation)
 and [asset license notices](provenance/ASSETS.md).

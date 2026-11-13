@@ -34,7 +34,7 @@ a bridge, and return an error with connection guidance when none is available. S
 | Group | Reference |
 |---|---|
 | `refresh_tools`, `use_bridge`, screenshots, recording, window placement, `join_videos` | [Host tools](../docs/TOOLS-HOST.md) |
-| `status`, `run_python`, `job_status`, `job_cancel`, `list_bridges`, `reload_tools`, file tools (bridge built-ins) | [Bridge built-ins](../docs/TOOLS-HOST.md#kit-bridge-built-ins) |
+| `status`, `run_python`, `job_status`, `job_cancel`, `reload_tools`, file tools (bridge built-ins) | [Bridge built-ins](../docs/TOOLS-HOST.md#kit-bridge-built-ins) |
 | `sim__*`, `assets__*` | [Scene tools](../docs/TOOLS-SCENE.md) |
 | `ur5e_dt__*` | [UR5e tools](../docs/TOOLS-UR5E.md) |
 | `isaaclab__*`, `run_script` | [Isaac Lab and script-job tools](../docs/TOOLS-ISAACLAB.md) |
@@ -73,11 +73,11 @@ started read-only. The protocol, the scheduling rules and both switches are in
 
 ## What a client is shown
 
-About 45 tools: related single-purpose tools are offered as one tool with an `action` argument
+The default profile lists 30 tools; `all` lists 47: related single-purpose tools are offered as one tool with an `action` argument
 (`sim__prim` with `action="create"`, `"get"`, `"delete"`, ...). `action="help"` returns the full
 description of each action. Every single-purpose name (`sim__prim__create`) still works when
 called, so older prompts and scripts keep running; those names are deprecated and are no longer
-listed. Set `ISAAC_MCP_GROUP_TOOLS=0` to list every tool singly, with no groups. The groups are
+listed. Disabled toolsets register neither grouped tools nor their member tools. The groups are
 defined in `isaac_mcp/tool_groups.py`.
 
 ## Loading the bridge in another Kit app

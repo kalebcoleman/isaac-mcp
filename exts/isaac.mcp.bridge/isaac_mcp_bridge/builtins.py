@@ -382,27 +382,6 @@ def cmd_status(bridge, detail: bool = True) -> Dict[str, Any]:
     }
 
 
-def cmd_list_bridges(bridge) -> Dict[str, Any]:
-    """Every bridge advertised on this machine by a live process, this one included."""
-    from .bridge import _alive, runtime_dir, valid_portfile
-
-    found: List[Dict[str, Any]] = []
-    try:
-        names = os.listdir(runtime_dir())
-    except OSError:
-        return {"bridges": found}
-    for name in sorted(names):
-        try:
-            with open(os.path.join(runtime_dir(), name)) as stream:
-                info = json.load(stream)
-        except (OSError, ValueError):
-            continue
-        if valid_portfile(name, info) and _alive(info["pid"]):
-            info.pop("token_file", None)
-            found.append(info)
-    return {"bridges": found}
-
-
 def cmd_list_tools(bridge) -> Dict[str, Any]:
     return {"tools": bridge.get_registered_tools()}
 
@@ -431,12 +410,6 @@ def builtin_tools(bridge) -> List:
             name="run_python", description=_RUN_PYTHON_DESCRIPTION, parameters=_RUN_PYTHON_PARAMETERS,
             # The code may advance the app from inside the call, so it runs alone.
             handler=bound(cmd_run_python), exclusive=True),
-        ToolDefinition(
-            name="list_bridges",
-            description="List all isaac.mcp.bridge bridges advertised on this box (this Kit process and any "
-                        "siblings, e.g. a second instance on an ephemeral port). status lists them too, and "
-                        "also answers when no bridge is running.",
-            handler=bound(cmd_list_bridges), read_only=True, inline=True),
         ToolDefinition(
             name="reload_tools",
             description="Hot-reload one of a project's own tool packages: unregister it, import it again and "

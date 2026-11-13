@@ -2,8 +2,7 @@
 
 A group lists the single-purpose tools behind it. Those keep their names and stay callable, so a
 script or an older prompt that names one still works, but they are left out of the tool list: a
-client reads about 45 tools instead of about 140. ``ISAAC_MCP_GROUP_TOOLS=0`` lists the
-single-purpose tools as before, with no groups. Tools named in no group are always listed.
+client reads compact grouped tools. Tools named in no group are always listed.
 
 Pure data and stdlib only: the server builds the grouped tools from this (grouped_tools.py), and
 the documentation checks read it without the MCP SDK.
@@ -81,23 +80,14 @@ GROUPS: Dict[str, tuple] = {
         "summary": "isaaclab__metrics_summary", "curve": "isaaclab__tensorboard_tail"}),
     "screen_recording": ("Record the desktop or a window to MP4: start, stop, status.", {
         "start": "start_screen_recording", "stop": "stop_screen_recording", "status": "screen_recording_status"}),
-    "windows": ("Desktop windows: list, raise, move, tile.", {
-        "list": "list_windows", "raise": "raise_window", "move": "move_window", "tile": "tile_windows"}),
+    "windows": ("Desktop windows: info, list, raise, move, tile.", {
+        "info": "screen_info", "list": "list_windows", "raise": "raise_window", "move": "move_window", "tile": "tile_windows"}),
     "window_input": ("Mouse and keyboard into the focused window (opt-in group).", {
         "click": "window_click", "drag": "window_drag", "scroll": "window_scroll", "type": "window_type",
         "key": "window_key"}),
     "sim__session": ("Simulators this server manages (opt-in group): launch, list, status, stop.", {
         "launch": "sim__launch", "list": "sim__list", "status": "sim__status", "stop": "sim__stop"}),
 }
-
-# Listed under another tool that does the same job; callable, and left out of the list like group members.
-SUPERSEDED: Dict[str, str] = {
-    "list_bridges": "status",                 # status lists the advertised bridges, and answers with none running
-    "isaaclab__run_script": "run_script",     # the same runner; run_script(uses_gpu=true, install=...) is this tool
-    "isaaclab__runs_cancel": 'jobs(action="cancel")',   # job_cancel stops a process job too
-}
-
-GROUP_ENV = "ISAAC_MCP_GROUP_TOOLS"      # "0": list every tool singly, with no grouped tools
 
 # Tools whose answer, or whose error, quotes the caller's own data, code or a log: returned exactly
 # as it is. Every other answer and error has tool names put in their listed form (listed_form).
@@ -113,22 +103,18 @@ def members() -> Dict[str, tuple]:
 
 def hidden(registered: Set[str]) -> Set[str]:
     """The registered tools a client is not shown by default."""
-    return (set(members()) | set(SUPERSEDED)) & set(registered)
+    return set(members()) & set(registered)
 
 
-def listed(registered: Set[str], grouped: bool = True) -> List[str]:
+def listed(registered: Set[str]) -> List[str]:
     """What a client is shown: groups with at least one registered member, and every ungrouped tool."""
     registered = set(registered)
-    if not grouped:
-        return sorted(registered)
     groups = {group for group, (_, actions) in GROUPS.items() if registered & set(actions.values())}
     return sorted((registered - hidden(registered)) | groups)
 
 
 def replacement(tool: str) -> Optional[str]:
     """How to say the same thing with a listed tool, for the documentation."""
-    if tool in SUPERSEDED:
-        return SUPERSEDED[tool]
     found = members().get(tool)
     return f'{found[0]}(action="{found[1]}")' if found else None
 
@@ -138,7 +124,7 @@ def _spoken(tool: str) -> str:
     found = members().get(tool)
     if found:
         return f"{found[0]} action={found[1]}"
-    return SUPERSEDED[tool].replace('(action="', " action=").replace('")', "")
+    return tool
 
 
 def _names(tools) -> str:
@@ -148,9 +134,9 @@ def _names(tools) -> str:
 # A name with a namespace (sim__prim__get) is only ever a tool. A bare one (get_file, job_status,
 # window_type) is also an ordinary word for a file, a prim or a JSON key, so it is rewritten only
 # where prose names a tool: after a space, a backtick or a bracket, and not inside a path or a key.
-_NAMESPACED = re.compile(r"(?<![A-Za-z0-9_/.\-])(" + _names(t for t in list(members()) + list(SUPERSEDED) if "__" in t)
+_NAMESPACED = re.compile(r"(?<![A-Za-z0-9_/.\-])(" + _names(t for t in list(members()) if "__" in t)
                          + r")(?![A-Za-z0-9_*-])")
-_BARE_NAMES = _names(t for t in list(members()) + list(SUPERSEDED) if "__" not in t)
+_BARE_NAMES = _names(t for t in list(members()) if "__" not in t)
 # ... or where a JSON value starts with a call, as in "next": "job_status(job_id=...)".
 _BARE = re.compile(r"(?:(?:(?<=[ `(])|^)(" + _BARE_NAMES + r")(?=[ `().,;:]|$)(?!\.[A-Za-z0-9])|(?<=\")(" + _BARE_NAMES + r")(?=\())")
 

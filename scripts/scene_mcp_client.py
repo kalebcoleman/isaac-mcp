@@ -22,9 +22,8 @@ def parameters(port):
         command=sys.executable,
         args=["-m", "isaac_mcp.server"],
         env={
-            # Defaults for a scene-only client; an exported value opts in (e.g. all,screen_input).
-            "ISAAC_MCP_LOCAL_TOOLS": "gateway,screen_read,screen_capture,screen_control",
-            "ISAAC_MCP_BUILTINS": "0",
+            # Defaults for a scene-only client; an exported value opts in (e.g. default,+input).
+            "ISAAC_MCP_TOOLSETS": "default,-code",
             **os.environ,
             "PYTHONPATH": str(ROOT / "mcp"),
             "ISAAC_MCP_PORT": str(port),

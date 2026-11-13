@@ -566,10 +566,6 @@ Without strict mode, a missing local file loads from NVIDIA. `doctor --local-onl
 and shows `layer: remote` for each such asset. Add the file, then set
 `ISAAC_MCP_ASSET_STRICT=1`.
 
-**`assets__prepare_workstation` refuses the folder**
-It refuses a group- or world-writable store. Run any `isaac_assets.py` write command
-(`pin` is enough) to tighten your own folders, or `chmod go-w` them.
-
 **Project file seems ignored**
 Run `isaac_assets.py where` from the same directory Kit started in. Check
 `ISAAC_MCP_PROJECT`, which wins over the directory walk.

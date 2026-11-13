@@ -114,9 +114,8 @@ The bridge CLI is `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client` fr
    generic scene and UR5e catalog tools are listed even with Kit offline, so a listed tool does not
    mean Kit is up: `status` tells you. Kit can take 2-3 minutes to start; while it boots, call
    `refresh_tools(wait_s=120)` (max 180) instead of retrying by hand.
-2. Find bridges. Use `list_bridges` if it is listed. Otherwise run the CLI in a shell
-   (`"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client --list-bridges`, or the checkout form above), which works even when bridge built-ins are hidden
-   by `ISAAC_MCP_BUILTINS=0` or `ISAAC_MCP_NAMESPACE`. It exits 2 with `[]` when none is advertised.
+2. Find bridges with `status`, or run `python3 -m isaac_mcp.client --list-bridges`.
+   The CLI exits 2 with `[]` when none is advertised.
 3. With several bridges, call `use_bridge` with the listed port, then `status`, and check that the
    PID and app version are the process you mean.
 4. For Isaac Lab work, call `isaaclab__install_info`. Inspect the returned error: installation
@@ -127,16 +126,14 @@ The bridge CLI is `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client` fr
    environment merely because a probe fails.
 5. For generic scene or project-asset work, call `sim__quick_start` for a new scene, or
    `sim__stage__info` on an existing one, and `assets__roots` for your own files. The
-   71-tool pack (59 `sim`, 12 `assets`) is on by default; `ISAAC_MCP_SCENE_TOOLS=0` hides it per server.
+   70-tool pack (59 `sim`, 11 `assets`) is split across toolsets; `ros2` and `kit_debug` are off by default.
    `assets__roots`, `assets__scan`, `assets__search` and `assets__packs` / `assets__pack_*` run on the host; the rest need the
    `sim-tools` extension in the selected Kit. These tools are visibility-filtered, not an access
    boundary.
 
-If a tool you expect is missing, it is usually filtered rather than broken:
-`ISAAC_MCP_LOCAL_TOOLS` selects host groups (`window_*` needs `screen_input`; managed
-`sim__launch`, `sim__list`, `sim__status` and `sim__stop` need `sim_launch`). The generic
-`sim__*` / `assets__*` pack is separate. `ISAAC_MCP_NAMESPACE` / `ISAAC_MCP_BUILTINS` filter
-bridge tools.
+If a tool you expect is missing, call `status` to see disabled toolsets and how to enable them.
+Set `ISAAC_MCP_TOOLSETS=default,+lab` for Lab, `+workcell` for the twin, and explicitly add
+`+input` or `+launch` for desktop input or managed simulator sessions. Restart after changing configuration.
 
 ## Isaac Lab: train, watch, evaluate
 
@@ -157,7 +154,7 @@ Details and parameter tables: [references/isaac-lab.md](references/isaac-lab.md)
    `isaaclab__checkpoints_list`. Judge by task metrics, not reward alone.
 6. `isaaclab__eval` (headless) or `isaaclab__play` (window) with the chosen checkpoint. For play,
    `isaaclab__runs_status` returns `window.id`; pass it to `screenshot(window_id=...)` or
-   `start_screen_recording(window_id=...)`, then stop the job with `isaaclab__runs_cancel`.
+   `start_screen_recording(window_id=...)`, then stop the job with `jobs(action="cancel")`.
 
 ## Isaac Sim: inspect and change a live scene
 
@@ -373,7 +370,7 @@ worked while locked on GNOME.
 
 | Symptom | Likely cause | Action |
 |---|---|---|
-| `run_python`/`status` not listed | `ISAAC_MCP_BUILTINS=0` (they are listed offline otherwise) | Use the `isaac_mcp.client` CLI, or ask the user to enable built-ins |
+| `run_python` not listed | The `code` toolset is off; `status` is always present | Add `+code` to toolsets and restart |
 | `refresh_tools`: no bridge reachable, or no response for `list_tools` | Kit still starting | `refresh_tools(wait_s=120)`; the error names a managed session and its age |
 | `refresh_tools` reports connection refused | No bridge on that port | Check the listing; start Kit with `isaac.mcp.bridge` only if none is advertised and the user agrees |
 | `refresh_tools` refused right after `sim__launch` | The server dials its configured port, not the new session's | `use_bridge(port=<the launched port>)` (sim__status's `next` says so) |
@@ -381,7 +378,7 @@ worked while locked on GNOME.
 | `window_*` refused: "the desktop is locked" | The lock screen would get the input | For Isaac Sim use `sim__ui__find`/`sim__ui__act`; other apps need the desktop unlocked |
 | New tools not shown after refresh | Client ignores `tools/list_changed` | Reconnect the MCP server, or use the bridge CLI: `... list_tools --port <port>` |
 | Tools vanish, the client says the server "disconnected" and reconnected | Each client owns one server process; it ended (EOF, signal or crash) and a new one started | Read `~/.local/state/isaac-mcp/server-<pid>.log` (newest file first; the last lines say EOF, a signal, or a traceback). `status` shows `host.code_drift: true` when the checkout changed under a running server: reconnect |
-| Tool count differs from 121 | 48 are listed when tools are grouped (the default); `ISAAC_MCP_GROUP_TOOLS=0` lists all 121. Otherwise `ISAAC_MCP_LOCAL_TOOLS` etc. in the client entry: +5 `screen_input`, +4 `sim_launch` = 130 | Compare with the filters on the log's `process start` line |
+| Tool count differs from 84 | 30 grouped tools are shown by default; `all` registers 118 members, plus 5 `input` and 4 `launch` = 127 | Inspect `status.toolsets` and the startup on/off log |
 | Train/eval/play refused with `kit_bridges` | GPU guard | Ask: stop the Sim, or pass `allow_concurrent_gpu=true` |
 | `path outside allowed roots` | Metrics/checkpoint path not under the Lab or jobs roots | Use `run_dir` from `isaaclab__runs_status`, or set `ISAACLAB_LOGS_DIR` |
 | `STALE_TARGET` from `sim__*` / `assets__*` | Stage or session changed (Kit restarted, stage opened) | The message names the current `session_id` and `stage_id`: resend with those, never the old ones |
@@ -401,5 +398,5 @@ worked while locked on GNOME.
 
 Tool references live in the isaac-mcp repository under `docs/`: `TOOLS-HOST.md` (gateway, screen,
 input, sim sessions, bridge built-ins), `TOOLS-ISAACLAB.md`, `TOOLS-UR5E.md`, `TOOLS-SCENE.md`
-(the 71 generic tools: 59 `sim` and 12 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
+(the 70 generic tools: 59 `sim` and 11 `assets`, and their limits), and `MCP-SERVER.md` for client setup.
 `AGENTS.md` at the repository root gives the tier map and current tool counts.

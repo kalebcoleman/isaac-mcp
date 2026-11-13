@@ -6,7 +6,7 @@ required. For behavior, refusals and limits, read the page linked in each sectio
 
 A client is shown most of these as an action of a [grouped tool](TOOLS-HOST.md#grouped-tools): each
 such entry says "Listed as", and takes the same arguments either way. The single-purpose name still
-works when called, and `ISAAC_MCP_GROUP_TOOLS=0` lists it.
+works when called if its toolset is enabled. Disabled toolsets register no tools.
 
 Arguments are shown as `name` (type, required) or `name` (type, default). Generic scene tools refuse
 arguments they do not declare, so a misspelled name is an error rather than being ignored. A live
@@ -78,6 +78,8 @@ Re-discover the bridge's tools and register new ones. Use after Kit starts or re
 
 ### `screen_info`
 
+Listed as `windows(action="info")`.
+
 Report the X11 display, monitors, capture directories and recording state.
 
 No arguments.
@@ -142,9 +144,9 @@ Tile 2-6 windows over a monitor's work area, e.g. Isaac Sim left and RViz 2 righ
 
 Switch this MCP server to another running Kit bridge on this machine.
 
-- `port` (int, required): Bridge TCP port from --list-bridges or list_bridges.
+- `port` (int, required): Bridge TCP port from --list-bridges or status.
 
-## Desktop input (opt-in: `screen_input`)
+## Desktop input (opt-in: `input` toolset)
 
 Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-desktop-input). 5 tools.
 
@@ -214,7 +216,7 @@ Type up to 200 printable ASCII characters into the focused selected X11 window.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
 - `text` (str, required): Up to 200 printable ASCII characters.
 
-## Simulator sessions (opt-in: `sim_launch`)
+## Simulator sessions (opt-in: `launch` toolset)
 
 Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-simulator-sessions). 4 tools.
 
@@ -260,7 +262,7 @@ Stop only the identified managed process; unsaved changes can be lost. Refuses e
 
 ## Isaac Lab
 
-Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 18 tools.
+Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 16 tools.
 
 ### `isaaclab__checkpoint_register`
 
@@ -374,7 +376,7 @@ Summarise TensorBoard scalars of a run (last, min, max, step, count per tag), or
 
 Listed as `isaaclab__launch(action="play")`.
 
-Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
+Play a checkpoint with a window (interactive); stop it with job_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
 
 - `task` (str, required): Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.
 - `checkpoint` (str, required): Checkpoint file from isaaclab__checkpoints_list. Must lie under the Isaac Lab checkout, the jobs folder, a python_paths or cwd folder you pass, or a folder in ISAACLAB_CHECKPOINT_ROOTS; the error names the allowed roots.
@@ -431,37 +433,6 @@ Record an MP4 of a task with no window, as a job. With a checkpoint it plays the
 - `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
 - `cwd` (str | None, default `None`): Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.
 - `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
-
-### `isaaclab__run_script`
-
-Listed as `run_script`.
-
-Run your own bounded Python script as a managed job (kind "script") and return its job_id at once.
-
-- `script` (str, required): Path to an existing .py file. It runs as `<python> <script> <args...>` with no shell.
-- `args` (list[str] | None, default `None`): Command-line arguments for the script.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables; the same rules as the env argument of isaaclab__train (PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value).
-- `python_paths` (list[str] | None, default `None`): Absolute folders added to the front of PYTHONPATH (before the install's own path, never replacing it): the import roots of a project that is not installed, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way.
-- `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
-- `python` (str | None, default `None`): Interpreter. Default: the configured ISAACLAB_PYTHON.
-- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
-- `cwd` (str | None, default `None`): Working directory. Default: the script's folder.
-- `label` (str | None, default `None`): Short name, used in the job_id and runs_list.
-- `timeout_s` (float, default `600`): Hard wall limit in seconds; the whole process group is killed at expiry.
-- `min_free_vram_mb` (int | None, default `None`): Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.
-- `wait_for_vram_s` (float, default `0`): With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).
-- `single_instance_key` (str | None, default `None`): Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.
-- `allow_concurrent` (bool, default `False`): Start even if another job is running; a 16 GB GPU normally fits one.
-- `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
-
-### `isaaclab__runs_cancel`
-
-Listed as `jobs(action="cancel")`.
-
-Stop a job: SIGTERM to its process group, SIGKILL after grace_s seconds.
-
-- `job_id` (str, required): job_id from isaaclab__train, eval or play, or isaaclab__runs_list.
-- `grace_s` (int, default `10`): Seconds between SIGTERM and SIGKILL.
 
 ### `isaaclab__runs_list`
 
@@ -551,13 +522,39 @@ Run any Python script as a managed job: a job_id at once, a log, a hard timeout,
 - `label` (str | None, default `None`): Short name, used in the job_id and runs_list.
 - `timeout_s` (float, default `600`): Hard wall limit in seconds; the whole process group is killed at expiry.
 - `single_instance_key` (str | None, default `None`): Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.
-- `uses_gpu` (bool, default `False`): true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget), as in isaaclab__run_script. Default false: it starts at once and does not block GPU jobs.
+- `uses_gpu` (bool, default `False`): true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget). Default false: it starts at once and does not block GPU jobs.
 - `min_free_vram_mb` (int | None, default `None`): Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.
 - `wait_for_vram_s` (float, default `0`): With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).
 
+## RoboSimStudio (opt-in: `robosim` toolset)
+
+Reference: [ROBOSIM.md](ROBOSIM.md). 1 tools.
+
+### `robosim`
+
+RSS live real-to-sim via its private Python: start a trusted scene, extract reference video frames, snapshot, compare masks, record a rollout, compare_take, report and stop. Image-space metrics only, not physics fitting. Long actions return a run to poll with status. CPU is never auto-upgraded to GPU.
+
+- `action` (Literal['status', 'start', 'scene_template', 'reference', 'snapshot', 'compare', 'rollout', 'compare_take', 'stop', 'report'], required): Action to perform.
+- `run` (str | None, default `None`): Exact run name from start; omit for status to list runs.
+- `name` (str | None, default `None`): start: short run name; letters, digits, underscores and hyphens.
+- `scene` (str | None, default `None`): start: absolute trusted Python scene file; copied into the run. Executes code, not sandboxed.
+- `device` (Literal['cpu', 'cuda:0'] | None, default `None`): Required for start: cpu or cuda:0. Later actions inherit the run's device.
+- `video` (str | None, default `None`): reference: absolute local video file; copied before extracting frames.
+- `keys` (list[str] | None, default `None`): compare/compare_take: RSS object masks, e.g. ['cube=red'] or ['cube=#d01a10~0.1'].
+- `take` (str | None, default `None`): rollout/compare_take: take basename, without extension.
+- `routine` (str | None, default `None`): rollout: routine defined by the scene; omit for RSS's default routine.
+- `camera` (str | None, default `None`): Camera name from start's RSS status; omit for the scene's first camera.
+- `at` (str, default `'0:start,end'`): reference: RSS time anchors, e.g. '0:start,1:middle,end'.
+- `every` (int, default `4`): rollout: record every N control steps.
+- `size` (str, default `'320x240'`): snapshot/compare: WIDTHxHEIGHT pixels.
+- `width` (int, default `320`): reference: contact-sheet tile width.
+- `port` (int, default `8080`): start: live viewer TCP port (RSS listens on all interfaces).
+- `wait_s` (float, default `0`): Wait at most this many seconds; poll status with run for completion.
+- `allow_concurrent_gpu` (bool, default `False`): start: knowingly permit cuda:0 despite other GPU workloads or an unavailable GPU check.
+
 ## Bridge built-ins
 
-Reference: [TOOLS-HOST.md](TOOLS-HOST.md#kit-bridge-built-ins). 9 tools.
+Reference: [TOOLS-HOST.md](TOOLS-HOST.md#kit-bridge-built-ins). 8 tools.
 
 ### `get_file`
 
@@ -583,14 +580,6 @@ Status of background work in this Kit: run_python(background=true), sim__simulat
 
 - `job_id` (string, optional): job_id from the call that started the work. Omit to list jobs.
 - `wait_s` (number, optional): Wait up to this many seconds (0-60) for the job to end before answering, instead of polling.
-
-### `list_bridges`
-
-Listed as `status`.
-
-List all isaac.mcp.bridge bridges advertised on this box (this Kit process and any siblings, e.g. a second instance on an ephemeral port). status lists them too, and also answers when no bridge is running.
-
-No arguments.
 
 ### `put_file`
 
@@ -1422,7 +1411,7 @@ Point the active viewport camera, e.g. before a screenshot. path alone frames a 
 
 ## Assets (`assets__*`)
 
-Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 12 tools.
+Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 11 tools.
 
 ### `assets__dependencies`
 
@@ -1523,14 +1512,6 @@ Listed as `assets__pack(action="list")`.
 List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_PATH, or Kit will not see these packs. With a Kit connected it also lists kit_environment and warns when Kit and this host use different project files, stores or strict mode.
 
 No arguments.
-
-### `assets__prepare_workstation`
-
-Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `source_path` (string, required): Absolute local USD path inside an already approved trusted root.
 
 ### `assets__roots`
 

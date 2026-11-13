@@ -56,7 +56,7 @@ simulator. It is not encryption: over an untrusted network, use an SSH tunnel.
 Tools run on Kit's main loop. Three rules decide when:
 
 - **Inline** tools change nothing in Kit and need nothing from its main loop, so they are answered at once on the socket thread, whatever
-  Kit is doing: `status`, `job_status`, `list_tools`, `list_bridges`, and the file tools
+  Kit is doing: `status`, `job_status`, `list_tools`, and the file tools
   (`put_file`, `get_file`, `stat_file`), which only use the disk. So you can always ask what is
   running, wait for a job, and move a large file, without waiting for a frame or holding one up.
 - **Exclusive** tools may advance the app from inside their own call; `run_python` is one. An
@@ -99,7 +99,7 @@ The bridge listens on `localhost` only, because it runs code. From another machi
 way in is an SSH tunnel to the port. To listen on a private address instead, set `ISAAC_MCP_BIND`
 to that address (never `0.0.0.0` on a machine the internet can reach) and give the client the
 token as `ISAAC_MCP_TOKEN`, with `ISAAC_MCP_HOST` and `ISAAC_MCP_PORT`. A remote client cannot
-read the portfiles; the `list_bridges` tool, asked of any bridge it can reach, lists the others
+read the portfiles; the `status` tool, asked of any bridge it can reach, lists the others
 on that machine.
 
 Every setting is listed in [ENVIRONMENT.md](../../docs/ENVIRONMENT.md#bridge-isaacmcpbridge).

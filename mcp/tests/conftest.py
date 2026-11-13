@@ -21,6 +21,22 @@ os.environ["PYTHONPATH"] = _pythonpath
 import pytest
 
 
+@pytest.fixture
+def member_listing(monkeypatch):
+    """Inspect underlying contracts in gateway tests, not the public grouped listing."""
+    from isaac_mcp import grouped_tools, tool_groups
+    monkeypatch.setattr(tool_groups, "listed_form", lambda text: text)
+    original = grouped_tools.sync
+
+    def sync(server, env=None):
+        original(server, env)
+        server._tool_manager.list_tools = lambda: [
+            tool for name, tool in server._tool_manager._tools.items()
+            if name not in tool_groups.GROUPS]
+
+    monkeypatch.setattr(grouped_tools, "sync", sync)
+
+
 @pytest.fixture(autouse=True)
 def isolate_runtime_dir(tmp_path, monkeypatch):
     """Keep bridge portfiles out of the real XDG_RUNTIME_DIR during tests.

@@ -10,7 +10,7 @@ MCP client ──stdio──► isaac-mcp (host process)
                         │  NDJSON over TCP (loopback by default)
                         ▼
                       isaac.mcp.bridge (extension inside Kit: Isaac Sim or Isaac Lab)
-                        ├── built-ins: status, list_bridges, run_python, job_status, job_cancel,
+                        ├── built-ins: status, run_python, job_status, job_cancel,
                         │              reload_tools, put_file, get_file, stat_file
                         └── tool packs registered under a namespace, e.g. ur5e_dt.*, sim.*, assets.*
 ```
@@ -28,7 +28,7 @@ processes: screen and Isaac Lab tools working says nothing about the bridge.
 - `use_bridge` lasts until the host restarts. Re-check `status` after switching.
 - Reuse the intended reachable bridge. Start an additional isolated simulator only when the
   user requested one and resource checks pass. With the
-  optional `sim_launch` group, `sim__launch` starts an isolated session (own port, ROS domain,
+  optional `launch` toolset, `sim__launch` starts an isolated session (own port, ROS domain,
   output directory) after resource checks; poll `sim__status` until `state` is `running`, then
   `use_bridge` to its port. `sim__stop` needs `expected_pid` and `confirm_discard=true`.
 
@@ -87,14 +87,14 @@ Rules of thumb:
 - `screenshot` without a selector picks the Isaac Sim / Isaac Lab window and captures it even when
   covered. `list_windows` with `{"filter": "Isaac"}` gives ids for `window_id`.
 - `start_screen_recording` / `stop_screen_recording` record a window or monitor to MP4 (no audio).
-- Optional `screen_input` tools (`window_click`, `window_drag`, `window_scroll`, `window_type`,
+- Optional `input` toolset tools (`window_click`, `window_drag`, `window_scroll`, `window_type`,
   `window_key`) act inside one window. They need `expected_width` / `expected_height` from a fresh
   screenshot, so take one first. Prefer `run_python` or a named tool over clicking UI.
 
 ## Generic scene and project assets (`sim__*`, `assets__*`)
 
-The `sim`/`assets` pack is on by default (`run.sh` enables `sim-tools`). `ISAAC_MCP_SCENE_TOOLS=0`
-on the host hides all of them per server; it is a visibility preference, not access control.
+The `sim`/`assets` pack is divided among toolsets (`run.sh` enables `sim-tools`).
+Call `status` for selection and enable instructions; toolsets are not access control.
 Arguments are in `docs/TOOLS-ARGUMENTS.md`. The workcell uses external assets and starts stopped. After reopening a scene, adopt cameras and LiDARs for capture; generic edits require a stopped timeline.
 
 - Call `sim__stage__info` first. Keep its `session_id` and `stage_id`; every call except discovery

@@ -29,12 +29,6 @@ _STATE = "_isaac_grouped_tools"
 _SENTENCE = re.compile(r"(?<![ (]e\.g)(?<![ (]i\.e)[.;:]\s+(?=[A-Z`'\"(])")
 
 
-def listed_singly(env: Optional[Dict[str, str]] = None) -> bool:
-    """Whether ISAAC_MCP_GROUP_TOOLS=0 asks for every tool to be listed singly, with no groups."""
-    value = (env or {}).get(tool_groups.GROUP_ENV) or os.environ.get(tool_groups.GROUP_ENV, "1")
-    return str(value).strip().lower() in ("0", "false", "no", "off")
-
-
 def _brief(text: str, limit: int = 110) -> str:
     """The first sentence of a description, cut at a word if it is long."""
     first = _SENTENCE.split(" ".join((text or "").split()), 1)[0].rstrip(".:;")
@@ -209,18 +203,15 @@ def sync(server: Any, env: Optional[Dict[str, str]] = None) -> None:
     for group in tool_groups.GROUPS:
         manager._tools.pop(group, None)
     names = set(manager._tools)
-    singly = listed_singly(env)
     for group, (summary, actions) in tool_groups.GROUPS.items():
-        if not singly and names & set(actions.values()):
+        if names & set(actions.values()):
             _build(server, group, summary, actions)
-    hide = set() if singly else tool_groups.hidden(names)
+    hide = tool_groups.hidden(names)
     if not hasattr(server, _STATE):
         everything, call = manager.list_tools, manager.call_tool
-        setattr(server, _STATE, {"hide": hide, "singly": singly})
+        setattr(server, _STATE, {"hide": hide})
 
         async def call_tool(name, arguments, *args, **kwargs):
-            if getattr(server, _STATE)["singly"]:
-                return await call(name, arguments, *args, **kwargs)
             if name in tool_groups.VERBATIM:      # the caller's own data, code or log, in answers and errors alike
                 return _hints_in_listed_form(await call(name, arguments, *args, **kwargs))
             try:
@@ -230,8 +221,11 @@ def sync(server: Any, env: Optional[Dict[str, str]] = None) -> None:
 
         manager.list_tools = lambda: [tool for tool in everything() if tool.name not in getattr(server, _STATE)["hide"]]
         manager.call_tool = call_tool
-    getattr(server, _STATE).update(hide=hide, singly=singly)
-    if not singly:
-        for name, tool in manager._tools.items():
-            if name not in hide:
-                _describe_in_listed_form(tool)
+    getattr(server, _STATE).update(hide=hide)
+    for name, tool in manager._tools.items():
+        if name not in hide:
+            _describe_in_listed_form(tool)
+
+
+def listed_names(server: Any) -> List[str]:
+    return [tool.name for tool in server._tool_manager.list_tools()]

@@ -680,7 +680,7 @@ def _concurrency_guard() -> dict[str, Any] | None:
         "running_job_id": jid,
         "running_pid": pid,
         "hint": (
-            "wait for it to finish, cancel it with isaaclab__runs_cancel, "
+            "wait for it to finish, cancel it with job_cancel, "
             "or pass allow_concurrent=true to start anyway"
         ),
     }
@@ -1411,7 +1411,7 @@ def record(python: str, root: Any, task: str, checkpoint: Any = None, num_envs: 
     return {**out, "note": f"{agent} actions, no policy; isaaclab__runs_status lists video_paths when it finishes"}
 
 
-# ---- generic script jobs (isaaclab__run_script) ----------------------------------------------------------------
+# ---- generic script jobs (run_script) ----------------------------------------------------------------
 
 _ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _ARTIFACT_PREFIX = "ISAAC_MCP_ARTIFACT:"
@@ -1537,7 +1537,7 @@ def _liveness(log_dir: Path, pid_alive: bool) -> dict[str, Any]:
         out["health"] = "crashed"
         out["health_note"] = (f"stderr ends in an uncaught exception ({exception}) but the process is still alive, "
                               "so it has probably crashed and is hanging in shutdown. Read isaaclab__runs_tail("
-                              "stream='stderr'), then isaaclab__runs_cancel.")
+                              "stream='stderr'), then job_cancel.")
     elif newest and out["last_output_age_s"] > STALLED_AFTER_S:
         out["health"] = "stalled"
         out["health_note"] = (f"No output for {int(out['last_output_age_s'])} s. A long simulation step or a quiet "
@@ -1671,7 +1671,7 @@ def run_script(
             if other is not None:
                 return {"error": f"a job with single_instance_key {single_instance_key!r} is already running: {other.get('job_id')} (pid {other.get('pid')})",
                         "running_job_id": other.get("job_id"), "running_pid": other.get("pid"),
-                        "hint": "wait for it, or cancel it with isaaclab__runs_cancel"}
+                        "hint": "wait for it, or cancel it with job_cancel"}
         if uses_gpu and not allow_concurrent:
             blocked = _concurrency_guard()
             if blocked is not None:

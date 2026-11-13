@@ -960,8 +960,6 @@ class Extension(omni.ext.IExt):
                 return s.import_path(stage, **a)
             if name == "assets.info":
                 return s.inspect_asset(**a)[2]
-            if name == "assets.prepare_workstation":
-                return s.prepare_workstation(**a)
             raise RuntimeError("Unknown asset operation: " + name)
         if name == "sim.body.state":
             from .advanced import physics_manager

@@ -11,15 +11,12 @@ starts `run.sh`. Set host variables in the client's `env` for the `isaac` server
 | `ISAAC_MCP_PORT` | unset | Bridge port to pin; the installer writes this one. With no port set, a lone advertised bridge is discovered; several make discovery refuse. |
 | `UR5E_DT_PORT` | unset | Older name for the same pin, which older client entries still use. Takes precedence over `ISAAC_MCP_PORT`. |
 | `ISAAC_MCP_HOST` | discovered bridge | Bridge host. |
-| `ISAAC_MCP_LOCAL_TOOLS` | `all` | Local tool groups and aliases. See [choosing local tools](TOOLS-HOST.md#choosing-which-local-tools-a-server-exposes). |
-| `ISAAC_MCP_NAMESPACE` | unset | Comma-separated allowlist of bridge namespaces. Empty means no filter. |
-| `ISAAC_MCP_BUILTINS` | `1` | `0` hides the bridge built-ins. |
-| `ISAAC_MCP_SCENE_TOOLS` | `1` | `0` hides all generic `sim__*` and `assets__*` tools. |
+| `ISAAC_MCP_TOOLSETS` | `default` | Toolset profile and adjustments. Overrides user and project TOML. See [toolsets](TOOLS-HOST.md#choosing-which-local-tools-a-server-exposes). |
+| `ISAAC_MCP_PHYSICS_BACKEND` | `physx` | Configured backend (`physx` or `newton`); selection is recorded only, not applied to a simulator yet. |
 | `ISAAC_MCP_NAME`, `ISAAC_MCP_INSTRUCTIONS` | built in | Cosmetic server identity. |
 | `ISAAC_MCP_LOG` | `1` | `0` turns off the host server's durable log file (stderr logging stays). See [Diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log). |
 | `ISAAC_MCP_LOG_DIR` | `$XDG_STATE_HOME/isaac-mcp`, else `~/.local/state/isaac-mcp` | Directory of the host's `server-<pid>.log` (1 MB x 3, private). The bridge reads the same variable for its failure log. |
 | `DISPLAY` | `:0` | X11 display for the desktop tools. Match your session. |
-| `ISAAC_MCP_GROUP_TOOLS` | `1` | `0` lists every tool singly instead of grouped. See [grouped tools](TOOLS-HOST.md#grouped-tools). |
 
 The filters are visibility preferences, not a security boundary; the token and read-only mode are enforced by the bridge. See
 [limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach).
@@ -42,7 +39,7 @@ The filters are visibility preferences, not a security boundary; the token and r
 | Variable | Default | Meaning |
 |---|---|---|
 | `ISAACLAB_PYTHON` | discovered | Lab interpreter. An invalid explicit path fails discovery instead of falling back. It takes priority over `isaaclab_python` in a named project's `isaac-mcp.json` ([project setting](TOOLS-ISAACLAB.md#setup-and-configuration)). |
-| `ISAAC_MCP_SIM_LAUNCHER` | unset | With `sim_launch`: [a project's own launcher](TOOLS-HOST.md#a-projects-own-launcher) for `sim__launch`. Only from here, never from a tool argument or project file. |
+| `ISAAC_MCP_SIM_LAUNCHER` | unset | With the `launch` toolset: [a project's own launcher](TOOLS-HOST.md#a-projects-own-launcher) for `sim__launch`. Only from here, never from a tool argument or project file. |
 | `ISAACLAB_ROOT` | discovered | Lab checkout. |
 | `ISAACLAB_JOBS_DIR` | `~/.local/share/isaac-mcp/jobs` | Job records, for Isaac Lab jobs and simulator jobs alike. |
 | `ISAACLAB_LOGS_DIR` | unset | Extra run directory for checkpoints and metrics. |

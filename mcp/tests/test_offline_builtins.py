@@ -21,13 +21,13 @@ import isaac_mcp.server as gw
 from isaac_mcp import host_catalog
 from isaac_mcp.client import BridgeClient
 
-BUILTINS = {"run_python", "status", "list_bridges", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
+BUILTINS = {"run_python", "status", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
 
 
 @pytest.fixture(autouse=True)
-def single_purpose_tool_list(monkeypatch):
+def single_purpose_tool_list(member_listing):
     """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
-    monkeypatch.setenv("ISAAC_MCP_GROUP_TOOLS", "0")
+    pass
 
 
 class _Offline:
@@ -68,7 +68,7 @@ def test_builtins_are_listed_and_callable_through_an_mcp_client_before_discovery
     monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     monkeypatch.setattr(gw, "live_sessions", lambda env=None: [])   # not this machine's real ones
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     state = gw._state_for(server)
     state.client = _Offline()
 
@@ -83,7 +83,7 @@ def test_builtins_are_listed_and_callable_through_an_mcp_client_before_discovery
             assert not where.isError, "with nothing running, status still answers"
             nothing = json.loads(where.content[0].text)
             assert nothing["running"] is False and "refresh_tools(wait_s=120)" in nothing["message"]
-            answer = await client.call_tool("list_bridges", {})
+            answer = await client.call_tool("run_python", {"code": "result = 1"})
             assert answer.isError
             text = answer.content[0].text
             assert "no Isaac Sim bridge could be reached" in text and "refresh_tools(wait_s=" in text
@@ -113,12 +113,12 @@ def test_builtins_are_listed_and_callable_through_an_mcp_client_before_discovery
 
 
 def test_offline_note_counts_builtins_as_one_group():
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
-    assert "built-ins: 9" in gw._offline_note(server)
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    assert "built-ins: 8" in gw._offline_note(server)
 
 
 def test_refresh_reports_a_list_tools_timeout_as_kit_still_starting(monkeypatch):
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
 
     def booting(_server):
         raise TimeoutError("no response for 'list_tools' within 5.0s (the tool may still be executing)")
@@ -130,7 +130,7 @@ def test_refresh_reports_a_list_tools_timeout_as_kit_still_starting(monkeypatch)
 
 
 def test_refresh_wait_polls_until_the_bridge_answers(monkeypatch):
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     attempts = []
 
     def discover(_server):
@@ -147,7 +147,7 @@ def test_refresh_wait_polls_until_the_bridge_answers(monkeypatch):
 
 
 def test_refresh_wait_is_bounded_and_gives_up_with_guidance(monkeypatch):
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     attempts = []
 
     def offline(_server):
@@ -164,7 +164,7 @@ def test_refresh_wait_is_bounded_and_gives_up_with_guidance(monkeypatch):
 
 
 def test_refresh_wait_does_not_retry_an_ambiguous_bridge(monkeypatch):
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     attempts = []
 
     def ambiguous(_server):
@@ -178,7 +178,7 @@ def test_refresh_wait_does_not_retry_an_ambiguous_bridge(monkeypatch):
 
 
 def test_refresh_tools_advertises_wait_s():
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     tools = {t.name: t for t in asyncio.run(server.list_tools())}
     assert tools["refresh_tools"].inputSchema["properties"]["wait_s"]["default"] == 0
     assert "ctx" not in tools["refresh_tools"].inputSchema["properties"]
@@ -188,7 +188,7 @@ def test_refresh_wait_rejects_nan_and_probes_off_the_event_loop(monkeypatch):
     # wait_s=nan made the deadline nan (poll forever); the boot probe blocked the loop.
     import threading
 
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     assert "finite" in asyncio.run(gw._refresh_tools(server, None, float("nan")))
     threads = []
     monkeypatch.setattr(gw, "_probe_bridge", lambda s: threads.append(threading.current_thread().name))
@@ -212,7 +212,7 @@ def test_wait_runs_to_the_deadline_with_a_shorter_last_sleep(monkeypatch):
     _refused(monkeypatch)
     monkeypatch.setattr(gw, "REFRESH_POLL_S", 0.2)
     monkeypatch.setattr(gw, "live_sessions", lambda env=None: [])
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     start = time.monotonic()
     message = asyncio.run(gw._refresh_tools(server, None, 0.5))
     elapsed = time.monotonic() - start
@@ -224,7 +224,7 @@ def test_wait_returns_at_once_with_several_sessions_this_server_launched(monkeyp
     import time
 
     _refused(monkeypatch)
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     state = gw._state_for(server)
     state.launched_sessions = {"a", "b"}
     monkeypatch.setattr(gw, "_screen_port", lambda state: 18000)
@@ -253,7 +253,7 @@ def test_several_bridges_error_reads_as_two_sentences(monkeypatch):
 
     monkeypatch.setattr(gw, "discover_and_register_tools", lambda server: (_ for _ in ()).throw(
         RuntimeError("multiple bridges running (1, 2) — pass port= or set ISAAC_MCP_PORT")))
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     message = asyncio.run(gw._refresh_tools(server))
     assert "ISAAC_MCP_PORT. Pick one with use_bridge(port)" in message
 
@@ -267,7 +267,7 @@ def test_failed_gateway_tools_set_iserror_with_the_same_words(monkeypatch):
     monkeypatch.setattr(gw, "live_sessions", lambda env=None: [])
 
     async def scenario():
-        server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+        server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
         async with connect(server._mcp_server) as client:
             refused = await client.call_tool("refresh_tools", {})
             bad_port = await client.call_tool("use_bridge", {"port": 1})
@@ -295,7 +295,7 @@ def _dead_port_server(monkeypatch, bridges):
     monkeypatch.setattr(gw, "live_sessions", lambda env=None: [])
     monkeypatch.setattr(gw, "_screen_port", lambda state: 8766)
     monkeypatch.setattr("isaac_mcp.client.discover_bridges", lambda: list(bridges))
-    return gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    return gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
 
 
 def test_dead_endpoint_beside_a_live_bridge_names_both_and_does_not_say_wait(monkeypatch):
@@ -333,7 +333,7 @@ def test_a_timeout_is_still_a_slow_start_not_a_wrong_port(monkeypatch):
     monkeypatch.setattr(gw, "live_sessions", lambda env=None: [])
     monkeypatch.setattr(gw, "_screen_port", lambda state: 8766)
     monkeypatch.setattr("isaac_mcp.client.discover_bridges", lambda: [OTHER])
-    server = gw.build_server({"ISAAC_MCP_LOCAL_TOOLS": "gateway"})
+    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
     assert "still starting" in asyncio.run(gw._refresh_tools(server))
 
 

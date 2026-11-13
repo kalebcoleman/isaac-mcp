@@ -20,7 +20,7 @@ from isaac_mcp_bridge.schema import field_specs
 
 def test_builtins_are_served_bare_named_and_the_listing_hides_internal_ones():
     tools = make_bridge().get_registered_tools()
-    assert {"run_python", "status", "job_status", "job_cancel", "put_file", "get_file", "stat_file", "list_bridges",
+    assert {"run_python", "status", "job_status", "job_cancel", "put_file", "get_file", "stat_file",
             "reload_tools"} == set(tools)
     assert tools["status"]["namespace"] is None and tools["status"]["read_only"] is True
     assert "list_tools" in make_bridge().get_registered_tools(include_internal=True)

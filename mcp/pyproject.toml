@@ -6,6 +6,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
+    "tomli>=2; python_version < '3.11'",
     # 1.22 is the lowest version tested with current Pydantic 2 releases.
     # Upper bound <2: mcp 2 renamed FastMCP to MCPServer and removed
     # `mcp.server.fastmcp`, which isaac_mcp/server.py imports.

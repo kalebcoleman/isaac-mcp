@@ -22,9 +22,9 @@ from isaac_mcp_bridge.schema import field_specs
 
 
 @pytest.fixture(autouse=True)
-def single_purpose_tool_list(monkeypatch):
+def single_purpose_tool_list(member_listing):
     """These tests are about the single-purpose tools themselves, so they list them as before the groups."""
-    monkeypatch.setenv("ISAAC_MCP_GROUP_TOOLS", "0")
+    pass
 
 
 def _meta(description, namespace="demo"):
@@ -80,12 +80,12 @@ def world(monkeypatch, tmp_path):
 OFFLINE = {gw._mcp_name(canonical) for canonical in host_catalog.catalog_tool_names()}
 
 
-def build(groups="gateway"):
-    return gw.build_server({lt.ENV_VAR: groups})
+def build(groups="default"):
+    return gw.build_server({"ISAAC_MCP_TOOLSETS": groups})
 
 
 def bridge_names(server):
-    return {t.name for t in asyncio.run(server.list_tools())} - set(lt.ALL_TOOLS) - OFFLINE
+    return {t.name for t in asyncio.run(server.list_tools())} - set(gw.build_server({"ISAAC_MCP_TOOLSETS": "all,+input,+launch"})._tool_manager._tools) - OFFLINE
 
 
 def session(server, notifications=None):
@@ -97,7 +97,7 @@ def session(server, notifications=None):
 
 
 async def listed(client):
-    return {t.name for t in (await client.list_tools()).tools} - set(lt.ALL_TOOLS) - OFFLINE
+    return {t.name for t in (await client.list_tools()).tools} - set(gw.build_server({"ISAAC_MCP_TOOLSETS": "all,+input,+launch"})._tool_manager._tools) - OFFLINE
 
 
 def test_each_server_has_its_own_state_and_the_default_uses_the_module_state():

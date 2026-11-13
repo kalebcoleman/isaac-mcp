@@ -86,7 +86,7 @@ _WINDOW_HINT = (
     "A window opens within ~30 s but the scene is empty/black until loading finishes. Poll "
     "isaaclab__runs_status(job_id) until it reports `window`, and isaaclab__runs_tail(job_id, lines=200) until it contains "
     "'Completed setting up the environment' (later lines can push it out of last_log_lines), wait ~5 s, then screenshot(window_id=...) or a short "
-    "start_screen_recording(window_id=...) to inspect the result, and isaaclab__runs_cancel when done."
+    "start_screen_recording(window_id=...) to inspect the result, and job_cancel when done."
 )
 
 
@@ -249,7 +249,7 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         install: _Install = None,
         label: _Label = None,
     ) -> str:
-        """Play a checkpoint with a window (interactive); stop it with isaaclab__runs_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
+        """Play a checkpoint with a window (interactive); stop it with job_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
 
         Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true. Video needs optional
         MoviePy/imageio-ffmpeg in the Lab interpreter.
@@ -352,40 +352,6 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
             cancel.set()  # the client gave up: stop waiting for GPU memory instead of launching later
             raise
 
-    @mcp.tool(name="isaaclab__run_script", annotations=PYTHON_EXECUTION)
-    async def isaaclab_run_script(
-        script: _Script,
-        args: _ScriptArgs = None,
-        env: _ScriptEnv = None,
-        python_paths: _PythonPaths = None,
-        python_path: _PythonPath = None,
-        python: Annotated[str | None, Field(description="Interpreter. Default: the configured ISAACLAB_PYTHON.")] = None,
-        install: _Install = None,
-        cwd: _ScriptCwd = None,
-        label: _ScriptLabel = None,
-        timeout_s: _ScriptTimeout = 600,
-        min_free_vram_mb: _MinVram = None,
-        wait_for_vram_s: _VramWait = 0,
-        single_instance_key: _SingleKey = None,
-        allow_concurrent: _AllowConcurrent = False,
-        allow_concurrent_gpu: _AllowGpu = False,
-    ) -> str:
-        """Run your own bounded Python script as a managed job (kind "script") and return its job_id at once.
-
-        WARNING: executes arbitrary code with your rights; not sandboxed, not idempotent. Own process
-        group: timeout or isaaclab__runs_cancel kills all of it. Print `ISAAC_MCP_ARTIFACT: <path>` to list
-        outputs; runs_status then gives `script_result`.
-
-        Also the route for a project's own evaluator. Print `ISAAC_MCP_PROGRESS: <0-1|N%|a/b> [text]` for runs_status `progress`.
-
-        Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true."""
-        return await start_script(
-            lambda: None, script=script, args=args, env=env, python_paths=python_paths, python_path=python_path,
-            python=python, install=install, cwd=cwd, label=label, timeout_s=timeout_s,
-            min_free_vram_mb=min_free_vram_mb, wait_for_vram_s=wait_for_vram_s,
-            single_instance_key=single_instance_key, allow_concurrent=allow_concurrent,
-            allow_concurrent_gpu=allow_concurrent_gpu)
-
     @mcp.tool(name="run_script", annotations=PYTHON_EXECUTION)
     async def run_script(
         script: _Script,
@@ -398,16 +364,15 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
         label: _ScriptLabel = None,
         timeout_s: _ScriptTimeout = 600,
         single_instance_key: _SingleKey = None,
-        uses_gpu: Annotated[bool, Field(description="true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget), as in isaaclab__run_script. Default false: it starts at once and does not block GPU jobs.")] = False,
+        uses_gpu: Annotated[bool, Field(description="true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget). Default false: it starts at once and does not block GPU jobs.")] = False,
         min_free_vram_mb: _MinVram = None,
         wait_for_vram_s: _VramWait = 0,
     ) -> str:
         """Run any Python script as a managed job: a job_id at once, a log, a hard timeout, progress and cancel.
         Needs no simulator and no Isaac Lab: a controller server, a data conversion, a plot, a sweep step.
 
-        WARNING: executes arbitrary code with your rights; not sandboxed, not idempotent. The same job
-        system as isaaclab__run_script (kind "script"): follow it with job_status(job_id, wait_s=45),
-        isaaclab__runs_tail and job_cancel. Print `ISAAC_MCP_ARTIFACT: <path>` to list outputs and
+        WARNING: executes arbitrary code with your rights; not sandboxed, not idempotent. Follow it with jobs action=status(job_id, wait_s=45),
+        jobs action=tail and jobs action=cancel. Print `ISAAC_MCP_ARTIFACT: <path>` to list outputs and
         `ISAAC_MCP_PROGRESS: <0-1|N%|a/b> [text]` for progress."""
         import shutil
         import sys
@@ -507,11 +472,6 @@ def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) ->
                            lines: Annotated[int, Field(description="How many of the last lines to return.")] = 100) -> str:
         """Last lines of a job's stdout or stderr log. Creates the jobs directory if missing."""
         return _guard(lambda: _jobs.runs_tail(job_id, stream=stream, lines=lines))
-
-    @mcp.tool(name="isaaclab__runs_cancel", annotations=DESTRUCTIVE)
-    def isaaclab_runs_cancel(job_id: _JobId, grace_s: Annotated[int, Field(description="Seconds between SIGTERM and SIGKILL.")] = 10) -> str:
-        """Stop a job: SIGTERM to its process group, SIGKILL after grace_s seconds."""
-        return _guard(lambda: _jobs.runs_cancel(job_id, grace_s=grace_s))
 
     @mcp.tool(name="isaaclab__checkpoints_list", annotations=READ_ONLY)
     def isaaclab_checkpoints_list(run_dir: Annotated[str | None, Field(description="Run folder. Default: search the configured logs.")] = None,

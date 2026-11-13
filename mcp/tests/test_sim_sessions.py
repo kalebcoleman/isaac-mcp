@@ -505,7 +505,7 @@ def _tool_server(env):
                 return fn
             return decorate
 
-    sim.register_sim_session_tools(Fake(), groups=["sim_launch"], env=env)
+    sim.register_sim_session_tools(Fake(), groups=["launch"], env=env)
     return tools
 
 

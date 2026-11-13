@@ -26,7 +26,7 @@ class EmptyBridge:
 @pytest.fixture
 def host(monkeypatch):
     monkeypatch.setattr(server, "BridgeClient", EmptyBridge)
-    return server.build_server({local_tools.ENV_VAR: "isaaclab_read,isaaclab_probe,isaaclab_jobs"})
+    return server.build_server({"ISAAC_MCP_TOOLSETS": "minimal,+lab,+code"})
 
 
 def call(host, name, arguments=None):
@@ -105,7 +105,7 @@ def test_install_probe_runs_interpreter_startup_code(host, tmp_path, monkeypatch
 
 def test_effectful_inspection_tools_are_not_readonly_and_have_conservative_hints(host):
     tools = host._tool_manager._tools   # every registered tool, listed or grouped
-    for name in local_tools.GROUPS["isaaclab_probe"]:
+    for name in ("isaaclab__install_info", "isaaclab__envs_list"):
         ann = tools[name].annotations
         assert (ann.readOnlyHint, ann.destructiveHint, ann.idempotentHint, ann.openWorldHint) == (
             False, True, False, True)
@@ -116,5 +116,4 @@ def test_effectful_inspection_tools_are_not_readonly_and_have_conservative_hints
     tail = tools["isaaclab__runs_tail"].annotations
     assert (tail.readOnlyHint, tail.destructiveHint, tail.idempotentHint, tail.openWorldHint) == (
         False, False, True, False)
-    assert not (local_tools.GROUPS["isaaclab_probe"] | local_tools.GROUPS["isaaclab_jobs"]) & (
-        local_tools.READ_ONLY_TOOLS)
+    assert not tools["isaaclab__install_info"].annotations.readOnlyHint

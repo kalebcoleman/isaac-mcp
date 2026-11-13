@@ -21,7 +21,6 @@ _DESTROYS = _hints(destructive=True)
 
 CATALOG_HINTS = {
     "status": _READ,
-    "list_bridges": _READ,
     "get_file": _READ,
     "stat_file": _READ,
     "job_status": _READ,

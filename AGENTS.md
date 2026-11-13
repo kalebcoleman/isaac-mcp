@@ -68,41 +68,31 @@ configured filters.
 
 | Tier | Tools | Present when | Reference |
 |---|---|---|---|
-| Host gateway and desktop | 13 (`isaac_help`, `refresh_tools`, `use_bridge`, and 10 screen tools) | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), even with Kit down | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
-| Desktop input (optional) | 5 (`window_*`) | only when `screen_input` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-desktop-input) |
-| Simulator sessions (optional) | 4 (`sim__*`) | only when `sim_launch` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-simulator-sessions) |
-| Isaac Lab (`isaaclab__*`, `run_script`) | 18 | by default (`ISAAC_MCP_LOCAL_TOOLS` unset or `all`), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
-| Bridge built-ins (`run_python`, `status`, `job_status`, `job_cancel`, `list_bridges`, `reload_tools`, file tools) | 9 | listed from a packaged catalog even with Kit down; execution needs a reachable bridge; hidden by `ISAAC_MCP_BUILTINS=0` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
-| Generic scene and assets | 71 (`sim__quick_start`, `assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, controller runs, trajectory replay, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; hide with `ISAAC_MCP_SCENE_TOOLS=0`; roots, scan, search and the pack tools run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
+| Host gateway and desktop | 13 (`isaac_help`, `refresh_tools`, `use_bridge`, and 10 screen tools) | selected by `core`, `screen` and `code`, even with Kit down | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
+| Desktop input (optional) | 5 (`window_*`) | only when `input` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-desktop-input) |
+| Simulator sessions (optional) | 4 (`sim__*`) | only when `launch` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-simulator-sessions) |
+| RoboSimStudio (`robosim`) | 1 | selected by `robosim` (off by default); one grouped tool that runs RoboSimStudio in its own private Python environment, no Kit bridge needed | [ROBOSIM.md](docs/ROBOSIM.md) |
+| Isaac Lab (`isaaclab__*`, `run_script`) | 16 | selected by `lab` (off by default), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
+| Bridge built-ins (`run_python`, `status`, `job_status`, `job_cancel`, `reload_tools`, file tools) | 8 | listed from a packaged catalog even with Kit down; execution needs a reachable bridge; selected by `core` and `code` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
+| Generic scene and assets | 70 (`sim__quick_start`, `assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, controller runs, trajectory replay, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; selected by the scene, physics, sensors, assets, code, ros2 and kit_debug toolsets; roots, scan, search and the pack tools run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
 | UR5e twin (`ur5e_dt__*`) | 10 | RISE lab's UR5e digital twin, Kaleb's work with that robot; every other tier is robot-agnostic. Listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With default groups and no namespace filter, the server registers exactly 121 tools from startup:
-the host, Isaac Lab, bridge built-in, generic and UR5e catalog tiers, whether or not Kit is running.
-A client is shown **48 tools**: related tools are listed as one grouped tool with an `action`
-argument (`sim__prim(action="create")`, `ur5e_dt__workcell(action="quick_start")`, `jobs(action="status")`),
-and `action="help"` describes each action. The single-purpose names used in this guide and the
-docs (`sim__prim__create`, `sim__stage__save`) are the tools behind those actions: each is still
-callable by that name with the same arguments, deprecated, and no longer listed.
-`ISAAC_MCP_GROUP_TOOLS=0` lists them singly. The [table of groups](docs/TOOLS-HOST.md#grouped-tools)
-maps every action to its tool.
-A listed tool does not prove that a bridge exists: catalogued tools dial the selected bridge when
-called and return an actionable error if none answers. Use `status` (or the CLI check below) to
-find out. Fewer tools mean a filter:
+With the `all` profile, the server registers exactly 118 tools from startup, whether or not Kit runs.
+With the default profile a client is shown **30 tools**: related tools share one grouped tool
+with an `action` argument. The single-purpose names in these docs remain callable only while
+their toolset is enabled, but are not listed separately. `action="help"` describes available actions.
+The [table of groups](docs/TOOLS-HOST.md#grouped-tools) maps each action to its member.
 
-- `ISAAC_MCP_BUILTINS=0` hides the bridge built-ins, `ISAAC_MCP_NAMESPACE` hides namespaced
-  bridge and catalog tools, and `ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack;
-- `ISAAC_MCP_LOCAL_TOOLS` is restricting the local tools (the default, `all`, registers 31 local tools),
-  so the listed host and Isaac Lab tools may be a subset. If its `gateway` group is excluded,
-  `refresh_tools` and `use_bridge` are not listed: bridge tools are then discovered only when
-  the server starts, so restart the MCP connection after starting Kit.
-
-The other 9 tools are the bridge built-ins, also listed from a snapshot. With the standard
-groups there are 121 tools in total; the optional desktop input and simulator session groups add 9 more.
-`ISAAC_MCP_SCENE_TOOLS=0` hides the generic pack, leaving 50 tools with otherwise standard settings.
-These filters control discovery, not security. Two things are enforced by the bridge itself: every
-connection must present the bridge's token (clients on the same account read it from a private
-file; `python3 mcp/isaac_mcp/client.py` does too), and a Kit started with `ISAAC_MCP_READ_ONLY=1`
-refuses every tool that changes something with the code `READ_ONLY`. Do not work around either.
+The other 8 tools in the tier inventory are bridge built-ins. With `all`, there are 118 tools in total;
+the explicit-only desktop input and simulator session groups add 9 more.
+Use `ISAAC_MCP_TOOLSETS=default,+lab` or `isaac-mcp --toolsets minimal` to select toolsets.
+Configuration precedence is defaults, user `~/.config/isaac-mcp/config.toml`, nearest project
+`isaac-mcp.toml`, environment, then CLI. TOML uses `[tools] toolsets = ["default", "+lab"]`.
+`core` is always on; `all` excludes `input` and `launch`. Run `isaac-mcp toolsets`, or call `status`
+for enabled, disabled and planned toolsets. Disabled toolsets register no listed or hidden tools.
+The former five selection switches are rejected with exact migration instructions.
+These controls are discovery preferences, not security: bridge token authentication and Kit's
+`ISAAC_MCP_READ_ONLY=1` remain enforced separately.
 
 `ur5e_dt__workcell_quick_start` builds a stopped scene. Joint tools take the articulation root (for the twin, `/World/UR5e/root_joint`,
 reported by `sim__ros2__tf_setup`), not the robot's parent Xform. See the [scene workflow](docs/TOOLS-SCENE.md#a-typical-session).
@@ -159,23 +149,18 @@ client setup is in [MCP server](docs/MCP-SERVER.md).
   at launch; a `tcp://127.0.0.1:<port>` controller is your own process and needs nothing. See the
   [scene reference](docs/TOOLS-SCENE.md#controller-runs-jobs-and-replay).
 - `isaaclab__train`, `eval` and `play` start GPU jobs and are blocked by a running Kit bridge
-  unless `allow_concurrent_gpu=true`; `isaaclab__runs_cancel` kills one.
+  unless `allow_concurrent_gpu=true`; `jobs(action="cancel")` kills one.
 - Screen tools return window titles and pixels to the model, and save captures under
   `~/Pictures/screen-mcp` and `~/Videos/screen-mcp`.
-- Desktop input is off unless `screen_input` is explicitly selected. It operates a shared X11
+- Desktop input is off unless `input` is explicitly selected. It operates a shared X11
   desktop and can trigger arbitrary application actions. Inspect the actual window, its PID and
   screenshot first; its target checks are not an operating-system security boundary.
-- `sim_launch` is off by default. Its launch guard counts known bridge, managed Sim and configured
+- `launch` is off by default. Its launch guard counts known bridge, managed Sim and configured
   Lab job processes and checks headroom, but cannot detect every untracked workload. Never stop an
   unrelated process to make room, and use separate desktops or coordinate input between agents.
-- To expose less to a client, use `ISAAC_MCP_NAMESPACE` and `ISAAC_MCP_BUILTINS=0` (they filter
-  bridge tools only) and `ISAAC_MCP_LOCAL_TOOLS` (it selects groups of the host and Isaac Lab
-  tools only; the standard groups are registered by default). `ISAAC_MCP_LOCAL_TOOLS=readonly` leaves only the
-  local tools that read state, but it does not touch bridge tools: with a bridge connected,
-  `run_python` and `ur5e_dt__*` can still change the scene, so it is not a read-only server.
-  For a simulator that cannot be changed, start Kit with `ISAAC_MCP_READ_ONLY=1`.
-  The three variables compose; see [TOOLS-HOST.md](docs/TOOLS-HOST.md) and, for what a
-  scene-safe profile needs, [MCP-SERVER.md](docs/MCP-SERVER.md#limiting-what-a-client-can-reach).
+- To expose less, select `minimal` or remove toolsets using `ISAAC_MCP_TOOLSETS` or the
+  `[tools].toolsets` configuration. This does not create a read-only simulator; use
+  `ISAAC_MCP_READ_ONLY=1` in Kit for enforced refusal of scene writes.
 - Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, ...). The job
   inspection and Python probe tools can have side effects and are not in `readonly`;
   `screenshot` writes files and returns desktop pixels. Annotations are hints, not enforcement.

@@ -28,7 +28,7 @@ required. For behavior, refusals and limits, read the page linked in each sectio
 
 A client is shown most of these as an action of a [grouped tool](TOOLS-HOST.md#grouped-tools): each
 such entry says "Listed as", and takes the same arguments either way. The single-purpose name still
-works when called, and `ISAAC_MCP_GROUP_TOOLS=0` lists it.
+works when called if its toolset is enabled. Disabled toolsets register no tools.
 
 Arguments are shown as `name` (type, required) or `name` (type, default). Generic scene tools refuse
 arguments they do not declare, so a misspelled name is an error rather than being ignored. A live
@@ -37,11 +37,12 @@ bridge's own metadata takes precedence over these snapshots once discovered.
 LOCAL_SECTIONS = (
     ("Host gateway and desktop", "TOOLS-HOST.md",
      ("server.py", "screen.py")),
-    ("Desktop input (opt-in: `screen_input`)", "TOOLS-HOST.md#optional-desktop-input",
+    ("Desktop input (opt-in: `input` toolset)", "TOOLS-HOST.md#optional-desktop-input",
      ("desktop_input.py",)),
-    ("Simulator sessions (opt-in: `sim_launch`)", "TOOLS-HOST.md#optional-simulator-sessions",
+    ("Simulator sessions (opt-in: `launch` toolset)", "TOOLS-HOST.md#optional-simulator-sessions",
      ("sim_sessions.py",)),
     ("Isaac Lab", "TOOLS-ISAACLAB.md", ("isaaclab/tools.py",)),
+    ("RoboSimStudio (opt-in: `robosim` toolset)", "ROBOSIM.md", ("robosim/tools.py",)),
 )
 CATALOG_SECTIONS = (
     ("Bridge built-ins", "TOOLS-HOST.md#kit-bridge-built-ins", "builtins.json"),
