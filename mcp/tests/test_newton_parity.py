@@ -315,6 +315,14 @@ def test_quick_scene_aligns_the_timesteps_and_sizes_the_buffers(newton, monkeypa
     assert ns.quick_scene(stage, scene_prim, Timeline(), authored_rate=120)["rate_hz"] == 120
 
 
+def test_quick_scene_authors_into_the_session_layer_only(newton, monkeypatch):
+    stage, scene_prim = body_stage(12)
+    targets = []
+    monkeypatch.setattr(ns, "scene_settings", lambda prim, rate, tower=False: targets.append(stage.GetEditTarget().GetLayer()) or {})
+    ns.quick_scene(stage, scene_prim, Timeline())
+    assert targets == [stage.GetSessionLayer()] and stage.GetEditTarget().GetLayer() == stage.GetRootLayer()
+
+
 def test_quick_scene_reports_instead_of_raising(newton):
     stage, scene_prim = body_stage(12)
     report = ns.quick_scene(stage, scene_prim, Timeline(stopped=False), authored_rate=120)

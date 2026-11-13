@@ -21,7 +21,7 @@ MuJoCo-Warp) really exposes, and where this module relies on it:
 
 from copy import deepcopy
 
-from pxr import UsdPhysics
+from pxr import Usd, UsdPhysics
 
 from isaac_mcp.project_assets import AssetError, refuse
 
@@ -200,7 +200,8 @@ def quick_scene(stage, scene, timeline, authored_rate=None):
     try:
         report["rate_hz"] = authored_rate or QUICK_SCENE_HZ
         if authored_rate is None:
-            report["settings"] = scene_settings(scene, QUICK_SCENE_HZ)
+            with Usd.EditContext(stage, stage.GetSessionLayer()):  # like the rest of the quick scene: never the root layer
+                report["settings"] = scene_settings(scene, QUICK_SCENE_HZ)
         config, report["buffers"] = prepare_buffers(stage, scene, timeline)
         apply_buffers(config)
     except AssetError as exc:
