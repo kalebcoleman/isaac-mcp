@@ -8,13 +8,16 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import time
 from scene_mcp_client import parameters, call
 from mcp import ClientSession
 from mcp.client.stdio import stdio_client
 
 
-async def validate(port, output):
+async def validate(port, output, backend=None):
     transcript = []
     async with stdio_client(parameters(port)) as (r, w):
         async with ClientSession(r, w) as c:
@@ -145,6 +148,7 @@ async def validate(port, output):
                 after["dynamics"]["linear_velocity"][2]
                 < before["dynamics"]["linear_velocity"][2]
             )
+            assert backend is None or after["backend"] == backend, after
             if after["backend"] == "physx":
                 assert all(
                     abs(a - b) < 1e-5

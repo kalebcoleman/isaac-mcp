@@ -8,6 +8,9 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import time
 from mcp import ClientSession
 from mcp.client.stdio import stdio_client
@@ -21,7 +24,7 @@ def require_root(listing, root_id):
                          "docs/VENDORING.md and approve it as in docs/TOOLS-SCENE.md, then run this again.")
 
 
-async def validate(port, output):
+async def validate(port, output, backend=None):
     records = []
     async with stdio_client(parameters(port)) as (r, w):
         async with ClientSession(r, w) as c:
@@ -228,6 +231,7 @@ async def validate(port, output):
                 step
             )  # settled on authored static floor
             displayed = await invoke("sim__prim__get", **t, path="/World/Falling")
+            assert backend is None or step["backend"] == backend, step
             if step["backend"] == "physx":
                 assert all(
                     abs(a - b) < 1e-5
