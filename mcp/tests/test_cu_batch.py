@@ -219,13 +219,18 @@ def test_kit_batch_stops_at_the_failing_step_and_says_input_was_sent(kit):
     assert exc.code == "NO_WINDOW" and str(exc).startswith("actions[1] (tab):")
     assert exc.details["completed"] == 1 and exc.details["failed_index"] == 1 and len(exc.details["steps"]) == 1
     assert "No input was sent" not in exc.effects and "sent input" in exc.effects
+    envelope = kit.ui.refusal("sim.ui.act", exc)   # what extension.py returns to the host
+    assert envelope["code"] == "NO_WINDOW" and envelope["effects"] == exc.effects and envelope["completed"] == 1
     assert ("char", "n") not in kit.sent and sum(kind == "LEFT_BUTTON_DOWN" for kind, _ in kit.sent) == 1
 
 
 def test_kit_batch_failing_first_step_keeps_the_no_input_rule(kit):
     with pytest.raises(kit.ui.UIRefusal) as err:
         kit.run({"actions": [{"action": "click", "ref": "Stage//Frame/Button[0]"}]})  # no fingerprint: refused
-    assert err.value.effects is None and err.value.details["completed"] == 0  # extension.py: "No input was sent."
+    assert err.value.effects is None and err.value.details["completed"] == 0
+    assert kit.ui.refusal("sim.ui.act", err.value)["effects"] == "No input was sent."
+    late = kit.ui.UIRefusal("ACT_FAILED", "actions[0] (click): boom", completed=0)
+    assert kit.ui.refusal("sim.ui.act", late)["effects"] == "Inspect the UI before retrying."
     assert not kit.sent
 
 

@@ -56,6 +56,19 @@ class UIRefusal(ValueError):
         self.code, self.effects, self.details = code, effects, details
 
 
+# Refusals raised before the first event: the action sent nothing.
+NO_INPUT_CODES = ("INVALID_VALUE", "LIMIT", "STALE_WIDGET", "NOT_VISIBLE", "OUT_OF_WINDOW", "NO_UI", "DISABLED",
+                  "NO_WINDOW")
+
+
+def refusal(name, exc):
+    """The bridge's error envelope for a UIRefusal from sim.ui.find or sim.ui.act. A failed batch step
+    says itself what the steps before it sent (exc.effects)."""
+    sent_nothing = name == "sim.ui.find" or exc.code in NO_INPUT_CODES
+    return dict(status="error", code=exc.code, message=str(exc), **exc.details, effects=exc.effects or (
+        "No input was sent." if sent_nothing else "Inspect the UI before retrying."))
+
+
 def parse_keys(keys):
     """``["ctrl", "s"]`` -> (["CONTROL"], "S"). One non-modifier key, any modifiers, OpenAI-style names."""
     if not isinstance(keys, list) or not 1 <= len(keys) <= 5 or not all(isinstance(k, str) and k for k in keys):
