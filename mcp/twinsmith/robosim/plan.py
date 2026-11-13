@@ -27,6 +27,24 @@ def engine(device):
             "scope": "Compares images. It does not fit mass or friction."}
 
 
+GPU_FIRST_RUN_NOTE = ("The first action on cuda:0 can take minutes while Warp compiles its kernels (the cache under "
+                      "~/.cache/warp makes later runs fast); status shows whether the run is still working.")
+PUSHER_TRACK_LIMIT_M = 0.005  # the template's own limit for pusher_tracked
+
+
+def untracked_message(applied):
+    """Why a rollout whose pusher left its path is not a path problem; ``None`` when the pusher tracked (or is unknown)."""
+    if not applied or applied.get("pusher_tracked") is not False:
+        return None
+    solver = applied.get("solver")
+    cause = (f"The scene was stepped by {solver}, which does not take the pusher's coordinate writes; the template names "
+             "physics=MUJOCO_500HZ for this reason, so a hand-written scene must do the same." if solver and solver != "SolverMuJoCo"
+             else "Check the scene's physics arrangement and that the pusher is a free body moved by place_free_body.")
+    return (f"PUSHER DID NOT TRACK ITS PATH: it missed it by up to {applied.get('pusher_tracking_error_max_m')} m (limit "
+            f"{PUSHER_TRACK_LIMIT_M} m), so the block was not pushed. This is a fault in the simulation setup, not in the push "
+            f"path: changing the waypoints will not help. {cause}")
+
+
 ENGINES_SHORT = {"cpu": "MuJoCo (CPU)", "cuda:0": "MuJoCo-Warp (GPU)"}
 
 
@@ -400,6 +418,8 @@ def search_push(push, pivot, axes, evaluate, *, max_trials=TUNE_DEFAULT_TRIALS):
         trials.append(row)
         if best is None or m["cost"] < best[1]:
             best = (row, m["cost"])
+        if found.get("pusher_tracked") is False:
+            return trials, best[0], "pusher did not track"
         if within_tolerance(m):
             return trials, best[0], "within tolerance"
         if number == max_trials:

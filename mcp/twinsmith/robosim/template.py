@@ -5,6 +5,15 @@ T made of two boxes on one rigid body, or a Jenga-sized block), a small cylinder
 plain data near the top. The ``push`` and ``settle`` routines read ``ROLLOUT`` (set by the bridge's
 ``rollout`` action) and fall back to ``PUSH`` and ``DURATION_S`` below.
 
+Which solver steps it, from the RSS source (pin 87b5e32): ``rss.Scene`` defaults to the ``GENERIC``
+arrangement, whose catch-all backend is ``vbd`` (``specs/arrangement.py``). On a GPU that puts every free
+rigid body, the pusher included, on SolverVBD, which does not take its coordinates from ``joint_q`` and
+``joint_qd``: the pusher write below is silently ignored and the pusher stays at its start. A CPU device
+swaps ``GENERIC`` for MuJoCo (``scene/physics/devices.py``), which is why the same scene worked there. This
+scene therefore names ``MUJOCO_500HZ`` (the arm and every rigid body in one MuJoCo island at 50 Hz control,
+10 substeps) so that cpu and cuda:0 run the same physics: plain MuJoCo on the CPU, Newton's MuJoCo-Warp on
+the GPU. The push result records the solver class that stepped the scene.
+
 How things move, from the RSS source (checkout paths, pin 87b5e32):
 * ``domains/rigid/entity.py`` ``_add_primitive`` records ``coord_start`` and ``dof_start`` for a free
   body, and its ``reset`` writes ``state.joint_q[coord_start:coord_start+7]``. The pusher is placed
@@ -27,6 +36,7 @@ import numpy as np
 import robosimstudio as rss
 from robosimstudio.specs import ObjectSpec
 from robosimstudio.specs.asset import ShapeSpec
+from robosimstudio.specs.physics import MUJOCO_500HZ
 
 # ---- parameters: plain data, edit these -------------------------------------------------------
 # Table frame: metres, +z up. In the default camera image +x is right and +y is up (away from the
@@ -47,6 +57,7 @@ TABLE_COLOUR = (0.9, 0.9, 0.9)
 PUSHER_RADIUS = 0.0125
 PUSHER_HALF_HEIGHT = 0.03
 PUSHER_COLOUR = (0.1, 0.1, 0.1)
+PUSHER_Z = PUSHER_HALF_HEIGHT + TABLE_TOP + 0.001  # the pusher's centre height; also where it is placed
 CAMERA_EYE = (-0.05, -0.05, 0.7)
 CAMERA_LOOK_AT = (-0.05, 0.12, 0.0)
 CAMERA_SIZE = (320, 240)
@@ -92,7 +103,9 @@ elif SHAPE in ("box", "jenga"):
 else:
     raise ValueError("SHAPE must be 'box', 'tee' or 'jenga'")
 
-scene = rss.Scene(cell="void", name="push_scene")
+# MUJOCO_500HZ, not the default GENERIC: on a GPU GENERIC runs free bodies on VBD, which ignores the pusher's
+# joint_q / joint_qd writes below (see the module docstring). A CPU device uses MuJoCo either way.
+scene = rss.Scene(cell="void", name="push_scene", physics=MUJOCO_500HZ)
 scene.add(rss.box(name="table", half=(TABLE_HALF[0], TABLE_HALF[1], 0.02), at=(0.0, 0.0, TABLE_TOP - 0.02),
                   static=True, friction=OBJECT_FRICTION, color=TABLE_COLOUR))
 scene.add(ObjectSpec(name=OBJECT_NAME, shape=shape, mass=OBJECT_MASS, friction=OBJECT_FRICTION,
@@ -100,7 +113,7 @@ scene.add(ObjectSpec(name=OBJECT_NAME, shape=shape, mass=OBJECT_MASS, friction=O
                      quat=(0.0, 0.0, math.sin(OBJECT_XY_YAW[2] / 2), math.cos(OBJECT_XY_YAW[2] / 2))))
 _first = PUSH["waypoints"][0]
 scene.add(rss.cylinder(name="pusher", radius=PUSHER_RADIUS, half_height=PUSHER_HALF_HEIGHT,
-                       at=(_first[1], _first[2], PUSHER_HALF_HEIGHT + TABLE_TOP + 0.001), mass=2.0,
+                       at=(_first[1], _first[2], PUSHER_Z), mass=2.0,
                        friction=0.2, color=PUSHER_COLOUR))
 scene.cameras.append(rss.CameraSpec(name="camera", width=CAMERA_SIZE[0], height=CAMERA_SIZE[1],
                                     eye=CAMERA_EYE, look_at=CAMERA_LOOK_AT, up=(0.0, 0.0, 1.0)))
@@ -108,11 +121,14 @@ BUILD = {"renderer": "tiled"}
 
 
 # ---- moving things ----------------------------------------------------------------------------
-def place_free_body(sim, name, x=None, y=None, velocity=None):
+def place_free_body(sim, name, x=None, y=None, velocity=None, z=None):
     """Write a free body's planar position and/or velocity into the solver's own coordinates.
 
     joint_q[coord_start:+7] is (x, y, z, qx, qy, qz, qw); joint_qd[dof_start:+6] is
     (vx, vy, vz, wx, wy, wz). Writing body_q or body_qd instead does nothing: the solver rebuilds them.
+    Given ``z``, the body is also set upright (identity rotation, no spin) at that height: the pusher uses this
+    so it slides on a plane like a planar actuator. Left free in z, the cylinder drifted (up, then 1 cm down into
+    the table) under MuJoCo-Warp and rode over a Jenga block instead of pushing it, while plain MuJoCo held it.
     """
     entity = sim.scene.by_name[name]
     state = sim.state
@@ -120,6 +136,9 @@ def place_free_body(sim, name, x=None, y=None, velocity=None):
         q = state.joint_q.numpy()
         c = entity.coord_start
         q[c], q[c + 1] = x, y
+        if z is not None:
+            q[c + 2] = z
+            q[c + 3:c + 7] = [0.0, 0.0, 0.0, 1.0]
         state.joint_q.assign(q)
     if velocity is not None:
         qd = state.joint_qd.numpy()
@@ -161,7 +180,7 @@ def push_routine(sim):
     worst = 0.0
     for k in range(steps):
         x, y, vx, vy = pusher_at(waypoints, k * dt)
-        place_free_body(sim, "pusher", x, y, velocity=[vx, vy, 0.0])
+        place_free_body(sim, "pusher", x, y, velocity=[vx, vy, 0.0], z=PUSHER_Z)
         sim.run(1)
         want = pusher_at(waypoints, (k + 1) * dt)
         have = sim["pusher"].position
@@ -171,6 +190,7 @@ def push_routine(sim):
     result = {"applied": True, "routine": "push", "take": take, "steps": steps, "control_hz": hz,
               "waypoints": waypoints, "object_velocity": push.get("object_velocity"),
               "pusher_tracking_error_max_m": round(worst, 5), "pusher_tracked": worst < 0.005,
+              "solver": type(sim.pipeline.solver).__name__,
               "object": OBJECT_NAME, "object_start_xy_m": start[:2], "object_end_xy_m": end[:2],
               "object_start_yaw_rad": round(start_yaw, 4), "object_end_yaw_rad": round(_yaw(sim[OBJECT_NAME].pose), 4)}
     Path(__file__).with_name(f"push-{take}.json").write_text(json.dumps(result))
@@ -204,7 +224,8 @@ SIZE_MEANING = {
     "tee": "[bar_length, stem_length, thickness, height] in metres; the bar is bar_length x thickness and the stem "
            "thickness x stem_length, so the T is thickness + stem_length deep",
     "box": "[x_length, y_length, height] in metres",
-    "jenga": "[x_length, y_length, height] in metres, lying flat; default 72 x 24 x 14 mm, a Jenga-style block",
+    "jenga": "[x_length, y_length, height] in metres, lying flat: x is the long axis. Default 0.072 x 0.024 x 0.014 "
+             "(72 x 24 x 14 mm, a Jenga-style block), so its long side lies along x and a push along +y hits the long face",
 }
 DEFAULT_CAMERA = {"eye": [-0.05, -0.05, 0.7], "target": [-0.05, 0.12, 0.0]}
 CLOSE_CAMERA = {"eye": [0.0, -0.06, 0.45], "target": [0.0, 0.0, 0.0]}
@@ -354,7 +375,8 @@ def scene_source(resolved):
 
 PARAMETERS = {
     "shape": "tee (default), box or jenga",
-    "size": "tee [bar_length, stem_length, thickness, height]; box and jenga [x, y, height]; metres",
+    "size": ("tee [bar_length, stem_length, thickness, height]; box and jenga [x, y, height]; metres. "
+             "jenga default [0.072, 0.024, 0.014]: x is the long axis"),
     "position": "[x, y] of the object on the table, metres",
     "yaw": "radians about +z; tee yaw 0 has the bar far and the stem toward the camera",
     "color": "red, orange, yellow, green, blue, wood, '#rrggbb' or [r, g, b] in 0-1",
