@@ -37,13 +37,12 @@ JSON-lines message shape and the portfile location, so existing tool packages an
 
 - **`isaac-sim-mcp`:** MIT License. A copy of the upstream license is archived at `docs/provenance/isaac-sim-mcp-LICENSE`.
 - **`omni-kit-mcp`:** no upstream license file. No file in this repository is a copy of it any longer.
-- **Assets:** the repository ships none (it is code-only; see `docs/ASSETS.md`). Earlier revisions
+- **Assets:** the repository ships none (it is code-only; see `docs/ASSET-PACKS.md`). Earlier revisions
   carried `exts/ur5e-dt/assets/`, and not all of it could be redistributed. The NVIDIA robot,
   sensor and material files, the Vention bench and the Poliigon oak textures must stay out of a
   public repository; the Husarion gripper files (Apache-2.0) and the FMB objects (CC BY 4.0) may
-  ship with notices. Per-group evidence, sizes and the fetch-on-demand plan are in
-  [`provenance/ASSETS.md`](provenance/ASSETS.md). The host asset utilities use
-  `exts/ur5e-dt/assets-manifest.json`; `scripts/fetch_ur5e_assets.py` populates the operator cache.
+  ship with notices (`THIRD-PARTY-NOTICES.md`). Each pack records the source, licence and
+  `redistributable` flag of every file in its `pack.yaml`; nothing is downloaded.
 
 ## Project scene implementation references
 

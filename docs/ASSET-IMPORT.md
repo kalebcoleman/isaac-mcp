@@ -3,7 +3,7 @@
 One tool brings a robot or object into a scene: **`assets__import_path`**. Give it a file (or a folder that holds one) and it
 works out the format, checks it, converts it when it has to, and imports it. It replaced three tools, `assets__import_usd`,
 `assets__import_urdf` and `assets__import_mjcf`, so an agent has one place to look; an approved root is still addressable with
-`root_id` and `relative_path`. For how approval and the asset stores work, see [ASSETS.md](ASSETS.md);
+`root_id` and `relative_path`. For how approval and asset packs work, see [ASSET-PACKS.md](ASSET-PACKS.md);
 for every tool's arguments, [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md); for what is planned next, [working checklist](CHECKLIST.md#assets-and-workspace).
 
 ```text
@@ -23,7 +23,7 @@ joint targets or address a file with `root_id` and `relative_path`, use `assets_
 ## Set up, once
 
 1. **Isaac Sim** with this repository's MCP server (`./install.sh`, see [LINUX-SETUP.md](LINUX-SETUP.md)). The URDF and MJCF importers and the mesh converter are Isaac Sim's own. Representative formats were exercised on Isaac Sim 6.2 and 5.1; see [Tested](#tested) for scope and limits. Nothing else is needed for USD, URDF, xacro, SDF, meshes or maps: **no ROS, no `xacro` program, no Gazebo, no internet.**
-2. **Put the file where the tools may read it.** Either in your asset folder (`isaac-mcp-assets/<project>/`, loads with no approval) or in any folder you approve once, as a trusted root. Approve the **smallest folder that holds the files** (one robot's folder, not your whole downloads or projects folder): every import copies the approved folder, up to 1000 files and 256 MiB. An agent cannot approve anything. When it needs approval, the refusal prints the exact command; you run it, then restart the MCP server and Isaac Sim, because both read the approval file at startup.
+2. **Put the file where the tools may read it.** Either in a verified pack version of your asset root (`<root>/<pack id>/<version>/`, made with `assets__pack action=adopt`; loads with no approval) or in any folder you approve once, as a trusted root. Approve the **smallest folder that holds the files** (one robot's folder, not your whole downloads or projects folder): every import copies the approved folder, up to 1000 files and 256 MiB. An agent cannot approve anything. When it needs approval, the refusal prints the exact command; you run it, then restart the MCP server and Isaac Sim, because both read the approval file at startup.
 3. **Ask.** For example: *"Load the UR10e from <folder> and bend two joints"*, *"Put the Duck from <folder> in the scene as a prop that falls"*, *"Make a warehouse with a robot in it"*. The agent finds `assets__import_path` and picks the format.
 
 ## What it can do, in short
@@ -75,7 +75,7 @@ The same rules hold for every format.
 2. **Every file it names stays inside the folder you approved.** An absolute path, a URI, a backslash, a symlink or `..` out of the folder is refused, percent-encoded or not.
 3. **The approved folder is copied to a private snapshot and verified.** The importer reads only the snapshot. A converted file (xacro, SDF) is written into that snapshot, hashed like the rest, and becomes its entry.
 4. **The result says what it did.** The reply has an `import` block: the format, what was converted from what, the model chosen, the warnings and what was dropped.
-5. **Approval stays on.** A path outside an approved root or your asset store is refused with the exact command the user runs. See [ASSETS.md](ASSETS.md#when-something-comes-from-online).
+5. **Approval stays on.** A path outside an approved root or your asset root is refused with the exact command the user runs. See [ASSET-PACKS.md](ASSET-PACKS.md#the-tools).
 
 ### xacro: what the expander reads
 
@@ -147,7 +147,7 @@ A tool can be called once from a shell, with no MCP client, against a bridge: `p
 
 | Code | Meaning | What to do |
 |---|---|---|
-| `ROOT_NOT_APPROVED` | The file or folder is outside every approved root and asset folder | Run the printed command (smallest folder), restart the MCP server and Isaac Sim |
+| `ROOT_NOT_APPROVED` | The file or folder is outside every approved root and the asset root | Run the printed command (smallest folder), restart the MCP server and Isaac Sim |
 | `AMBIGUOUS_BUNDLE` | A folder holds several possible robots | Pass `source_path` with the file you want (the reply lists them) |
 | `XACRO_ARG` | A xacro file needs `$(arg ...)` values | Give them in `xacro_args`; the reply names every missing one |
 | `SDF_MODEL` | A Gazebo world has several models | Pass `sdf_model` with the model's name |

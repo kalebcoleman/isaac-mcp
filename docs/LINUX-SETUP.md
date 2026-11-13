@@ -4,7 +4,7 @@ This guide covers the repository's Linux launcher, host MCP server, optional Isa
 UR5e mock driver. Install the parts needed for your workflow; the host server, simulator and external ROS nodes run
 in separate environments.
 
-**Keep it organized.** Put the checkout, asset stores and Sim environments in one workspace
+**Keep it organized.** Put the checkout, the asset root and Sim environments in one workspace
 folder and let the tool find an existing install. See [WORKSPACE.md](WORKSPACE.md).
 
 ## Platforms and prerequisites
@@ -189,98 +189,35 @@ The [compatibility record](COMPATIBILITY.md) is authoritative for measured scope
 viewport and URDF follow-ups have superseded some early pending checks, while the original
 6.0.1 windowed native-step stall and remaining matrix gates remain open.
 
-## Prepare the UR5e and sensor assets
+## Prepare the work cell's asset pack
 
-The host connection and `sim__stage__info` do not require a robot or workstation. `ur5e_dt__quick_start`
-needs only NVIDIA's public UR5e. The gripper, workstation and objects are [your own lab files](ASSETS.md#public-files-and-lab-files), and
-Quick Start skips the gripper when they are absent. The repository ships **no
-assets**: every asset lives in your local asset folder, `isaac-mcp-assets` next to the
-checkout (see [ASSETS.md](ASSETS.md)). `install.sh` installs packages, not assets. Add your
-own files with `python3 scripts/isaac_assets.py add`, move assets from an older checkout with
-`python3 scripts/isaac_assets.py migrate`, and download NVIDIA's public robot and sensor files
-once (they are not downloaded again on every launch):
+The host connection and `sim__stage__info` do not require a robot or workstation, and NVIDIA's public robots
+(`ur5e`, `franka`, `unitree_g1`, ...) load by name from the running simulator's own asset root. The UR5e Jenga work cell uses
+[a private asset pack](../exts/ur5e-dt/workcell/README.md#private-asset-pack) (`ur5e-jenga-workcell/v1`) that you supply. The
+repository ships **no assets**, `install.sh` installs packages, not assets, and nothing is ever downloaded for you.
 
-```bash
-python3 scripts/fetch_ur5e_assets.py
-python3 scripts/fetch_ur5e_assets.py --check
-```
-
-The first command downloads missing manifest files from the configured NVIDIA
-asset root and skips already valid files. The second reads the cache only: exit 0 means all
-manifest fetch entries match size/SHA-256; exit 1 reports missing or mismatched entries.
-It checks neither the manual Vention bench nor native rendering/physics readiness.
-Do not repair or replace a cache while another simulator or user is relying on its files.
-
-The assets remain subject to NVIDIA's applicable terms; see [asset notices](provenance/ASSETS.md)
-and [vendoring](VENDORING.md). The fetcher has **no `--accept-eula` flag or interactive EULA
-acceptance step**. The installer's `--accept-eula` controls simulator setup; it is not an
-asset-redistribution license. Obtain the necessary permission before downloading or copying.
-
-### Asset folder location and supported options
-
-The default asset folder is `isaac-mcp-assets` next to the checkout, or
-`<workspace>/isaac-mcp-assets` when `ISAAC_MCP_WORKSPACE` is set. Older locations
-(`<workspace>/assets`, `~/.cache/ur5e-dt/assets`) are still read if they exist. You can
-override it: `ISAAC_MCP_ASSET_PATH` sets the stores (a list separated by `:`, the first is
-where files are written; `UR5E_DT_ASSET_CACHE` is a deprecated alias). Use the same stores in the
-fetcher's environment and the selected **Kit process**; setting it only in the MCP client
-cannot change an already-running Kit process's environment. Stores, the per-project
-`isaac-mcp.json`, user pins and `scripts/isaac_assets.py doctor` are described in
-[ASSETS.md](ASSETS.md).
+Every pack lives in one **asset root**: `ISAAC_MCP_ASSET_ROOT`, else `<workspace>/assets` (a folder named
+`isaac-mcp-assets` there still works, with a warning). See [asset packs](ASSET-PACKS.md) for the format and the tools.
+Copy the pack folder onto the machine, then check it:
 
 ```bash
-# Optional: choose another asset folder, outside Git; prepare it before launching a new session.
-export ISAAC_MCP_ASSET_PATH=<asset-folder>
-python3 scripts/fetch_ur5e_assets.py --check
-# If preparation is needed and authorized, fetch into this same cache:
-python3 scripts/fetch_ur5e_assets.py
-python3 scripts/fetch_ur5e_assets.py --check
-# After a successful check, launch the intended new session using local assets only:
-ISAAC_MCP_ASSET_STRICT=1 ./run.sh --port 8766
+export ISAAC_MCP_ASSET_ROOT=<asset-root>        # outside Git; set it for the MCP server and for any Kit you start yourself
+python3 scripts/isaac_assets.py list              # every <id>/<version> and whether it verifies
+python3 scripts/isaac_assets.py doctor ur5e-jenga-workcell/v1
 ```
 
-The initial check may return 1 on a new cache; that is a missing-asset result, not success.
-All options can be inspected without fetching: `python3 scripts/fetch_ur5e_assets.py --help`.
+`list` also names any pack in the old format (files or a `SHA256SUMS`, no `pack.yaml`), which nothing reads; convert one with
+`isaac_assets.py adopt --from-old` ([converting an old pack](ASSET-PACKS.md#converting-an-old-pack)). Setting the root
+only in the MCP client cannot change an already-running Kit process's environment: give Kit the same value.
 
-| Option | Scope |
-|---|---|
-| `--cache-dir PATH` | Overrides the destination for this invocation only; select the same directory through `ISAAC_MCP_ASSET_PATH` when launching Kit |
-| `--asset-root URL_OR_DIRECTORY` | Overrides the source for this invocation; an existing local mirror must have the manifest's source-relative layout. `ISAAC_MCP_ASSET_REMOTE_ROOT` is the environment equivalent (`UR5E_DT_ASSET_ROOT` is a deprecated alias) |
-| `--check` | Verifies existing cache bytes only; no download or repair |
-| `--force` | Re-fetches/copies even matching files, and replaces changed files that are not pinned; intentional replacement, not a normal startup requirement |
+The files remain subject to their own terms (see [third-party notices](../THIRD-PARTY-NOTICES.md) and
+[vendoring](VENDORING.md)); the installer's `--accept-eula` controls simulator setup and is not an asset-redistribution
+license. Obtain the necessary permission before copying. A missing or unverifiable pack is a real failed operation: it must
+not be counted as a loaded robot.
 
-The [manifest](../exts/ur5e-dt/assets-manifest.json) pins the **Isaac asset-library 5.1**
-paths and byte hashes. That asset generation is separate from the selected **Sim 6.2**
-package version; do not substitute an arbitrary asset-library version. The sensor cache
-preserves its source-relative MDL/texture layout. Keep the whole fetched group intact,
-rather than moving only `rsd455.usd` into a different folder.
-
-### Local reuse, remote fallback and failures
-
-Resolution prefers a local file in a project store (`isaac-mcp.json`), then the user stores
-(the asset folder), then an allowed configured NVIDIA URL for supported robot/sensor entries.
-Files under an old checkout's `exts/ur5e-dt/assets` are not used; `isaac_assets.py migrate`
-moves them.
-Cached manifest entries **and their fetch-group dependencies** are verified before use.
-Valid local files are reused. Missing/corrupt group members refuse instead of silently
-bypassing verification with a network URL.
-
-If no local top-level asset exists and offline mode is disabled, the resolver can give Kit
-the configured remote URI. This is not the same as populating and verifying the operator
-cache; it requires network access and does not prove the remote load succeeded. Prefer
-explicit prefetch plus `--check` when preparing an offline or repeatable run.
-
-`ISAAC_MCP_ASSET_STRICT=1` (deprecated alias `UR5E_DT_OFFLINE`) disables this twin resolver's remote fallback. With the robot absent,
-Quick Start returns **`Asset not available offline: robot/ur5e.usd`** and preparation guidance.
-That is a real failed operation; it must not be counted as a loaded robot. Offline mode does
-not firewall Kit, arbitrary USD references or other extensions, and it does not prevent an
-explicit fetcher invocation from downloading. For a fully offline preparation, use a local mirror.
-
-The **Vention bench is separate**: no public download is configured. Supply an approved
-licensed workstation project through [workstation preparation](TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation),
-or add your own export with `python3 scripts/isaac_assets.py add` (see [ASSETS.md](ASSETS.md)),
-or use the twin's placeholder bench when the manual asset is absent. A placeholder does not
-replace the mandatory UR robot asset. Basic connection and generic scene work require neither.
+The **Vention bench** has no public download. Supply an approved licensed workstation project through
+[workstation preparation](TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation), or put it in a pack with
+`isaac_assets.py adopt`. Basic connection and generic scene work require neither.
 
 ## Troubleshooting the first connection
 
@@ -293,10 +230,9 @@ replace the mandatory UR robot asset. Basic connection and generic scene work re
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
 | Missing `omni`, renderer or `.pyi` imports | Verify selected Sim and enabled Kit extensions. Do not pip-install `omni` or hand-copy type stubs |
-| Quick Start result says `"gripper": {"loaded": false}` | Expected without your lab files; the scene still works. See [public and lab files](ASSETS.md#public-files-and-lab-files) |
-| `Asset not available: objects/...` | Object tools need your lab files. See [public and lab files](ASSETS.md#public-files-and-lab-files) |
-| `fetch_ur5e_assets.py` exits 1 and lists files it kept | They differ from NVIDIA's. Run `isaac_assets.py pin` if the change is yours, or `--force` to replace them |
-| `Asset not available offline` / corrupt cache | Confirm the selected Kit cache, run the fetcher's read-only `--check`, and prepare/repair it only when safe. A known deliberate harness failure has separate recovery evidence; an ordinary missing asset is still a failure |
+| `Missing pack ...; sync this private pack first` | The pack is not under the asset root the process resolved. Run `python3 scripts/isaac_assets.py where` and `list`, and give Kit the same `ISAAC_MCP_ASSET_ROOT` |
+| `Checksum mismatch` / `Pack contains files not listed` | The pack differs from its `pack.yaml`. Run `isaac_assets.py doctor <id>/<version>`; restore the file, or write a new version. See [asset packs](ASSET-PACKS.md) |
+| `No asset root: ...` | Set `ISAAC_MCP_ASSET_ROOT`, or create `<workspace>/assets` |
 | `No module named 'Xlib'` when starting the MCP host | You ran the host with Isaac Sim's Python. It has its own dependencies: use the installed `isaac-mcp`, or `cd mcp && uv run --locked --isolated ...` |
 | `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK, and the validators `pxr` and `numpy`: `uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
 | Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |
@@ -367,7 +303,7 @@ from the operator's approved workstation USD; it does not load the scene or over
 existing cached asset. Vention-specific routing is separate from generic project import.
 No private workstation or personal asset is required for the initial read-only connection check.
 Follow [project setup and exact tool parameters](TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation)
-and [asset license notices](provenance/ASSETS.md).
+and [third-party notices](../THIRD-PARTY-NOTICES.md).
 
 ## Optional UR5e mock ROS driver
 

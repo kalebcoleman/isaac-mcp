@@ -101,13 +101,10 @@ These must match in both processes:
 |---|---|---|
 | `ISAAC_MCP_ASSET_CONFIG` | unset | The [trusted-project approval file](TOOLS-SCENE.md#one-time-approval). No file means no approved roots. |
 | `ISAAC_MCP_STAGING` | `~/.cache/isaac-mcp/staging` | With no approval file: the private folder the server copies import snapshots into and Kit reads them from. The server and Kit must be given the same value. |
-| `ISAAC_MCP_ASSET_PATH` | `isaac-mcp-assets` next to the checkout | Asset stores separated by `:`; the first receives writes. `UR5E_DT_ASSET_CACHE` is a deprecated alias. |
-| `ISAAC_MCP_ASSET_PACK` | `ur5e-dt` | Selects the [asset pack](ASSETS.md#named-packs); beats `"pack"` in `isaac-mcp.json`. An invalid name is an error. |
+| `ISAAC_MCP_ASSET_ROOT` | `<workspace>/assets`, else `<workspace>/isaac-mcp-assets` (transitional, with a warning) | The one [asset root](ASSET-PACKS.md#the-asset-root-and-how-it-is-found): packs are `<pack id>/<version>/pack.yaml` under it. No literal home-folder default; with nothing found the error names this setting. Replaces `ISAAC_MCP_ASSET_PATH` and `UR5E_DT_ASSET_CACHE`, which are not read: if one is set, the host says so once. |
 | `ISAAC_MCP_USD_PYTHON` | unset | A Python with `usd-core` for USD dependency checks on the MCP host; without it they use the selected Kit. |
-| `ISAAC_MCP_ASSET_STRICT` | unset | `1` disables the twin's remote asset fallback. `UR5E_DT_OFFLINE` is a deprecated alias. |
-| `ISAAC_MCP_ASSET_REMOTE_ROOT` | NVIDIA's asset root | Fetch source. `UR5E_DT_ASSET_ROOT` is a deprecated alias. |
-| `ISAAC_MCP_WORKSPACE` | unset | [Workspace folder](WORKSPACE.md). `isaac_env.py` falls back to `~/isaac-workspace`. |
-| `ISAAC_MCP_PROJECT` | walk up from the working directory | A project directory or its `isaac-mcp.json`. Only a project named here can set `isaaclab_python` and `isaaclab_root`; a file found by the walk is ignored for those two keys. |
+| `ISAAC_MCP_WORKSPACE` | the folder that holds the checkout | [Workspace folder](WORKSPACE.md); `<workspace>/assets` is where the asset root is looked for. `isaac_env.py` falls back to `~/isaac-workspace`. |
+| `ISAAC_MCP_PROJECT` | walk up from the working directory | A project directory or its `isaac-mcp.json`; its `"pack"` key (`"<id>/<version>"`) is the default pack for `doctor` and `pin`. Only a project named here can set `isaaclab_python` and `isaaclab_root`; a file found by the walk is ignored for those two keys. |
 
 ## Install discovery
 

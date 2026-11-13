@@ -142,32 +142,29 @@ The repository ships no robots or props, so anything you load comes from one of 
 
 | Source | How you use it | Good for |
 |---|---|---|
-| **A public name** | Say `franka`, `nova_carter`, `ur5e`... in the prompt. It loads from NVIDIA's asset server. | Trying things quickly. |
-| **Your asset folder** | Put a project folder in `isaac-mcp-assets/` (next to the checkout) and load it by name, such as `so_arm100/so100.urdf`. | Your own robots, props and scenes, and open-source ones you download. |
+| **A public name** | Say `franka`, `nova_carter`, `ur5e`... in the prompt. It loads from the running simulator's own asset root. | Trying things quickly. |
+| **Your asset root** | Make a pack of a project folder and load a file by name, such as `so_arm100/v1/so100.urdf`. | Your own robots, props and scenes, and open-source ones you download. |
 | **Any other folder** | You approve the folder once as a trusted root, then the agent can import from it. | A project that has to stay where it is. |
 
-**Your asset folder** is one folder on your machine, `isaac-mcp-assets` by default, with a subfolder per project. Each
-subfolder is called a **pack**. To add one:
+**Your asset root** is one folder on your machine (`ISAAC_MCP_ASSET_ROOT`, else `<workspace>/assets`). It holds **packs**:
+`<pack id>/<version>/` with a `pack.yaml` that lists every file with its checksum, source and licence. To add one:
 
-1. Copy the project into it, for example `isaac-mcp-assets/so_arm100/` holding `so100.urdf` and its meshes.
-2. Ask your agent: *"List my asset packs, then pin the so_arm100 folder."* A folder only becomes a pack once it is
-   pinned, which records a checksum of every file so a changed file is noticed.
-3. Ask for it by name: *"Make a scene with the so_arm100/so100.urdf robot."*
+1. Ask your agent: *"Make a pack so_arm100/v1 from the folder I approved, source <where it came from>, licence <licence>."*
+   It copies the files, records a checksum of each, and a changed or extra file is noticed from then on.
+2. Ask for it by name: *"Make a scene with the so_arm100/v1/so100.urdf robot."*
 
-The agent uses `assets__packs`, `assets__pack_pin` and `sim__quick_start`. From a terminal, the same is
-`python3 scripts/isaac_assets.py adopt <folder>`. To keep the folder somewhere else, set `ISAAC_MCP_ASSET_PATH` before
-starting Isaac Sim and restart it.
+The agent uses `assets__pack` (`adopt`, `list`, `doctor`) and `sim__quick_start`. From a terminal, the same is
+`python3 scripts/isaac_assets.py adopt <folder> --pack so_arm100/v1 --source ... --license ...`. Set `ISAAC_MCP_ASSET_ROOT`
+before starting Isaac Sim to keep the folder somewhere else.
 
 **Good to know**
-- **Your files win.** If your folder has a file with the same name as an online one, yours is used, and nothing is
-  silently replaced.
-- **Online loading is optional.** Set `ISAAC_MCP_ASSET_STRICT=1` and nothing is fetched from NVIDIA; a missing file is an
-  error. Each result says where every file came from.
+- **Versions never change.** To change a pack, make a new version; nothing is silently replaced.
+- **Nothing is downloaded.** A file is in a pack or it is not. Each result says where every file came from.
 - **Trust.** Loading USD and URDF runs native parsers that are not sandboxed, so only load files you trust. Approving
   other folders is deliberately something only you can do, not the agent.
-- **Packs of USD scenes** work the same way. `assets__pack_build` copies a USD and only the files it needs into a pack.
+- **Packs of USD scenes** work the same way. `assets__pack_build` copies a USD and only the files it needs into a new version.
 
-Full details, including the UR5e twin's files: [Assets](docs/ASSETS.md).
+Full details: [Asset packs](docs/ASSET-PACKS.md).
 
 ## The tools
 
@@ -352,9 +349,9 @@ call what is running, and `refresh_tools` finds a simulator you have started.
 | I want to... | Read |
 |---|---|
 | Find an argument or default | [Tool arguments](docs/TOOLS-ARGUMENTS.md) |
-| Import my own USD or URDF | [Assets and packs](docs/ASSETS.md) · [Project roots](docs/TOOLS-SCENE.md#one-time-approval) |
+| Import my own USD or URDF | [Asset packs](docs/ASSET-PACKS.md) · [Project roots](docs/TOOLS-SCENE.md#one-time-approval) |
 | Use ROS 2, RViz 2 or Nav2 | [ROS 2 and RViz 2](docs/ROS2-RVIZ.md) |
-| Run the UR5e lab twin | [UR5e twin](docs/TOOLS-UR5E.md) · [lab files](docs/ASSETS.md#public-files-and-lab-files) |
+| Run the UR5e lab twin | [UR5e twin](docs/TOOLS-UR5E.md) · [the work cell's pack](exts/ur5e-dt/workcell/README.md#private-asset-pack) |
 | Configure the server | [Client configuration](docs/MCP-SERVER.md#4-client-configuration) · [Environment variables](docs/ENVIRONMENT.md) |
 | Check results or report a problem | [Verification](docs/VERIFICATION.md), which also says what to record |
 | Add my own tools | [Tool authoring](mcp/docs/tool-authoring.md) |
@@ -395,5 +392,5 @@ want the 20 GB simulator environment. See [AGENTS.md](AGENTS.md) for agent rules
 MIT licensed. This project grew out of work by Aldrin Inbaraj, a lab mate at the RISE lab: the UR5e twin began as a
 fork of his MIT-licensed [isaac-sim-mcp](https://github.com/inbarajaldrin/isaac-sim-mcp), and the bridge and client were first built on his [omni-kit-mcp](https://github.com/inbarajaldrin/omni-kit-mcp) before being rewritten
 here. Thank you, Aldrin. Component and asset terms differ, so read [VENDORING](docs/VENDORING.md) and the
-[asset notices](docs/provenance/ASSETS.md) before redistributing.
+[third-party notices](THIRD-PARTY-NOTICES.md) before redistributing.
 NVIDIA's installed runtime packages remain subject to their own terms.

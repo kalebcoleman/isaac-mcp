@@ -16,7 +16,7 @@ UR5e twin, `ur5e_dt__quick_start`.
 
 | Argument | Meaning |
 |---|---|
-| `robot` | Optional. A public name, `<pack>/<file.usd>`, or an absolute path under an approved root. Names: `ur5e` (your local copy first), and `franka`, `unitree_h1`, `unitree_g1` (humanoids), `turtlebot3_burger`, `carter_v1`, `nova_carter`, `jetbot` and `create3` from this simulator's own assets root, which are checked first and refused with the names if this build lacks one. A wheeled robot's result adds `robot.wheels` and `robot.cmd_vel_graph`, ready for `sim__graph__build`. See the [worked example](ROS2-RVIZ.md#worked-example-a-public-robot-cmd_vel-and-a-nav2-goal). |
+| `robot` | Optional. A public name, `<pack id>/<version>/<file.usd>` (or `.urdf`), or an absolute path under an approved root. Names: `ur5e`, `franka`, `unitree_h1`, `unitree_g1` (humanoids), `turtlebot3_burger`, `carter_v1`, `nova_carter`, `jetbot` and `create3`, all from this simulator's own assets root, which are checked first and refused with the names if this build lacks one. A wheeled robot's result adds `robot.wheels` and `robot.cmd_vel_graph`, ready for `sim__graph__build`. See the [worked example](ROS2-RVIZ.md#worked-example-a-public-robot-cmd_vel-and-a-nav2-goal). |
 | `environment` | Optional: `warehouse` builds a 24 by 16 m warehouse (see [A warehouse in one call](#a-warehouse-in-one-call)) and puts the robot in it; `jenga` builds a block tower with a Franka beside it (see [A Jenga tower in one call](#a-jenga-tower-in-one-call)). |
 | `ros` | With a robot: run what `sim__ros2__tf_setup` runs and report the matching shell line. |
 | `play` | Start the timeline. Default: stopped. |
@@ -58,11 +58,12 @@ To use it with Nav2, make the map of it with `sim__map__occupancy` (`min=[-12.5,
 The result has the new `session_id` and `stage_id`, the paths, `robot.articulation_root` (joint tools need this prim, not the
 robot prim), `assets` with each file's `source` and `location`, and `next_steps` with exact calls.
 
-Robot files follow the same rules as `assets__*`. The first local copy wins, then NVIDIA's URL for a public name, unless strict
-mode is on. A pack file is verified against its pins. An absolute path is snapshotted through your approved roots by the host,
-and needs shared staging. A file that would come only from a project file's `asset_path` is refused, because that is not an
-approval. A robot file must match `up_axis` and `meters_per_unit`; there is no conversion, and a mismatch refuses with
-`UNITS_MISMATCH`, both sets of values and `retry_with`. A remote file that cannot be read beforehand reports `units_note`.
+Robot files follow the same rules as `assets__*`. A public name (`ur5e`, `franka`, `unitree_g1`, ...) comes from the running
+simulator's own asset root; nothing is downloaded by these tools. A pack file is `<pack id>/<version>/<file>` in the
+[asset root](ASSET-PACKS.md): the manifest must list it and its bytes must match. An absolute path is snapshotted through your
+approved roots by the host, and needs shared staging. A project file never names a folder or a robot. A robot file must match
+`up_axis` and `meters_per_unit`; there is no conversion, and a mismatch refuses with
+`UNITS_MISMATCH`, both sets of values and `retry_with`.
 Everything is checked before the stage changes.
 
 Edits are in the session layer. `sim__stage__save` flattens that layer, so the saved file contains the whole scene and opens on
@@ -122,7 +123,7 @@ A refused path now ends with this command filled in for that folder, for the age
 
 Run the helper again with another `--root-id` and `--root` to add a folder; it only adds, and cannot
 repoint an existing root or change staging. `--staging` alone, with no root, sets up staging for
-importing [packs from your asset folder](ASSETS.md#trust-rules-for-the-pack-tools), which need no root
+importing [packs from your asset root](ASSET-PACKS.md#the-tools), which need no root
 of their own. Host and Kit read the file at startup, so restart them after a change.
 
 - A root that does not exist is reported in `assets__roots` as `missing_roots`, and the others keep
@@ -132,9 +133,9 @@ of their own. Host and Kit read the file at startup, so restart them after a cha
 - Roots must not overlap, because a snapshot copies a whole root and each file must belong to one.
 
 The pack tools follow the same rule. `assets__pack_adopt` copies only from an approved root;
-`assets__pack_build` reads sources and dependencies only from approved roots and user asset stores
-(not a project file's `asset_path`), which the user also sets outside the tools. All of them write only to the primary asset
-folder. See [the trust rules](ASSETS.md#trust-rules-for-the-pack-tools).
+`assets__pack_build` reads sources and dependencies only from approved roots and the asset root,
+which the user also sets outside the tools. All of them write only a new version under the asset root and never
+modify a version that exists. See [the tools](ASSET-PACKS.md#the-tools).
 
 Only use this for files and dependencies the user trusts with the OS account's permissions.
 The raw bridge remains powerful and unauthenticated: keep it on a trusted local interface.
@@ -152,19 +153,19 @@ UR5e, Isaac Lab, desktop and managed-session tools; it is not an enforcement bou
 `ISAAC_MCP_LOCAL_TOOLS` does not select these catalogued tools. `assets__roots`,
 `assets__scan`, `assets__search`, `assets__packs` and the `assets__pack_*` tools execute on the host even without Kit
 (`assets__dependencies` and the USD parts of the pack tools use a host USD helper if one is set, otherwise the
-selected Kit; see [asset packs](ASSETS.md#packs-from-mcp-tools)). Other tools explain an absent
+selected Kit; see [asset packs](ASSET-PACKS.md#the-tools)). Other tools explain an absent
 bridge/extension. Existing `sim__launch/list/status/stop` remain separate optional process tools.
 
 | Tool | Contract |
 |---|---|
 | `assets__roots` | List launch-approved project roots and capability refusals. Filename access only; trusted projects are NOT sandboxed. |
 | `assets__scan` | Bounded filename-only USD discovery on the MCP host. No USD parser. Results are untrusted data. A folder deeper than eight levels is skipped, not fatal: `skipped_deep` names it, `depth_limit` is 8, and the rest of the root is still listed. A snapshot still refuses, because copying part of a project silently would be wrong. |
-| `assets__packs` | List the asset packs in every store, the selected pack and where that choice came from. Host side, no Kit, no USD parser. Writes nothing. |
-| `assets__pack_doctor` | Check a pack without changing it: corrupt, missing and unpinned files, then the dependencies of its entry files (unresolved, unreadable, remote, outside the pack). A file accepted at build time with allow_unresolved is still missing, so it is reported and ok is false until it is added; `assets__import_path` refuses it for the same reason. Unused files are information. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. |
-| `assets__dependencies` | Compute dependency closures for files under an approved root or a user asset store. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A `.urdf` is read on the host with the build's package rules, so its meshes, `package.xml` and textures are returned instead of a parser error. Copies nothing. |
-| `assets__pack_adopt` | Create a pack in the primary asset folder, or copy a folder's asset files into it and pin them. The source must be under a user-approved root; no tool can approve folders. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in `skipped_symlinks` with a note. A different file already there is refused unless force=true; nothing is written inside the repository. |
-| `assets__pack_pin` | Record the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true. |
-| `assets__pack_build` | Copy USD files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. Sources must be under an approved root or a user asset store; dependencies outside those are never copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, and the result says `importable: false` with `import_blockers`. Files that differ need force=true. Checks the new pack afterwards. |
+| `assets__packs` | List every `<id>/<version>` pack in the asset root with its file count, size and whether it verifies against its `pack.yaml`, and any old-format pack with a hint to convert it. Host side, no Kit, no USD parser. Writes nothing. |
+| `assets__pack_doctor` | Check a pack without changing it: every listed file exists and matches its sha256, nothing unlisted or symlinked is in the folder, and the dependencies of its USD, URDF, MJCF, SDF, mesh and map files are all files of the same pack. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. |
+| `assets__dependencies` | Compute dependency closures for files under an approved root or the asset root. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A `.urdf` is read on the host with the build's package rules, so its meshes, `package.xml` and textures are returned instead of a parser error. Copies nothing. |
+| `assets__pack_adopt` | Copy a folder's asset files into a new `<id>/<version>` in the asset root and write its `pack.yaml` (sha256 of every file, the `source` and `license` you give, `redistributable` false unless you say so). The source must be under a user-approved root; no tool can approve folders. A version that exists is never modified. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in `skipped_symlinks` with a note. `from_old` converts an old-format pack folder of the asset root into `<id>/v1`. Nothing is written inside the repository. |
+| `assets__pack_pin` | Rewrite the sha256 values of an existing `pack.yaml` to match its files and show what changed. A version that already verifies is not modified; a changed hash is refused with before and after hashes unless the file is named in `files` or `force=true`. Missing or unlisted files need a new version. |
+| `assets__pack_build` | Copy USD, URDF, MJCF, SDF, mesh or map files and only what they depend on into a new pack version in the asset root, keeping relative layout, and write its `pack.yaml`. A file from `from_pack` keeps that pack's source, license and `redistributable`; any other file needs `source` and `license`. Sources must be under an approved root or the asset root; dependencies outside those are never copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import, and the result says `importable: false` with `import_blockers`. Checks the new pack afterwards. |
 | `assets__info` | Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. |
 | `assets__prepare_workstation` | Take an absolute USD path under an already approved trusted root, validate its bounded snapshot in the selected Kit, and prepare a private workstation cache without overwriting. Returns `loaded:false`; call `ur5e_dt__load_workstation` and inspect `/World/Vention` to verify. |
 | `assets__import_path` | The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF, or a folder that holds one. `format=auto` picks it from the name; xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. A USD composes with its own variant selections and payloads, and the result's `visuals` counts the geometry that will be drawn: a robot with physics but nothing to draw comes back with a warning instead of looking fine until you render it. See [ASSET-IMPORT.md](ASSET-IMPORT.md). |
@@ -301,8 +302,7 @@ the resulting prim or viewport before assuming physics is ready.
 For a workstation, after the same one-time trusted-root approval, call
 `assets__prepare_workstation` with the exact `session_id` and `stage_id` from `sim__stage__info`
 and `source_path` set to the absolute USD path under that root. The tool writes a private project
-copy and wrapper to `workstation/vention.usd` under the first store of `ISAAC_MCP_ASSET_PATH` (deprecated alias
-`UR5E_DT_ASSET_CACHE`, then `<workspace>/isaac-mcp-assets` when `ISAAC_MCP_WORKSPACE` is set, otherwise the `isaac-mcp-assets` folder next to the checkout), in its `ur5e-dt` pack folder, and reports the destination and dependency checks. It does **not** load the scene:
+copy and wrapper to `workstation/vention.usd` under the [asset root](ASSET-PACKS.md#the-asset-root-and-how-it-is-found), in its `ur5e-dt` folder (an old-format folder: this tool is planned for removal), and reports the destination and dependency checks. It does **not** load the scene:
 call `ur5e_dt__load_workstation` or the appropriate workstation quick-start, then inspect
 `/World/Vention`. The twin and selected Kit must use the same asset folder. A project store
 (`isaac-mcp.json`) still takes precedence; check which file the twin actually used with
@@ -804,8 +804,8 @@ layer). General graph topology and file/module hot-reload are not implemented. E
 
 From a public URDF to a moving joint, with these tools alone:
 
-1. `assets__pack_build` copies the URDF and what it names into a pack. See [Assets](ASSETS.md#build-a-pack-from-a-urdf).
-2. `sim__quick_start robot="<pack>/<file>.urdf"`, or `assets__import_path source_path=<file>.urdf` in a scene you have.
+1. `assets__pack_build` copies the URDF and what it names into a new pack version. See [Asset packs](ASSET-PACKS.md#the-tools).
+2. `sim__quick_start robot="<pack id>/<version>/<file>.urdf"`, or `assets__import_path source_path=<file>.urdf` in a scene you have.
    Pass `fixed_base=false` for a robot that drives or walks.
 3. Play, then `sim__joints__state` and `sim__joints__command` on the reported `articulation_root`; `sim__joints__inspect` takes that same path (a link carrying the articulation API also works) to show authored limits and drives.
 
@@ -853,7 +853,7 @@ A successful import does not prove fidelity: check it with `sim__camera__capture
 Most robots in [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) (the Franka, UR5e, quadrupeds and humanoids)
 ship only as MuJoCo XML. `assets__import_path` brings one in with the importer Isaac Sim 6.x ships (`isaacsim.asset.importer.mjcf`):
 
-1. Download the model folder (a named source: see [Where assets come from](ASSETS.md#where-assets-come-from)), and have the user approve
+1. Download the model folder (a named source: see [Provenance](ASSET-PACKS.md#provenance)), and have the user approve
    **that folder**: the whole folder is copied for each import, so approve the one robot's folder, not the whole repository.
 2. `assets__import_path source_path=<folder>/<model>.xml prim_path=/World/<name>` in a scene you have. Leave `fixed_base` out to keep what the
    model says: an arm without a free joint is fixed, a quadruped or humanoid with one floats and falls. Pass `fixed_base=true` to pin a

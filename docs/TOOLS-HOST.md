@@ -316,7 +316,7 @@ At server startup the operator may set these environment variables:
 | `ISAAC_MCP_SIM_MIN_FREE_VRAM_MIB` | `8192` | Minimum free GPU memory at launch. |
 | `ISAAC_MCP_SIM_MIN_FREE_RAM_MIB` | `4096` | Minimum available system RAM at launch. |
 
-A launched simulator inherits this server's environment, so `ISAAC_MCP_ASSET_PATH` and `DISPLAY` come from the `env` of your MCP
+A launched simulator inherits this server's environment, so `ISAAC_MCP_ASSET_ROOT` and `DISPLAY` come from the `env` of your MCP
 client's server entry, not from a shell you opened later. It removes `PYTHONPATH`, `UR5E_DT_HEADLESS` and `UR5E_DT_SHOW_PANEL`, sets its own port, bind address, ROS domain, backend and output folder, and
 passes `ISAAC_MCP_PYTHON`, `UR5E_DT_PYTHON` and `ISAAC_MCP_WORKSPACE` only from the server's own settings.
 
