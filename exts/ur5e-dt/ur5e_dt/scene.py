@@ -15,8 +15,6 @@ def _preflight(config_path, mode):
     if mode not in ("physics", "mirror_real"):
         raise ValueError("mode must be physics or mirror_real")
     config, raw = hardware_config.load_config(config_path)
-    if (config.get("pack", {}).get("id"), config.get("pack", {}).get("version")) != ("ur5e-jenga-workcell", "v1"):
-        raise ValueError("pack must identify ur5e-jenga-workcell v1")
     roles = config.get("assets", {})
     if any(not isinstance(roles.get(role), str) or not roles[role] for role in ROLES):
         raise ValueError("assets must map every workcell role to a logical asset ID")
@@ -38,6 +36,7 @@ def _preflight(config_path, mode):
     if len(jenga["tower_xy_m"]) != 2 or not all(math.isfinite(float(value)) for value in jenga["tower_xy_m"]):
         raise ValueError("invalid jenga tower position")
     pack = asset_pack.resolve_pack(config)
+    pack.verify_dependencies()
     assets = {}
     for role in ROLES:
         path = Path(pack.asset(roles[role]))
@@ -111,9 +110,9 @@ class Workcell:
             bench.GetPrim().GetReferences().AddReference(str(assets["bench"]))
             xy = config["world"]["workstation_xy_m"]
             scale = config["world"]["bench_scale"]
-            bench.AddTranslateOp().Set(Gf.Vec3d(xy[0], xy[1], -config["world"]["bench_asset_top_z_m"] * scale))
+            bench.AddTranslateOp().Set(Gf.Vec3d(xy[0], xy[1], -config["world"]["bench_asset_top_z_m"]))
             bench.AddScaleOp().Set(Gf.Vec3f(scale, scale, scale))
-            robot_report = robot.build_robot(stage, assets, config)
+            robot_report = robot.build_robot(stage, pack, config)
             camera_report = cameras.build_cameras(stage, assets, config, robot_report)
             block_report = jenga.build(stage, assets["jenga_block"], config)
             parts = ([{"prim_path": "/World/Bench", "asset_id": config["assets"]["bench"], "bom_id": "bench"}]

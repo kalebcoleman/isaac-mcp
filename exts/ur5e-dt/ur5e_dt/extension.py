@@ -33,16 +33,22 @@ class DigitalTwin(Commands, omni.ext.IExt):
         from .scene import Workcell
 
         self.workcell = Workcell()
-        self._mcp = get_mcp_bridge()
-        requested_port = os.getenv("UR5E_DT_PORT") or os.getenv("ISAAC_SIM_PORT")
-        configured_port = knobs.PORT.read()
-        attach(self._mcp, MCP_TOOL_REGISTRY, self, ToolDefinition,
-               requested_port=int(requested_port) if requested_port is not None else None,
-               configured_port=int(configured_port) if configured_port is not None else None,
-               host=knobs.BIND.read() or "localhost")
+        self._mcp = None
+        try:
+            bridge = get_mcp_bridge()
+            requested_port = os.getenv("UR5E_DT_PORT") or os.getenv("ISAAC_SIM_PORT")
+            configured_port = knobs.PORT.read()
+            attach(bridge, MCP_TOOL_REGISTRY, self, ToolDefinition,
+                   requested_port=int(requested_port) if requested_port is not None else None,
+                   configured_port=int(configured_port) if configured_port is not None else None,
+                   host=knobs.BIND.read() or "localhost")
+            self._mcp = bridge
+        except Exception:
+            self.workcell.shutdown()
+            raise
 
     def on_shutdown(self):
-        bridge = self._mcp
+        bridge = getattr(self, "_mcp", None)
         self._mcp = None
         if bridge is not None:
             bridge.unregister_owner(OWNER_ID, on_drained=self.workcell.shutdown)

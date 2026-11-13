@@ -24,7 +24,8 @@ def main():
     with BridgeClient(host=args.host, port=args.port, timeout=120) as bridge:
         identity = bridge.call("status", {})
         print("Bridge:", json.dumps(identity, default=str), flush=True)
-        code = f'''from ur5e_dt.scene import Workcell
+        code = f'''import omni.usd
+from ur5e_dt.scene import Workcell
 from pxr import UsdPhysics, UsdGeom
 workcell = Workcell()
 report = await workcell.quick_start(config_path={args.config!r}, mode={args.mode!r}, discard_changes={args.discard_changes!r})

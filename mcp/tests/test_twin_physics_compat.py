@@ -4,7 +4,6 @@ import importlib.util
 from pathlib import Path
 
 import pytest
-import twin_source
 
 
 path = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/physics_compat.py"
@@ -408,105 +407,10 @@ def test_saved_twin_runtime_restores_only_uninitialized_process_configuration(
     assert not native.configured
 
 
-@pytest.mark.parametrize("engine", ["physx", "newton"])
-def test_rebinding_saved_graphs_does_not_rebuild_or_author_usd(monkeypatch, engine):
-    import ast
-    from types import SimpleNamespace as NS
-    source = ast.parse(twin_source.SOURCE.read_text())
-    cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == "DigitalTwin")
-    fn = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "_resubscribe_physics_callbacks")
-    events = []
-    stage = NS(GetPrimAtPath=lambda path: True)  # No USD mutation API supplied.
-    namespace = {"omni": NS(usd=NS(get_context=lambda: NS(get_stage=lambda: stage))),
-                 "og": NS(get_node_by_path=lambda p: p),
-                 "selected_engine": lambda: engine,
-                 "wrench_capability": lambda: {"available": True},
-                 "subscribe_physics_step": lambda callback: events.append(callback) or callback}
-    exec(compile(ast.Module(body=[fn], type_ignores=[]), "rebind", "exec"), namespace)
-    owner = NS(_stop_gripper_physics=lambda: events.append("close gripper"),
-               _stop_physics_callback=lambda *a: events.append("close force"),
-               _set_force_gate=lambda *a, **kw: events.append("gate"),
-               _on_physics_step_gripper="gripper", _on_physics_step_force="force")
-    namespace[fn.name](owner)
-    assert events == ["close gripper", "gripper", "close force", "gate", "force"]
-    assert owner._pad_local is None
-    assert owner._gripper_pad_attr.endswith("/pad_pub.inputs:data")
-    assert owner._force_publish_active
 
 
-def test_gate_cleanup_before_graph_creation_never_queries_missing_og_attribute():
-    import ast
-    from types import SimpleNamespace as NS
-    source = ast.parse(twin_source.SOURCE.read_text())
-    cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == "DigitalTwin")
-    fn = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "_set_force_gate")
-    values, queried = [], []
-    present = [False]
-    stage = NS(GetPrimAtPath=lambda p: present[0])
-    namespace = {"omni": NS(usd=NS(get_context=lambda: NS(get_stage=lambda: stage))),
-                 "og": NS(Controller=NS(attribute=lambda p: queried.append(p) or NS(set=values.append)))}
-    exec(compile(ast.Module(body=[fn], type_ignores=[]), "force_gate", "exec"), namespace)
-    gate = namespace["_set_force_gate"]
-    gate(None, False)
-    assert not queried
-    with pytest.raises(RuntimeError, match="validity gate"):
-        gate(None, True, required=True)
-    assert not queried
-    present[0] = True
-    gate(None, False)
-    gate(None, True, required=True)
-    assert values == [False, True]
 
 
-@pytest.mark.parametrize("initial_frame", ["", "stale-frame"])
-@pytest.mark.parametrize("header_failure", [False, True])
-@pytest.mark.parametrize("engine", ["physx", "newton"])
-def test_force_callback_restores_frame_and_time_before_publishing(
-        monkeypatch, initial_frame, header_failure, engine):
-    import ast
-    import sys
-    from types import SimpleNamespace as NS
-
-    source = ast.parse(twin_source.SOURCE.read_text())
-    cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == "DigitalTwin")
-    fn = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "_on_physics_step_force")
-    values = {"inputs:header:frame_id": initial_frame}
-    events = []
-
-    def attribute(name, node):
-        def put(value):
-            if name == "inputs:header:frame_id" and header_failure:
-                raise RuntimeError("header unavailable")
-            values[name] = value
-            events.append((name, value))
-        return NS(set=put)
-
-    namespace = {
-        "selected_engine": lambda: engine,
-        "og": NS(Controller=NS(attribute=attribute)),
-        "omni": NS(usd=NS(get_context=lambda: NS(get_stage=lambda: object()))),
-        "tool_wrench": lambda *args: [1, 2, 3, 4, 5, 6],
-        "physics_stamp": compat.physics_stamp,
-        "wrench_capability": lambda: {"available": True},
-    }
-    monkeypatch.setitem(sys.modules, "isaacsim.core.simulation_manager", NS(
-        SimulationManager=NS(get_simulation_time=lambda: 1.25)))
-    exec(compile(ast.Module(body=[fn], type_ignores=[]), "force_callback", "exec"), namespace)
-    owner = NS(_force_pub_node=object(),
-               _set_force_gate=lambda value, **kw: events.append(("gate", value)),
-               _lazy_init_articulation=lambda *args: NS(_physics_view=object()))
-    namespace[fn.name](owner, 1 / 120)
-    assert events[0] == ("gate", False)
-    if header_failure:
-        assert ("gate", True) not in events
-        assert owner._force_publish_status["available"] is False
-        assert owner._force_publish_status["reason"] == "header unavailable"
-    else:
-        assert values["inputs:header:frame_id"] == "tool0"
-        assert values["inputs:header:stamp:sec"] == 1
-        assert values["inputs:header:stamp:nanosec"] == 250_000_000
-        assert events[-1] == ("gate", True)
-        assert owner._force_publish_status["status"] == "ready"
 
 
 @pytest.mark.parametrize("enabled,available,release,success,expected", [

@@ -4,7 +4,7 @@ import math
 from pathlib import Path
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config/lab_hardware.json"
-STATUSES = {"confirmed", "unconfirmed", "conflict", "placeholder", "to_buy"}
+STATUSES = {"confirmed", "unconfirmed"}
 
 
 def load_config(path=None):
@@ -15,7 +15,7 @@ def load_config(path=None):
             continue
         values[section] = {}
         for key, record in fields.items():
-            if set(record) != {"value", "status", "source"} or record["status"] not in STATUSES or not record["source"]:
+            if not isinstance(record, dict) or set(record) != {"value", "status", "source"} or record["status"] not in STATUSES or not record["source"]:
                 raise ValueError(f"Missing provenance for {section}.{key}")
             values[section][key] = record["value"]
     order = values["stack"]["order"]

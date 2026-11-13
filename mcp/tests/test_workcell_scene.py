@@ -31,7 +31,7 @@ def config(scene):
     return {"pack": {"id": "ur5e-jenga-workcell", "version": "v1"},
             "assets": {role: role for role in scene.ROLES},
             "world": {"workstation_xy_m": [0.2, -0.1], "bench_scale": 0.01,
-                      "bench_asset_top_z_m": 80.0, "tabletop_z_m": 0.0},
+                      "bench_asset_top_z_m": 0.8, "tabletop_z_m": 0.0},
             "jenga": {"block_size_m": [0.072, 0.024, 0.014], "block_mass_kg": 0.015,
                       "tower_layers_built": 18, "tower_xy_m": [0.7, -0.13]}}
 
@@ -42,6 +42,8 @@ def install_contracts(monkeypatch, scene, tmp_path, values):
     pack_module = types.ModuleType("workcell_test.asset_pack")
     class Pack:
         manifest = {"id": "ur5e-jenga-workcell"}
+        def verify_dependencies(self):
+            return True
         def asset(self, logical_id):
             return tmp_path / logical_id
     pack_module.resolve_pack = lambda value: Pack()

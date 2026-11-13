@@ -31,7 +31,7 @@ def test_default_cell_has_provenance_and_full_size_tower():
     assert cfg["jenga"]["block_size_m"] == [0.072, 0.024, 0.014]
     assert cfg["jenga"]["tower_layers_built"] == 18
     assert cfg["gravity"]["mode"] == "physics"
-    assert raw["wrist_camera"]["offset_in_tool0_m"]["status"] == "conflict"
+    assert raw["wrist_camera"]["offset_in_tool0_m"]["status"] == "unconfirmed"
 
 
 @pytest.mark.parametrize("order", [["bota", "rg2", "quick_changer"], ["bota", "bota", "rg2"]])
