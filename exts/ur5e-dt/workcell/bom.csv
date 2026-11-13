@@ -1,9 +1,9 @@
 bom_id,area,item,model,quantity,unit,asset_id,unit_price,currency,price_status,price_source,hardware_status,source,notes
 bench,scene,Vention workbench with lab benchtop,Vention custom,1,each,bench,,USD,quote_required,,confirmed,Preserved local Vention CAD (private flatten),Genuine vendor mesh; top size and height remain unmeasured
 robot,robot,UR5e collaborative robot arm,Universal Robots UR5e,1,each,robot,,USD,quote_required,,confirmed,Kaleb; UR5e datasheet,No public manufacturer list price; distributor quote required
-base_plate,robot,UR5e mounting base plate,Unmeasured lab plate,1,each,base_plate,,USD,quote_required,,unconfirmed,Config robot.base_plate_thickness_m,Thickness recorded as 0.0 pending caliper measurement
+base_plate,robot,UR5e mounting base plate,Unmeasured lab plate,1,each,base_plate,,USD,quote_required,,unconfirmed,Config base_plate.placement,Private proxy is 5 mm thick; measure plate and robot elevation
 bota,robot,Bota Rokubi force/torque sensor,Bota Systems Rokubi BFT-ROKS-SER-M8,1,each,bota,,USD,quote_required,,confirmed,bota_socket.json product_name and serial SN000540,Dimensions and mass remain approximate
-quick_changer,robot,OnRobot Quick Changer robot and tool side,OnRobot Quick Changer,1,each,quick_changer,,USD,quote_required,,confirmed,Kaleb; Aldrin CAD standoff,Standoff 0.01592 m confirmed; mass unconfirmed
+quick_changer,robot,OnRobot Quick Changer robot and tool side,OnRobot Quick Changer,1,each,quick_changer,,USD,quote_required,,confirmed,Kaleb; Aldrin CAD standoff,CAD standoff 0.01592 m; physical installed standoff and mass unconfirmed
 rg2,robot,OnRobot RG2 standard parallel gripper,OnRobot RG2,1,each,rg2,,USD,quote_required,,confirmed,Kaleb; OnRobot RG2 datasheet,Standard RG2 not RG2-FT; 110 mm maximum opening confirmed
 finger_pad,robot,Black add-on RG2 finger pads,OnRobot standard pads,2,each,finger_pad,,USD,quote_required,,confirmed,Kaleb,Pad geometry and friction are placeholders until measured
 d415,camera,Intel RealSense D415 depth camera,Intel RealSense D415,2,each,d415,272.00,USD,verified_web_list,https://store.realsenseai.com/buy-intel-realsense-depth-camera-d415.html,confirmed,Kaleb; Intel D415 datasheet,Wrist camera present; overhead camera is a to-buy second unit

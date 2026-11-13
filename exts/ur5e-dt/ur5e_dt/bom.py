@@ -87,8 +87,16 @@ def _validate_rows(rows):
 
 def load_manifest(path):
     try:
-        manifest = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        text = Path(path).read_text(encoding="utf-8")
+        try:
+            manifest = json.loads(text)
+        except json.JSONDecodeError:
+            import yaml
+            try:
+                manifest = yaml.safe_load(text)
+            except yaml.YAMLError as exc:
+                raise ValueError(str(exc)) from exc
+    except (OSError, ValueError, ImportError) as exc:
         raise BomError(f"Cannot read pack manifest {path}: {exc}") from exc
     if not isinstance(manifest, dict):
         raise BomError("Pack manifest must be a mapping")
@@ -195,12 +203,8 @@ def _prim_attr(prim, name):
 
 
 def _is_physical(prim):
-    try:
-        if prim.IsA("Mesh"):
-            return True
-        return any(prim.HasAPI(api) for api in PHYSICAL_APIS)
-    except Exception:
-        return False
+    return (prim.GetTypeName() in {"Mesh", "Cube", "Sphere", "Cylinder", "Capsule", "Cone", "Plane"}
+            or bool(set(prim.GetAppliedSchemas()).intersection(PHYSICAL_APIS)))
 
 
 def _stage_prims(stage):
@@ -251,6 +255,11 @@ def audit_parts(parts, rows, stage=None, require_all=True, strict=False):
     missing = sorted(set(rows_by_id) - set(mapped))
     if require_all and missing:
         errors.append(f"BOM rows have no mapped physical part: {missing}")
+    if require_all:
+        for bom_id, row in rows_by_id.items():
+            count = len(mapped.get(bom_id, ()))
+            if count != row["quantity"]:
+                errors.append(f"BOM quantity mismatch for {bom_id}: {count} mapped, {row['quantity']} expected")
     unmatched, empty, physical_paths = [], [], []
     if stage is not None:
         physical_paths = [_prim_path(prim) for prim in _stage_prims(stage) if _is_physical(prim)]
@@ -259,6 +268,8 @@ def audit_parts(parts, rows, stage=None, require_all=True, strict=False):
                  if not any(_under(item, (path,)) for item in physical_paths)]
         if unmatched:
             errors.append(f"Mesh or collider has no mapped BOM ancestor: {sorted(unmatched)}")
+        if empty:
+            errors.append(f"Part mappings contain no physical geometry: {empty}")
         if not physical_paths:
             errors.append("Stage has no mesh or collider prims to audit")
     report = {"ok": not errors, "errors": errors, "parts": len(parts),

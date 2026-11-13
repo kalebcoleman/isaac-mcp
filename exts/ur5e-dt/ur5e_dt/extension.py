@@ -52,3 +52,5 @@ class DigitalTwin(Commands, omni.ext.IExt):
         self._mcp = None
         if bridge is not None:
             bridge.unregister_owner(OWNER_ID, on_drained=self.workcell.shutdown)
+        elif getattr(self, "workcell", None) is not None:
+            self.workcell.shutdown()

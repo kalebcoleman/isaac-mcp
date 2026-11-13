@@ -42,11 +42,11 @@ class Prim:
     def GetPath(self):
         return self.path
 
-    def IsA(self, name):
-        return name == self.kind
+    def GetTypeName(self):
+        return self.kind
 
-    def HasAPI(self, name):
-        return name in self.apis
+    def GetAppliedSchemas(self):
+        return list(self.apis)
 
     def IsValid(self):
         return True
