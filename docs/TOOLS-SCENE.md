@@ -11,17 +11,15 @@ This page describes behavior and limits. For each tool's arguments and defaults,
 `sim__quick_start` builds a working scene with one call and no IDs: a ground plane, a physics scene, two lights and a camera
 aimed at the origin. It uses the current stage if that is new and empty; otherwise it makes a new one. Called again with `robot` on a scene it
 built, it adds that robot and keeps what you made (`kept_scene` in the result); `discard_changes=true` starts over. It adds no real-robot
-wiring, so there is no mirror graph, gripper, `/joint_states` subscriber, force publisher or panel. Those belong to the RISE lab
-UR5e twin, `ur5e_dt__quick_start`.
+wiring, so there is no mirror graph, gripper, `/joint_states` subscriber or force publisher. The lab's UR5e Jenga work cell is built
+by `ur5e_dt__workcell(action="quick_start")`, documented in its [README](../exts/ur5e-dt/workcell/README.md).
 
-| Argument | Meaning |
-|---|---|
-| `robot` | Optional. A public name, `<pack id>/<version>/<file.usd>` (or `.urdf`), or an absolute path under an approved root. Names: `ur5e`, `franka`, `unitree_h1`, `unitree_g1` (humanoids), `turtlebot3_burger`, `carter_v1`, `nova_carter`, `jetbot` and `create3`, all from this simulator's own assets root, which are checked first and refused with the names if this build lacks one. A wheeled robot's result adds `robot.wheels` and `robot.cmd_vel_graph`, ready for `sim__graph__build`. See the [worked example](ROS2-RVIZ.md#worked-example-a-public-robot-cmd_vel-and-a-nav2-goal). |
-| `environment` | Optional: `warehouse` builds a 24 by 16 m warehouse (see [A warehouse in one call](#a-warehouse-in-one-call)) and puts the robot in it; `jenga` builds a block tower with a Franka beside it (see [A Jenga tower in one call](#a-jenga-tower-in-one-call)). |
-| `ros` | With a robot: run what `sim__ros2__tf_setup` runs and report the matching shell line. |
-| `play` | Start the timeline. Default: stopped. |
-| `up_axis`, `meters_per_unit` | The stage's up axis (`Z` or `Y`, default `Z`) and units (default `1.0`; `0.01` for centimetres). The ground, gravity, camera and framing follow them. |
-| `discard_changes` | Replace a stage with unsaved edits, which are lost. Without it, the call refuses with `UNSAVED_CHANGES` and changes nothing. |
+Its arguments (`robot`, `environment`, `ros`, `play`, `up_axis`, `meters_per_unit`, `discard_changes` and the robot-file options) are in
+the [tool arguments](TOOLS-ARGUMENTS.md#sim__quick_start). A public robot name (`ur5e`, `franka`, `unitree_h1`, `unitree_g1`,
+`turtlebot3_burger`, `carter_v1`, `nova_carter`, `jetbot`, `create3`) is loaded from this simulator's own assets root, checked first
+and refused with the names if this build lacks it. A wheeled robot's result adds `robot.wheels` and `robot.cmd_vel_graph`, ready for
+`sim__graph__build`; see the [worked example](ROS2-RVIZ.md#worked-example-a-public-robot-cmd_vel-and-a-nav2-goal). Without
+`discard_changes=true`, a stage with unsaved edits is not replaced: the call refuses with `UNSAVED_CHANGES` and changes nothing.
 
 ### A Jenga tower in one call
 
@@ -88,16 +86,14 @@ anything that replaces the stage. The calls below ran against a live 6.2.0.0 hea
    timeline and pauses it in one call; physics may advance. A runtime read confirms readiness.
    `sim__simulation__step` advances exact steps only while paused; `sim__simulation__run` runs a
    whole closed loop with your controller as a [job](#controller-runs-jobs-and-replay).
-5. **Read joints:** pass the **articulation root**, not the robot's parent Xform. On the twin that is
-   `/World/UR5e/root_joint`; `/World/UR5e` returns `PHYSICS_NOT_READY`. `sim__ros2__tf_setup` reports the root as
-   `articulation_root`.
+5. **Read joints:** pass the **articulation root**, not the robot's parent Xform: a robot's root is often a fixed `root_joint`
+   below its prim, and the parent returns `PHYSICS_NOT_READY`. `sim__ros2__tf_setup` reports the root as `articulation_root`.
 6. **Stop before editing again:** `action="stop"`. Authored edits refuse with `TIMELINE_ACTIVE` while playing or paused.
    After a run that failed part-way, `action="reset"` cancels its jobs and stops in one call.
 7. **Keep it:** `sim__stage__save` with `filename`, and optionally a `directory` under your home. `sim__stage__open`
    opens files under your home only.
 
-Two things to expect with the UR5e twin: `ur5e_dt__quick_start*` leaves the timeline **playing**, so call stop before generic
-edits. A first generic Play on a timeline something else started refuses with `TIMELINE_ALREADY_ACTIVE`, for the same fix. When stopping would end a project's own script that paused it (a BrickSim demo waits for Play), `action=play resume=true` continues it instead.
+A first generic Play on a timeline something else started refuses with `TIMELINE_ALREADY_ACTIVE`; stop it first. When stopping would end a project's own script that paused it (a BrickSim demo waits for Play), `action=play resume=true` continues it instead.
 Helper scripts that speak MCP run as `uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>`
 (`scene-test` adds the `pxr` and `numpy` the validators import).
 
@@ -113,8 +109,7 @@ uv run --locked --isolated --project mcp --python 3.12 python -m isaac_mcp.proje
 ```
 
 Set `ISAAC_MCP_ASSET_CONFIG=/absolute/private/approval.json` in **both** the MCP host and
-Kit launch environments, then restart them. `run.sh` enables `sim-tools` and retains all UR5e
-behavior. Direct Kit users enable `sim-tools` beside `isaac.mcp.bridge` from this checkout.
+Kit launch environments, then restart them. `run.sh` enables `sim-tools`. Direct Kit users enable `sim-tools` beside `isaac.mcp.bridge` from this checkout.
 No manifest or hand-written Python is needed. Approval is explicit configuration, not a universal
 MCP approval dialog. No tool can grant roots. Launching outside the project works because paths
 are absolute. Default configuration grants no roots.
@@ -146,67 +141,42 @@ A missing/different mount produces an error, never an implicit transfer via `put
 
 ## Tools
 
-Names below are registered only when their toolset is enabled. Use `status` to inspect toolsets
-or `ISAAC_MCP_TOOLSETS=default,+ros2,+kit_debug` to include the optional scene integrations.
+Names below are registered only when their toolset is enabled (`scene`, `physics`, `sensors`, `assets`, `ros2`, `kit_debug`;
+`status` shows which are on, and `ISAAC_MCP_TOOLSETS=default,+ros2,+kit_debug` adds the optional ones; see [toolsets](TOOLSETS.md)).
+Every tool and argument is in the generated [tool arguments](TOOLS-ARGUMENTS.md). The rows below are only the tools whose contract
+says more than their generated description: refusals, error codes, limits and side effects. A tool with no row is fully described
+there.
 `assets__roots`,
 `assets__scan`, `assets__search`, `assets__packs` and the `assets__pack_*` tools execute on the host even without Kit
 (`assets__dependencies` and the USD parts of the pack tools use a host USD helper if one is set, otherwise the
 selected Kit; see [asset packs](ASSET-PACKS.md#the-tools)). Other tools explain an absent
-bridge/extension. Existing `sim__launch/list/status/stop` remain separate optional process tools.
+bridge/extension. The optional `sim__session` process tools are separate (see [host tools](TOOLS-HOST.md#optional-simulator-sessions)).
 
 | Tool | Contract |
 |---|---|
-| `assets__roots` | List launch-approved project roots and capability refusals. Filename access only; trusted projects are NOT sandboxed. |
 | `assets__scan` | Bounded filename-only USD discovery on the MCP host. No USD parser. Results are untrusted data. A folder deeper than eight levels is skipped, not fatal: `skipped_deep` names it, `depth_limit` is 8, and the rest of the root is still listed. A snapshot still refuses, because copying part of a project silently would be wrong. |
-| `assets__packs` | List every `<id>/<version>` pack in the asset root with its file count, size and whether it verifies against its `pack.yaml`, and any old-format pack with a hint to convert it. Host side, no Kit, no USD parser. Writes nothing. |
-| `assets__pack_doctor` | Check a pack without changing it: every listed file exists and matches its sha256, nothing unlisted or symlinked is in the folder, and the dependencies of its USD, URDF, MJCF, SDF, mesh and map files are all files of the same pack. Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. |
-| `assets__dependencies` | Compute dependency closures for files under an approved root or the asset root. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A `.urdf` is read on the host with the build's package rules, so its meshes, `package.xml` and textures are returned instead of a parser error. Copies nothing. |
 | `assets__pack_adopt` | Copy a folder's asset files into a new `<id>/<version>` in the asset root and write its `pack.yaml` (sha256 of every file, the `source` and `license` you give, `redistributable` false unless you say so). The source must be under a user-approved root; no tool can approve folders. A version that exists is never modified. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in `skipped_symlinks` with a note. `from_old` converts an old-format pack folder of the asset root into `<id>/v1`. Nothing is written inside the repository. |
-| `assets__pack_pin` | Rewrite the sha256 values of an existing `pack.yaml` to match its files and show what changed. A version that already verifies is not modified; a changed hash is refused with before and after hashes unless the file is named in `files` or `force=true`. Missing or unlisted files need a new version. |
 | `assets__pack_build` | Copy USD, URDF, MJCF, SDF, mesh or map files and only what they depend on into a new pack version in the asset root, keeping relative layout, and write its `pack.yaml`. A file from `from_pack` keeps that pack's source, license and `redistributable`; any other file needs `source` and `license`. Sources must be under an approved root or the asset root; dependencies outside those are never copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import, and the result says `importable: false` with `import_blockers`. Checks the new pack afterwards. |
-| `assets__info` | Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. |
 | `assets__import_path` | The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF, or a folder that holds one. `format=auto` picks it from the name; xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. A USD composes with its own variant selections and payloads, and the result's `visuals` counts the geometry that will be drawn: a robot with physics but nothing to draw comes back with a warning instead of looking fine until you render it. See [ASSET-IMPORT.md](ASSET-IMPORT.md). |
 | `sim__stage__info` | Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations. Also returns `ros`: the simulator's ROS_DISTRO, ROS_DOMAIN_ID, RMW, localhost and Cyclone settings, plus the shell line that matches them. |
 | `sim__quick_start` | Build a ground plane, physics scene, lights and an aimed camera with no IDs, optionally with a robot and ROS 2. See [Start a scene](#start-a-scene). |
 | `sim__stage__open` | Open a .usd/.usda/.usdc/.usdz file under your home, or in this simulator's own output folder (where `sim__stage__save` writes by default), as the current stage (File > Open), timeline stopped; refuses to drop unsaved edits unless `discard_changes=true` (a fresh Kit's empty stage counts as nothing to lose). Returns the new `session_id`/`stage_id`, prim count and composition-error count; run_python sessions reset. |
 | `sim__stage__tree` | Bounded stage hierarchy including inactive prims; `depth` limits levels below `root`; Kit's runtime `/Render` (Replicator) prims are hidden unless `include_runtime=true`. Text is untrusted data. |
-| `sim__prim__get` | Read local/world matrices and authored physics at default USD time. Runtime physics readiness remains unknown. |
-| `sim__prim__bounds` | World-space bounds of one prim at default USD time from `UsdGeom.BBoxCache.ComputeWorldBound`: axis-aligned min/max, centre and size, plus the oriented box's world corners. `purpose` selects default, render, proxy or guide geometry; `empty` says the prim has no boundable content. Stage units. Authored USD, not a runtime physics observation. |
-| `sim__prim__measure` | Distance between two prims' world bounds: centre-to-centre and the shortest gap (`0` when the axis-aligned bounds overlap), with each prim's bound. Refuses with `NO_BOUNDS` when either prim has no bounds, naming it and pointing to `sim__prim__bounds`. Stage units; authored USD. |
-| `sim__prim__find` | Bounded literal path substring/type search (not regex). Includes inactive prims. |
 | `sim__prim__create` | Create a Cube, Sphere, Cylinder, Capsule, Cone, Plane, Xform or PhysicsScene in the session layer. No arbitrary references/attributes. Stopped timeline, existing parent and no conflict required. Dimensions are stage units; `size` is the cube edge, the sphere/cylinder/capsule/cone diameter or height, or the Plane's width and length (its axis follows the stage up axis). `mass` (kilograms) or `density` (kg/m^3) authors PhysicsMassAPI on volume geometry; `rigid=true` gives it a runtime effect. |
 | `sim__prim__create_many` | Create up to 200 prims in one call, all or none: a tower, a wall, a grid or a room without one call per piece. Each item takes `sim__prim__create`'s arguments plus an optional `material` path; `defaults` fills any key an item leaves out (kind, size, mass, material). A failing item removes the earlier ones and the error keeps its code and names its index and path. A shared `rigid`, `mass`, `density`, `collision` or `material` that doesn't apply to an item's kind (an Xform, PhysicsScene or Plane) is skipped for it and listed in `defaults_skipped`. `sim__material__apply` takes `paths` (up to 128) and checks every prim before binding any. |
 | `sim__prim__set_transform` | Set a static local or world pose on **any** Xformable prim in the session layer, reporting the pose before and after; undo with `sim__prim__revert`. Authors one transform op and, when the prim's stack is not already that one op, a session `xformOpOrder` that replaces the composed order. Refuses instance proxies (name the instance root), articulation links other than the root (a joint attaches them; it names the robot Xform to move instead), time-sampled transforms, Kit runtime prims, prims with no Xformable schema and a running or paused timeline. Source files never change. No claim of runtime teleportation. |
-| `sim__prim__set_attribute` | Set one typed attribute on any prim in the session layer, reading the composed value before and after; undo with `sim__prim__revert`. `type` creates a missing attribute (bool, int, uint, int64, uint64, float, double, string, token, asset, float2/3/4, double2/3/4, int2/3, color3f/4f, normal3f, point3f, vector3f, quatf, quatd); without it the attribute must exist. Refuses engine- and schema-owned attributes (`points`, `normals`, `faceVertexIndices`, `faceVertexCounts`, `extent`, `xformOpOrder`, `xformOp:*`, `physics:*`, `physx*:*`), instance proxies and Kit runtime prims. |
-| `sim__prim__revert` | Remove the session-layer opinions these tools recorded on one prim or its subtree, restoring the composed values from the source files; reports what was removed and the values before and after. Source files never change. Prims the pack created stay (delete them with `sim__prim__delete`). Nothing recorded is a no-op, not an error. Only edits recorded in this session and stage can be undone. |
-| `sim__physics__apply` | Add or remove a collider, rigid body and kinematic state, or set `mass` / `density`, on any prim; session layer only and undo with `sim__prim__revert`. `collider=true` may set `approximation` (convexHull, convexDecomposition, boundingSphere, boundingCube, meshSimplification, none). Refuses a rigid body under an existing rigid-body ancestor, a joint or articulation root as a body, both mass and density, and any change while the timeline is active. |
-| `sim__physics__inspect` | Bounded authored collision/body/mass/joint/articulation report. Does not assert initialized or stable physics. |
-| `sim__physics__raycast` | Cast one ray into the PhysX scene: hits with position, normal, distance, collider and rigid-body paths. `all=false` returns the closest; `all=true` returns up to 32 sorted by distance. `max_distance` is 0..100 stage units and `direction` is normalised. `scene_ready=false` before physics initialises. Newton refuses with `RAYCAST_UNSUPPORTED`. |
-| `sim__physics__contacts` | Read current PhysX contact pairs and impulses for up to 32 bodies from the last delivered contact report. Subscribes once on first use or Play; a call before any report says so. Only colliders with `PhysxContactReportAPI` report; paths without it are listed, and a call where none report refuses `CONTACT_REPORT_DISABLED` with the fix. Needs a playing or paused initialized timeline. Newton refuses with `CONTACT_QUERY_UNSUPPORTED`. |
 | `sim__body__state` | Read initialized rigid-body world pose on selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Supply `path` (or its aliases `prim` or `prim_path`). Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. `render_pose` compares that physics pose with the poses the renderer can draw the body from, Fabric and USD (PhysX usually writes USD; Newton writes Fabric and leaves USD at the authored pose): `source`, `agrees`, `position_gap`, `angle_gap_deg` and `checked`. When neither is within 5 mm and 2 degrees, a `warnings` entry says the viewport, camera captures and recordings do not show where the body is. It cannot see an instanced visual that stayed behind its link; `assets__import_path` expands those at import. |
 | `sim__timeline__control` | Explicit play, pause, stop, initialize or reset. Initialize briefly plays a stopped timeline and pauses it, reporting that physics may advance; an already-paused timeline is left alone and an already-playing timeline is refused. Play waits up to 30 frames for the engine's tensor view and reports `physics_ready` (with a note when it did not appear), so the first read or step after it does not land before physics exists; a runtime read still confirms readiness. `reset` is the call after a failed run: it cancels this pack's running jobs, stops the viewport follow and stops the timeline, from playing, paused or already stopped, and is safe to repeat; the result has `was` and `cancelled_jobs`. Stop rewinds physics and awaits pending native render/writer completion. The timeout is cooperative. TIMELINE_BUSY or TIMELINE_INTERRUPTED requires inspection before retry. Exact stepping uses sim.simulation.step. |
 | `sim__stage__save` | Export a flattened copy, including session edits, to a new basename ending .usda in configured output root. Never overwrite or switch the current stage. A result over 100 MB has a `size_note` saying why: flattening copies every referenced USD file's data into this one file. Paused Newton copies runtime rigid-body poses into the export only (<=256 bodies), not a solver checkpoint. External texture paths remain dependencies. ROS camera render handles require the explicit export option described below. `directory` writes into an existing folder under your home instead of the output root (never overwrites). Dangling internal references (a reference to a prim path that does not exist) no longer block camera render-handle saves. |
 | `sim__viewport__frame` | Point the active viewport camera. `path` alone: Kit's native select-and-frame; `framed_path` is the prim this call framed, and the Stage selection is restored afterwards (`selection`: framed for this call; Stage selection unchanged), so the Stage and Property panels keep their own selection. `path` + `margin` (metres): frame the prim's current bounding sphere plus the margin, keeping the view direction. `eye` + `target` (world, stage units): place the camera exactly (with `path`, `target` defaults to the prim's centre); the orbit pivot is set on the target. `follow=true` (with `path`): one Kit update subscription moves the camera with the prim at a fixed offset while the timeline runs (PhysX writes link poses to USD, so a robot whose links move under a fixed root is followed); `follow=false`, any new call, stage close, a viewport camera switch or an error stops it, and `sim__stage__info.viewport_follow` reports it and the last stop reason. All variants edit the active camera in session-layer edits; source layers and the previous edit target are preserved. No Kit undo entry. Refuses mismatched viewport contexts, look-through targets, unsafe session-sublayer camera opinions, empty bounds and subtrees above 10,000 composed prims. Reports the camera transform and `render_complete=false`: allow ordinary rendering, then capture the verified application window. Framing a smaller subtree can avoid surrounding occluders. Native failures can leave selection/session-camera changes; inspect before retrying. For a clean recording, `layout="clean"` hides the app's panels, menus, grid and selection outline (process-wide UI settings, not saved with the stage) and `layout="default"` puts back what was there; `caption` draws one line (up to 120 characters) over the bottom of the viewport and an empty string removes it. Given alone, they leave the camera where it is. A caption needs a viewport window: an app that has none refuses it, and a headless app draws it where nobody sees it, so label headless video with `sim__trajectory__replay` or `sim__simulation__run` instead. |
 | `assets__search` | Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again. A folder deeper than eight levels is skipped and named in `skipped_deep`, with `depth_limit`, instead of failing the whole search. |
-| `sim__prim__delete` | Delete one pack-owned subtree from the session layer only. Requires stopped physics and confirm=true; exact owned sensors release their resources; sensor-containing subtrees and articulation roots are refused. |
-| `sim__prim__clone` | Clone a pack-created simple leaf primitive into a new path, preserving session-layer attributes. Refuses references, children, sensors and articulations. |
-| `sim__stage__clear_owned` | Remove only pack-created non-sensor, non-articulated subtrees, preserving other scene content. Explicit stopped target and confirm required. Returns removed/refused lists. |
-| `sim__light__create` | Create a SphereLight, DistantLight or DomeLight without asset-valued textures. Pose in stage units, orientation wxyz. |
-| `sim__light__modify` | Set intensity and color (both required) of a pack-owned light on a stopped timeline. |
-| `sim__material__create` | Create a UsdPreviewSurface or physics material with finite numeric parameters. No asset-valued attributes or texture URLs. |
-| `sim__material__apply` | Bind a pack-created material to an existing geometry prim in the session layer, preserving source files. |
-| `sim__physics__configure` | Set explicitly selected PhysicsScene gravity and time step while stopped. No implicit scene creation or GPU/backend switch. |
 | `sim__joints__inspect` | Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim. On an articulation root, it returns the joints connected to it through its rigid bodies, with their authored limits and drives, plus `scope` and `articulation_root`; the root may be a joint (often `<robot>/root_joint`), a link carrying the articulation API, or the prim holding all of them. `limit` then caps the prims visited to find joints. A joint excluded from the articulation is left out. |
 | `sim__joints__drive` | Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention. A target that is past an authored limit only by float32 rounding is put on the limit, and the result says so: a limit authored from 1.0 rad is stored as 57.2957764 degrees, one step below the exact conversion. `sim__joints__command` does the same with runtime limits. |
-| `sim__joints__state` | Read initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Angular radians, linear stage units; no authored-target fallback. |
-| `sim__simulation__step` | Advance 1..120 exact steps on the selected PhysX or qualified Newton backend while PAUSED and initialized. No app-update pumping or engine fallback. Return measured time delta, runtime rigid-body poses and articulation DOFs; Newton publishes poses to Fabric. |
 | `sim__simulation__run` | Run your own controller in the physics loop, as a job: every step it gets one rigid body's measured state and returns the force and torque for that step. A `tcp://127.0.0.1:<port>` controller is your own process; a `module:function` controller is code in Kit and needs `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`. Writes a CSV log. See [controller runs](#controller-runs-jobs-and-replay). |
-| `sim__trajectory__replay` | Replay a saved trajectory (that CSV, or JSON samples) into a labelled MP4, as a job: moves prims through the poses on a stopped timeline and saves one camera frame per step. Works headless. See [controller runs](#controller-runs-jobs-and-replay). |
 | `sim__camera__list` | List `Camera` prims under `root` with focal length and aperture (mm), clipping range (stage units and metres), projection, world pose and whether each is the active viewport camera. Bounded by `limit` and a 10,000-prim visit cap. Headless or no viewport reports `viewport_available=false`; a listed camera is not proof of render resources. |
 | `sim__camera__create` | Create a persistent RTX camera on a stopped timeline, under any existing parent prim (e.g. a robot link). `target=[x,y,z]` aims it at a world point, so `position` and `target` are enough to watch something. Orientation as a `[w,x,y,z]` quaternion or as `rotate_xyz` Euler degrees (USD rotateXYZ; with `frame=local` authored as translate + rotateXYZ ops, as in the Property panel). Optional `focal_length` and `horizontal_aperture` (mm) and `clipping_range` (metres, default 0.01..1000, converted to stage units). Returns optics, horizontal FOV, local and world pose. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate: set a ROS rate on the camera helper (`frameSkipCount`). |
 | `sim__camera__capture` | Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for the first render completion, four further frames AND a matching renderer CPU transfer; no stale annotator fallback. Frame-number baseline is the first completion observed after the request, so an immediately created camera needs no caller-side warm-up. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. |
 | `sim__lidar__create` | Create an RTX LiDAR (`OmniLidar`) while stopped, at an exact path under an existing parent. `config` selects NVIDIA's registry entry (e.g. `Example_Rotary_2D`, `OS1` + `variant`) through `isaacsim.sensors.experimental.rtx.Lidar.create`, which the Create > Sensors menu uses; the asset is referenced from Isaac's assets root (network or local mirror), and an unknown name or variant lists the valid ones. Without `config`, a local generic LiDAR. `tick_rate` defaults to the scan rate; another rate warns about partial scans. Motion BVH is not required (6.2 enforces it only for radar); `motion_bvh` in the result says whether in-scan motion distortion is modelled. Returns prim type, sensor path, tick and scan rate. At most eight sensors; delete an exact owned sensor path to release resources. |
-| `sim__lidar__read` | Read CPU Cartesian LiDAR return points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. |
 | `sim__graph__node_types` | Find OmniGraph node types in the running Isaac Sim by id or UI name ("Make Array" is `omni.graph.nodes.ConstructArray`), with exact port names, types, defaults and descriptions from the installed `.ogn` file or, for compiled nodes, the generated docs. Read-only. Ports include `allowed_values` for token inputs; constant nodes (no outputs) say to connect from `inputs:value`. |
 | `sim__graph__build` | Create a whole OmniGraph in one call from `nodes` ([name, type] pairs), `values`, `connections` ([from, to]) and prim `targets`; timeline stopped. Checks every port against the created nodes (a typo lists the real ports), creates Make Array-style `inputs:inputN`, stores a token's value when given its key (`toStage` -> `Convert to stage units`), authors everything in USD so saves keep it, and rolls the graph back on any error. `replace=true` rebuilds an existing graph. Returns the graph as `sim__graph__inspect` does. Also accepts nodes as `{"name", "type"}` objects or with the type first (it says so), and connections as `[srcNode, srcPort, dstNode, dstPort]` or `{"from", "to"}`. For ROS graphs the result includes the shell line that matches the simulator's DDS settings. |
 | `sim__graph__inspect` | Read a graph: each node's type, input values or upstream connections, and output connections, to check a hand-built Action Graph. Read-only. Lists allowed token values and each node's compute errors/warnings from its last run (`nodes_with_errors`). |
@@ -217,15 +187,8 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `sim__ros2__tf_setup` | Build one ROS 2 graph for a robot: `/clock`, `/joint_states`, static `world -> base_link` (or `world -> odom` + odometry for a mobile base) and the link TF, rebuilt on every call so no frame is published twice. Resolves the articulation root, refuses colliding frame names; timeline stopped. See [ROS2-RVIZ.md](ROS2-RVIZ.md). After a save and reopen, calling it again deactivates the saved graph in the session layer and builds a new one, at `<graph>_r1` if the saved path is taken; `deactivated_saved_graphs` lists what it replaced. |
 | `sim__logs__tail` | Read a bounded tail of the selected Kit log file, never arbitrary files. Default: the last 1 MiB, with warnings/errors and `[sim-tools]` lines in `lines` (the original behavior over a larger window, so three warnings are not pushed out by about 2 s of Info lines). With `min_level`, `channel`, `contains` or `cursor`: parsed `entries` (timestamp, level, channel, message capped at 2 KB), `next_cursor` and `truncated`. A cursor comes from `sim__logs__mark` or a previous `next_cursor`. Reads at most 1 MiB per call, never installs a log callback, and redacts obvious secrets. Also returns recent `scene_events`. |
 | `sim__logs__mark` | Cursor at the current end of Kit's log: byte offset plus file identity (device, inode, size, mtime). Pass it to `sim__logs__tail` or `sim__logs__summary` to read only later lines; rotation, replacement or truncation returns `LOG_ROTATED` instead of unrelated lines. Reads the log path only. |
-| `sim__logs__summary` | Counts by level and channel since a `sim__logs__mark` cursor (or the retained 1 MiB window when omitted), with the first and last error. Reads at most 1 MiB per call; `truncated` and `next_cursor` say whether more remains. Same parser and secret redaction as `sim__logs__tail`. |
-| `sim__controller__create` | OPT-IN CODE EXECUTION: create OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox. |
-| `sim__controller__update` | OPT-IN CODE EXECUTION: replace inline code of this pack's controller and request recompilation while stopped. Same explicit script enable required. |
-| `sim__joints__command` | Command initialized articulation position targets by name (`targets`) or in DOF order (`positions`), optionally with velocity targets, on the selected PhysX or qualified Newton backend. Radians for revolute, stage units for prismatic. Out-of-limit values are refused unless `clamp=true`, which uses the limit and reports what it clamped; unknown DOF names are refused with the valid ones. Returns the applied targets, their previous values and units, not achieved poses. Runtime only and lost on Stop; `sim__joints__drive` authors USD targets. |
 | `sim__arm__ik` | Inverse kinematics for any robot with revolute or prismatic joints: the joint values that put a link (the hand) at a target position and optional orientation, nearest to the current pose. Read from the robot's own USD joints, so it needs no per-robot description file. Solve only: it commands nothing, and there is no collision check or path. Needs a playing or paused timeline. It first compares its model with where physics reports the link and refuses (`IK_MODEL_MISMATCH`) if they disagree. Returns `joint_targets` to pass to `sim__joints__move`, the reached pose and the errors; `reached=false` means out of reach or past the limits, with `why_not_reached` when the cause is clear. `offset` places a fingertip or tool tip beyond the link's origin. A reachable pose can still be blocked by the ground or the robot itself: there is no collision check, so read `settled` from `sim__joints__move`. |
 | `sim__arm__fk` | Forward kinematics: where a link (the hand) would be for given joint values, in the world and base frames, from the robot's own USD joints. Joints left out use their current values when the simulation runs, else zero; values outside the authored limits are warned. Commands nothing; pair it with `sim__arm__ik`. Works with the timeline stopped or running; running, it first checks its model against physics. |
-| `sim__joints__gains` | Read or set an initialized articulation's runtime drive gains: `stiffness`, `damping` and `max_effort` for named `dofs` or every DOF, with values before and after. These are PhysX/Newton runtime values: not USD, lost on Stop and never saved; `sim__joints__drive` authors USD gains. Omit every value to only read. Needs a playing or paused timeline and a valid tensor view. |
-| `sim__joints__move` | Step a **paused**, initialized simulation until named joint targets are within `tolerance` or `max_steps` is used, then report `settled` and every joint's error. A joint held by a contact or a weak drive reports `settled=false` with the blocked joint and its remaining error: clear the path, raise gains with `sim__joints__gains`, or retry with more steps. Runtime only; never pumps the app loop. |
-| `sim__joints__teleport` | Set joint positions directly as a state reset, not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are `{dof name: value}`; needs an initialized (playing or paused) articulation, refuses out-of-limit values, and reports each joint's value before and after. |
 
 Graph build accepts pairs or objects, JSON-encoded individual node/connection entries, and a
 JSON string for each whole `nodes`, `connections`, `values` or `targets` container. A target
@@ -287,7 +250,7 @@ exit normally. Verify the process has exited and resources are free before start
 Recheck endpoint, stage, backend and finite state on the new session. Never stop unrelated
 processes, and do not mistake a fresh session for recovery of the original solver state.
 
-### Project USD and the UR5e workstation
+### Project USD and trusted roots
 
 For an ordinary object or robot, call `assets__roots`, then `sim__stage__info`, and pass the
 absolute USD path to `assets__import_path` (or use the approved root ID and relative path with
@@ -310,7 +273,7 @@ does not certify visual fidelity, physics readiness, or complete detection of ar
 The tool copies the entire bounded approved project, not only the reported dependencies, and is
 not an untrusted-USD sandbox. Keep the cache and snapshots while scenes still reference them.
 
-The import and workstation workflows were exercised in both windowed and headless sessions
+The import workflows were exercised in both windowed and headless sessions
 on installed Isaac Sim `6.0.0.0`, `6.0.0.1`, `6.0.1.0`, `6.1.0.0` and `6.2.0.0` on one
 Linux/NVIDIA machine. These tests cover the documented sample projects, not every USD or future
 release. In those tests, new cameras sometimes needed a retry after the first capture failed.
@@ -430,7 +393,7 @@ unchanged. A call with an old `session_id` gets `STALE_TARGET` saying this happe
 counts it under `extension.reloads`.
 
 If a sim tool call is running when the reload happens, the sim and asset tools are missing until that call finishes,
-then return by themselves. A wait over 30 s is logged as an error. The UR5e twin does not have this: if a twin call is
+then return by themselves. A wait over 30 s is logged as an error. The work cell does not have this: if a work-cell call is
 running when `exts/ur5e-dt` reloads, its startup fails with a message saying so, and it needs another reload or a restart.
 
 ## Joint control by name, gains, settling and teleport
@@ -466,7 +429,7 @@ and refuses with `PHYSICS_API_UNAVAILABLE` when neither exists, rather than chan
 ## Editing any prim: move, physics, attributes, revert
 
 These tools edit **any** prim on the stage, not only prims this pack created: imported assets, prims
-from your own USD files and, in a disposable session, the twin's prims. Safety comes from how the edit
+from your own USD files and, in a disposable session, the work cell's prims. Safety comes from how the edit
 is made and undone:
 
 - Every edit is a session-layer opinion. The source USD files and the stage's root layer are never
@@ -660,7 +623,7 @@ body poses/DOF observations. It does not render, pump nested application updates
 changing an authored USD transform moved an active simulated body. Angular runtime values and
 drive targets use radians; USD authored joint diagnostics and angular drive gains use degrees.
 
-If Play came from outside `sim__timeline__control` (the UI, a script, `ur5e_dt__quick_start`), the step refuses with
+If Play came from outside `sim__timeline__control` (the UI or a script), the step refuses with
 `EDIT_TARGET_CHANGED`, `started_outside_tools: true` and the exact calls: `before_retry` is Stop and `then` is Play and
 Pause. A running timeline cannot be adopted: during that Play, physics was already writing poses to the selected layer
 (checked on 6.2: the wrist's `xformOp:orient` appears in the root layer while playing and is gone after Stop), so moving
@@ -763,12 +726,11 @@ until process restart. A native crash may bypass that guard. Inspect, save when 
 Stop, and restart only the owned disposable process. See the compatibility follow-up evidence
 for measured outcomes and retained earlier failures; no indefinite lifetime guarantee is made.
 
-Managed launches can select `physics_backend="newton"` (default: the configured backend, see
-[Choosing which local tools a server exposes](TOOLS-HOST.md#choosing-which-local-tools-a-server-exposes)); an unavailable
-requested engine fails instead of falling back. Newton uses its tensor adapter, explicit
+Managed launches can select `physics_backend="newton"` or `"physx"` (the default is stated in
+[compatibility](COMPATIBILITY.md#target-engine)); an unavailable requested engine fails instead of falling back. Newton uses its tensor adapter, explicit
 paused solver steps and Fabric publication; it does not report authored USD as runtime pose.
 On Sim 6.2 one GPU Newton exact-step probe returned `STEP_TIMING_MISMATCH`; inspect state and
-do not assume exact stepping succeeds on every Newton scene. See [compatibility](COMPATIBILITY.md#release-backend-scope).
+do not assume exact stepping succeeds on every Newton scene. See [compatibility](COMPATIBILITY.md#target-engine).
 The likely cause is two timesteps on one scene; see [Newton in the generic tools](#newton-in-the-generic-tools).
 The older three releases need a scoped internal playing-flag adapter, restored even on error.
 Direct Newton steps invalidate captured CUDA graphs to avoid stale dt/state buffers.
@@ -939,8 +901,8 @@ native texture may have been torn down, so inspect a refusal rather than assumin
 
 ### Newton in the generic tools
 
-Newton (Isaac Sim 6.2, MuJoCo-Warp) is experimental and PhysX is still the default. These are the differences in the
-generic scene tools, read from the installed extension; the live checks that prove them are in
+Newton (Isaac Sim 6.2, MuJoCo-Warp) is the target engine; its status and known limits are in
+[compatibility](COMPATIBILITY.md#target-engine). These are the differences in the generic scene tools, read from the installed extension; the live checks that prove them are in
 `scripts/smoke/newton_checks.py` (`python3 scripts/smoke.py physics --backend newton --discard-changes --check newton_checks`).
 
 - **Contact buffers.** MuJoCo-Warp holds a fixed number of contacts (`nconmax`, default 200 per world) and constraint rows

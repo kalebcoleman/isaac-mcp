@@ -2,7 +2,7 @@
 
 Use this guide to get a correct TF tree and a working RViz 2 view of an Isaac Sim robot,
 the same way on any machine. Labs written for Isaac Sim 6.0 should also read the
-[Isaac Sim 6.2 notes](ISAAC-6.2-NOTES.md) (node and API differences, verified live). It covers three tools:
+[Isaac Sim 6.2 notes](COMPATIBILITY.md#isaac-sim-62-notes-for-60-tutorials) (node and API differences, verified live). It covers three tools:
 
 | Step | Tool | Runs where |
 |---|---|---|
@@ -310,13 +310,13 @@ Every "the map is wrong", "frames jump" or "RobotModel is white" problem we have
    URDF gives every link two sources, so RViz jumps between them. Pick one
    (`link_frames=isaac` or `link_frames=robot_state_publisher`).
 2. **One clock.** Isaac stamps everything with simulation time and publishes `/clock`, from
-   exactly one node. Two `/clock` publishers (for example the UR5e twin's graph plus a
-   hand-built one) disagree by a few frames, so time keeps jumping back: RViz logs "Detected
+   exactly one node. Two `/clock` publishers (for example two graphs that each
+   publish one) disagree by a few frames, so time keeps jumping back: RViz logs "Detected
    jump back in time", resets and clears TF many times a second. `sim__ros2__tf_setup` reuses
    an existing clock (`clock=auto`), or else publishes one shared clock
    (`/Graph/isaac_mcp_ros2_clock`) for every robot it sets up, and matches its TF stamps to that
-   clock's stop/play behaviour. Running the twin's own setup (`quick_start`) afterwards adds a second
-   clock: call the tool again with `clock=auto`; it drops its clock and updates every robot it
+   clock's stop/play behaviour. If another graph adds a second
+   clock afterwards, call the tool again with `clock=auto`; it drops its clock and updates every robot it
    set up. The shared clock stays after the last robot graph is deleted (`sim__stage__clear_owned`
    removes it). Every other node, RViz included, must run with
    `use_sim_time:=true`; mixing wall-clock and sim stamps makes TF lookups fail or extrapolate.
@@ -367,10 +367,10 @@ refuses with `ROBOT_GRAPH_CONFLICT`, names the robot there, and gives a free nam
 joint states and frames stay. Repeating setup on the same robot rebuilds its graph as before. This also holds for a graph saved
 in a file and reopened.
 
-The tool refuses with `JOINT_STATE_LOOP` when another graph subscribes to the joint state topic it would publish. On a
-Quick Start scene, `ur5e_dt__*`'s graph mirrors a real robot from `/joint_states`, so publish the simulated state elsewhere:
+The tool refuses with `JOINT_STATE_LOOP` when another graph subscribes to the joint state topic it would publish. Where
+another graph mirrors a real robot from `/joint_states`, publish the simulated state elsewhere:
 `joint_states_topic=isaac/joint_states`. Without this, the arm chased its own state and oscillated at about 3.14 rad/s once
-playing (checked on 6.2). The check sees graphs that exist at setup time: running `ur5e_dt__quick_start` after this tool
+playing (checked on 6.2). The check sees graphs that exist at setup time: adding such a graph after this tool
 creates the same loop, so call this tool again afterwards, which refuses until you pick another topic.
 
 The tool finds the articulation root itself (often a fixed `root_joint` below the robot prim).
@@ -485,6 +485,30 @@ ERROR: simulation-time and wall-clock stamps are mixed: ... Start every node wit
 WARNING: several nodes publish TF: /_Graph_isaac_mcp_ros2_TFRobotLinks, ..., /robot_state_publisher. If Isaac publishes the robot's links, do not also run robot_state_publisher for it.
 ```
 
+## Frames Isaac Sim 6.2 publishes
+
+In Isaac Sim 6.2, transform publication was modernized to use the standard OmniGraph nodes:
+
+```
+USD Stage Prims ──► IsaacComputeTransformTree ──► ROS2PublishTransformTree ──► /tf, /tf_cam, /objects_poses_sim
+```
+
+On 6.x builds that have the compute node, this replaces the deprecated `targetPrims` pose-tree interface. 5.1.0.0 and 6.0.0.0 don't have that node and use the older publisher. On 6.2 the older interface still published the whole tree in testing, but logs a deprecation warning.
+
+### Frame names
+
+Frame naming rules in `IsaacComputeTransformTree` preserve existing ROS consumer expectations:
+- Unique prims retain their bare name (e.g., `base1`, `inverted_u_yellow`, `line_green`).
+- Duplicate prim names under different parents resolve to `<parent>_<child>`.
+- Any prim with the string attribute `isaac:nameOverride` uses that override unconditionally.
+
+### The 180° camera rotation
+
+`IsaacComputeTransformTree` deliberately applies a **180° rotation around the X-axis** to all `UsdGeomCamera` prims (`ros2.nodes/docs/CHANGELOG.md:310`, version 1.14.0):
+- **Rationale:** USD native cameras look down the $-Z$ axis with $+Y$ up. ROS optical frames convention expects $+X$ forward, $+Y$ right, $+Z$ down (or $+Z$ forward for optical axes). NVIDIA corrected the camera transform evaluation in 6.2 to align with ROS standard conventions.
+- **Impact:** Transforms published on `/tf_cam` reflect this 180° X rotation compared to the old 5.1 output. Plain `UsdGeomXform` objects (such as those published on `/objects_poses_sim`) are unaffected.
+- **Instruction:** **Do not attempt to "fix" or revert this rotation.** The change reflects the official Isaac Sim ROS 2 node standard and represents the pipeline functioning correctly. Reference values are recorded in [`provenance/tf-baseline-6.2.json`](provenance/tf-baseline-6.2.json).
+
 ## Troubleshooting
 
 - **A `ROS_LOCALHOST_ONLY is deprecated` line at every node start on Jazzy** is harmless: `config/ros_dds.env` keeps that setting so Humble and Jazzy clients agree.
@@ -510,7 +534,7 @@ WARNING: several nodes publish TF: /_Graph_isaac_mcp_ros2_TFRobotLinks, ..., /ro
 | `/scan` is all `-1.0` | no return for those beams: `-1.0` means nothing in range. A few are normal | put something within the sensor's range, on its scan plane |
 | Kit logs "no usable time-code range" | a hand-written file has no `startTimeCode`/`endTimeCode` | add `startTimeCode = 0` and `endTimeCode = 1000000` to its header. `sim__stage__open` reports this. Measured: driving still worked on 6.2 and 5.1, and `/scan` on 6.2 |
 | Nav2 "Control loop missed its desired rate", "Costmap timed out" | headless Kit runs faster than real time | `./run.sh --headless --realtime` |
-| Frames stop after reset | timeline stopped | play again; RViz resets once if `/clock` restarts from 0 (the twin's clock keeps counting) |
+| Frames stop after reset | timeline stopped | play again; RViz resets once if `/clock` restarts from 0 |
 | Robot vanishes after stop/play, "extrapolation into the past" | TF and `/clock` from different time sources | doctor reports the skew; re-run `sim__ros2__tf_setup` (`clock=auto`) |
 
 Validated on Isaac Sim 6.2 (UR5e + RG2 + camera: 17 frames, one root; NVIDIA Jetbot mobile

@@ -1,10 +1,9 @@
 # Importing any robot or asset file
 
 One tool brings a robot or object into a scene: **`assets__import_path`**. Give it a file (or a folder that holds one) and it
-works out the format, checks it, converts it when it has to, and imports it. It replaced three tools, `assets__import_usd`,
-`assets__import_urdf` and `assets__import_mjcf`, so an agent has one place to look; an approved root is still addressable with
+works out the format, checks it, converts it when it has to, and imports it. It replaced three per-format import tools, so an agent has one place to look; an approved root is still addressable with
 `root_id` and `relative_path`. For how approval and asset packs work, see [ASSET-PACKS.md](ASSET-PACKS.md);
-for every tool's arguments, [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md); for what is planned next, [working checklist](CHECKLIST.md#assets-and-workspace).
+for every tool's arguments, [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md); for what is planned next, [open items](OPEN-ITEMS.md#assets-and-workspace).
 
 ```text
 assets__import_path  source_path=<file or folder>  prim_path=/World/robot
@@ -65,7 +64,7 @@ alone gives a robot that simulates and cannot be seen. The result says what comp
 
 Not importable yet: CAD (STEP, IGES, JT), Gaussian splats, heightmap terrain and Collada (`.dae`) as a prop of its own (Collada works as
 the meshes of a URDF robot; as a prop it is refused with a message that says to convert it to glTF or OBJ). Isaac Sim ships converters for
-CAD and splats; they are on the plan in [working checklist](CHECKLIST.md#assets-and-workspace).
+CAD and splats; they are on the plan in [open items](OPEN-ITEMS.md#assets-and-workspace).
 
 ## What is read and what is never run
 

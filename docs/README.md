@@ -10,40 +10,41 @@ over both.
 
 | Page | Use it for |
 |---|---|
-| [Linux setup](LINUX-SETUP.md) | Prerequisites, install paths, build selection, assets, first-connection troubleshooting |
+| [Linux setup](LINUX-SETUP.md) | Prerequisites, install paths, build selection, the workspace folder and what is auto-detected, first-connection troubleshooting |
 | [MCP server](MCP-SERVER.md) | Client configuration (Claude Code and Desktop, Codex, OpenCode, Antigravity), limiting what a client can reach |
-| [Workspace](WORKSPACE.md) | One folder for the checkout, assets and environments; what is auto-detected |
+| [Toolsets](TOOLSETS.md) | The toolsets, how to switch them (config file, environment, command line), the size of each profile |
+| [Environment variables](ENVIRONMENT.md) | Every setting, its default and which process reads it |
+| [Compatibility](COMPATIBILITY.md) | The target physics engine and its known limits, tested simulator builds and Isaac Sim 6.2 notes |
 | [Asset packs](ASSET-PACKS.md) | The one pack model: `pack.yaml`, the asset root, list/doctor/adopt/pin/build, converting an old pack, moving packs between machines |
 | [Importing any asset](ASSET-IMPORT.md) | One import for USD, URDF, xacro, SDF, MJCF and robot folders: formats, safety, physics after import |
-| [Environment variables](ENVIRONMENT.md) | Every setting, and which process reads it |
-| [Compatibility](COMPATIBILITY.md) | Tested simulator builds, modes and open issues |
 
 **Tools**
 
 | Page | Covers |
 |---|---|
-| [Tool arguments](TOOLS-ARGUMENTS.md) | Every tool's arguments and defaults, generated from the code |
+| [Tool arguments](TOOLS-ARGUMENTS.md) | Every tool's arguments and defaults, one section per toolset, generated from the code |
 | [Scene and assets](TOOLS-SCENE.md) | `sim__*`, `assets__*`: trusted projects, contracts, sensors, physics, limits |
 | [Host and bridge](TOOLS-HOST.md) | Gateway, desktop, opt-in input and sessions, bridge built-ins |
-| [UR5e twin](TOOLS-UR5E.md) | `ur5e_dt__*`: the digital twin pack |
 | [Isaac Lab](TOOLS-ISAACLAB.md) | `isaaclab__*`: discovery, jobs, guards, metrics |
+| [RoboSimStudio](ROBOSIM.md) | The `robosim` tool: real-to-sim runs in RoboSimStudio's own environment |
+| [Work cell](../exts/ur5e-dt/workcell/README.md) | The lab's UR5e Jenga work cell: BOM, private pack, tools. [Jenga variation contract](TOOLS-UR5E.md) |
 | [BrickSim](BRICKSIM.md) | LEGO bricks with these tools: the bridge next to BrickSim, which tools work on bricks, its RL task |
 | [Agent skill](AGENT-SKILLS.md) | The `isaac-mcp` skill and where each client finds it |
 
-**Workflows**
+**Workflows and examples**
 
 | Page | Use it for |
 |---|---|
+| [Examples](EXAMPLES.md) | What to ask an agent, with pictures from real runs |
 | [ROS 2 and RViz 2](ROS2-RVIZ.md) | TF setup, RViz config, the TF doctor, Nav2 maps |
-| [Isaac Sim 6.2 notes](ISAAC-6.2-NOTES.md) | Adapting labs written for Isaac Sim 6.0 |
-| [Verification](VERIFICATION.md) | Host and live checks, expected values and limits; what to record so a result can be reproduced |
+| [Verification](VERIFICATION.md) | The test matrix: CPU checks, the live smoke per toolset and engine, what each proves, what to record |
 
 **Understand and extend**
 
 | Page | Use it for |
 |---|---|
-| [How it works](ARCHITECTURE.md) | The whole system with a diagram: what MCP is, how a client connects, how the server reaches Isaac Sim (bridge, ports, launch), Isaac Lab jobs, assets, recording, configuration, naming, ROS 2 rules |
-| [Host package guide](../mcp/README.md) | The server package: what a client is shown, loading the bridge in another Kit app, scripts without MCP |
+| [How it works](ARCHITECTURE.md) | The whole system with a diagram: client, host server, bridge, Kit extensions, Isaac Lab jobs, asset packs, RoboSimStudio, where each setting is read |
+| [Host package readme](../mcp/README.md) | The server package, install, layout |
 | [Tool authoring](../mcp/docs/tool-authoring.md) | Your own tool package: arguments, errors, flags, reloading, Kit surprises |
 | [Bridge protocol](../mcp/docs/protocol.md) | Messages, finding a bridge, the token, scheduling, read-only mode, jobs, access from another machine |
 | Extension notes: [bridge](../exts/isaac.mcp.bridge/docs/README.md) · [sim-tools](../exts/sim-tools/README.md) · [ur5e-dt](../exts/ur5e-dt/docs/README.md) | What each Kit extension is |
@@ -52,20 +53,19 @@ over both.
 
 | Page | Use it for |
 |---|---|
-| [Working checklist](CHECKLIST.md) | Current priorities and open work |
+| [Open items](OPEN-ITEMS.md) | Unfinished work by topic, including the Newton qualification list |
 | [Publishing](PUBLISHING.md) | PyPI release steps |
 | [Vendoring](VENDORING.md) · [Third-party notices](../THIRD-PARTY-NOTICES.md) | Licenses and origins |
-| [Media](media/README.md) | Provenance of the images in the README |
+| [Media](media/README.md) | Provenance of the images in the examples |
 
 ## NVIDIA resources
 
-The [agent skill guide](AGENT-SKILLS.md#nvidias-skills) links NVIDIA's documentation MCP
-and official Isaac Sim and Isaac Lab skills. Use the [working checklist](CHECKLIST.md) for future work.
+The [agent skill guide](AGENT-SKILLS.md#nvidias-skills) links NVIDIA's documentation MCP and official Isaac Sim and Isaac Lab skills.
 
 ## Evidence
 
-Use [compatibility](COMPATIBILITY.md) for tested builds and known limits, and
-[verification](VERIFICATION.md) for checks. The examples and navigation walkthrough keep their supporting material under `docs/evidence/`.
+Use [compatibility](COMPATIBILITY.md) for tested builds and known limits, and [verification](VERIFICATION.md) for checks. The
+examples and navigation walkthrough keep their supporting material under `docs/evidence/`.
 
 ## Scripts
 
@@ -77,9 +77,9 @@ away. Scripts that import `mcp` need `uv run --locked --isolated --project mcp -
 |---|---|
 | Find and prepare | `isaac_env.py` (find an install, create a workspace), `isaac_assets.py` (asset packs), `install.py` (register the bridge in a Kit app), `check_machine.sh` (6.2 preflight; can use the GPU) |
 | Start | `run_ur5e_dt.py` (what `run.sh` runs) |
-| Project checks (CPU, also in CI) | `check_docs.py`, `check_assets.py`, `check_portable_paths.py`, `check_private_paths.py`, `gen_host_catalog.py`, `gen_tool_reference.py` |
-| UR5e checks (live, disposable) | `workcell_smoke.py` (requires an explicitly selected disposable bridge and lab config) |
-| Smoke checks (live, disposable) | `smoke.py <toolset>`; `smoke.py all --list` lists GPU/simulator requirements offline. Validators live in `scripts/smoke/`; helpers: `scene_mcp_client.py`, `smoke_mcp_surface.py`, `make_scene_fixture.py`, `make_scene_package_fixture.py` |
+| Project checks (CPU, also in CI) | `check_docs.py`, `check_assets.py`, `check_portable_paths.py`, `check_private_paths.py`, `gen_host_catalog.py`, `gen_tool_reference.py` (also rewrites the generated count blocks) |
+| Work-cell check (live, disposable) | `workcell_smoke.py` (requires an explicitly selected disposable bridge and lab config; PhysX only) |
+| Smoke checks (live, disposable) | `smoke.py <toolset>`; `smoke.py --list` lists GPU/simulator requirements offline. Validators live in `scripts/smoke/`; helpers: `scene_mcp_client.py`, `smoke_mcp_surface.py`, `make_scene_fixture.py`, `make_scene_package_fixture.py` |
 | Offline surface audits | `measure_tool_list.py [KEY=VALUE ...] [--json]`, `check_names.py --audit [--json]` (name enforcement is opt-in, not yet CI) |
 | ROS 2 | `ros_env.sh` (source it), `ros2_rviz_config.py`, `ros2_tf_doctor.py`, `cmd_vel_sequence.py` |
 

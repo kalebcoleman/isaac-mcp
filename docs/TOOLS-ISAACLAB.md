@@ -1,8 +1,9 @@
 # Isaac Lab Host Tools (`isaaclab__*`)
 
-This document covers the 16 host-side tools registered by `mcp/isaac_mcp/isaaclab/tools.py`
-(`install.py`, `jobs.py`, `metrics.py`). It is the implementation reference; every argument is
-listed in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md#isaac-lab).
+This document covers the host-side tools registered by `mcp/isaac_mcp/isaaclab/tools.py`
+(`install.py`, `jobs.py`, `metrics.py`), which belong to the `lab` toolset (off by default: add `+lab`, see
+[toolsets](TOOLSETS.md)); `run_script` belongs to `code`. It holds the behaviour, contracts, guards and limits. Every tool and
+argument, with its default, is in the generated [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md#lab-isaac-lab-training-and-evaluation).
 
 ## Naming: host-side tools
 
@@ -203,45 +204,11 @@ job used `allow_concurrent=true` against the shared job-state directory. This is
 not a memory reservation or a guarantee for longer training, larger environments, rendering or a
 simultaneously running Kit bridge. Keep the default guards unless you have checked the actual workload.
 
-### Environment variables (summary)
+### Environment variables
 
-| Variable | Used by | Effect |
-|---|---|---|
-| `ISAACLAB_PYTHON` | install, jobs | Isaac Lab interpreter (or use `ISAACLAB_ROOT` with a `.venv`) |
-| `ISAACLAB_ROOT` | install, jobs | Isaac Lab root (scripts live under `scripts/reinforcement_learning/`) |
-| `ISAACLAB_JOBS_DIR` | jobs | Job state directory (default `~/.local/share/isaac-mcp/jobs`) |
-| `ISAACLAB_LOGS_DIR` | metrics | Primary log root for checkpoints/metrics |
-| `ISAACLAB_TASK_MODULES` | install, jobs | Comma list of task modules to import before lookup |
-| `ISAACLAB_TASK_PATH` | install, jobs | `os.pathsep` list added to `PYTHONPATH` |
-| `ISAACLAB_EXTERNAL_CALLBACK` | install, jobs | Default `external_callback` (`module.function`) when a call gives none |
-| `ISAACLAB_CHECKPOINT_ROOTS` | jobs, metrics | `os.pathsep` list of extra folders train/eval/play may take checkpoints from; `metrics_summary`, `checkpoints_list` and `tensorboard_tail` may read runs there too |
-| `ISAACLAB_INSTALLS` | install | `os.pathsep` list of venvs, interpreters, checkouts or folders of venvs added to the known installs selectable with `install` |
-| `ISAACLAB_GPU_BUDGET_HOURS` | jobs, preflight | Optional GPU-hour cap (off by default) |
-| `ISAACLAB_GPU_LEDGER` | jobs, preflight | Optional JSON file for that cap (see preflight) |
-| `ISAACLAB_ALLOW_TMP` | metrics | `1` adds the temp dir to allowed roots (tests only) |
-| `UR5E_DT_PORT` / `ISAAC_MCP_PORT` | jobs (Kit guard) | Fixed port probed for a running Kit bridge (default 8766) |
-| `CUDA_VISIBLE_DEVICES` | jobs (set by `device`) | Set per job from the `device` argument |
-
-## Quick reference
-
-| MCP name | Purpose |
-|---|---|
-| `isaaclab__install_info` | Report the Isaac Lab install: interpreter, versions, root, venv |
-| `isaaclab__envs_list` | List registered Isaac Lab task ids (optional substring filter) |
-| `isaaclab__train` | Start a training job (async) and return its `job_id` |
-| `isaaclab__eval` | Run and score a policy checkpoint as a job (async) |
-| `isaaclab__play` | Play a checkpoint with a window (async, interactive) |
-| `isaaclab__env_check` | Build a task, step it with zero or random actions, and report problems (async) |
-| `isaaclab__record` | Record an MP4 with no window, from a checkpoint or from zero/random actions (async) |
-| `run_script` | The same managed-job runner for any Python script: no Isaac Lab or GPU needed, and no GPU guards unless `uses_gpu=true` |
-| `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start`, a suggested `num_envs`, and optionally GPU-hours used |
-| `isaaclab__runs_list` | List jobs, newest first, filtered (task, kind, state, since) and limited (default 25) |
-| `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir (with its source), window, and for a running job its `health` and `progress`; `wait_s` waits for the job to end; or a run folder by name under a log root |
-| `isaaclab__runs_tail` | Last lines of a job's stdout/stderr |
-| `isaaclab__checkpoints_list` | List `*.pt`/`*.pth` checkpoints (newest first) |
-| `isaaclab__checkpoint_register` | Record a checkpoint's sha256, role and provenance in an append-only README table; refuses to overwrite a registered path |
-| `isaaclab__metrics_summary` | Summarise TensorBoard scalars (last/min/max/step/count), or, with `eval_json`, your evaluation-result files scored against criteria you give (optionally against a baseline) |
-| `isaaclab__tensorboard_tail` | Last points of one TensorBoard scalar |
+Every `ISAACLAB_*` variable, with its default and the process that reads it, is in [ENVIRONMENT.md](ENVIRONMENT.md#isaac-lab).
+The Kit-bridge guard probes the fixed bridge port (`ISAAC_MCP_PORT` or `UR5E_DT_PORT`, default 8766), and a job's `device`
+argument sets `CUDA_VISIBLE_DEVICES` for it.
 
 ## What a checkout offers: the profile
 
@@ -323,9 +290,6 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
   | `task` | string | yes | — | Task id (validated). |
-  | `num_envs` | integer | no | `64` | |
-  | `max_iterations` | integer | no | `null` | |
-  | `seed` | integer | no | `null` | |
   | `device` | string | no | `null` | Sets `CUDA_VISIBLE_DEVICES` when not `cpu`. |
   | `headless` | boolean | no | `true` | No window. Normally `--viz none`; `--video` selects Kit with child-only `HEADLESS=1`. `false` selects Kit with `HEADLESS=0`. |
   | `checkpoint` | string | no | `null` | Path to resume from (must be under the [checkpoint roots](#checkpoint-roots-for-train-eval-and-play)). |
@@ -345,18 +309,10 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `task` | string | yes | — | |
   | `checkpoint` | string | yes | — | Required; validated path. |
-  | `num_envs` | integer | no | `null` | |
-  | `headless` | boolean | no | `true` | |
-  | `rl_library` | string | no | `null` | |
   | `physics` | string | no | `null` | As for `isaaclab__train`. |
-  | `extra_args` | array[string] | no | `null` | |
   | `num_episodes` | integer | no | `20` | Finished episodes to collect. Must be at least 1. |
-  | `max_steps` | integer | no | `20000` | Environment-step bound that also ends the run; `null` removes it. |
   | `timeout_s` | number | no | `null` | Host watchdog, separate from the step bound. |
-  | `allow_concurrent` | boolean | no | `false` | |
-  | `allow_concurrent_gpu` | boolean | no | `false` | |
 - Returns on launch: same shape as `isaaclab__train`. Runs `play.py` with `--checkpoint` (Isaac Lab has no separate
   eval entrypoint) and `--viz none|kit`, through a scoring launcher (see below). Once it finishes,
   `isaaclab__runs_status` also returns `eval_result`.
@@ -488,16 +444,9 @@ starts the same kind of job (`script`) in the same job folder, so `isaaclab__run
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `task` | string | yes | — | |
   | `checkpoint` | string | yes | — | Required; validated path. |
-  | `num_envs` | integer | no | `1` | |
   | `headless` | boolean | no | `false` | Defaults to a window (`--viz kit`). |
-  | `rl_library` | string | no | `null` | |
   | `physics` | string | no | `null` | As for `isaaclab__train`. |
-  | `extra_args` | array[string] | no | `null` | |
-  | `timeout_s` | number | no | `null` | |
-  | `allow_concurrent` | boolean | no | `false` | |
-  | `allow_concurrent_gpu` | boolean | no | `false` | |
 - Returns: same shape as `isaaclab__train`. Interactive; stop it with `jobs(action="cancel")`. With `headless=false` a window opens, titled "Isaac Lab 3.0.0" on that version and "Isaac Sim 5.1.0" on Lab 2.3.2; `isaaclab__runs_status` reports its `window` (id, title, size) for screenshot/recording.
 - Example: `{"task": "Isaac-Reach-UR10", "checkpoint": "/abs/path/to/model.pth", "rl_library": "rl_games", "num_envs": 4, "headless": false}`
 
@@ -509,9 +458,7 @@ starts the same kind of job (`script`) in the same job folder, so `isaaclab__run
   |---|---|---|---|---|
   | `state` | string | no | `null` | `"running"`, `"finished"` (any end state, including failed), `"all"`, or omitted for all; anything else returns an error naming these. |
   | `task` | string | no | `null` | Case-insensitive substring of the task id. |
-  | `kind` | string | no | `null` | `train`, `eval`, `play`, `env_check` or `record`. |
   | `since` | string | no | `null` | ISO time (local time without a zone) or an age such as `90m`, `2h`, `1d`, `1w`. |
-  | `limit` | integer | no | `25` | 1 to 500. |
 - Returns: `{runs: [{job_id, kind, task, state, started_at, elapsed_s, exit_code, log_dir, label?}], total, truncated, hint?}`, **newest first**.
   `total` counts every match before `limit`; `truncated` is true when `limit` cut some (then `hint` says how to narrow).
   Callers that need every job pass `limit=500` or narrow with `since`.
@@ -528,7 +475,6 @@ starts the same kind of job (`script`) in the same job folder, so `isaaclab__run
   | `require_run_dir` | boolean | no | `false` | With `job_id`: an `error` instead of a status when no Lab run folder is known for the job. |
   | `log_root` | string | one of | — | Instead of a job: resolve a run folder by name under this logs folder (Lab `logs/`, a library folder, or `ISAACLAB_LOGS_DIR`; it must be inside the allowed roots). Needs `run_name`. |
   | `run_name` | string | with `log_root` | — | The `--run_name` the run used; matches folders `<timestamp>_<run_name>` exactly, so `recC` does not match `recC_v2`. |
-  | `experiment` | string | no | — | With `log_root`: experiment folder name, to narrow several matches. |
   | `latest` | boolean | no | `false` | With `log_root`: take the newest when several folders match `run_name` (otherwise that is an `error` listing them, so a re-run never silently resolves to the wrong folder). |
   | `wait_s` | number | no | `0` | With `job_id`: block up to this many seconds (at most 3600) until the job is no longer running. See below. |
 - Returns:
@@ -552,8 +498,6 @@ starts the same kind of job (`script`) in the same job folder, so `isaaclab__run
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `job_id` | string | yes | — | |
-  | `stream` | string | no | `"stdout"` | `"stdout"` or `"stderr"`. |
   | `lines` | integer | no | `100` | Clamped to 1..1000. |
 - Returns: `{lines: [str]}`.
 - Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10", "stream": "stderr", "lines": 50}`
@@ -583,8 +527,6 @@ Inspect `jobs(action="lab_status", job_id="...")` to confirm the final state.
   | `run_dir` | string | one of | — | Must be under allowed roots. Or give `job_id`, or `compare_jobs` (final scalars of several jobs side by side). |
   | `tags` | array[string] | no | `null` | Tag list; `null` summarises every available tag. |
   | `eval_json` | array[string] | one of | `null` | Evaluation-result JSON files or glob patterns: switches to result-file mode (below). |
-  | `criteria` | array[object] or string | no | `null` | With `eval_json`: `[{key, op, value, label?}]`, or an absolute path to a `.json`/`.yaml` file holding that list (or `{"criteria": [...]}`). |
-  | `label` | string | no | `null` | With `eval_json`: your name for the result, e.g. `candidate run`; echoed back. |
   | `baseline_json` / `baseline_label` | array[string] / string | no | `null` | With `eval_json`: a baseline's files or patterns, scored with the same criteria, and its name. |
 - Returns: `{scalars: {<tag>: {last, min, max, step, count}}}`. Unknown tags return `{"error": "unknown tag", "available": [...]}`. Non-finite values are encoded as the strings `"nan"`, `"inf"`, `"-inf"`. Requires the `tensorboard` extra.
 - Example: `{"run_dir": "/abs/path/to/run", "tags": ["rewards/iter", "Episode/dist_m"]}`
@@ -620,7 +562,6 @@ The only tool of the pack that writes next to your files, so it is annotated add
 
   | Name | Type | Required | Default | Notes |
   |---|---|---|---|---|
-  | `path` | string | yes | — | The checkpoint (`.pt`, `.pth`, `.zip`, `.ckpt`, `.onnx`), from `isaaclab__checkpoints_list`. |
   | `role` | string | yes | — | One line, at most 40 characters: `baseline`, `candidate`, `init`, `final`... |
   | `provenance` | string | yes | — | One line, at most 500 characters: run name, commit, settings, evaluation result. |
   | `registry` | string | no | `README.md` beside the checkpoint | A `.md` file in the checkpoint's folder or one above it; a path in the row is relative to it. |
@@ -922,14 +863,12 @@ Limitations and not verified:
   install is pinned to Isaac Lab 3.0.0 / Isaac Sim 6.2.0.0.
 - Other operating systems, GPUs, Isaac Sim versions and installation layouts are not
   supported claims. A prior isolated test of the generic bridge in Isaac Sim 5.1 is not proof
-  that the complete twin and Lab stack support 5.1.
+  that the complete work-cell and Lab stack support 5.1.
 - The Kit guard only probes the configured port plus advertised portfiles; two separate host
   processes can still race the guard.
 - `metrics_summary` returns no scalars for a run too short to log any. Measured on Lab 2.3.2: `sb3` logs every
   `--log_interval` timesteps (default 100,000), `skrl` writes no event file when `max_iterations` is very small, and
   `rl_games` wrote nothing at 3 epochs. For a short `sb3` run, pass `extra_args=["--log_interval=1000"]`.
-- `randomize_single_object` (UR5e twin, not Lab) can fail with its fixed narrow strip; not
-  relevant to Lab tools but noted for completeness.
 - The PyPI published install paths are not verified.
 - The `tensorboard` extra must be installed for metrics readout; otherwise those two tools
   return an install hint.

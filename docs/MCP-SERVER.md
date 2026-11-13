@@ -1,6 +1,6 @@
 # Host MCP Server: `isaac-mcp`
 
-The project provides a single host-side Model Context Protocol (MCP) server that exposes Isaac Sim's scene and asset tools, Isaac Lab jobs and desktop capture to any MCP client. One lab's UR5e digital twin is included as a separate tool group.
+The project provides a single host-side Model Context Protocol (MCP) server that exposes Isaac Sim's scene and asset tools, Isaac Lab jobs and desktop capture to any MCP client. Its tools are grouped into [toolsets](TOOLSETS.md) that you switch on or off; one lab's UR5e work cell is a separate toolset.
 
 The server package is located at `mcp/` (Python package `isaac_mcp`). The primary CLI executable is `isaac-mcp`. There is one command name and no aliases.
 
@@ -12,18 +12,18 @@ Kit Process (Isaac Sim 6.2.0.0)
                                     │ NDJSON over TCP
                                     ▼
                         isaac-mcp (stdio MCP server)
-                          ├── ur5e_dt__*        catalog-listed; execute through the twin bridge
+                          ├── ur5e_dt__*        the work cell (toolset `workcell`); executes through the shared bridge
                           ├── use_bridge        switch target port at runtime
                           ├── sim__* / assets__*  generic scene tools, from the sim-tools extension
                           ├── refresh_tools     rediscover tools; can wait for a starting Kit
                           ├── isaaclab__*       Isaac Lab jobs, run on the host
-                          └── screenshot / screen_* / list_windows / move_window / tile_windows / join_videos
+                          └── screenshot / screen_recording / windows / join_videos
 ```
 
 Inside Kit, `exts/ur5e-dt` registers on the `isaac.mcp.bridge` singleton alongside other packs. The launcher sets
-the shared port to 8766 by default and delays binding until the twin has registered its tools. Disabling the twin
-removes its live handlers without stopping the shared bridge; the host keeps their catalog entries visible, and an
-in-flight call must drain before the twin can re-register.
+the shared port to 8766 by default and delays binding until the work cell has registered its tools. Disabling the work cell
+extension removes its live handlers without stopping the shared bridge; the host keeps their catalog entries visible, and an
+in-flight call must drain before the work cell can re-register.
 
 ---
 
@@ -48,56 +48,39 @@ uv sync --project mcp --locked --extra isaaclab --no-dev
 
 `uv tool install` does not read `uv.lock`, so it is not the checkout install. `uv sync --locked` installs the versions in `mcp/uv.lock` and checks their hashes. The project is editable: modifications to `mcp/isaac_mcp/` take effect whenever the MCP server process restarts. `./install.sh --no-sim` runs the same sync and links `~/.local/bin/isaac-mcp`. Refresh the lock with `uv lock --directory mcp`, never `uv lock` in the repository root (that project is the simulator).
 
-`install.sh` also creates an ffmpeg shim at `~/.local/bin/ffmpeg` (a fixed default) for the twin's viewport recorder, unless an
+`install.sh` also creates an ffmpeg shim at `~/.local/bin/ffmpeg` (a fixed default) for the Kit viewport recorder, unless an
 unrelated file or symlink already occupies that path. Direct `uv tool install` does not create the shim.
 
 ---
 
 ## 2. Available Tools
 
-### Generic scene and assets (`sim__*`, `assets__*`)
+The tools a client is shown are the tools of the enabled [toolsets](TOOLSETS.md); `status` and `isaac-mcp toolsets` report which
+are on. Every tool and its arguments are in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md), one section per toolset. In short:
 
-The generic tools are catalog-listed by default. `assets__roots`, `assets__scan` and
-`assets__search` execute on the host; the others require `sim-tools` in the selected Kit.
-See [scene tools](TOOLS-SCENE.md) for trusted-root configuration and runtime prerequisites,
-and [the agent tier map](../AGENTS.md#what-you-can-reach-by-tier) for counts and filters.
+- **Scene and assets** (`scene`, `physics`, `sensors`, `assets`, and optionally `ros2` and `kit_debug`): the generic `sim__*` and
+  `assets__*` tools are catalogue-listed by default. `assets__library` (roots, scan, search) executes on the host; the others
+  require `sim-tools` in the selected Kit. See [scene tools](TOOLS-SCENE.md) for trusted-root configuration and runtime
+  prerequisites. The work cell's robot, sensor and bench files are packs in the asset root, which the host and Kit each resolve
+  themselves: set `ISAAC_MCP_ASSET_ROOT` in the **Kit** environment too, or Kit looks in `<workspace>/assets`. See
+  [Asset packs](ASSET-PACKS.md).
+- **Work cell** (`workcell`, off by default): the lab's UR5e Jenga cell. The host lists a packaged catalogue of its tools even
+  before a simulator runs; calls need an Isaac Sim session running `exts/ur5e-dt`, and the bridge's live metadata takes precedence
+  once connected. See its [README](../exts/ur5e-dt/workcell/README.md).
+- **Bridge discovery** (`core`): `use_bridge` points the host at a different bridge port at runtime; `refresh_tools` forces
+  rediscovery, and `refresh_tools(wait_s=120)` waits (up to 180 s) for a Kit that is still starting.
+- **Desktop and window capture** (`screen`): `screenshot`, `screen_recording`, `windows` and `join_videos`. Window capture reads
+  that window's buffer directly, so overlapping windows do not obscure it. Captures are written to `~/Pictures/screen-mcp/` and
+  `~/Videos/screen-mcp/`; recordings contain no audio.
+- **Isaac Lab and script jobs** (`lab`, and `run_script` in `code`): see the [Isaac Lab reference](TOOLS-ISAACLAB.md).
+- **Optional** (`input`, `launch`, `robosim`): desktop input, managed simulator sessions, RoboSimStudio.
 
-The work cell's robot, sensor and bench files are packs in the asset root, which the host and Kit each resolve themselves.
-Set `ISAAC_MCP_ASSET_ROOT` in the **Kit** environment too, or Kit looks in `<workspace>/assets`. See
-[Asset packs](ASSET-PACKS.md).
-
-### RISE lab's UR5e twin (`ur5e_dt__*`)
-The host lists a packaged catalog of UR5e tools even before a simulator is running. Calls require an Isaac Sim
-session running `exts/ur5e-dt`; when connected, the bridge's live metadata takes precedence. Kit's
-canonical `ur5e_dt.<tool>` names appear to MCP clients as `ur5e_dt__<tool>`. The pack includes scene setup,
-`play_scene`/`stop_scene`, object management, ROS graphs and viewport recording. See the complete
-[UR5e tool reference](TOOLS-UR5E.md) for actual names, parameters and side effects. Joint-position and pause tools
-are not registered by this pack.
-
-### Bridge discovery and selection
-
-- `use_bridge`: Points the host MCP server at a different bridge port at runtime without restarting the client.
-- `refresh_tools`: Forces rediscovery of tools from the currently connected bridge. `refresh_tools(wait_s=120)` waits (up to 180 s) for a Kit that is still starting.
-
-### Desktop & Window Capture Tools
-- `screenshot`: Captures an image of the Isaac Sim window (or desktop/monitor) and returns an inline thumbnail plus saved PNG path.
-- `list_windows`: Lists visible X11 windows with their window IDs, geometry, class, and titles.
-- `raise_window`: Brings a specified window to the front.
-- `start_screen_recording`: Records window or desktop activity to MP4 at a specified framerate (default 15 fps). Window capture reads that window's buffer directly, so overlapping windows do not obscure it.
-- `stop_screen_recording`: Finalizes recording and returns the path to the MP4.
-- `screen_recording_status`: Reports elapsed recording time and captured frames.
-- `windows(action="info")` (`screen_info`): Reports active display, attached monitors, capture directories, and recording state.
-- `move_window` / `tile_windows`: Place one window, or lay out two to six, for a recording.
-- `join_videos`: Join clips into one new MP4, or (`mode=sheet`) write a PNG contact sheet of frames at chosen times.
-
-Captures are written to `~/Pictures/screen-mcp/` and `~/Videos/screen-mcp/`. Screen recordings do not contain audio.
-See the [host and bridge reference](TOOLS-HOST.md) for the complete list and arguments. The separate
-[Isaac Lab reference](TOOLS-ISAACLAB.md) covers the 16 host-side Lab and script-job tools.
+See the [host and bridge reference](TOOLS-HOST.md) for behaviour and limits.
 
 ### Agent workflow
 
 Use the available tools to inspect and operate the user's authorized simulator
-before asking the user to repeat terminal or UI steps. `list_windows` identifies
+before asking the user to repeat terminal or UI steps. `windows(action="list")` identifies
 the window and PID; `screenshot(window_id=...)` captures that window even when
 covered. Check the capture directory before writing if workspace rules restrict
 where files may be created. Screen tools are host-side and can work even when
@@ -106,7 +89,7 @@ explicitly with `ISAAC_MCP_TOOLSETS=default,+input`; see the targeting rules and
 limitations in [host tools](TOOLS-HOST.md#optional-desktop-input).
 
 The host MCP server and the bridge inside Kit are separate processes. A working
-`list_windows` or Isaac Lab tool does not mean that the bridge is connected, and a
+window or Isaac Lab tool does not mean that the bridge is connected, and a
 client that lists the UR5e tools or `run_python` has not proved that a bridge exists: these are catalog-listed
 (call `status`). The client may have connected before Kit started (call `refresh_tools`, or
 `refresh_tools(wait_s=120)` while Kit boots),
@@ -129,7 +112,7 @@ The host advertises `tools.listChanged` and sends `notifications/tools/list_chan
 Code 2.1.314 does) show the change mid-session. If a client does not expose newly discovered tools
 after `refresh_tools`, reconnect it or use the standard-library CLI against
 the verified bridge. List the advertised bridges first and use the host and port it reports; 8766
-below is only the twin's default port:
+below is only the default port:
 
 ```bash
 python3 mcp/isaac_mcp/client.py --list-bridges
@@ -182,7 +165,7 @@ In an MCP client, call `status`, then select and verify the intended process wit
 
 Two headless processes, Sim 5.1 and 6.2, were exercised together on a 16 GB RTX 5080 with small robot-import and physics workloads. This is not a capacity guarantee: scene complexity, sensors, renderers and training can require much more memory. Check available GPU and system memory before starting, monitor both workloads, and stop only sessions you own. Headless still uses GPU resources.
 
-For managed launches, `sim__launch` chooses distinct free ports and ROS domains, applies resource checks and gives each session its own output folder; its [configuration and limits](TOOLS-HOST.md#optional-simulator-sessions) describe how to select interpreters and inspect/stop sessions. Isaac Lab has separate job and GPU guards; its [concurrency rules](TOOLS-ISAACLAB.md#concurrency-guards) explain explicit overrides. Do not treat a guard override as extra GPU capacity.
+For managed launches, `sim__session(action="launch")` chooses distinct free ports and ROS domains, applies resource checks and gives each session its own output folder; its [configuration and limits](TOOLS-HOST.md#optional-simulator-sessions) describe how to select interpreters and inspect/stop sessions. Isaac Lab has separate job and GPU guards; its [concurrency rules](TOOLS-ISAACLAB.md#concurrency-guards) explain explicit overrides. Do not treat a guard override as extra GPU capacity.
 
 
 ---
@@ -190,11 +173,11 @@ For managed launches, `sim__launch` chooses distinct free ports and ROS domains,
 ## 4. Client Configuration
 
 Replace `<repo>` with your checkout (suggested: `<workspace>/isaac-mcp`; see
-[WORKSPACE.md](WORKSPACE.md)) and `<home>` with your home directory. Optional environment
+[One workspace folder](LINUX-SETUP.md#one-workspace-folder)) and `<home>` with your home directory. Optional environment
 variables for any client below:
 
-- `ISAAC_MCP_WORKSPACE=<workspace>` makes `<workspace>/isaac-mcp-assets` the asset folder (otherwise it is `isaac-mcp-assets` next to the checkout).
-- `ISAAC_MCP_SIM_ROOT=<repo>` tells managed `sim__launch` sessions which checkout holds `run.sh`;
+- `ISAAC_MCP_WORKSPACE=<workspace>` makes `<workspace>/assets` (else `<workspace>/isaac-mcp-assets`) the asset root; without it the workspace is the folder that holds the checkout.
+- `ISAAC_MCP_SIM_ROOT=<repo>` tells managed `sim__session` launches which checkout holds `run.sh`;
   set it when the host is installed outside the checkout.
 - `ISAAC_MCP_PYTHON=<env>/bin/python` pins the Sim interpreter that `run.sh` uses.
 
@@ -302,22 +285,18 @@ Codex, OpenCode and Antigravity. See [AGENT-SKILLS.md](AGENT-SKILLS.md).
 
 ### Limiting what a client can reach
 
-Bridge tools such as `run_python` and the `ur5e_dt__*` scene operations reach the client as soon as a Kit bridge
+Bridge tools such as `run_python` and the work cell's `ur5e_dt__*` tools reach the client as soon as a Kit bridge
 exists, whatever the host's local tools are set to. Decide per client how much of the server it should see, and be
 clear about which of the settings below limit what.
 
-Server side: use `ISAAC_MCP_TOOLSETS=default,+lab` or `[tools] toolsets = ["default", "+lab"]`
-in `~/.config/isaac-mcp/config.toml`. Project `isaac-mcp.toml`, environment and `--toolsets` override
-user configuration in that order. `minimal` selects core only; `all` includes every non-explicit toolset.
-Desktop input and process launch require `+input` and `+launch`. Run `isaac-mcp toolsets` for the table,
-or call `status` for enabled, disabled and planned toolsets. Disabled sets register no tools, listed or hidden.
-The mandatory `core` set includes connection, help and job tracking. Toolsets are not a safety boundary:
-anything reaching the bridge socket directly is unaffected by host registration choices.
+Server side: choose [toolsets](TOOLSETS.md#choosing-toolsets), for example `ISAAC_MCP_TOOLSETS=default,+lab`. Disabled toolsets
+register no tools, listed or hidden; desktop input and process launch need `+input` and `+launch`. Toolsets are not a safety
+boundary: anything reaching the bridge socket directly is unaffected by host registration choices.
 
 **A simulator that cannot be changed.** Start Kit with `ISAAC_MCP_READ_ONLY=1`. The bridge then runs only the
 tools registered as read-only (stage and prim reads, joint and body state, logs, `status`, `job_status`, `get_file`,
 `stat_file`, and other tools annotated read-only) and refuses every other with the code `READ_ONLY` before the tool
-is called: `run_python`, `put_file`, every scene edit and every other twin tool. Read-only protects the simulator, not
+is called: `run_python`, `put_file`, every scene edit and every other work-cell tool. Read-only protects the simulator, not
 the disk: `get_file` still reads any file your account can read. This is enforced inside Kit, so it does not
 depend on the client, on which tools a host lists, or on who dials the socket. `status` and the bridge listing report
 `read_only`. Toolsets are not a read-only host mode: even `minimal` includes job cancellation.
@@ -336,15 +315,14 @@ Client side (these are client settings, not part of this server; check your clie
   (an empty `{"mcpServers":{}}` for none).
 - Give subagents an explicit tool allowlist. A subagent without one can inherit the parent's MCP tools.
 - Every local tool carries MCP annotations (`readOnlyHint`, `destructiveHint`), which clients can use for approval
-  prompts, and so do the scene, twin and built-in bridge tools. Annotations are hints, not an access control; the
+  prompts, and so do the scene, work-cell and built-in bridge tools. Annotations are hints, not an access control; the
   filters above decide what is registered at all, and only read-only mode is enforced at the bridge.
 
 ### Tool counts depend on toolsets
 
-The server registers **85 tools** with the default toolsets. A client is shown **31 tools**, because related
-members are grouped behind an `action` argument. `all` registers 119 single-purpose tools (48 shown);
-`all,+input,+launch` registers **128** with both explicit-only toolsets. Disabled toolsets register nothing, including hidden members.
-Use `isaac-mcp toolsets`, the startup log or the `isaac-mcp://toolsets` resource to inspect selection.
+The number of tools a client is shown depends on the enabled toolsets; the counts per toolset and per profile, and the measured
+size of each, are in [TOOLSETS.md](TOOLSETS.md#the-toolsets). Use `isaac-mcp toolsets`, the startup log or the
+`isaac-mcp://toolsets` resource to inspect the selection.
 
 ### Diagnosing disconnects: the server log
 
@@ -416,7 +394,7 @@ differ: call `refresh_tools`.
 
 ### Attaching the MCP to a Kit that a script launched
 
-`sim__launch` is optional and manages only the Kit processes it started. Any other Kit can be used, because
+`sim__session` (toolset `launch`) is optional and manages only the Kit processes it started. Any other Kit can be used, because
 the host only needs a bridge to dial. The mechanism, from `exts/isaac.mcp.bridge`:
 
 1. The Kit process must enable the extension: launch it with `--ext-folder <repo>/exts --enable isaac.mcp.bridge`
@@ -433,7 +411,7 @@ the host only needs a bridge to dial. The mechanism, from `exts/isaac.mcp.bridge
 
 So for a Kit started by your own script: set `ISAAC_MCP_PORT=<free port>` in that script's environment, enable the
 extension, wait for it to log `serving on`, then in the client call `status`, `use_bridge(port=<port>)` and
-`status` and confirm the PID. `sim__list` shows such a bridge as `managed: false` (`external-<pid>-<port>`); `sim__stop`
+`status` and confirm the PID. `sim__session(action="list")` shows such a bridge as `managed: false` (`external-<pid>-<port>`); `stop`
 will not stop it. A host server started before Kit may need `refresh_tools(wait_s=120)`.
 
 ---
@@ -451,13 +429,9 @@ printf '' | isaac-mcp
 Verify end-to-end communication with Isaac Sim running:
 
 ```bash
-# Launch simulation
-./run.sh --headless &
-
-# Wait for the app and bridge to finish starting, then run the check suite.
-# This builds/reopens a scene and moves a joint; use a disposable session.
-./verify.sh
+./run.sh --headless &                    # wait for the app and bridge to finish starting
+python3 mcp/isaac_mcp/client.py status --port 8766
 ```
 
-The verifier checks the bundled workstation's scene, gravity, joint limits, drive settings and an elbow motion. Review
-its output and exit status; [verification](VERIFICATION.md) describes the thresholds and remaining limits.
+`status` should answer with `"running": true` and `"app_ready": true`. The live smoke checks, which build scenes and move joints
+on a disposable simulator, are described in [verification](VERIFICATION.md#test-matrix).

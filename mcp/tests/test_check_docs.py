@@ -1,271 +1,151 @@
-"""scripts/check_docs.py must fail when a visible tool count in AGENTS.md goes stale.
+"""scripts/check_docs.py: tool names, retired phrases, generated counts, the work cell's own page.
 
-Expected figures come from the code via ``check_docs.tier_counts()``, so adding or removing a
-tool does not require editing this file; only AGENTS.md has to be brought up to date, and
-``scripts/check_docs.py`` reports exactly which figures are stale.
+Counts are never typed in a page, so there is nothing here to keep in step with a tool being added:
+the generated blocks and the tool reference are rewritten by ``scripts/gen_tool_reference.py --write``.
 """
 
+import asyncio
 import importlib.util
-import json
-import re
+import sys
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
 _spec = importlib.util.spec_from_file_location("check_docs", ROOT / "scripts" / "check_docs.py")
 check_docs = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(check_docs)
-
-GUIDE = (ROOT / "AGENTS.md").read_text()
-COUNTS = check_docs.tier_counts()
-LABELS = check_docs.TIER_ROWS
-
-# The three subtotal statements in the guide and the figure the code implies for each.
-PHRASES = {
-    "host_isaaclab": (r"exactly \d+ tools", "exactly {} tools",
-                      lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"] + c["robosim"]),
-    "bridge": (r"The other \d+ tools", "The other {} tools",
-               lambda c: c["builtins"]),
-    "total": (r"there are \d+ tools in total", "there are {} tools in total",
-              lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic", "robosim"))),
-    "optional": (r"groups add \d+ more", "groups add {} more",
-                 lambda c: c["desktop_input"] + c["sim_sessions"]),
-}
+import gen_tool_reference  # noqa: E402
 
 
-def errors_for(text, counts=COUNTS):
+def page(tmp_path, text, name="page.md"):
+    path = tmp_path / name
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def names_errors(tmp_path, text, **kwargs):
     errors = []
-    check_docs.check_agent_guide(errors, text=text, counts=counts)
+    check_docs.check_tool_names(errors, files=[page(tmp_path, text)], **kwargs)
     return errors
 
 
-def set_row(text, tier, value):
-    """Rewrite the leading count in the Tools cell of one tier row."""
-    prefix = "| " + LABELS[tier]
-    out, hits = [], 0
-    for line in text.splitlines():
-        if line.startswith(prefix):
-            cells = line.split("|")
-            cells[2] = re.sub(r"^(\s*)\d+", rf"\g<1>{value}", cells[2])
-            line, hits = "|".join(cells), hits + 1
-        out.append(line)
-    assert hits == 1, tier
-    return "\n".join(out) + "\n"
-
-
-def set_phrase(text, key, value):
-    pattern, template, _ = PHRASES[key]
-    new, hits = re.subn(pattern, template.format(value), text)
-    assert hits == 1, key
-    return new
-
-
-def bumped(tier="ur5e"):
-    """Counts as they would be after one more tool is registered in `tier`."""
-    return dict(COUNTS, **{tier: COUNTS[tier] + 1})
-
-
-def test_real_guide_passes():
-    assert errors_for(GUIDE) == []
-
-
-@pytest.mark.parametrize("tier", list(LABELS))
-def test_stale_table_row_fails(tier):
-    errors = errors_for(set_row(GUIDE, tier, COUNTS[tier] + 1))
-    assert len(errors) == 1
-    assert f"{LABELS[tier]} row says {COUNTS[tier] + 1}" in errors[0]
-
-
-@pytest.mark.parametrize("key", list(PHRASES))
-def test_stale_subtotal_or_total_fails(key):
-    wrong = PHRASES[key][2](COUNTS) + 1
-    errors = errors_for(set_phrase(GUIDE, key, wrong))
-    assert len(errors) == 1 and f"says {wrong}" in errors[0]
-
-
-def test_new_tool_not_reflected_in_guide_fails():
-    """Code gained a tool, guide untouched: the row, catalog subtotal and total are stale."""
-    errors = errors_for(GUIDE, counts=bumped())
-    assert len(errors) == 3
-    assert any("UR5e twin row" in e for e in errors)
-    assert any("exactly N tools" in e for e in errors)
-    assert any("there are N tools in total" in e for e in errors)
-
-
-def test_only_total_updated_after_adding_a_tool_fails():
-    """A maintainer who bumps just the headline total must still fail on the row and subtotal."""
-    counts = bumped()
-    text = set_phrase(GUIDE, "total", PHRASES["total"][2](counts))
-    errors = errors_for(text, counts=counts)
-    assert len(errors) == 2
-    assert any("UR5e twin row" in e for e in errors)
-    assert any("exactly N tools" in e for e in errors)
-
-
-def test_only_table_row_updated_after_adding_a_tool_fails():
-    counts = bumped()
-    errors = errors_for(set_row(GUIDE, "ur5e", counts["ur5e"]), counts=counts)
-    assert len(errors) == 2
-    assert any("exactly N tools" in e for e in errors)
-    assert any("there are N tools in total" in e for e in errors)
-
-
-def test_fully_updated_guide_passes_for_new_counts():
-    """The documented workflow: after adding a tool, update the guide; no test edit is needed."""
-    counts = bumped()
-    text = set_row(GUIDE, "ur5e", counts["ur5e"])
-    for key, (_, _, expected) in PHRASES.items():
-        text = set_phrase(text, key, expected(counts))
-    assert errors_for(text, counts=counts) == []
-
-
-def test_missing_statement_fails():
-    text, hits = re.subn(r"exactly (\d+) tools", r"\1 tools", GUIDE)
-    assert hits == 1
-    assert any("expected exactly one" in e for e in errors_for(text))
-
-
-def test_missing_table_row_fails():
-    prefix = "| " + LABELS["isaaclab"]
-    text = "\n".join(line for line in GUIDE.splitlines() if not line.startswith(prefix)) + "\n"
-    assert any("need exactly one" in e for e in errors_for(text))
-
-
-def skill_errors(tmp_path, body):
-    skill = tmp_path / "SKILL.md"
-    skill.write_text(body)
-    expected = {"docs/TOOLS-ISAACLAB.md": {"isaaclab__train", "isaaclab__runs_status"},
-                "docs/TOOLS-UR5E.md": {"ur5e_dt__quick_start", "ur5e_dt__quick_start_with_workstation"}}
+def test_the_repository_names_only_registered_tools():
     errors = []
-    original_root = check_docs.ROOT
-    check_docs.ROOT = tmp_path
-    try:
-        check_docs.check_skill_tool_names(errors, expected=expected, files=[skill])
-    finally:
-        check_docs.ROOT = original_root
-    return errors
-
-
-def test_skill_with_registered_names_passes(tmp_path):
-    body = "Call `isaaclab__train`, then `isaaclab__runs_status`; `ur5e_dt__quick_start*` builds a scene."
-    assert skill_errors(tmp_path, body) == []
-
-
-def test_skill_with_stale_name_fails(tmp_path):
-    errors = skill_errors(tmp_path, "Call `isaaclab__train_start` first.")
-    assert errors == ["SKILL.md: names not in registry: isaaclab__train_start"]
-
-
-def test_skill_family_must_prefix_a_tool(tmp_path):
-    errors = skill_errors(tmp_path, "Use `ur5e_dt__quickstart*`.")
-    assert errors == ["SKILL.md: names not in registry: ur5e_dt__quickstart*"]
-
-
-def test_repository_skills_name_only_registered_tools():
-    errors = []
-    check_docs.check_skill_tool_names(errors)
+    check_docs.check_tool_names(errors)
     assert errors == []
 
 
-def test_skill_scene_names_are_checked_when_catalogs_exist(tmp_path):
-    catalogs = tmp_path / "mcp" / "isaac_mcp" / "catalogs"
-    catalogs.mkdir(parents=True)
-    (catalogs / "sim.json").write_text(json.dumps({"tools": {"sim.stage.info": {}}}))
-    (catalogs / "assets.json").write_text(json.dumps({"tools": {"assets.roots": {}}}))
-    skill = tmp_path / "SKILL.md"
-    skill.write_text("Use `sim__stage__info` and `assets__roots`.")
+def test_a_registered_name_and_a_family_pass(tmp_path):
+    assert names_errors(tmp_path, "Use `sim__prim__create`, `sim__prim` and `sim__stage__*`.") == []
+    assert names_errors(tmp_path, "The `sim__camera__*` tools.") == []
+
+
+@pytest.mark.parametrize("prefix", ["sim__", "assets__", "isaaclab__", "ur5e_dt__"])
+def test_an_unregistered_name_is_reported_for_every_namespace(tmp_path, prefix):
+    errors = names_errors(tmp_path, f"Call `{prefix}no_such_tool` first.")
+    assert errors == [f"page.md: names a tool that is not registered: {prefix}no_such_tool"]
+
+
+def test_a_family_must_prefix_a_real_tool(tmp_path):
+    errors = names_errors(tmp_path, "Use `ur5e_dt__quickstart*`.")
+    assert errors == ["page.md: names a tool that is not registered: ur5e_dt__quickstart*"]
+
+
+def test_a_retired_bare_name_is_reported(tmp_path):
+    errors = names_errors(tmp_path, "Run `list_bridges`, then screen_info.")
+    assert sorted(errors) == ["page.md: names a retired tool: list_bridges",
+                              "page.md: names a retired tool: screen_info"]
+    # A longer word that merely contains a retired name is not a mention of it.
+    assert names_errors(tmp_path, "my_list_bridges_helper") == []
+
+
+def test_an_action_must_belong_to_its_group(tmp_path):
+    assert names_errors(tmp_path, 'Use `windows(action="info")` and `jobs action=tail`.') == []
+    errors = names_errors(tmp_path, 'Use `windows(action="bogus")`.')
+    assert errors == ["page.md: windows has no action 'bogus'"]
+    errors = names_errors(tmp_path, "Use sim__prim action=teleport.")
+    assert errors == ["page.md: sim__prim has no action 'teleport'"]
+
+
+def test_an_unrelated_word_before_action_is_not_a_group(tmp_path):
+    assert names_errors(tmp_path, "The tool takes the `action=run` argument; call(action=1).") == []
+
+
+@pytest.mark.parametrize("phrase", check_docs.RETIRED_PHRASES)
+def test_a_retired_phrase_is_reported(tmp_path, phrase):
     errors = []
-    original = check_docs.ROOT
-    check_docs.ROOT = tmp_path
-    try:
-        check_docs.check_skill_tool_names(
-            errors,
-            expected={"docs/TOOLS-ISAACLAB.md": set(), "docs/TOOLS-UR5E.md": set(),
-                      "docs/TOOLS-HOST.md": {"sim__launch"}},
-            files=[skill],
-        )
-        skill.write_text("Use `sim__bogus`.")
-        check_docs.check_skill_tool_names(
-            errors,
-            expected={"docs/TOOLS-ISAACLAB.md": set(), "docs/TOOLS-UR5E.md": set(),
-                      "docs/TOOLS-HOST.md": {"sim__launch"}},
-            files=[skill],
-        )
-    finally:
-        check_docs.ROOT = original
-    assert errors == ["SKILL.md: names not in registry: sim__bogus"]
+    check_docs.check_retired_phrases(errors, files=[page(tmp_path, f"Note: {phrase}. Use it.")])
+    assert len(errors) == 1 and phrase in errors[0]
 
 
-def _with_stale_readme_total():
-    text = (ROOT / "README.md").read_text()
-    match = re.search(r"\*\*(\d+) single-purpose tools\*\*", text)
-    return text.replace(match.group(0), f"**{int(match.group(1)) + 1} single-purpose tools**")
-
-
-def test_readme_counts_match_the_code():
+def test_no_page_in_the_repository_carries_a_retired_phrase():
     errors = []
-    check_docs.check_readme_counts(errors)
+    check_docs.check_retired_phrases(errors)
     assert errors == []
 
 
-def test_stale_readme_total_is_reported():
+def test_the_generated_reference_and_blocks_are_current():
     errors = []
-    check_docs.check_readme_counts(errors, text=_with_stale_readme_total())
-    assert any("README.md: says" in error for error in errors)
-
-
-def test_stale_tool_reference_is_reported(tmp_path, monkeypatch):
-    import sys
-    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
-    sys.modules.pop("gen_tool_reference", None)
-    import gen_tool_reference
-    monkeypatch.setattr(gen_tool_reference, "OUTPUT", tmp_path / "TOOLS-ARGUMENTS.md")
-    errors = []
-    check_docs.check_tool_reference(errors)
-    assert any("TOOLS-ARGUMENTS.md is stale" in error for error in errors)
-    (tmp_path / "TOOLS-ARGUMENTS.md").write_text(gen_tool_reference.render())
-    errors = []
-    check_docs.check_tool_reference(errors)
+    check_docs.check_generated(errors)
     assert errors == []
 
 
-def test_stale_readme_row_is_reported():
-    text = (ROOT / "README.md").read_text().replace("| UR5e digital twin | 10 |", "| UR5e digital twin | 99 |")
+def test_a_stale_block_is_reported_and_refreshed(tmp_path):
+    block = "<!-- generated:profiles -->\n| not | the | table |\n<!-- /generated -->\n"
+    path = page(tmp_path, "# Page\n\n" + block)
+    output = ROOT / "docs" / "TOOLS-ARGUMENTS.md"
     errors = []
-    check_docs.check_readme_counts(errors, text=text)
-    assert any("'UR5e digital twin' row" in error for error in errors)
+    check_docs.check_generated(errors, output=output, files=[path])
+    assert errors == [f"{path} is stale: run python3 scripts/gen_tool_reference.py --write"]
+    path.write_text(gen_tool_reference.refresh_blocks(path.read_text()))
+    assert "| `default` |" in path.read_text()
+    errors = []
+    check_docs.check_generated(errors, output=output, files=[path])
+    assert not any(str(path) in error for error in errors)
 
 
-def test_generic_count_catches_a_stale_page_and_passes_the_real_ones():
+def test_a_stale_tool_reference_is_reported(tmp_path):
+    output = tmp_path / "TOOLS-ARGUMENTS.md"
     errors = []
-    check_docs.check_generic_counts(errors)
+    check_docs.check_generated(errors, output=output, files=[])
+    assert len(errors) == 1 and "TOOLS-ARGUMENTS.md is stale" in errors[0]
+    output.write_text(gen_tool_reference.render())
+    errors = []
+    check_docs.check_generated(errors, output=output, files=[])
     assert errors == []
-    check_docs.check_generic_counts(errors, pages={"x.md": "the 54-tool pack and 40 generic tools"}, generic=55)
-    assert len(errors) == 2
 
 
-def test_architecture_generic_wording_is_checked():
-    """'tools (55)' is invisible to the generic-pack regex; 'N generic sim' is not."""
-    text = (ROOT / "docs/ARCHITECTURE.md").read_text()
-    assert "generic sim" in text
+def test_the_reference_has_one_section_per_toolset_in_registry_order():
+    from isaac_mcp import toolsets
+    text = (ROOT / "docs" / "TOOLS-ARGUMENTS.md").read_text()
+    headings = [line.split("`")[1] for line in text.splitlines() if line.startswith("## `")]
+    expected = [name for name in toolsets.TOOLSETS if gen_tool_reference.listed_by_toolset()[name]]
+    assert headings == expected
+
+
+def test_listed_counts_match_the_server():
+    """The generator reads the registry without the MCP SDK; the server must list the same tools."""
+    from isaac_mcp import server, toolsets
+    from isaac_mcp.config import select
+    instance = server.build_server({"ISAAC_MCP_TOOLSETS": "all,+input,+launch"})
+    listed = {tool.name for tool in asyncio.run(instance.list_tools())}
+    expected = {name for names in gen_tool_reference.listed_by_toolset().values() for name in names}
+    assert listed == expected
+    for profile, enabled in toolsets.PROFILES.items():
+        shown = server.build_server({"ISAAC_MCP_TOOLSETS": profile})
+        count = len(asyncio.run(shown.list_tools()))
+        assert count == sum(len(gen_tool_reference.listed_by_toolset()[name]) for name in enabled), profile
+    assert select("default") == toolsets.DEFAULT
+
+
+def test_every_listed_work_cell_tool_is_named_in_the_work_cell_readme():
     errors = []
-    check_docs.check_generic_counts(
-        errors, pages={"docs/ARCHITECTURE.md": text.replace("70 generic sim", "55 generic sim")})
-    assert any("55 generic sim" in error for error in errors)
-    ignored = []
-    check_docs.check_generic_counts(
-        ignored, pages={"docs/ARCHITECTURE.md": "Registers sim.* and assets.* tools (55), robot-agnostic"},
-        generic=69)
-    assert ignored == []
-
-
-def test_default_tool_inventory_excludes_disabled_toolsets():
-    from isaac_mcp.toolsets import DEFAULT, owner
-    names = check_docs.default_tool_names()
-    assert names
-    assert all(owner(name) in DEFAULT for name in names)
-    assert not any(name.startswith("ur5e_dt__") for name in names)
+    check_docs.check_workcell_documented(errors)
+    assert errors == []
+    check_docs.check_workcell_documented(errors, readme="no tools here", listed=["ur5e_dt__jenga"])
+    assert errors == [f"{check_docs.WORKCELL_README}: does not name the listed work-cell tool ur5e_dt__jenga"]
 
 
 def test_vendoring_rejects_a_bundled_asset_claim():
@@ -282,18 +162,21 @@ def test_vendoring_rejects_a_bundled_asset_claim():
     assert any("ships none" in error for error in errors)
 
 
-def test_the_shown_count_and_the_table_of_groups_match_the_code():
-    errors = []
-    check_docs.check_grouped_tools(errors)
-    assert errors == []
+@pytest.mark.parametrize("name,block", [("README.md", "toolsets-compact"), ("AGENTS.md", "toolsets-compact"),
+                                        ("docs/TOOLSETS.md", "toolsets-full"), ("docs/TOOLSETS.md", "profiles"),
+                                        (".agents/skills/isaac-mcp/SKILL.md", "profiles")])
+def test_the_pages_that_show_counts_carry_their_generated_block(name, block):
+    """A page that lost its marker would stop being checked, so the markers themselves are checked."""
+    text = (ROOT / name).read_text(encoding="utf-8")
+    assert f"<!-- generated:{block} -->" in text and "<!-- /generated -->" in text
+    assert gen_tool_reference.BLOCKS[block]() in text
 
 
-def test_a_stale_shown_count_or_group_row_is_reported():
-    pages = {name: (ROOT / name).read_text() for name in check_docs.SHOWN_PAGES}
-    pages["README.md"] = re.sub(r"is shown \*\*\d+ tools\*\*", "is shown **7 tools**", pages["README.md"])
-    pages["docs/TOOLS-HOST.md"] = pages["docs/TOOLS-HOST.md"].replace("`create` (`sim__prim__create`)", "`create`")
-    errors = []
-    check_docs.check_grouped_tools(errors, pages=pages)
-    assert any("README.md: 'is shown **N tools**' says ['7']" in error for error in errors)
-    assert any("the sim__prim row is missing create (sim__prim__create)" in error for error in errors)
-
+def test_every_toolset_row_in_the_generated_table_matches_the_registry():
+    from isaac_mcp import toolsets
+    table = gen_tool_reference.render_toolsets_compact()
+    listed = gen_tool_reference.listed_by_toolset()
+    for name in toolsets.TOOLSETS:
+        assert f"| `{name}` |" in table
+    assert sum(len(tools) for tools in listed.values()) == len(
+        {tool for tools in listed.values() for tool in tools})

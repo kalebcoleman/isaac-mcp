@@ -1,11 +1,10 @@
 # Linux setup and dependencies
 
-This guide covers the repository's Linux launcher, host MCP server, optional Isaac Lab tools, and optional ROS 2
-UR5e mock driver. Install the parts needed for your workflow; the host server, simulator and external ROS nodes run
-in separate environments.
+This guide covers the repository's Linux launcher, host MCP server, optional Isaac Lab tools, and where everything lives.
+Install the parts needed for your workflow; the host server, simulator and external ROS nodes run in separate environments.
 
-**Keep it organized.** Put the checkout, the asset root and Sim environments in one workspace
-folder and let the tool find an existing install. See [WORKSPACE.md](WORKSPACE.md).
+**Keep it organized.** Put the checkout, the asset root and Sim environments in one workspace folder and let the tool find an
+existing install. See [One workspace folder](#one-workspace-folder).
 
 ## Platforms and prerequisites
 
@@ -28,18 +27,18 @@ See [compatibility](COMPATIBILITY.md) for tested simulator releases and their in
 | Environment | Required for | Selection |
 |---|---|---|
 | Host Python **3.10+** | MCP connection, tool discovery, desktop capture, Lab job management | `isaac-mcp` installed by `uv tool`; independent of Sim |
-| Sim Python **3.12** | Kit, rendering, physics, bridge and scene/UR tools | Explicit `ISAAC_MCP_PYTHON`, else checkout `.venv`, else auto-detected (see [WORKSPACE.md](WORKSPACE.md)) |
+| Sim Python **3.12** | Kit, rendering, physics, bridge and scene/UR tools | Explicit `ISAAC_MCP_PYTHON`, else checkout `.venv`, else auto-detected (see [One workspace folder](#one-workspace-folder)) |
 | Optional Isaac Lab | Training, evaluation and play | Existing `ISAACLAB_PYTHON` and `ISAACLAB_ROOT`; select a compatible Sim/Lab version pairing |
-| Optional system ROS | External ROS nodes and the UR mock driver | Matching system ROS distribution, separate from Sim's bundled bridge |
+| Optional system ROS | External ROS nodes: RViz 2, Nav2 | Matching system ROS distribution, separate from Sim's bundled bridge |
 
 No personal environment name or directory layout is required. Keep existing installations where they are;
-`<workspace>` below means your workspace folder ([WORKSPACE.md](WORKSPACE.md)).
+`<workspace>` below means your workspace folder ([One workspace folder](#one-workspace-folder)).
 A callable offline catalog proxy still needs its runtime prerequisites to execute.
 
 ## New pinned 6.2 installation
 
 Use a **new dedicated checkout** (recommended location: `<workspace>/isaac-mcp`, see
-[WORKSPACE.md](WORKSPACE.md)) and run every command below from its root. Install
+[One workspace folder](#one-workspace-folder)) and run every command below from its root. Install
 [uv](https://docs.astral.sh/uv/getting-started/installation/) first, and ensure Git and your NVIDIA
 driver are available. Read NVIDIA's [requirements](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/requirements.html)
 and EULA before accepting it. The repository installer checks Ubuntu, architecture, GPU,
@@ -97,12 +96,12 @@ From the same checkout root, after accepting the EULA:
 
 `run.sh` chooses the Sim interpreter in this order: `ISAAC_MCP_PYTHON` (alias `UR5E_DT_PYTHON`),
 then `<repo>/.venv/bin/python`, then auto-detection (`scripts/isaac_env.py resolve-python`). It prints
-the interpreter it chose and how to pin it. See [WORKSPACE.md](WORKSPACE.md#what-is-auto-detected-and-where-it-looks).
+the interpreter it chose and how to pin it. See [what is auto-detected](#what-is-auto-detected-and-where-it-looks).
 
 Use an unused port. A live bridge may already exist: inspect it before starting another process.
-The launcher enables the bridge, generic scene tools, UR5e tools and NVIDIA's bundled ROS bridge;
-Its default backend is **PhysX**; the workcell extension has no panel.
-The optional Newton flag is not a compatibility promise; see the [matrix](COMPATIBILITY.md).
+The launcher enables the bridge, the generic scene tools, the work-cell tools and NVIDIA's bundled ROS bridge. The physics
+engine is chosen with `--physics-backend` or `ISAAC_MCP_PHYSICS_BACKEND`; the target and the current default are in
+[compatibility](COMPATIBILITY.md#target-engine), and a request for an engine the build lacks starts nothing.
 
 For a windowless GPU session, use `./run.sh --headless --port 8766` instead. To leave either running after your shell or a tool's time limit ends, use `setsid nohup ./run.sh --port 8766 > kit.log 2>&1 < /dev/null &`. Headless Sim still
 requires the NVIDIA runtime and can render sensors, but has no application window for desktop
@@ -169,7 +168,7 @@ ISAAC_MCP_PYTHON="$ISAAC_SIM_PYTHON" ./run.sh --port 8766
 ```
 
 Without the override, `run.sh` uses this checkout's `.venv/bin/python` and otherwise searches
-the documented locations only ([WORKSPACE.md](WORKSPACE.md#what-is-auto-detected-and-where-it-looks)).
+the documented locations only ([what is auto-detected](#what-is-auto-detected-and-where-it-looks)).
 A vendor installation still needs compatible dependencies for these extensions.
 A plain Python `import omni` failure outside Kit does not prove the installation is broken.
 
@@ -215,9 +214,8 @@ The files remain subject to their own terms (see [third-party notices](../THIRD-
 license. Obtain the necessary permission before copying. A missing or unverifiable pack is a real failed operation: it must
 not be counted as a loaded robot.
 
-The **Vention bench** has no public download. Supply an approved licensed workstation project through
-[workstation preparation](TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation), or put it in a pack with
-`isaac_assets.py adopt`. Basic connection and generic scene work require neither.
+The **Vention bench** has no public download. Put an approved licensed copy in a pack with `isaac_assets.py adopt`. Basic
+connection and generic scene work require neither.
 
 ## Troubleshooting the first connection
 
@@ -226,7 +224,7 @@ The **Vention bench** has no public download. Supply an approved licensed workst
 | `isaac-mcp` not found | Add the uv tool bin directory to PATH, or use its absolute executable path in the client; keep the editable checkout available |
 | Interpreter missing | Run `python3 scripts/isaac_env.py find`, select a compatible `ISAAC_MCP_PYTHON`, or install in the new checkout; do not overwrite an unrelated environment |
 | `uv pip check` fails | Record exact versions and conflicts. Use a new isolated locked environment for comparison; do not infer a native failure's cause from metadata alone |
-| 109 tools but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, filters and selected endpoint |
+| Tools are listed but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, the [toolsets](TOOLSETS.md) and the selected endpoint |
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
 | Missing `omni`, renderer or `.pyi` imports | Verify selected Sim and enabled Kit extensions. Do not pip-install `omni` or hand-copy type stubs |
@@ -235,8 +233,7 @@ The **Vention bench** has no public download. Supply an approved licensed workst
 | `No asset root: ...` | Set `ISAAC_MCP_ASSET_ROOT`, or create `<workspace>/assets` |
 | `No module named 'Xlib'` when starting the MCP host | You ran the host with Isaac Sim's Python. It has its own dependencies: use the installed `isaac-mcp`, or `cd mcp && uv run --locked --isolated ...` |
 | `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK, and the validators `pxr` and `numpy`: `uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
-| Generic edit refuses with `TIMELINE_ACTIVE` after a UR5e Quick Start | Quick Start leaves the timeline playing. Call `sim__timeline__control` with `action="stop"` first |
-| `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; for the twin that is `/World/UR5e/root_joint`. See the [typical session](TOOLS-SCENE.md#a-typical-session) |
+| `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; `sim__ros2__tf_setup` reports it. See the [typical session](TOOLS-SCENE.md#a-typical-session) |
 | `/scan` missing after reopening a saved scene | Open it with `sim__stage__open`, which repairs stale LiDAR products. See [saved LiDAR scenes](TOOLS-SCENE.md#saved-lidar-scenes-and-scan) |
 | `refresh_tools` selected another port | It found no bridge on the pinned port and one session this server launched. The result names it; verify with `status` |
 | `status` shows `host.stale: true` | This MCP server predates your `git pull`. Restart the MCP connection |
@@ -254,11 +251,11 @@ installer handles the dependencies below; they should not be mixed into a system
 |---|---|---|
 | Host MCP server | Python 3.10 or newer; `mcp`, `mss`, `PIL` (Pillow), `Xlib` (python-xlib), `imageio_ffmpeg` | `./install.sh` or `./install.sh --no-sim` installs the host package and its dependencies. Screen capture requires an accessible graphical display; window selection/raising uses X11/XWayland. |
 | Host Isaac Lab metrics | `tensorboard` | `./install.sh` installs the host with the `isaaclab` extra. If installing the host separately, use the `[isaaclab]` extra for metrics. |
-| Isaac Sim and twin | Python 3.12; `isaacsim`, `omni`, `carb`, `pxr`, `numpy`, `scipy`, `yaml` (PyYAML), plus project dependencies including `matplotlib`, `torch` and `torchvision` | The root environment is synced by `./install.sh`; Sim supplies its Kit/USD modules. Many Kit imports are available only after Kit starts, not from an arbitrary Python interpreter. PyYAML reads an optional camera configuration. |
+| Isaac Sim and work cell | Python 3.12; `isaacsim`, `omni`, `carb`, `pxr`, `numpy`, `scipy`, `yaml` (PyYAML), plus project dependencies including `matplotlib`, `torch` and `torchvision` | The root environment is synced by `./install.sh`; Sim supplies its Kit/USD modules. Many Kit imports are available only after Kit starts, not from an arbitrary Python interpreter. PyYAML reads an optional camera configuration. |
 | Simulator renderer and camera runtime | `omni.hydratexture` and `omni.kit.hydra_texture` inside Kit | Bundled NVIDIA extension in the inspected Sim installs; enabled/resolved as part of the Kit runtime where needed. `.pyi` files are type descriptions, not a separate user installation. Do not install an unrelated `omni` package or copy vendor files. |
 | Simulator ROS bridge | `rclpy`, `sensor_msgs`, `tf2_msgs` and default message types inside Kit | Supplied by the enabled Isaac Sim ROS 2 bridge; the repository launcher enables it. Custom ROS interfaces need a workspace built for Sim's Python 3.12; see [NVIDIA's ROS setup](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/install_ros.html). |
 | Isaac Lab jobs | Isaac Lab 3.0, its Python environment, compatible Isaac Sim, task modules and the selected training library | Install Isaac Lab separately. An activated environment or a checkout-local `.venv` can be discovered; use `ISAACLAB_PYTHON` and `ISAACLAB_ROOT` to select another installation. See [Isaac Lab tools](TOOLS-ISAACLAB.md). |
-| External ROS driver | System ROS `ros2`, UR driver, controller CLI, and Cyclone DDS | Install the matching ROS distribution and packages below. The launcher sources the system ROS setup itself. |
+| External ROS clients | System ROS `ros2` for RViz 2 and Nav2, and Cyclone DDS | Install the matching ROS distribution; see [ROS 2 and RViz 2](ROS2-RVIZ.md#installing-ros-2-for-rviz-2-and-the-doctor). |
 
 For recordings, `install.sh` supplies an `ffmpeg` shim backed by the host's `imageio-ffmpeg` package, unless an
 existing `~/.local/bin/ffmpeg` is present. A working system `ffmpeg` can also be used. A windowed workflow needs
@@ -269,13 +266,14 @@ no mouse or keyboard control by default; the X11 input tools can be explicitly e
 
 If a Kit module or renderer extension appears missing, first check the selected Sim interpreter and the
 running Kit extension manager/startup log. Do not try to fix a Kit import by installing `omni` or `.pyi` files
-into the host Python. The supplied launcher requests `isaac.mcp.bridge`, `sim-tools`, `ur5e-dt` and
+into the host Python. The supplied launcher requests `isaac.mcp.bridge`, `sim-tools`, `ur5e-dt` (the work cell) and
 `isaacsim.ros2.bridge`. After connecting the correct bridge, `status` and
 `sim__stage__info` help verify the running process and build; listing catalog tools by itself does not.
 
 ## Optional Lab, desktop controls and project assets
 
-**Isaac Lab** is a separate installation with its own version pairing and interpreter. Set
+**Isaac Lab** is a separate installation with its own version pairing and interpreter, and its tools are in the `lab` toolset,
+which is off by default: add `+lab` ([toolsets](TOOLSETS.md#choosing-toolsets)). Set
 `ISAACLAB_PYTHON=<workspace>/envs/lab-3.0/bin/python` and
 `ISAACLAB_ROOT=<workspace>/IsaacLab` (example locations; use your own) in the host/client environment, then call
 `isaaclab__install_info` before launching jobs. Invalid explicit paths fail discovery; they do
@@ -300,42 +298,224 @@ Managed launches require resource checks and distinct endpoints. See [host tools
 staging/cache location. Approval can include a bounded project copy, not just one USD file.
 Loading native assets is not sandboxed. Use `assets__import_path` for generic project import.
 No private workstation or personal asset is required for the initial read-only connection check.
-Follow [project setup and exact tool parameters](TOOLS-SCENE.md#project-usd-and-the-ur5e-workstation)
+Follow [project setup and exact tool parameters](TOOLS-SCENE.md#project-usd-and-trusted-roots)
 and [third-party notices](../THIRD-PARTY-NOTICES.md).
 
-## Optional UR5e mock ROS driver
+## One workspace folder
 
-No physical robot, Docker or ROS workspace is required for `backend="fake"`. The driver publishes ROS joint states
-and accepts trajectory commands using mock hardware. System ROS is needed for this external driver even though the
-simulator bundles libraries for its own bridge.
+Keep the isaac-mcp checkout, your asset stores and your Isaac Sim / Isaac Lab Python environments together in one folder.
+This section says how, and how the tool finds things that are already installed somewhere else. It documents no Windows or
+macOS paths: a Windows install, for example one under `C:` and reached from WSL as `/mnt/c/...`, cannot be used.
 
-On Ubuntu 24.04, first follow the [official ROS 2 Jazzy Ubuntu installation](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)
-to configure ROS packages. Then install the UR driver, controller CLI and Cyclone DDS:
+### Why one folder
 
-```bash
-sudo apt update
-sudo apt install ros-jazzy-ur-robot-driver ros-jazzy-ros2controlcli ros-jazzy-rmw-cyclonedds-cpp
+- **Reproducible.** One root holds everything the setup needs. You can write down what is
+  in it and rebuild it.
+- **Projects never edit the MCP checkout.** The checkout is code only. Your scenes, notes and
+  asset changes live in `projects/` and the asset root, so updating or re-cloning the checkout
+  cannot lose them.
+- **Easy to copy.** Moving to a second machine means copying the asset root and running `doctor` on each pack
+  (see [Move to a second machine](#move-to-a-second-machine)).
+
+### Layout
+
+```text
+<workspace>/
+  isaac-mcp/     the checkout (code only, never edited by projects)
+  isaac-mcp-assets/  your asset root: packs as <pack id>/<version>/pack.yaml; never pushed (the name `assets/` is preferred)
+  envs/          Isaac Sim / Isaac Lab Python environments (e.g. sim-6.2/, lab-3.0/)
+  projects/      your projects, each may hold an isaac-mcp.json
+  runs/          logs, job outputs, captures
 ```
 
-For Ubuntu 22.04 use the matching `ros-humble-...` packages and Humble setup. The Jazzy combination above was
-tested on the machine listed here; the Humble mock-driver path has automated launcher tests but has not been
-live-tested as part of this check.
+`<workspace>` can be any folder you own. The default is `~/isaac-workspace`, or whatever
+`ISAAC_MCP_WORKSPACE` says. It must not be inside the checkout; `init` refuses that.
 
-Start the simulator with `./run.sh`, connect the MCP host, and call `ur5e_dt__start_ros_driver` with
-`{"mode":"sim","action":"up","backend":"fake"}`. Use `action: "status"` to inspect it and `action: "down"` to
-stop it. The launcher uses the default `/opt/ros/jazzy/setup.bash` or `/opt/ros/humble/setup.bash` automatically; `ROS_SETUP`
-and `ROS_DISTRO` override that for a nonstandard installation. The same ROS domain and
-[`config/ros_dds.env`](../config/ros_dds.env) must be used by external ROS clients. This profile is local-only and
-sets Cyclone DDS; source it in a separate external ROS terminal after the ROS setup, rather than mixing an
-incompatible ROS Python environment into the simulator's environment.
+### Agent rules for every project
 
-The fake-driver launcher uses the Linux `setsid`, `ps`, and `timeout` commands. An unmanaged `./run.sh` session
-records its mock process in `/tmp/ur_fake_driver.pid` and logs to `/tmp/ur_fake_driver.log`. A `sim__launch`
-managed session instead keeps its own driver PID file and log in that session's directory; shutdown verifies both
-the mock command and the session marker before signaling the driver. Startup still refuses to start when another UR
-driver is detected, even in a different ROS domain. Stop the fake driver before `sim__stop`: the driver's separate
-process group is not automatically stopped with the simulator.
+`init` writes `<workspace>/AGENTS.md` and `<workspace>/CLAUDE.md` (which only contains `@AGENTS.md`). Claude Code, Codex
+and OpenCode read parent-folder instruction files, so every project under `projects/` gets them. The text is the `AGENTS`
+constant in `scripts/isaac_env.py`. In short: load the `mcp__isaac` tools, run `status` once before the first simulator action, use the
+screenshot, recording, contact and Isaac Lab tools, and say why before falling back to plain scripts. A project's own
+`AGENTS.md` can add to it. Run `init` again on an old workspace to add the files; nothing is overwritten.
 
-`backend="ursim"` is a different, optional workflow requiring Docker and the ROS workspace described in
-[the UR5e tool reference](TOOLS-UR5E.md#ur5e_dt__start_ros_driver). Its container and process controls are global,
-so it is not available through a managed `sim__launch` session.
+To see at the start of every session whether a bridge is up, add a Claude Code hook to `~/.claude/settings.json`.
+`scripts/session_check.py` prints one line and always exits 0:
+
+```json
+{"hooks": {"SessionStart": [{"hooks": [{"type": "command",
+  "command": "python3 /path/to/isaac-mcp/scripts/session_check.py"}]}]}}
+```
+
+### Set up a new machine
+
+1. **Create the folder and clone into it.**
+
+   ```bash
+   export ISAAC_MCP_WORKSPACE=~/isaac-workspace      # choose your own location
+   mkdir -p "$ISAAC_MCP_WORKSPACE"
+   git clone <repo-url> "$ISAAC_MCP_WORKSPACE/isaac-mcp"
+   cd "$ISAAC_MCP_WORKSPACE/isaac-mcp"
+   ```
+
+2. **Create the sub-folders.** `init` never overwrites anything that exists. New folders are
+   not group- or world-writable (0755 under the usual umask).
+
+   ```bash
+   python3 scripts/isaac_env.py init
+   ```
+
+   It creates `isaac-mcp-assets`, `envs`, `projects`, `runs` and a short README under
+   `$ISAAC_MCP_WORKSPACE`. Use `--workspace DIR` to name the folder explicitly.
+
+3. **Make the choice permanent.** Add the export to your shell profile (for example
+   `~/.bashrc`) and to the environment of your MCP client config
+   ([client configuration](MCP-SERVER.md#4-client-configuration)).
+
+   ```bash
+   echo 'export ISAAC_MCP_WORKSPACE=~/isaac-workspace' >> ~/.bashrc
+   ```
+
+4. **Install or point to Isaac Sim.** For a new pinned 6.2 install, follow
+   [the pinned installation](#new-pinned-62-installation); the installer creates
+   `<repo>/.venv`, which is found automatically. If you already have Isaac Sim, see
+   [I already have Isaac Sim installed](#i-already-have-isaac-sim-installed).
+
+5. **Add your assets and check.** The asset root is `ISAAC_MCP_ASSET_ROOT`, else `<workspace>/assets`, else
+   `<workspace>/isaac-mcp-assets` (what `init` creates; found with a warning that the name is transitional, so
+   set `ISAAC_MCP_ASSET_ROOT` to it). Fill it with `scripts/isaac_assets.py adopt` or by copying a pack folder
+   in (see [ASSET-PACKS.md](ASSET-PACKS.md)).
+
+   ```bash
+   export ISAAC_MCP_ASSET_ROOT="$ISAAC_MCP_WORKSPACE/isaac-mcp-assets"
+   python3 scripts/isaac_assets.py list
+   python3 scripts/isaac_env.py where
+   ./run.sh --port 8766   # not if a Kit already holds this port; choose another with --port
+   ```
+
+### I already have Isaac Sim installed
+
+Do not reinstall. Ask the tool what it can find:
+
+```bash
+python3 scripts/isaac_env.py find          # human-readable list
+python3 scripts/isaac_env.py find --json   # same, for scripts
+```
+
+`find` lists the Isaac Sim and Isaac Lab environments it discovers, in the search order
+below. It only looks at files. It does **not** run any interpreter, so a listed entry is
+a candidate, not proof that the environment works.
+
+Pick one:
+
+```bash
+python3 scripts/isaac_env.py resolve-python                       # print the chosen interpreter
+python3 scripts/isaac_env.py resolve-python --require-version 6.2 # only a matching version
+python3 scripts/isaac_env.py resolve-python --lab                 # prefer an environment that also has Isaac Lab
+```
+
+Then confirm it before you rely on it:
+
+```bash
+PY="$(python3 scripts/isaac_env.py resolve-python)" &&
+  "$PY" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))' &&
+  uv pip check --python "$PY"
+```
+
+**Pin it.** Auto-detect is a convenience. To make the choice explicit, set
+`ISAAC_MCP_PYTHON`. It wins over everything else:
+
+```bash
+export ISAAC_MCP_PYTHON=<env>/bin/python
+./run.sh --port 8766
+```
+
+**Link it into the workspace.** If you want the environment to be listed with the rest,
+symlink it. Nothing is moved or modified:
+
+```bash
+ln -s <env> "$ISAAC_MCP_WORKSPACE/envs/sim-6.2"
+```
+
+`<env>` is the directory that holds `bin/python`. Anything in `<workspace>/envs/*/bin/python`
+is found.
+
+`run.sh` follows the same rules. It prints which interpreter it chose and how to pin it.
+
+### What is auto-detected, and where it looks
+
+The first match in this order is used, even if a newer Isaac Sim exists further down the
+list; the version only filters. `run.sh` asks for any Isaac Sim 6.x
+(`resolve-python --require-version 6`). Pin a specific interpreter with `ISAAC_MCP_PYTHON`.
+
+1. `ISAAC_MCP_PYTHON`, then `UR5E_DT_PYTHON` (deprecated alias), then `ISAAC_SIM_PYTHON`.
+2. `<workspace>/envs/*/bin/python`.
+3. `<repo>/.venv/bin/python`.
+4. The active environment: `$VIRTUAL_ENV` or `$CONDA_PREFIX`.
+5. Sibling environments next to the checkout.
+6. Conda-style roots and common virtual-environment folders under your home directory, then
+   project virtual environments one and two folders below it (`~/<project>/.venv`,
+   `~/<group>/<project>/.venv`; hidden folders are skipped, nothing deeper is scanned).
+7. Standalone installs: `$ISAACSIM_PATH`, `$ISAAC_SIM_PATH`, `$ISAAC_PATH`, `~/isaacsim`,
+   `~/isaac-sim`, `~/.local/share/ov/pkg/isaac-sim-*`, `/opt/nvidia/isaac-sim*`,
+   `/isaac-sim`.
+
+The asset root is found in this order (see [ASSET-PACKS.md](ASSET-PACKS.md#the-asset-root-and-how-it-is-found)):
+`ISAAC_MCP_ASSET_ROOT`, then `<workspace>/assets`, then `<workspace>/isaac-mcp-assets` (with a warning), else an error
+that names the setting.
+
+### What is not auto-detected
+
+- Any Windows install, including under `C:` or `/mnt/c`. Not supported, untested.
+- macOS. Not supported.
+- Environments outside the places listed above. Set `ISAAC_MCP_PYTHON`, or symlink the
+  environment into `<workspace>/envs/`.
+- A version that matches. `find` does not execute Python, so check the version yourself
+  as shown above, or use `--require-version`.
+- System ROS. Isaac Sim's own ROS 2 bridge needs none. External clients (RViz 2, Nav2) use a system or RoboStack ROS; see
+  [ROS 2 and RViz 2](ROS2-RVIZ.md#installing-ros-2-for-rviz-2-and-the-doctor).
+- Isaac Lab for the `isaaclab__*` job tools is selected with `ISAACLAB_PYTHON` and
+  `ISAACLAB_ROOT`, see [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md).
+
+### Environment variables
+
+Every variable, with its default and the process that reads it, is in [ENVIRONMENT.md](ENVIRONMENT.md). Set them in the shell
+that starts `run.sh` and in your MCP client's environment; setting one only in the client does not change an already-running
+Kit process.
+
+### Move to a second machine
+
+Paths differ between machines. The bytes must not.
+
+1. On the second machine, do [the setup above](#set-up-a-new-machine) steps 1 to 4.
+2. Copy the pack folders (each `<pack id>/<version>/` with its `pack.yaml`) to the asset root there.
+   Keep each version whole.
+3. Run on the second machine:
+
+   ```bash
+   python3 scripts/isaac_assets.py list
+   python3 scripts/isaac_assets.py doctor <pack id>/<version>
+   ```
+
+   Every version must say `verified`: `pack.yaml` carries the hashes, so a file that differs fails. See
+   [ASSET-PACKS.md](ASSET-PACKS.md#moving-packs-between-machines).
+4. Environments are not copied. Install the same Sim version on the second machine and check
+   it with the version one-liner above.
+
+### Workspace troubleshooting
+
+**`find` lists nothing.** Your install is outside the search locations. Set
+`ISAAC_MCP_PYTHON`, or symlink it into `<workspace>/envs/`.
+
+**`init` refuses the folder.** It is inside the checkout. Choose a folder outside it.
+
+**`run.sh` picked the wrong interpreter.** Read its printed line, then pin the one you want
+with `ISAAC_MCP_PYTHON`. `python3 scripts/isaac_env.py where` shows the effective workspace
+and interpreter.
+
+**Assets are not found.** The asset root must be the one the Kit process sees: check
+`ISAAC_MCP_ASSET_ROOT` / `ISAAC_MCP_WORKSPACE` in the Kit process's environment. Run
+`python3 scripts/isaac_assets.py where` to see the root and how it was found.
+
+**Found but broken.** An interpreter listed by `find` can still be incompatible. Run the
+version one-liner and `uv pip check` shown above.

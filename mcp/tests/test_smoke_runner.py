@@ -28,6 +28,18 @@ def test_list_is_offline():
     assert "no checks registered" in result.stdout
 
 
+def test_list_needs_no_toolset_and_lists_all():
+    result = subprocess.run([sys.executable, "-S", str(SCRIPT), "--list"],
+                            capture_output=True, text=True, check=True)
+    for toolset in runner().TOOLSETS:
+        assert toolset in result.stdout
+
+
+def test_a_run_without_a_toolset_is_refused():
+    result = subprocess.run([sys.executable, "-S", str(SCRIPT)], capture_output=True, text=True)
+    assert result.returncode == 2 and "toolset" in result.stderr
+
+
 @pytest.mark.parametrize("actual,requested", [("physx", "newton"), ("newton", "physx"), ("unknown", "physx")])
 def test_backend_mismatch_refuses_before_checks(tmp_path, monkeypatch, capsys, actual, requested):
     module = runner()
