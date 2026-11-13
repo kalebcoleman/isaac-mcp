@@ -302,7 +302,7 @@ def test_the_registered_check_is_newton_only_and_skipped_with_a_note_on_physx(tm
             pass
 
         def call(self, name, arguments):
-            return {"app_version": "test-build"} if name == "status" else {"result": "physx"}
+            return {"app_version": "test-build"} if name == "status" else {"runtime": {"physics_engine": "physx"}}
 
     executed = []
     monkeypatch.setattr(smoke, "execute", lambda name, *args: executed.append(name))

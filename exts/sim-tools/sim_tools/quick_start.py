@@ -495,6 +495,7 @@ async def run(ext, args):
         except AssetError as exc:  # the scene exists: say why ROS is not up, and keep it
             result["ros"] = dict(error=exc.code, message=str(exc)[:600], shell=shell)
     ids = dict(session_id=info["session_id"], stage_id=info["stage_id"])
+    from .jenga import NEWTON_HZ
     from .newton_support import engine_name, quick_scene
 
     if engine_name() == "newton":
@@ -503,7 +504,7 @@ async def run(ext, args):
                                             "sim__physics action=configure on its PhysicsScene to size Newton's contact buffers.")
         else:  # the robots are in now: size the buffers for every body, and give the scene one timestep
             result["newton"] = quick_scene(stage, stage.GetPrimAtPath(PHYSICS_SCENE), scene.timeline,
-                                           authored_rate=120 if environment == "jenga" else None)  # the tower sets its own, 120 Hz
+                                           authored_rate=NEWTON_HZ if environment == "jenga" else None)  # the tower sets its own rate
     if play:
         await ext._timeline_control(dict(ids, action="play"))
         for _ in range(4):  # articulations initialize on the frames after Play

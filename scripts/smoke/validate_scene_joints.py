@@ -45,6 +45,9 @@ def payload(result):
     return {}
 
 
+SETTLE_BUDGET_S = 400 / 60  # the simulated time PhysX had for the old 400 steps
+
+
 async def validate(port, output, robot):
     records = []
 
@@ -58,6 +61,24 @@ async def validate(port, output, robot):
                 Path(output).write_text(json.dumps(records, indent=2))
                 assert item["isError"] == error, item
                 return payload(item["result"])
+
+            async def settle(**kw):
+                """sim__joints__move until settled, within the same simulated time on every engine.
+
+                The tool takes at most 600 steps per call, and a step is 1/60 s on PhysX but 2 ms on Newton, so the
+                old 400 steps were 6.7 s on PhysX and 0.8 s on Newton, less than the drive's settling time (the Franka's
+                drive has a 0.2 s time constant: about 0.9 to 1.2 s to come within 0.01 rad). The budget is the PhysX
+                one; the result adds the whole run's steps and simulated seconds."""
+                steps, seconds = 0, 0.0
+                request = 400
+                while True:
+                    got = await invoke("sim__joints__move", **kw, max_steps=request, tolerance=0.01)
+                    steps += got["steps_used"]
+                    seconds += got["simulated_seconds"]
+                    if got["settled"] or seconds >= SETTLE_BUDGET_S - 1e-9:
+                        return {**got, "steps_used": steps, "simulated_seconds": seconds}
+                    dt = got["simulated_seconds"] / got["steps_used"]
+                    request = max(1, min(600, math.ceil((SETTLE_BUDGET_S - seconds) / dt - 1e-9)))
 
             info = await invoke("sim__stage__info")
             target = {k: info[k] for k in ("session_id", "stage_id")}
@@ -107,13 +128,13 @@ async def validate(port, output, robot):
             assert {item["name"]: item["applied"] for item in commanded["targets"]} == up
             assert all(item["previous"] is not None for item in commanded["targets"])
             assert commanded["backend"] in ("physx", "newton")
-            away = await invoke("sim__joints__move", **target, path=root, targets=up,
-                                max_steps=400, tolerance=0.01)
+            away = await settle(**target, path=root, targets=up)
             direction = up
             if away["settled"]:
                 assert all(abs(item["error"]) <= 0.01 for item in away["joints"]), away
                 report["steps"]["move_out"] = dict(steps=away["steps_used"], settled=True,
-                                                   simulated_seconds=away["simulated_seconds"])
+                                                   simulated_seconds=away["simulated_seconds"],
+                                                   step_s=away["simulated_seconds"] / away["steps_used"])
             else:
                 # A real contact: the robot rests on the ground and this direction presses into it.
                 assert away.get("blocked") and away["blocked"]["name"] in joints, away
@@ -123,8 +144,7 @@ async def validate(port, output, robot):
                     note="blocked in this direction, honestly reported; the opposite direction follows",
                 )
                 direction = {name: inside(home[name] - 0.5, *limits[name]) for name in joints}
-                away = await invoke("sim__joints__move", **target, path=root, targets=direction,
-                                    max_steps=400, tolerance=0.01)
+                away = await settle(**target, path=root, targets=direction)
                 assert away["settled"] is True, away
                 assert all(abs(item["error"]) <= 0.01 for item in away["joints"]), away
                 report["steps"]["move_out"] = dict(direction="opposite", steps=away["steps_used"],
@@ -134,12 +154,12 @@ async def validate(port, output, robot):
             moved_to = {item["name"]: item["position"] for item in away["joints"]}
             assert moved_to and all(name in joints for name in moved_to), away
 
-            returned = await invoke("sim__joints__move", **target, path=root, targets=home,
-                                    max_steps=400, tolerance=0.01)
+            returned = await settle(**target, path=root, targets=home)
             assert returned["settled"] is True, returned
             assert all(abs(item["error"]) <= 0.01 for item in returned["joints"]), returned
             report["steps"]["move_back"] = dict(steps=returned["steps_used"], settled=True,
-                                                simulated_seconds=returned["simulated_seconds"])
+                                                simulated_seconds=returned["simulated_seconds"],
+                                                step_s=returned["simulated_seconds"] / returned["steps_used"])
 
             # Velocity targets are acknowledged per name and reported with the previous ones.
             velocity = await invoke("sim__joints__command", **target, path=root,
@@ -163,8 +183,7 @@ async def validate(port, output, robot):
                                    targets={first: beyond}, clamp=True)
             assert clamped["clamped"] and clamped["clamped"][0]["name"] == first
             assert clamped["clamped"][0]["applied"] in (low, high)
-            await invoke("sim__joints__move", **target, path=root, targets=home,
-                         max_steps=400, tolerance=0.01)
+            await settle(**target, path=root, targets=home)
 
             # Runtime gains: read, change, read back, restore.
             gains = await invoke("sim__joints__gains", **target, path=root)
@@ -199,8 +218,7 @@ async def validate(port, output, robot):
             )
             await invoke("sim__joints__gains", **target, path=root, dofs=joints,
                          stiffness=1000.0, damping=100.0, max_effort=1000.0)
-            await invoke("sim__joints__move", **target, path=root, targets=home,
-                         max_steps=400, tolerance=0.01)
+            await settle(**target, path=root, targets=home)
 
             # Teleport is a state reset, reported before and after, with drive targets left alone.
             teleported = await invoke("sim__joints__teleport", **target, path=root,
