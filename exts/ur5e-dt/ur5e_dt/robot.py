@@ -12,6 +12,9 @@ with the flange frame; downstream offsets use stack.axis_in_flange (default +X).
 
 finger_pads.mounts contains two {parent, position_m, orientation_wxyz} records in
 the standard RG2's finger-body frames. Legacy Husarion pad offsets are not used.
+base_plate is static pack geometry (no body/mount_frame layout required), placed
+by base_plate.placement {position_m, orientation_wxyz} relative to the assembly.
+This pose is required: plate thickness and robot base elevation are not inferred.
 No simulator lifecycle, ROS publishers, markers or asset-cache lookup lives here.
 """
 
@@ -24,7 +27,7 @@ from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 
 MODELS = {"robot": "ur5e", "bota": "bota_rokubi",
           "quick_changer": "onrobot_quick_changer", "rg2": "onrobot_rg2",
-          "finger_pad": "finger_pad"}
+          "finger_pad": "finger_pad", "base_plate": "base_plate"}
 
 
 def _vector(value, size, name):
@@ -163,7 +166,7 @@ def build_robot(stage, assets, config):
         raise ValueError("Assembly parent must already exist")
     pads = config.get("finger_pads", {}).get("present", False)
     sources = {role: _source(assets, config, role)
-               for role in ["robot", *order, *(["finger_pad"] if pads else [])]}
+               for role in ["robot", "base_plate", *order, *(["finger_pad"] if pads else [])]}
     layer = Sdf.Layer.CreateAnonymous("workcell-robot.usda")
     session = stage.GetSessionLayer()
     session.subLayerPaths.insert(0, layer.identifier)
@@ -207,6 +210,18 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
         if fidelity != "verified":
             limitations.append(f"{role}: {fidelity} geometry; not a faithful CAD/dynamics claim.")
         return prim
+
+    plate = reference("base_plate", root.AppendChild("base_plate"))
+    for prim in Usd.PrimRange(plate):
+        if (prim.HasAPI(UsdPhysics.RigidBodyAPI)
+                or prim.HasAPI(UsdPhysics.ArticulationRootAPI) or prim.IsA(UsdPhysics.Joint)):
+            raise ValueError("base_plate must be static geometry without bodies, joints or articulations")
+        if UsdGeom.Xformable(prim):
+            if UsdGeom.Xformable(prim).GetResetXformStack():
+                raise ValueError("base_plate transforms cannot reset the asset transform stack")
+    plate_pose = config["base_plate"]["placement"]
+    _set_world(plate, _pose(plate_pose["position_m"], plate_pose["orientation_wxyz"]) * _world(assembly))
+    limitations.append("Base plate is static pack geometry; verify its explicit pose and robot elevation independently.")
 
     for role in ["robot", *order]:
         roots[role] = reference(role, root.AppendChild(role))
@@ -306,6 +321,7 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
     if sources["rg2"][1].get("fidelity", "unverified") != "verified":
         limitations.append("Genuine standard RG2 asset remains unavailable/unverified; max opening is a command bound only.")
     return {"robot_path": str(roots["robot"].GetPath()), "articulation_root": str(arm.GetPath()),
+            "base_plate_path": str(plate.GetPath()),
             "flange_path": str(flange.GetPath()), "tool0_path": str(tool0.GetPath()),
             "gripper_path": str(roots["rg2"].GetPath()),
             "gripper_articulation_root": str(gripper_articulation.GetPath()) if gripper_articulation else None,

@@ -63,7 +63,7 @@ def cell(tmp_path):
         source.SetDefaultPrim(root)
         UsdGeom.Xformable(root).AddTranslateOp().Set(Gf.Vec3d(0.23, -0.17, 0.08))
         layout = {"model": model, "bom_id": f"BOM-{role}", "fidelity": "placeholder"}
-        if role == "finger_pad":
+        if role in ("finger_pad", "base_plate"):
             cube = UsdGeom.Cube.Define(source, root_path + "/pad")
             cube.CreateSizeAttr().Set(0.01)
             UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
@@ -98,6 +98,7 @@ def cell(tmp_path):
     config = {
         "assets": {role: f"pack/{role}" for role in layouts}, "asset_layout": layouts,
         "robot": {"placement": {"position_m": [1, 2, 3], "orientation_wxyz": [1, 0, 0, 0]}},
+        "base_plate": {"placement": {"position_m": [0, 0, -0.01], "orientation_wxyz": [1, 0, 0, 0]}},
         "stack": {"order": ["bota", "quick_changer", "rg2"]},
         "bota": {"length_m": 0.032, "mass_kg": 0.12, "sensor_origin_along_axis_m": 0.016,
                  "frame_id": "bota_ft_sensor"},
@@ -153,8 +154,8 @@ def test_stack_frames_order_mapping_and_sources_unchanged(cell, order):
     assert list(native_rg2.TransformDir(Gf.Vec3d(0, 0, 1))) == pytest.approx([1, 0, 0])
     tool0 = world(stage, report["tool0_path"]) * flange.GetInverse()
     assert list(tool0.TransformDir(Gf.Vec3d(0, 0, 1))) == pytest.approx([1, 0, 0])
-    assert len(report["parts"]) == 6
-    assert pack.calls == [f"pack/{role}" for role in ["robot", *order, "finger_pad"]]
+    assert len(report["parts"]) == 7
+    assert pack.calls == [f"pack/{role}" for role in ["robot", "base_plate", *order, "finger_pad"]]
     for part in report["parts"]:
         prim = stage.GetPrimAtPath(part["prim_path"])
         assert prim.GetCustomDataByKey("workcell:asset_id") == part["asset_id"]
@@ -162,6 +163,42 @@ def test_stack_frames_order_mapping_and_sources_unchanged(cell, order):
     assert any("placeholder" in limitation for limitation in report["limitations"])
     assert not any("marker" in str(prim.GetPath()).lower() for prim in stage.Traverse())
     assert {key: path.read_bytes() for key, path in pack.paths.items()} == originals
+
+
+def test_base_plate_pose_metadata_and_static_geometry(cell):
+    stage, pack, config = cell
+    rotation = [math.sqrt(0.5), 0, 0, math.sqrt(0.5)]
+    config["robot"]["placement"]["orientation_wxyz"] = rotation
+    config["base_plate"]["placement"] = {"position_m": [0.1, 0.2, -0.01], "orientation_wxyz": rotation}
+    report = robot.build_robot(stage, pack, config)
+    path = report["base_plate_path"]
+    local = world(stage, path) * world(stage, report["assembly_path"]).GetInverse()
+    assert np.array(local) == pytest.approx(np.array(robot._pose([0.1, 0.2, -0.01], rotation)))
+    assert next(part for part in report["parts"] if part["prim_path"] == path) == {
+        "prim_path": path, "asset_id": "pack/base_plate", "bom_id": "BOM-base_plate", "fidelity": "placeholder"}
+    assert stage.GetPrimAtPath(path + "/pad").HasAPI(UsdPhysics.CollisionAPI)
+    assert not stage.GetPrimAtPath(path).HasAPI(UsdPhysics.RigidBodyAPI)
+    assert Usd.Stage.Open(stage.Flatten()).GetPrimAtPath(path)
+
+
+@pytest.mark.parametrize("fault", ["missing_pose", "dynamic_plate", "reset_stack", "missing_asset"])
+def test_base_plate_failure_rolls_back(cell, fault):
+    stage, pack, config = cell
+    if fault == "missing_pose":
+        del config["base_plate"]["placement"]
+    elif fault == "missing_asset":
+        del config["assets"]["base_plate"]
+    else:
+        source = Usd.Stage.Open(str(pack.paths["pack/base_plate"]))
+        if fault == "dynamic_plate":
+            UsdPhysics.RigidBodyAPI.Apply(source.GetDefaultPrim())
+        else:
+            UsdGeom.Xformable(source.GetDefaultPrim()).SetResetXformStack(True)
+        source.GetRootLayer().Save()
+    with pytest.raises((ValueError, KeyError)):
+        robot.build_robot(stage, pack, config)
+    assert not stage.GetPrimAtPath("/World/RobotAssembly")
+    assert not stage.GetSessionLayer().subLayerPaths
 
 
 def test_black_pads_follow_finger_frames_and_export(cell):
