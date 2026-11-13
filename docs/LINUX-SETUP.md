@@ -323,14 +323,16 @@ macOS paths: a Windows install, for example one under `C:` and reached from WSL 
 ```text
 <workspace>/
   twinsmith/     the checkout (code only, never edited by projects)
-  isaac-mcp-assets/  your asset root: packs as <pack id>/<version>/pack.yaml; never pushed (the name `assets/` is preferred)
+  assets/        your asset root: packs as <pack id>/<version>/pack.yaml; never pushed
   envs/          Isaac Sim / Isaac Lab Python environments (e.g. sim-6.2/, lab-3.0/)
   projects/      your projects, each may hold a twinsmith.json
+  tools/         other tools that run next to the simulator (e.g. RoboSimStudio)
   runs/          logs, job outputs, captures
 ```
 
-`<workspace>` can be any folder you own. The default is `~/isaac-workspace`, or whatever
-`TWINSMITH_WORKSPACE` says. It must not be inside the checkout; `init` refuses that.
+`<workspace>` can be any folder you own. The default is `~/robotics-workspace`, or whatever
+`TWINSMITH_WORKSPACE` says. An existing `~/isaac-workspace` is still used while the new folder does not exist
+([migrating](MIGRATING.md#workspace-folder)). It must not be inside the checkout; `init` refuses that.
 
 ### Agent rules for every project
 
@@ -353,7 +355,7 @@ To see at the start of every session whether a bridge is up, add a Claude Code h
 1. **Create the folder and clone into it.**
 
    ```bash
-   export TWINSMITH_WORKSPACE=~/isaac-workspace      # choose your own location
+   export TWINSMITH_WORKSPACE=~/robotics-workspace    # choose your own location
    mkdir -p "$TWINSMITH_WORKSPACE"
    git clone <repo-url> "$TWINSMITH_WORKSPACE/twinsmith"
    cd "$TWINSMITH_WORKSPACE/twinsmith"
@@ -366,15 +368,16 @@ To see at the start of every session whether a bridge is up, add a Claude Code h
    python3 scripts/env.py init
    ```
 
-   It creates `isaac-mcp-assets`, `envs`, `projects`, `runs` and a short README under
-   `$TWINSMITH_WORKSPACE`. Use `--workspace DIR` to name the folder explicitly.
+   It creates `assets`, `envs`, `projects`, `runs`, `tools` and a short README under
+   the workspace (`$TWINSMITH_WORKSPACE`, else `~/robotics-workspace`). On an existing old workspace it moves and renames
+   nothing: an existing `isaac-mcp-assets` is left as it is and reported. Use `--workspace DIR` to name the folder explicitly.
 
 3. **Make the choice permanent.** Add the export to your shell profile (for example
    `~/.bashrc`) and to the environment of your MCP client config
    ([client configuration](MCP-SERVER.md#4-client-configuration)).
 
    ```bash
-   echo 'export TWINSMITH_WORKSPACE=~/isaac-workspace' >> ~/.bashrc
+   echo 'export TWINSMITH_WORKSPACE=~/robotics-workspace' >> ~/.bashrc
    ```
 
 4. **Install or point to Isaac Sim.** For a new pinned 6.2 install, follow
@@ -383,12 +386,11 @@ To see at the start of every session whether a bridge is up, add a Claude Code h
    [I already have Isaac Sim installed](#i-already-have-isaac-sim-installed).
 
 5. **Add your assets and check.** The asset root is `TWINSMITH_ASSET_ROOT`, else `<workspace>/assets`, else
-   `<workspace>/isaac-mcp-assets` (what `init` creates; found with a warning that the name is transitional, so
-   set `TWINSMITH_ASSET_ROOT` to it). Fill it with `scripts/assets.py adopt` or by copying a pack folder
+   `<workspace>/isaac-mcp-assets` (an old workspace may have it; found with a warning that the name is transitional). Fill it with `scripts/assets.py adopt` or by copying a pack folder
    in (see [ASSET-PACKS.md](ASSET-PACKS.md)).
 
    ```bash
-   export TWINSMITH_ASSET_ROOT="$TWINSMITH_WORKSPACE/isaac-mcp-assets"
+   export TWINSMITH_ASSET_ROOT="$TWINSMITH_WORKSPACE/assets"
    python3 scripts/assets.py list
    python3 scripts/env.py where
    ./run.sh --port 8766   # not if a Kit already holds this port; choose another with --port

@@ -19,7 +19,7 @@ import threading
 import time
 import uuid
 
-from twinsmith import legacy
+from twinsmith import legacy, pack_manifest
 
 from . import plan
 from . import template as scene_template_module
@@ -32,6 +32,23 @@ ACTIONS = ("status", "start", "scene_template", "update_scene", "reference", "sn
 RECENT_RUNS = 5
 STOP_WAIT_S = 15.0
 BASE_PORT = 8080
+
+
+def _bundled_ffmpeg():
+    """The ffmpeg binary that the imageio-ffmpeg package ships (a dependency of this server), or None."""
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
+def _ffmpeg_exe():
+    """ffmpeg on PATH, else the bundled one, else None. A PC without a system ffmpeg still trims clips."""
+    return shutil.which("ffmpeg") or _bundled_ffmpeg()
+
+
 NO_BRIDGE = ("robosim needs no Isaac Sim or Kit bridge: it runs RoboSimStudio in its own Python environment. "
              "The device (cpu or cuda:0) is chosen at start.")
 
@@ -65,7 +82,7 @@ class RoboSimBridge:
     """
 
     def __init__(self, workspace=None, root=None):
-        self.workspace = Path(workspace or os.environ.get("TWINSMITH_WORKSPACE", "~/isaac-workspace")).expanduser().resolve()
+        self.workspace = Path(workspace or pack_manifest.workspace_dir()).expanduser().resolve()
         self.root = Path(root or os.environ.get("TWINSMITH_ROBOSIM_ROOT", self.workspace / "tools/robosimstudio")).expanduser().resolve()
         self.runs = self.workspace / "runs/robosim"
         self._jobs = {}
@@ -596,9 +613,9 @@ class RoboSimBridge:
 
     def _trim(self, source, destination, start, end):
         """Cut ``start``-``end`` seconds of ``source`` into ``destination`` with ffmpeg (RSS cannot trim)."""
-        ffmpeg = shutil.which("ffmpeg")
+        ffmpeg = _ffmpeg_exe()
         if not ffmpeg:
-            raise ValueError("start_s/end_s cut the clip with ffmpeg, which is not on PATH. Install ffmpeg, or leave them out "
+            raise ValueError("start_s/end_s cut the clip with ffmpeg, which was not found on PATH or in the imageio-ffmpeg package. Install ffmpeg, or leave them out "
                              "and pass `at` anchor times instead.")
         for codec in (["libx264", "-preset", "veryfast", "-crf", "16"], ["mpeg4", "-q:v", "2"]):
             result = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}", "-i", str(source),
@@ -635,7 +652,7 @@ class RoboSimBridge:
         ledger["inputs"][f"reference-{sequence}"] = self._copy_input(video, copied)
         feed, offset, trimmed, source_duration, end_anchor = copied, 0.0, None, None, None
         if windowed:
-            ffmpeg = shutil.which("ffmpeg")
+            ffmpeg = _ffmpeg_exe()
             source_duration, fps = self._clip_info(ffmpeg, copied) if ffmpeg else (None, None)
             frame = 1.0 / fps if fps else 0.0
             last = end_s if end_s is not None else source_duration

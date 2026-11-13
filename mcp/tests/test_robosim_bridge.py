@@ -15,6 +15,7 @@ import time
 import pytest
 
 from twinsmith.robosim import PIN, RoboSimBridge, register_robosim_tools
+from twinsmith.robosim import bridge as bridge_module
 
 
 STUB = r'''
@@ -607,9 +608,18 @@ def test_reference_window_without_ffmpeg_says_how_to_proceed(fake, monkeypatch):
     bridge = fake[0]
     run = start(fake)["run"]
     monkeypatch.setattr(shutil, "which", lambda *args, **kwargs: None)
+    monkeypatch.setattr(bridge_module, "_bundled_ffmpeg", lambda: None)
     refused = bridge.call("reference", run=run, video=str(fake[2]), start_s=1, end_s=5, wait_s=10)["operation"]["result"]
     assert not refused["ok"] and "ffmpeg" in refused["error"] and "pass `at`" in refused["error"]
     assert complete(bridge, "reference", run, video=str(fake[2]), at="0:a,6:b")["ok"]  # `at` alone needs no ffmpeg
+
+
+def test_ffmpeg_falls_back_to_the_bundled_binary_when_none_is_on_path(monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda *args, **kwargs: None)
+    monkeypatch.setattr(bridge_module, "_bundled_ffmpeg", lambda: "/bundled/ffmpeg")
+    assert bridge_module._ffmpeg_exe() == "/bundled/ffmpeg"
+    monkeypatch.setattr(shutil, "which", lambda *args, **kwargs: "/usr/bin/ffmpeg")
+    assert bridge_module._ffmpeg_exe() == "/usr/bin/ffmpeg"
 
 
 def test_status_says_no_bridge_and_names_the_engine(fake):
@@ -1269,3 +1279,18 @@ def test_start_on_cuda_warns_that_the_first_run_compiles_kernels_and_cpu_does_no
 def test_jenga_template_states_the_default_size_and_long_axis():
     assert "x is the long axis" in template.SIZE_MEANING["jenga"] and "0.072 x 0.024 x 0.014" in template.SIZE_MEANING["jenga"]
     assert "x is the long axis" in template.PARAMETERS["size"]
+
+
+def test_the_workspace_follows_the_shared_rule(tmp_path, monkeypatch):
+    from twinsmith import pack_manifest
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(pack_manifest, "checkout_root", lambda: None)
+    monkeypatch.delenv("TWINSMITH_WORKSPACE", raising=False)
+    assert RoboSimBridge().workspace == tmp_path / "home" / "robotics-workspace"
+    (tmp_path / "home" / "isaac-workspace").mkdir(parents=True)
+    assert RoboSimBridge().workspace == tmp_path / "home" / "isaac-workspace"      # only while the new folder is absent
+    (tmp_path / "home" / "robotics-workspace").mkdir()
+    assert RoboSimBridge().workspace == tmp_path / "home" / "robotics-workspace"
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(tmp_path / "chosen"))
+    assert RoboSimBridge().workspace == (tmp_path / "chosen").resolve()
+    assert RoboSimBridge(workspace=tmp_path / "given").workspace == (tmp_path / "given").resolve()
