@@ -312,7 +312,7 @@ Gaussian splats come that way.
 | **Service** (separate process, reached over loopback) | FoundationPose; any other model with a restrictive licence | Research-only or custom licences must not touch an MIT repository |
 | **Beside** (another MCP server in the client's configuration) | FreeCAD, build123d or agentcad, Blender, NVIDIA's documentation servers | Mature servers; twinsmith only receives their output as files |
 | **Library, in the `mesh` extra** | CoACD (MIT), fast-simplification (MIT), trimesh (MIT) | Used as dependencies, not copied |
-| **Not wrapped** | ROS control servers such as ros-mcp-server; MoveIt servers | They publish and call actions, so twinsmith does not carry them. One may run beside twinsmith on the simulation-only PCs, never on the robot laptop. See [safety](#safety-boundaries) |
+| **Not used** | ROS control servers such as ros-mcp-server; MoveIt servers | They give an agent publish, service and action tools. twinsmith does not wrap them and none is installed on any of the owner's machines. See [safety](#safety-boundaries) |
 
 Every wrapper follows one contract, the one `robosim` already has:
 
@@ -383,9 +383,10 @@ Which machine runs which of these processes, and what each machine cannot run, i
 3. **The `gap` wrapper refuses real hardware.** Graph-as-Policy's `run` accepts `--real franka` and `--real ur_zed`. The wrapper
    builds its command line from typed arguments, has no argument that maps to `--real`, and refuses any value that contains
    it, with `REAL_ROBOT_REFUSED`. A test proves it.
-4. **Agent-facing ROS servers stay off the robot laptop.** A ROS MCP server such as ros-mcp-server can publish, call
-   services and send action goals. On the simulation-only PCs that is fine: the ASU PC has one, and it reaches only simulated
-   ROS 2. Such a server is never installed on the laptop, and twinsmith does not wrap one.
+4. **No agent-facing ROS MCP server, on any machine.** A server such as ros-mcp-server gives an agent tools to publish, call
+   services and send action goals. None is installed on the ASU PC, the home PC or the robot laptop, and twinsmith does not
+   wrap one. The only agent path to ROS 2 is twinsmith's own `ros2` toolset: off by default, simulator-side, on the two
+   simulation-only PCs, and never on the laptop, where twinsmith is not installed at all. ROS 2 itself stays on the PCs.
 5. **Restrictive licences stay outside.** FoundationPose (research-only) and SAM 3D (custom licence) run as separate services
    or offline steps. No code or weights from them enter this repository; only files and poses come back.
 6. **Wrapped tools that spend money say so first.** A tool that calls a paid model, or drives another agent, runs only with

@@ -63,11 +63,15 @@ The ASU column was read on that machine on 2026-11-13 (`nvidia-smi`, `scripts/en
 
 **The robot boundary** (the owner's statement of the lab's wiring; it cannot be read from either PC).
 
-| Machine | Connected to the UR5e | Agents and agent-facing ROS servers |
-|---|---|---|
-| ASU PC | No | Allowed. ROS 2 and a ROS MCP server with publish, service and action tools are installed here; they reach only simulated ROS 2 |
-| Home PC | No | Allowed, on the same terms |
-| Laptop | **Yes, and it is the only one** | **Never.** No agent runs here and no agent-facing ROS MCP server is ever installed here. It runs only ROS 2 code the owner has approved |
+| Machine | Connected to the UR5e | ROS 2 | Agent path to ROS 2 |
+|---|---|---|---|
+| ASU PC | No | Installed; simulation traffic only | twinsmith's `ros2` toolset, and nothing else |
+| Home PC | No | Installed; simulation traffic only | twinsmith's `ros2` toolset, and nothing else |
+| Laptop | **Yes, and it is the only one** | Only code the owner has approved | **None.** No agent runs here and twinsmith is not installed here |
+
+**No agent-facing ROS MCP server is installed on any of these machines**: nothing that gives an agent tools to publish, call
+services or send action goals. twinsmith's own `ros2` toolset is the only agent path to ROS 2. It is off by default, it works
+inside the simulator, and it exists only on the two PCs.
 
 twinsmith and everything in this roadmap run on the two PCs. Nothing here is installed on the laptop.
 
