@@ -35,6 +35,9 @@ rows for the server you have installed, with the current state of each.
 
 - `core` is always on and cannot be turned off.
 - `input` and `launch` are never part of a profile, not even `all`. Name them to get them (`+input`, `+launch`).
+- `screen` and `input` are not specific to Isaac Sim: `screenshot`, `windows`, `doctor` and `computer` work on any X11 window
+  (FreeCAD, RViz 2, a browser), so they carry no `sim__` prefix. `sim__ui` and `sim__logs` (`kit_debug`) need Kit. The
+  [computer use workflow](TOOLS-HOST.md#computer-use-workflow) covers both.
 - `extensions` carries the tools that a project's own Kit extension registers under a namespace this repository does not
   catalogue. It lists nothing until such an extension connects.
 - `workcell` is the lab's UR5e work cell; see its [README](../exts/workcell/workcell/README.md). Its tools for real-to-sim,
