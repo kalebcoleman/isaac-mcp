@@ -65,7 +65,7 @@ grouped tool with its actions, by toolset.
 - The single-purpose names still work when called, with the same arguments and answers, so existing prompts and scripts keep
   running. They are deprecated: no longer listed, and new work should use the grouped form. Only members of enabled toolsets are
   callable. Tools that belong to no group (`status`, `run_python`, `sim__quick_start`, `sim__timeline__control`,
-  `assets__import_path`, `screenshot`) are listed under their own names.
+  `assets__import_path`, `screenshot`, `doctor`) are listed under their own names.
 - Where a tool has an argument of its own called `action`, the grouped tool takes it as `sub_action`.
 
 ## Desktop and window tools

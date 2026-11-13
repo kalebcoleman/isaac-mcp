@@ -131,12 +131,12 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 
 | Selection | Listed tools | Characters | Estimated tokens |
 |---|--:|--:|--:|
-| `minimal` | 6 | 6,360 | 1,590 |
-| `default` | 31 | 60,715 | 15,178 |
-| `all` | 48 | 88,982 | 22,245 |
-| `all,+input,+launch` | 50 | 93,071 | 23,267 |
-| `core,lab,code` | 15 | 22,059 | 5,514 |
-| `core,workcell` | 13 | 10,542 | 2,635 |
+| `minimal` | 6 | 6,346 | 1,586 |
+| `default` | 32 | 61,863 | 15,465 |
+| `all` | 49 | 92,440 | 23,110 |
+| `all,+input,+launch` | 51 | 97,381 | 24,345 |
+| `core,lab,code` | 15 | 22,027 | 5,506 |
+| `core,workcell` | 13 | 10,470 | 2,617 |
 
 Before toolsets existed the server always listed 48 tools, about 28,450 estimated tokens. The listed text is a summary:
 `action="help"` on a grouped tool and `help(tool="<name>")` return the full description. A test
