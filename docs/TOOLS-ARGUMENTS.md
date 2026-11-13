@@ -959,7 +959,13 @@ Check a file's existence, size and sha256 on the bridge's box. Skips unchanged p
 
 ## `screen`: Capture, record and arrange desktop windows
 
-Toolset `screen` is on by default. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 10 tools, listed as 4: `join_videos`, `screen_recording` (start, stop, status), `screenshot`, `windows` (info, list, raise, move, tile).
+Toolset `screen` is on by default. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 11 tools, listed as 5: `doctor`, `join_videos`, `screen_recording` (start, stop, status), `screenshot`, `windows` (info, list, raise, move, tile).
+
+### `doctor`
+
+Check whether desktop input (computer) and Isaac Sim UI control (sim__ui) can work here, and what to fix.
+
+No arguments.
 
 ### `join_videos`
 
@@ -1416,9 +1422,9 @@ Read a bounded tail of the Kit log. Of the selected Kit log file, never arbitrar
 
 Listed as `sim__ui(action="act")`.
 
-Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (desktop window_* input does not). Then check the result with screenshot(window_id=<Isaac Sim window>) or sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.
+Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (the X11 computer tool does not). screenshot_after=true returns the window after the action; or check with sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.
 
-- `action` (click|double_click|right_click|move|drag|scroll|type|keypress|menu|tab|close|wait, required): What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab).
+- `action` (click|double_click|right_click|move|drag|scroll|type|keypress|menu|tab|close|wait, optional): What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab). Omit it with actions.
 - `ref` (string, optional): Widget ref from sim__ui__find (its centre is used). For type/keypress it is clicked first to focus it.
 - `x` (integer, optional): X in Isaac Sim window pixels (when no ref).
 - `y` (integer, optional): Y in Isaac Sim window pixels (when no ref).
@@ -1575,7 +1581,21 @@ RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a sce
 
 ## `input`: Desktop mouse and keyboard input
 
-Toolset `input` is off until you select it with `+input` (never enabled by `all`). Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-desktop-input). 5 tools, listed as 1: `computer` (click, drag, scroll, type, key).
+Toolset `input` is off until you select it with `+input` (never enabled by `all`). Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-desktop-input). 6 tools, listed as 1: `computer` (click, drag, scroll, type, key, batch).
+
+### `computer_batch`
+
+Listed as `computer(action="batch")`.
+
+Run 1-10 click, drag, scroll, type or key steps in one selected X11 window, in order.
+
+- `window_id` (int, required): Window id from windows(action="list").
+- `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
+- `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
+- `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
+- `actions` (list[dict[str, Any]], required): 1-10 steps run in order, each {action, ...that action's arguments}, e.g. {"action": "click", "x": 10, "y": 20}.
+- `coord_space` (str, default `'window'`): window: x/y are original window pixels. Or the coord_space token a screenshot printed: x/y are pixels of that image (also a zoomed crop).
+- `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
 ### `computer_click`
 

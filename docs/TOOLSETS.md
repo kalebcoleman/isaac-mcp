@@ -22,7 +22,7 @@ rows for the server you have installed, with the current state of each.
 | `sensors`: Cameras, LiDAR and viewport framing | on | `sim__camera`, `sim__lidar`, `sim__viewport__frame` |
 | `assets`: Import and manage robot and scene assets | on | `assets__import_path`, `assets__library`, `assets__pack` |
 | `code`: Execute code and scripts, transfer files | on | `files`, `reload_tools`, `run_python`, `run_script`, `sim__controller` |
-| `screen`: Capture, record and arrange desktop windows | on | `join_videos`, `screen_recording`, `screenshot`, `windows` |
+| `screen`: Capture, record and arrange desktop windows | on | `doctor`, `join_videos`, `screen_recording`, `screenshot`, `windows` |
 | `lab`: Isaac Lab training and evaluation | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics` |
 | `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
 | `kit_debug`: Inspect Kit logs and operate its UI | off | `sim__logs`, `sim__ui` |
@@ -124,9 +124,9 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 | Profile | Toolsets | Listed tools |
 |---|---|--:|
 | `minimal` | `core` | 6 |
-| `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 31 |
-| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 48 |
-| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 50 |
+| `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 32 |
+| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 49 |
+| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 51 |
 <!-- /generated -->
 
 | Selection | Listed tools | Characters | Estimated tokens |
