@@ -129,7 +129,7 @@ def test_locked_screen_blocks_computer_and_points_to_sim_ui(desk, monkeypatch):
 
 def test_unlocked_desktop_with_input_on_is_ready(desk):
     report = _doctor(_state("input", badge=True))[1]()
-    assert report["x11"] == {"xtest": True, "shape": True} and report["locked"] is False
+    assert report["x11"] == {"xtest": True, "shape": True, "compositing": True} and report["locked"] is False
     assert report["ready"]["computer"] is True and report["input_toolset"] is True and report["cursor_badge"] is True
     assert report["screenshot_max_width"] == 1600 and report["next"].startswith("sim__ui: no bridge answers")
     desk.close.assert_called_once()
@@ -138,7 +138,7 @@ def test_unlocked_desktop_with_input_on_is_ready(desk):
 def test_missing_xtest_blocks_computer(desk):
     desk.has_extension.side_effect = lambda name: name == "SHAPE"
     report = _doctor(_state("input"))[1]()
-    assert report["x11"] == {"xtest": False, "shape": True} and "lacks XTEST" in report["next"]
+    assert report["x11"] == {"xtest": False, "shape": True, "compositing": True} and "lacks XTEST" in report["next"]
 
 
 def test_input_toolset_is_read_when_called(desk):
@@ -227,8 +227,9 @@ def test_kit_readiness_reads_and_never_enables(monkeypatch):
     app = ModuleType("omni.kit.app")
     app.get_app = lambda: SimpleNamespace(get_extension_manager=lambda: manager)
     omni_ui = ModuleType("omni.ui")
-    omni_ui.Workspace = SimpleNamespace(get_dpi_scale=lambda: 2.0, get_main_window_width=lambda: 1919.6,
-                                        get_main_window_height=lambda: 1080.2)
+    # omni.ui measures the workspace in UI points: 959.8 x 540.1 at scale 2 is a 1920x1080 pixel window.
+    omni_ui.Workspace = SimpleNamespace(get_dpi_scale=lambda: 2.0, get_main_window_width=lambda: 959.8,
+                                        get_main_window_height=lambda: 540.1)
     kit = ModuleType("omni.kit")
     kit.app = app
     omni = ModuleType("omni")
@@ -248,3 +249,27 @@ def test_kit_readiness_reads_and_never_enables(monkeypatch):
     omni_ui.Workspace = SimpleNamespace(get_dpi_scale=gone, get_main_window_width=gone, get_main_window_height=gone)
     assert ui.readiness() == {"ui_test_enabled": False, "headless": True, "dpi_scale": None,
                               "main_window": {"width": None, "height": None}}
+
+
+def test_notes_say_what_works_with_a_limit(desk, monkeypatch):
+    assert _doctor(_state("input"))[1]()["notes"] == []
+    monkeypatch.setattr(screen, "_probe_locked", lambda: None)
+    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
+    desk.get_selection_owner.return_value = screen.X.NONE
+    report = _doctor(_state("input"))[1]()
+    assert report["locked"] is None and report["ready"]["computer"] is True and report["backend"] == "xwayland"
+    assert [note.split(":")[0] for note in report["notes"]] == [
+        "lock state unknown (no screen saver service answered)", "XWayland", "no compositing manager"]
+    assert report["x11"]["compositing"] is False
+
+
+def test_the_first_sim_ui_call_enabling_ui_test_is_a_note_not_a_blocker(desk):
+    FakeClient.answer = {"ui_test_enabled": False, "dpi_scale": 1.0, "main_window": {}, "headless": False}
+    report = _doctor(_state("kit_debug"))[1]()
+    assert report["ready"]["sim__ui"] is True and "the first sim__ui call turns it on" in report["notes"][0]
+
+
+def test_a_bridge_error_is_said_once_and_whole(desk):
+    message = "AUTH_REQUIRED: this bridge needs its token. A client on the same account reads it from the token file."
+    FakeClient.answer = {"status": "error", "code": "AUTH_REQUIRED", "message": message}
+    assert _doctor(_state("kit_debug"))[1]()["bridge"]["reason"] == message

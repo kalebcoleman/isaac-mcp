@@ -12,7 +12,7 @@ import os
 import threading
 import time
 from contextlib import contextmanager
-from typing import Annotated, Any, Iterable
+from typing import Annotated, Any, Callable, Iterable
 
 from pydantic import Field
 
@@ -34,15 +34,16 @@ _WindowId = Annotated[int, Field(description="Window id from list_windows.")]
 _Pid = Annotated[int, Field(description="The window's PID from list_windows; a different owner is refused.")]
 _X = Annotated[int, Field(description="X in window pixels (or image pixels, see coord_space), from a fresh screenshot.")]
 _Y = Annotated[int, Field(description="Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.")]
-_Width = Annotated[int, Field(description="The window width you inspected, in pixels; a changed size is refused.")]
-_Height = Annotated[int, Field(description="The window height you inspected, in pixels; a changed size is refused.")]
+_Width = Annotated[int, Field(description="The window's own width in pixels (windows list), not a downscaled image's; "
+                                         "it ends a coord_space token (/WxH). A changed size is refused.")]
+_Height = Annotated[int, Field(description="The window's own height in pixels, as for expected_width.")]
 _CoordSpace = Annotated[str, Field(description="window (window pixels) or the coord_space token a screenshot "
                                                "printed (x/y are then pixels of that image or crop).")]
 _ShotAfter = Annotated[bool, Field(description="Also return a screenshot of the window after the action.")]
 _Steps = Annotated[list[dict[str, Any]], Field(
     min_length=1, max_length=10,
-    description="1-10 steps run in order, each {action, ...that action's arguments}, e.g. "
-                "{\"action\": \"click\", \"x\": 10, \"y\": 20}.",
+    description="1-10 steps run in order, each an object with action and that action's own arguments. "
+                "E.g. [{\"action\": \"click\", \"x\": 10, \"y\": 20}, {\"action\": \"type\", \"text\": \"hi\"}].",
     json_schema_extra={"items": {
         "type": "object", "required": ["action"],
         "properties": {"action": {"type": "string", "enum": ["click", "drag", "scroll", "type", "key"]}},
@@ -59,6 +60,7 @@ _KEYS = {
     "space": "space",
     **{f"f{i}": f"F{i}" for i in range(1, 13)},
 }
+_KEY_NAMES = "f1-f12 enter tab escape backspace delete left right up down home end pageup pagedown space"
 _MODIFIERS = {"ctrl": "Control_L", "shift": "Shift_L", "alt": "Alt_L", "super": "Super_L"}
 _LOCKED = ("the desktop is locked or its screen saver is active (the PC is probably used remotely): X input "
            "would go to the lock screen, typed text into its password box, not to the window. For Isaac Sim "
@@ -160,7 +162,9 @@ def _keyboard_grabbed(disp) -> bool:
 
 
 @contextmanager
-def _target(window_id: int, expected_pid: int, badge_at: tuple[int, int] | None = None):
+def _target(window_id: int, expected_pid: int, badge_at: tuple[int, int, int, int] | None = None):
+    """The checked target window under a server grab. ``badge_at`` (x, y and the expected window size) is
+    where the cursor badge glides first, when the input can follow it there."""
     if window_id <= 0 or expected_pid <= 0:
         raise ValueError("window_id and expected_pid must be positive")
     locked = _lock_state()  # fresh for this call: it guards where keystrokes go
@@ -170,14 +174,19 @@ def _target(window_id: int, expected_pid: int, badge_at: tuple[int, int] | None 
     visible = screen._match_window(None, window_id)
     if visible.get("pid") != expected_pid:
         raise ValueError("target window PID is missing or changed; list windows again")
-    if badge_at is not None and cursor_badge.enabled():
-        # Before the server grab: the badge's own X connection would block under it.
-        cursor_badge.glide(visible["x"] + badge_at[0], visible["y"] + badge_at[1])
     disp = screen._xdisplay()
     grabbed = False
     try:
         if not disp.has_extension("XTEST"):
             raise RuntimeError("the X11 display does not support the XTEST extension")
+        if badge_at is not None and cursor_badge.enabled():
+            x, y, width, height = badge_at
+            # Not for a point the checks below refuse (outside, or a resized window), and not over a
+            # possible lock screen: with the lock state unknown, a held keyboard grab refuses the input.
+            if ((visible["width"], visible["height"]) == (width, height) and 0 <= x < width and 0 <= y < height
+                    and (locked is False or not _keyboard_grabbed(disp))):
+                # Before the server grab: the badge's own X connection would block under it.
+                cursor_badge.glide(visible["x"] + x, visible["y"] + y)
         # Keep another X client from moving/replacing the target between the
         # final checks and injection. This is brief, and is not an X11 security boundary.
         disp.grab_server()
@@ -207,9 +216,12 @@ def _target(window_id: int, expected_pid: int, badge_at: tuple[int, int] | None 
 def _point(disp, window, geometry, x: int, y: int, width: int, height: int) -> None:
     left, top, actual_width, actual_height = geometry
     if width != actual_width or height != actual_height:
-        raise ValueError("window size changed; capture it again before using coordinates")
+        raise ValueError(f"the window is {actual_width}x{actual_height}, not the expected {width}x{height}: pass the "
+                         "window's own size (windows list, or the /WxH end of a coord_space token), not a "
+                         "downscaled image's; if it was resized, capture it again")
     if not (0 <= x < width and 0 <= y < height):
-        raise ValueError("coordinates are outside the selected window")
+        raise ValueError(f"({x}, {y}) is outside the {width}x{height} window; x and y are window pixels unless "
+                         "coord_space names a screenshot")
     root = disp.screen().root
     root_x, root_y = left + x, top + y
     if not (0 <= root_x < disp.screen().width_in_pixels and
@@ -226,14 +238,16 @@ def _point(disp, window, geometry, x: int, y: int, width: int, height: int) -> N
             break
         leaf = child
     if not _belongs_to(leaf, window.id, root.id):
-        raise ValueError("another window covers that point; uncover the target and capture again")
+        raise ValueError("another window covers that point; uncover the target (windows action=raise) and "
+                         "capture again")
 
 
 def _focus(disp, window) -> None:
     root = disp.screen().root
     focus = disp.get_input_focus().focus
     if not _belongs_to(focus, window.id, root.id):
-        raise ValueError("target window does not have keyboard focus; click it and try again")
+        raise ValueError("target window does not have keyboard focus; click it and try again (for an open "
+                         "menu or popup, send the key to its parent window)")
 
 
 def _lookup(disp, symbol: int) -> tuple[int, bool]:
@@ -293,7 +307,8 @@ def _scroll_button(direction: str, steps: int) -> int:
 
 def _check_text(text: str) -> None:
     if not text or len(text) > _MAX_TEXT or any(not 32 <= ord(c) <= 126 for c in text):
-        raise ValueError("text must contain 1–200 printable ASCII characters")
+        raise ValueError("text must contain 1–200 printable ASCII characters; send a new line or a tab with "
+                         "action=key (key=enter, key=tab)")
 
 
 def _key_symbol(key: str, modifiers: list[str]) -> int:
@@ -303,21 +318,23 @@ def _key_symbol(key: str, modifiers: list[str]) -> int:
         return XK.string_to_keysym(_KEYS[key.lower()])
     if len(key) == 1 and key.isascii() and key.isalnum():
         return ord(key)
-    raise ValueError("unsupported key; use a navigation key, F1–F12, or a letter/digit")
+    raise ValueError(f"unsupported key; use a letter, a digit, or one of: {_KEY_NAMES} (punctuation goes "
+                     "through action=type)")
 
 
 def _step_click(window_id: int, pid: int, x: int, y: int, width: int, height: int,
                 button: str = "left", clicks: int = 1) -> str:
     _check_click(button, clicks)
     for i in range(clicks):  # glide once: a pause between the clicks would break a double-click
-        with _target(window_id, pid, None if i else (x, y)) as (disp, window, geom):
+        with _target(window_id, pid, None if i else (x, y, width, height)) as (disp, window, geom):
             _point(disp, window, geom, x, y, width, height)
             _click(disp, _BUTTONS[button])
-    return f"sent click to window {window_id} at ({x}, {y}){cursor_badge.note()}"
+    kind = ("double " if clicks == 2 else "") + ("" if button == "left" else f"{button} ")
+    return f"sent {kind}click to window {window_id} at ({x}, {y}){cursor_badge.note()}"
 
 
 def _step_drag(window_id: int, pid: int, x: int, y: int, end_x: int, end_y: int, width: int, height: int) -> str:
-    with _target(window_id, pid, (x, y)) as (disp, window, geom):
+    with _target(window_id, pid, (x, y, width, height)) as (disp, window, geom):
         # Check the entire sampled path before pressing, including any covered areas.
         for i in range(1, 13):
             px = round(x + (end_x - x) * i / 12)
@@ -348,7 +365,7 @@ def _step_scroll(window_id: int, pid: int, x: int, y: int, width: int, height: i
                  direction: str, steps: int = 1) -> str:
     button = _scroll_button(direction, steps)
     for i in range(steps):
-        with _target(window_id, pid, None if i else (x, y)) as (disp, window, geom):
+        with _target(window_id, pid, None if i else (x, y, width, height)) as (disp, window, geom):
             _point(disp, window, geom, x, y, width, height)
             _click(disp, button)
     return f"sent {steps} scroll step(s) {direction} to window {window_id}{cursor_badge.note()}"
@@ -396,17 +413,17 @@ def _step_key(window_id: int, pid: int, key: str, modifiers: list[str] | None = 
         if shifted and "shift" not in modifiers:
             modifier_codes.append(_lookup(disp, XK.string_to_keysym("Shift_L"))[0])
         _send_key(disp, code, modifier_codes)
-    return f"sent key {key} to window {window_id}"
+    return f"sent key {'+'.join([*modifiers, key])} to window {window_id}"
 
 
 def _after(window_id: int, text: str, screenshot_after: bool):
-    """The action's answer, and with screenshot_after the window as it looks now (taken after every lock
-    and server grab is released, with the same capture as the screenshot tool). A capture that fails
+    """The action's answer, and with screenshot_after the window once it has reacted (taken after every
+    lock and server grab is released, with the same capture as the screenshot tool). A capture that fails
     leaves a note beside the answer instead."""
     if not screenshot_after:
         return f"{text}; verify the resulting UI"
     try:
-        return [text, *screen.capture(window_id=window_id)]
+        return [text, *screen.capture(window_id=window_id, settle=True)]
     except Exception as error:  # noqa: BLE001 - the input was sent; its answer must not be lost
         return f"{text}; screenshot: not taken ({error or type(error).__name__}); verify the resulting UI"
 
@@ -456,17 +473,29 @@ def _batch_plan(steps: list, coord_space: str, width: int, height: int) -> list[
     return plan
 
 
-def _failed_after(window_id: int, text: str, screenshot_after: bool):
-    """A failed action's answer: an error, with the window as it looks now when screenshot_after is set."""
-    if not screenshot_after:
-        raise RuntimeError(text)
+def _failed_after(window_id: int, text: str):
+    """A failed action's answer with screenshot_after: an error that carries the window as it looks now
+    (and so a fresh coord_space token)."""
     try:  # the failed step may have closed or resized the window; the failure text matters more
         shot = [block.to_image_content() if isinstance(block, Image) else TextContent(type="text", text=str(block))
-                for block in screen.capture(window_id=window_id)]
+                for block in screen.capture(window_id=window_id, settle=True)]
     except Exception as exc:  # noqa: BLE001
         shot = [TextContent(type="text", text=f"no screenshot: {exc}")]
     return CallToolResult(content=[TextContent(type="text", text=text), *shot],
                           structuredContent={"result": text}, isError=True)
+
+
+def _run(window_id: int, screenshot_after: bool, step: Callable[[], str]):
+    """One action as a tool call: ``step`` under both locks, then its answer. A refusal or failure is
+    raised as it is, or with screenshot_after returned as an error with the picture."""
+    try:
+        with _action_lock():
+            text = step()
+    except Exception as exc:  # noqa: BLE001
+        if not screenshot_after:
+            raise
+        return _failed_after(window_id, str(exc))
+    return _after(window_id, text, screenshot_after)
 
 
 def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None = None) -> None:
@@ -484,10 +513,11 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         Obtain window_id, PID and size from windows(action="list"); inspect a fresh screenshot first.
         Input affects the shared desktop and can trigger destructive or external actions.
         """
-        x, y = screen.map_point(coord_space, x, y, expected_width, expected_height)
-        with _action_lock():
-            text = _step_click(window_id, expected_pid, x, y, expected_width, expected_height, button, clicks)
-        return _after(window_id, text, screenshot_after)
+        def step():
+            px, py = screen.map_point(coord_space, x, y, expected_width, expected_height)
+            return _step_click(window_id, expected_pid, px, py, expected_width, expected_height, button, clicks)
+
+        return _run(window_id, screenshot_after, step)
 
     @mcp.tool(annotations=DESKTOP_INPUT)
     def computer_drag(window_id: _WindowId, expected_pid: _Pid, x: _X, y: _Y,
@@ -500,11 +530,12 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         Inspect a fresh screenshot and size first.
         Input affects the shared desktop and can trigger destructive or external actions.
         """
-        x, y = screen.map_point(coord_space, x, y, expected_width, expected_height)
-        end_x, end_y = screen.map_point(coord_space, end_x, end_y, expected_width, expected_height)
-        with _action_lock():
-            text = _step_drag(window_id, expected_pid, x, y, end_x, end_y, expected_width, expected_height)
-        return _after(window_id, text, screenshot_after)
+        def step():
+            start = screen.map_point(coord_space, x, y, expected_width, expected_height)
+            end = screen.map_point(coord_space, end_x, end_y, expected_width, expected_height)
+            return _step_drag(window_id, expected_pid, *start, *end, expected_width, expected_height)
+
+        return _run(window_id, screenshot_after, step)
 
     @mcp.tool(annotations=DESKTOP_INPUT)
     def computer_scroll(window_id: _WindowId, expected_pid: _Pid, x: _X, y: _Y,
@@ -517,10 +548,11 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         Inspect a fresh screenshot and size first.
         Input affects the shared desktop and can trigger destructive or external actions.
         """
-        x, y = screen.map_point(coord_space, x, y, expected_width, expected_height)
-        with _action_lock():
-            text = _step_scroll(window_id, expected_pid, x, y, expected_width, expected_height, direction, steps)
-        return _after(window_id, text, screenshot_after)
+        def step():
+            px, py = screen.map_point(coord_space, x, y, expected_width, expected_height)
+            return _step_scroll(window_id, expected_pid, px, py, expected_width, expected_height, direction, steps)
+
+        return _run(window_id, screenshot_after, step)
 
     @mcp.tool(annotations=DESKTOP_INPUT)
     def computer_type(window_id: _WindowId, expected_pid: _Pid,
@@ -531,22 +563,18 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
         It does not use the clipboard. Caps Lock and unsupported key mappings are rejected.
         Input affects the shared desktop and can trigger destructive or external actions.
         """
-        with _action_lock():
-            sent = _step_type(window_id, expected_pid, text)
-        return _after(window_id, sent, screenshot_after)
+        return _run(window_id, screenshot_after, lambda: _step_type(window_id, expected_pid, text))
 
     @mcp.tool(annotations=DESKTOP_INPUT)
     def computer_key(window_id: _WindowId, expected_pid: _Pid,
-                     key: Annotated[str, Field(description="A navigation or editing key name, or an ASCII letter or digit, e.g. enter, tab, a.")],
+                     key: Annotated[str, Field(description=f"A letter, a digit, or {_KEY_NAMES}.")],
                      modifiers: Annotated[list[str] | None, Field(description="Any of ctrl, shift, alt, super.")] = None,
                      screenshot_after: _ShotAfter = False):
         """Send one navigation/editing key or ASCII letter/digit to the focused X11 window.
 
         Modifiers may contain ctrl, shift, alt and super. Input can trigger destructive or external actions.
         """
-        with _action_lock():
-            text = _step_key(window_id, expected_pid, key, modifiers)
-        return _after(window_id, text, screenshot_after)
+        return _run(window_id, screenshot_after, lambda: _step_key(window_id, expected_pid, key, modifiers))
 
     @mcp.tool(annotations=DESKTOP_INPUT)
     def computer_batch(window_id: _WindowId, expected_pid: _Pid, expected_width: _Width, expected_height: _Height,
@@ -567,11 +595,13 @@ def register_desktop_input_tools(server: FastMCP, groups: Iterable[str] | None =
                 try:
                     done.append(_STEPS[name](window_id, expected_pid, **args, **size))
                 except Exception as exc:  # noqa: BLE001 - reported with the steps that ran
-                    failure = f"actions[{len(done)}] ({name}) failed: {exc}"
+                    failure = f"actions[{len(done)}] ({name}) failed: {str(exc).rstrip('.')}"
                     break
         ran = "; ".join(f"{i}: {text}" for i, text in enumerate(done))
         if failure:
-            return _failed_after(window_id, f"batch stopped: {failure}. {len(done)} of {len(plan)} step(s) ran "
-                                            f"before it{': ' + ran if ran else ''}. Capture the window before "
-                                            "retrying.", screenshot_after)
+            text = (f"batch stopped: {failure}. {len(done)} of {len(plan)} step(s) ran before it"
+                    f"{': ' + ran if ran else ''}. Capture the window before retrying.")
+            if not screenshot_after:
+                raise RuntimeError(text)
+            return _failed_after(window_id, text)
         return _after(window_id, f"batch ran all {len(plan)} step(s): {ran}", screenshot_after)

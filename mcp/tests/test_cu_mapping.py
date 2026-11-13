@@ -51,7 +51,7 @@ def test_a_zoomed_crop_round_trips_through_its_offset():
 
 
 def test_a_resized_window_is_refused():
-    with pytest.raises(ValueError, match="2560x1440 window, but it is 2560x1400 now"):
+    with pytest.raises(ValueError, match="2560x1440 window, but this one is 2560x1400"):
         screen.map_point(FULL, 10, 10, 2560, 1400)
 
 
@@ -199,7 +199,7 @@ def test_window_space_is_unchanged(computer):
 
 
 @pytest.mark.parametrize("arguments, message", [
-    (dict(action="click", x=10, y=15, coord_space="img:150x100@0,0,600x400/600x400"), "it is 300x200 now"),
+    (dict(action="click", x=10, y=15, coord_space="img:150x100@0,0,600x400/600x400"), "this one is 300x200"),
     (dict(action="click", x=150, y=15, coord_space="img:150x100@0,0,300x200/300x200"), "outside"),
     (dict(action="drag", x=1, y=1, end_x=1, end_y=100, coord_space="img:150x100@0,0,300x200/300x200"), "outside"),
     (dict(action="scroll", x=1, y=1, direction="down", coord_space="image"), "coord_space token"),
@@ -282,7 +282,7 @@ def test_a_token_without_an_isaac_window_is_refused(kit):
 
 def test_a_token_from_before_a_resize_is_refused(kit):
     kit.window["value"] = {**ISAAC, "width": 1280, "height": 720}
-    refused(kit, {"actions": [{"action": "click", "x": 5, "y": 6}], "coord_space": HALF}, "it is 1280x720 now")
+    refused(kit, {"actions": [{"action": "click", "x": 5, "y": 6}], "coord_space": HALF}, "this one is 1280x720")
 
 
 @pytest.mark.parametrize("params, message", [

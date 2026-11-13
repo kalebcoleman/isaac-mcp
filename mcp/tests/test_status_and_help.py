@@ -8,7 +8,7 @@ import pytest
 from PIL import Image
 
 import twinsmith.server as gw
-from twinsmith import screen
+from twinsmith import screen, toolsets
 from twinsmith.client import BridgeError
 
 IDENTITY = {
@@ -301,3 +301,15 @@ def test_the_check_in_does_not_reread_jobs_and_sessions_that_have_ended(tmp_path
     (tmp_path / "c-new" / "job.json").write_text(json.dumps({"id": "c-new", "status": "finished"}))
     del read[:]
     assert lab_jobs.running_jobs() == [] and read == ["c-new"], "only the job not seen before is read"
+
+
+@pytest.mark.parametrize("task", [
+    "click a button in FreeCAD and type into a text editor window",
+    "operate a desktop app with mouse and keyboard",
+    "open the Window menu in Isaac Sim UI",
+    "computer use",
+])
+def test_help_knows_the_computer_use_tools(task):
+    answer = gw._help(task, enabled=toolsets.DEFAULT | {"input", "kit_debug"})
+    assert not answer.startswith("No twinsmith tool is known to fit")
+    assert "doctor" in answer and "computer" in answer and "sim__ui" in answer and "coord_space" in answer

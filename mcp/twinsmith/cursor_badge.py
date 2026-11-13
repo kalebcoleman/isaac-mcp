@@ -8,10 +8,12 @@ covers the target pixel and the covered-window check never sees it. Kit draws it
 ``sim__ui__act`` (``exts/sim-tools/sim_tools/ui.py``) with the same hiding protocol.
 
 Hidden from every screenshot (the pattern of agent-sh/computer-use-linux's indicator): a capture holds a
-shared flock on ``capture.lock``. An overlay creates its flag file ``badge-<pid>-<kind>.shown`` before it
-maps, hides while anyone holds that lock (probed with a non-blocking exclusive flock) and deletes the flag
-once the hidden frame is on screen. The capturer waits, bounded, until no live flag remains. Recordings do
-not take the lock, so the badge shows in them.
+shared flock on ``capture.lock``. An overlay creates its flag file ``badge-<pid>-<kind>.shown`` (holding its
+process's start time, so a reused PID is not mistaken for it) before it maps, hides while anyone holds that
+lock (probed with a non-blocking exclusive flock) and deletes the flag once the hidden frame is on screen.
+The capturer waits, bounded, until no live flag remains. Recordings do not take the lock, so a monitor
+recording shows the badge (a window recording reads that window's own pixels, which this separate X11
+window is not part of).
 """
 
 from __future__ import annotations
@@ -44,7 +46,6 @@ FRAME_S = 0.04       # after an unmap, time for the compositor to put the hidden
 CAPTURE_WAIT_S = 1.0
 LOCK_NAME = "capture.lock"
 _COLOR = (0xFFFF, 0x8C00, 0x0000)
-_RETRY = ("Any input this call sent was already sent: take a new screenshot rather than repeat the action.")
 
 _enabled = False
 _badge: "_X11Badge | None" = None
@@ -82,26 +83,36 @@ def capture_held(fd: int) -> bool:
     return False
 
 
+def process_start(pid: int) -> str:
+    """When the process started (clock ticks since boot, from /proc), or "" if it is gone or there is no /proc."""
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return ""
+
+
 def _alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
-        return True
+        pass
     return True
 
 
-def _live_flags(directory: Path) -> list[int]:
-    """PIDs whose badge is still on screen; flags of dead processes are deleted."""
+def _live_flags(directory: Path) -> list[Path]:
+    """Flag files of badges still on screen. A flag whose process is gone, or whose PID now belongs to
+    another process (the start time it holds differs), is deleted."""
     live = []
     for path in directory.glob("badge-*.shown"):
         try:
             pid = int(path.name.split("-")[1])
-        except (IndexError, ValueError):
+            started = path.read_text().strip()
+        except (IndexError, ValueError, OSError):
             continue
-        if _alive(pid):
-            live.append(pid)
+        if _alive(pid) and started in ("", process_start(pid)):
+            live.append(path)
         else:
             path.unlink(missing_ok=True)
     return live
@@ -126,8 +137,8 @@ def capture_hold(wait_s: float = CAPTURE_WAIT_S):
                 break
             except BlockingIOError:  # an overlay is probing the lock at this instant
                 if time.monotonic() > deadline:
-                    raise RuntimeError(f"the screenshot was not taken: the cursor badge lock stayed busy. "
-                                       f"{_RETRY}") from None
+                    raise RuntimeError("the cursor badge lock stayed busy, so no picture was taken; "
+                                       "take a screenshot again") from None
                 time.sleep(0.002)
         if _badge is not None:
             _badge.hide_for_capture(deadline)
@@ -136,9 +147,11 @@ def capture_hold(wait_s: float = CAPTURE_WAIT_S):
             if not live:
                 break
             if time.monotonic() > deadline:
-                raise RuntimeError(f"the screenshot was not taken: the cursor badge of process "
-                                   f"{', '.join(map(str, sorted(set(live))))} did not hide within {wait_s:g} s, "
-                                   f"so it would have been in the picture. {_RETRY}")
+                raise RuntimeError(
+                    f"a cursor badge did not hide within {wait_s:g} s, so no picture was taken (it would have "
+                    f"been in it). Its process is busy or stuck (an Isaac Sim that is loading or stepping hides "
+                    f"its badge on its next frame): take a screenshot again in a few seconds. If that process "
+                    f"shows no badge, delete its flag file: {', '.join(sorted(map(str, live)))}")
             time.sleep(0.01)
         yield
     finally:
@@ -214,7 +227,7 @@ class _X11Badge:
 
     def _show(self) -> bool:
         """Flag, then probe, then map: a capturer that locks after the probe still sees the flag."""
-        self.flag.touch(mode=0o600)
+        self.flag.write_text(process_start(os.getpid()))
         if capture_held(self.fd):
             self.flag.unlink(missing_ok=True)
             return False

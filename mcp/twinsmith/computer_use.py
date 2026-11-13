@@ -74,14 +74,14 @@ ZOOM_PAD = 32  # window pixels of context kept around a zoomed widget
 ZOOM_MIN = 200  # smallest crop side, so a small button still shows its neighbours
 
 
-def zoom_region(rect: Dict[str, int], width: int, height: int) -> list:
-    """[x, y, w, h] to crop for a widget at ``rect`` (window pixels): padded, at least ZOOM_MIN on a side,
-    centred on the widget and shifted (never shrunk below the window) to stay inside a width x height window."""
-    x, y, w, h = rect["x"], rect["y"], rect["width"], rect["height"]
-    cw = min(width, max(w + 2 * ZOOM_PAD, ZOOM_MIN))
-    ch = min(height, max(h + 2 * ZOOM_PAD, ZOOM_MIN))
-    left = min(max(0, round(x + w / 2 - cw / 2)), width - cw)
-    top = min(max(0, round(y + h / 2 - ch / 2)), height - ch)
+def zoom_region(widget: Dict[str, int], width: int, height: int) -> list:
+    """[x, y, w, h] to crop for a widget (its centre x, y and size, window pixels): padded, at least ZOOM_MIN
+    on a side, centred on the widget and shifted (never shrunk below the window) to stay inside a
+    width x height window."""
+    cw = min(width, max(widget["width"] + 2 * ZOOM_PAD, ZOOM_MIN))
+    ch = min(height, max(widget["height"] + 2 * ZOOM_PAD, ZOOM_MIN))
+    left = min(max(0, round(widget["x"] - cw / 2)), width - cw)
+    top = min(max(0, round(widget["y"] - ch / 2)), height - ch)
     return [left, top, cw, ch]
 
 

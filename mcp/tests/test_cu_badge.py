@@ -129,7 +129,7 @@ def test_capture_hold_deletes_flags_of_dead_processes(monkeypatch, badge_env):
 
 def test_capture_hold_fails_closed_on_timeout(badge_env):
     flag = _flag(badge_env, os.getppid())  # alive, and never hides
-    with pytest.raises(RuntimeError, match="screenshot was not taken.*already sent.*rather than repeat"):
+    with pytest.raises(RuntimeError, match=rf"no picture was taken.*again in a few seconds.*{flag.name}"):
         with cursor_badge.capture_hold(wait_s=0.05):
             pytest.fail("captured while a badge was on screen")
     assert flag.exists()
@@ -177,7 +177,8 @@ def test_flag_off_opens_no_badge_connection(monkeypatch, desktop_setup):  # noqa
 def test_glide_happens_before_the_server_grab(monkeypatch, desktop_setup):  # noqa: F811
     disp, tools = desktop_setup
     order = []
-    monkeypatch.setattr(desktop.screen, "_match_window", lambda q, wid: {"id": wid, "pid": 22, "x": 100, "y": 100})
+    monkeypatch.setattr(desktop.screen, "_match_window", lambda q, wid: {"id": wid, "pid": 22, "x": 100, "y": 100,
+                                                                           "width": 300, "height": 200})
     monkeypatch.setattr(cursor_badge, "glide", lambda x, y: order.append(("glide", x, y, disp.grabbed)))
     monkeypatch.setattr(cursor_badge, "follow", lambda x, y: order.append(("follow", x, y, disp.grabbed)))
     grab = disp.grab_server
@@ -421,3 +422,78 @@ def test_kit_badge_stays_off_without_the_no_input_flags(kit, badge_env):
     del kit.fake.WINDOW_FLAGS_NO_MOUSE_INPUTS
     ui.badge(1, 1)
     assert ui._badge_state == [None] and kit.fake.windows == [] and not list(badge_env.glob("*.shown"))
+
+
+# ---------------------------------------------------------------- stale flags, and where the badge may go
+
+
+def test_a_flag_whose_pid_was_reused_is_deleted(badge_env):
+    stale = _flag(badge_env, os.getpid())
+    stale.write_text("1")  # the start time of the process that wrote it: not this one
+    with cursor_badge.capture_hold(wait_s=0.05):
+        pass
+    assert not stale.exists()
+    live = _flag(badge_env, os.getpid())
+    live.write_text(cursor_badge.process_start(os.getpid()))
+    with pytest.raises(RuntimeError, match="did not hide"):
+        with cursor_badge.capture_hold(wait_s=0.05):
+            pytest.fail("captured while a badge was on screen")
+    assert cursor_badge.process_start(os.getpid()).isdigit() and cursor_badge.process_start(2 ** 22 + 7) == ""
+
+
+def test_a_shown_badge_writes_its_start_time(monkeypatch, badge_env, kit):
+    monkeypatch.setattr(cursor_badge, "_open_display", FakeBadgeDisplay)
+    cursor_badge.configure(True)
+    cursor_badge.glide(5, 5)
+    kit.ui.badge(10, 10)
+    started = cursor_badge.process_start(os.getpid())
+    assert {path.name.split("-")[2]: path.read_text() for path in badge_env.glob("*.shown")} == {
+        "x11.shown": started, "kit.shown": started}
+
+
+@pytest.mark.parametrize("call, why", [
+    (lambda tools: tools["computer_click"](101, 22, 300, 20, 300, 200), "outside"),
+    (lambda tools: tools["computer_click"](101, 22, 10, 20, 299, 200), "not the expected"),
+])
+def test_the_badge_does_not_glide_to_a_point_that_is_refused(monkeypatch, desktop_setup, call, why):  # noqa: F811
+    _, tools = desktop_setup
+    glides = []
+    monkeypatch.setattr(desktop.screen, "_match_window", lambda q, wid: {"id": wid, "pid": 22, "x": 100, "y": 100,
+                                                                           "width": 300, "height": 200})
+    monkeypatch.setattr(cursor_badge, "glide", lambda x, y: glides.append((x, y)))
+    cursor_badge.configure(True)
+    with pytest.raises(ValueError, match=why):
+        call(tools)
+    assert glides == []
+
+
+def test_the_badge_is_not_drawn_over_a_possible_lock_screen(monkeypatch, desktop_setup):  # noqa: F811
+    disp, tools = desktop_setup
+    glides = []
+    monkeypatch.setattr(desktop.screen, "_match_window", lambda q, wid: {"id": wid, "pid": 22, "x": 100, "y": 100,
+                                                                           "width": 300, "height": 200})
+    monkeypatch.setattr(cursor_badge, "glide", lambda x, y: glides.append((x, y)))
+    monkeypatch.setattr(desktop.screen, "_probe_locked", lambda: None)  # no screen saver answered
+    cursor_badge.configure(True)
+    disp.keyboard_owner = "lock screen"
+    with pytest.raises(RuntimeError, match="could not tell whether the desktop is locked"):
+        tools["computer_click"](101, 22, 10, 20, 300, 200)
+    assert glides == [] and not disp.events
+    disp.keyboard_owner = None  # unknown, but nothing holds the keyboard: the click goes, and so does the badge
+    tools["computer_click"](101, 22, 10, 20, 300, 200)
+    assert glides == [(110, 120)]
+
+
+def test_a_kit_badge_asked_to_show_while_it_hides_keeps_its_flag(kit, badge_env):
+    ui = kit.ui
+    ui.badge(10, 10)
+    badge = ui._badge_state[0]
+    fd = cursor_badge._open_lock(badge_env)
+    fcntl.flock(fd, fcntl.LOCK_SH)  # a host screenshot
+    kit.subs[0]()  # hidden, but that frame is not drawn yet
+    ui.badge(20, 20)  # the next act asks for it during the capture
+    assert not badge.window.visible and badge.flag.exists(), "the capture must still wait for the hidden frame"
+    kit.subs[0]()
+    kit.subs[0]()
+    assert not badge.flag.exists()
+    os.close(fd)

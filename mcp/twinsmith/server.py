@@ -1782,6 +1782,13 @@ _HELP_TOPICS = (
      "Order: robosim action=start with a template (plain data), reference (frames from the clip), compare, update_scene, "
      "tune_push (makes the simulated block move like the real one), rollout, compare_take, report, stop. It compares images; "
      "it does not fit mass or friction."),
+    ("operate a desktop app (FreeCAD, RViz, any X11 window) or Isaac Sim's own UI with mouse and keyboard",
+     ("click", "typing", "type into", "type text", "keyboard", "mouse", "button", "menu", "toolbar", "dialog", "widget",
+      "desktop", "gui", "freecad", "rviz", "computer use", "operate", "scroll"),
+     "doctor says what can work here and what to fix. Any X11 window: list_windows, then screenshot(window_id=...) "
+     "for a picture and its coord_space token, then computer_click, computer_type, computer_key or computer_batch with "
+     "that token and screenshot_after=true. Isaac Sim's own UI, also while the desktop is locked: sim__ui__find, then "
+     "sim__ui__act on a ref with screenshot_after=true."),
     ("start, check or recover a simulator", ("start", "launch", "bridge", "kit", "hang", "stuck kit", "status", "connect", "where am i", "running"),
      "status (one call: the bridge, what is running, the stage IDs; says so when nothing runs), refresh_tools(wait_s=120), "
      "use_bridge, sim__launch, sim__status, sim__stop, sim__logs__tail."),

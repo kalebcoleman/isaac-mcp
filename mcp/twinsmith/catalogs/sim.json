@@ -4464,7 +4464,7 @@
         },
         "window": {
           "type": "string",
-          "description": "Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'.",
+          "description": "Only windows whose title contains this, e.g. 'Stage'.",
           "required": false,
           "default": ""
         },
@@ -4497,7 +4497,7 @@
           "required": false,
           "default": "",
           "has_default": true,
-          "description": "Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'."
+          "description": "Only windows whose title contains this, e.g. 'Stage'."
         },
         {
           "name": "limit",
@@ -4580,7 +4580,7 @@
         },
         "window": {
           "type": "string",
-          "description": "For action=tab or close: the window or tab title, e.g. 'Console' or 'Content'.",
+          "description": "Window or tab title for tab and close, e.g. 'Console'.",
           "required": false
         },
         "menu": {
@@ -4608,7 +4608,7 @@
         },
         "actions": {
           "type": "array",
-          "description": "Batch: up to 10 action objects (each with action and its own arguments) run in order, stopping at the first failure; replaces the top-level action fields.",
+          "description": "Batch of up to 10 steps, each an object with action (not sub_action) and that action's arguments. E.g. [{\"action\": \"click\", \"ref\": \"...\"}, {\"action\": \"type\", \"text\": \"2\"}]. Steps run in order and stop at the first failure; they replace the top-level action fields, and frames is then each step's default wait.",
           "required": false
         },
         "coord_space": {
@@ -4722,7 +4722,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "For action=tab or close: the window or tab title, e.g. 'Console' or 'Content'."
+          "description": "Window or tab title for tab and close, e.g. 'Console'."
         },
         {
           "name": "menu",
@@ -4767,7 +4767,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "Batch: up to 10 action objects (each with action and its own arguments) run in order, stopping at the first failure; replaces the top-level action fields."
+          "description": "Batch of up to 10 steps, each an object with action (not sub_action) and that action's arguments. E.g. [{\"action\": \"click\", \"ref\": \"...\"}, {\"action\": \"type\", \"text\": \"2\"}]. Steps run in order and stop at the first failure; they replace the top-level action fields, and frames is then each step's default wait."
         },
         {
           "name": "coord_space",

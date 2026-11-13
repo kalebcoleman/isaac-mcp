@@ -46,14 +46,15 @@ def test_region_in_window_pixels_is_taken_as_is_and_must_fit():
 def test_region_in_a_downscaled_image_selects_the_window_pixels_it_shows():
     usual = screen.coord_token(1600, 900, (0, 0, 2560, 1440), 2560, 1440)  # the default 1600-wide screenshot
     assert screen.region_rect([0, 0, 1600, 900], usual, 2560, 1440) == (0, 0, 2560, 1440)
-    # Corners snap to the window pixel under each corner pixel's centre: at 2x that trims one leading pixel.
+    # Every window pixel under the region's image pixels: nothing is lost at an edge.
     token = screen.coord_token(1000, 500, (0, 0, 2000, 1000), 2000, 1000)  # a half-size screenshot
-    assert screen.region_rect([0, 0, 1000, 500], token, 2000, 1000) == (1, 1, 1999, 999)
-    # Corners map through pixel centres (map_point): 100.5 * 2 = 201 to 109.5 * 2 = 219, inclusive.
-    assert screen.region_rect([100, 50, 10, 10], token, 2000, 1000) == (201, 101, 19, 19)
+    assert screen.region_rect([0, 0, 1000, 500], token, 2000, 1000) == (0, 0, 2000, 1000)
+    assert screen.region_rect([100, 50, 10, 10], token, 2000, 1000) == (200, 100, 20, 20)
+    third = screen.coord_token(400, 300, (0, 0, 1000, 750), 1000, 750)  # 2.5x: edges round outwards
+    assert screen.region_rect([1, 1, 1, 1], third, 1000, 750) == (2, 2, 3, 3)
     with pytest.raises(ValueError, match="outside that 1000x500 image"):
         screen.region_rect([995, 0, 10, 10], token, 2000, 1000)
-    with pytest.raises(ValueError, match="capture it again"):
+    with pytest.raises(ValueError, match="capture this window again"):
         screen.region_rect([0, 0, 10, 10], token, 1999, 1000)  # the window changed size
 
 
@@ -101,11 +102,11 @@ def test_a_region_picked_in_a_downscaled_screenshot_zooms_the_same_place(fake_wi
     assert first == "img:600x400@0,0,1200x800/1200x800"
     inline, saved, _, token = _shot(screen.capture(window_id=0x42, region=[150, 100, 50, 25], coord_space=first,
                                                    max_width=600))
-    assert saved.size == (99, 49) and inline.size == (396, 196)
-    assert token == "img:396x196@301,201,99x49/1200x800"
+    assert saved.size == (100, 50) and inline.size == (400, 200)
+    assert token == "img:400x200@300,200,100x50/1200x800"
     # And a zoom of that zoom maps straight back to window pixels.
     _, deeper, _, inner = _shot(screen.capture(window_id=0x42, region=[0, 0, 200, 100], coord_space=token))
-    assert inner.endswith("@301,201,50x25/1200x800") and deeper.size == (50, 25)
+    assert inner.endswith("@300,200,50x25/1200x800") and deeper.size == (50, 25)
 
 
 def test_a_large_region_is_scaled_down_and_its_token_still_round_trips(fake_window):
@@ -157,10 +158,10 @@ def kit_ui(monkeypatch):
 REF = "Stage//Frame/VStack[0]/Button[2]|Button:b"
 
 
-def test_zoom_rect_is_the_widget_rectangle_in_window_pixels(kit_ui):
+def test_zoom_rect_is_the_widget_centre_and_size_in_window_pixels(kit_ui):
     rect = kit_ui.module.zoom_rect(REF)
-    # Centre (40, 30) and size 20x10 UI points at dpi 2 -> 40x20 pixels around (80, 60).
-    assert rect == dict(ref=REF, type="Button", name="play", x=60, y=50, width=40, height=20)
+    # Centre (40, 30) and size 20x10 UI points at dpi 2 -> 40x20 pixels around (80, 60), the x, y find reports.
+    assert rect == dict(ref=REF, type="Button", name="play", x=80, y=60, width=40, height=20)
 
 
 def test_find_routes_zoom_ref_before_listing_and_after_the_headless_check(kit_ui, monkeypatch):
@@ -193,13 +194,13 @@ def test_zoom_rect_refuses_a_ref_without_a_fingerprint(kit_ui):
 
 
 def test_zoom_region_pads_to_a_minimum_and_stays_inside_the_window():
-    rect = dict(x=500, y=400, width=40, height=20)
-    assert computer_use.zoom_region(rect, 1200, 800) == [420, 310, 200, 200]  # minimum, centred
-    big = dict(x=100, y=100, width=400, height=300)
+    widget = dict(x=520, y=410, width=40, height=20)  # x, y: the widget's centre
+    assert computer_use.zoom_region(widget, 1200, 800) == [420, 310, 200, 200]  # minimum, centred
+    big = dict(x=300, y=250, width=400, height=300)
     assert computer_use.zoom_region(big, 1200, 800) == [68, 68, 464, 364]  # 32 px of context each side
-    assert computer_use.zoom_region(dict(x=0, y=0, width=10, height=10), 1200, 800) == [0, 0, 200, 200]
-    assert computer_use.zoom_region(dict(x=1190, y=790, width=10, height=10), 1200, 800) == [1000, 600, 200, 200]
-    assert computer_use.zoom_region(dict(x=0, y=0, width=150, height=150), 150, 120) == [0, 0, 150, 120]
+    assert computer_use.zoom_region(dict(x=5, y=5, width=10, height=10), 1200, 800) == [0, 0, 200, 200]
+    assert computer_use.zoom_region(dict(x=1195, y=795, width=10, height=10), 1200, 800) == [1000, 600, 200, 200]
+    assert computer_use.zoom_region(dict(x=75, y=75, width=150, height=150), 150, 120) == [0, 0, 150, 120]
 
 
 def _failed(result: str) -> bool:

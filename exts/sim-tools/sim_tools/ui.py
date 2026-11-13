@@ -292,9 +292,11 @@ def _widget_fingerprint(widget, path, ui_test):
     return fp
 
 
-def _shown(path, center, ui_test):
+def _shown(path, center, ui_test, cache=None):
     """None when the centre point (UI points) is really clickable, else why not: inside the owning
-    Kit window, inside every enclosing ScrollingFrame, and not under a floating Kit window."""
+    Kit window, under no hidden container (a panel keeps the rows of a view it has switched away from),
+    inside every enclosing ScrollingFrame, and not under a floating Kit window. ``cache`` (a dict) keeps
+    what was read about each container for the widgets of one find."""
     import omni.ui as ui
 
     title = path.split("//", 1)[0]
@@ -304,15 +306,26 @@ def _shown(path, center, ui_test):
     if not inside(center, (win.position_x, win.position_y, win.width, win.height)):
         return f"it is outside the visible part of the '{title}' window"
     parts = path.split("/")
-    for i, part in enumerate(parts):
-        if part.startswith("ScrollingFrame["):
+    cache = {} if cache is None else cache
+    for i in range(3, len(parts) - 1):  # every container between the window's root frame and the widget
+        prefix = "/".join(parts[: i + 1])
+        if prefix not in cache:
             try:
-                frame = ui_test.find("/".join(parts[: i + 1]))
+                frame = ui_test.find(prefix)
                 pos, size = frame.position, frame.size
+                cache[prefix] = (bool(getattr(frame.widget, "visible", True)), (pos.x, pos.y, size.x, size.y))
             except Exception:  # noqa: BLE001
+                cache[prefix] = None
+        scrolling = parts[i].startswith("ScrollingFrame[")
+        if cache[prefix] is None:
+            if scrolling:
                 return "its scrolling panel could not be measured"
-            if not inside(center, (pos.x, pos.y, size.x, size.y)):
-                return "it is scrolled out of view; scroll its panel first"
+            continue
+        visible, rect = cache[prefix]
+        if not visible:
+            return "it is inside a hidden part of its panel"
+        if scrolling and not inside(center, rect):
+            return "it is scrolled out of view; scroll its panel first"
     if getattr(win, "docked", False):
         for other in ui.Workspace.get_windows():
             if (other is not win and other.visible and not getattr(other, "docked", False) and other.title
@@ -365,21 +378,29 @@ def _menu_bar():
         return []
 
 
+def menu_walk(path):
+    """The menu widgets along *path* from the menu bar, as far as they exist (the menu bar first)."""
+    import omni.ui as ui
+
+    found = [_ui_test().get_menubar().widget]
+    for part in (p for p in path.split("/") if p):
+        nxt = next((c for c in ui.Inspector.get_children(found[-1]) if getattr(c, "text", "") == part), None)
+        if nxt is None:
+            break
+        found.append(nxt)
+    return found
+
+
 def menu_children(path, inside=False):
-    """Items available under the deepest existing level of *path* ("" = the menu bar); with ``inside``
+    """Items a person sees under the deepest existing level of *path* ("" = the menu bar); with ``inside``
     the last level is walked too, so this lists what the menu *path* itself contains."""
     import omni.ui as ui
 
-    level = _ui_test().get_menubar().widget
-    walked = []
     parts = [p for p in path.split("/") if p]
-    for part in parts if inside else parts[:-1]:
-        nxt = next((c for c in ui.Inspector.get_children(level) if getattr(c, "text", "") == part), None)
-        if nxt is None:
-            break
-        level, walked = nxt, walked + [part]
-    items = [getattr(c, "text", "") for c in ui.Inspector.get_children(level)]
-    return "/".join(walked), [t for t in items if t][:40]
+    found = menu_walk("/".join(parts if inside else parts[:-1]))
+    items = [getattr(c, "text", "") for c in ui.Inspector.get_children(found[-1])
+             if getattr(c, "visible", True) and "Separator" not in type(c).__name__]
+    return "/".join(parts[: len(found) - 1]), [t for t in items if t][:40]
 
 
 def find(a):
@@ -406,6 +427,7 @@ def find(a):
     dpi = ui.Workspace.get_dpi_scale()
     widgets, matched, budget, hidden, examined = [], 0, 48_000, 0, 0  # stay well under the 64 KiB cap
     rects = {w.title: (w.position_x, w.position_y, w.width, w.height) for w in ui.Workspace.get_windows()}
+    containers = {}
     for title, ref, widget, cheap in _candidates(window or None, bool(query), query):
         matched += 1
         if len(widgets) >= limit or budget <= 0 or examined >= 4 * limit:
@@ -420,7 +442,7 @@ def find(a):
         except Exception:  # noqa: BLE001 - stale or not yet laid out
             hidden += 1
             continue
-        if _shown(path, (center.x, center.y), ui_test) is not None:
+        if _shown(path, (center.x, center.y), ui_test, containers) is not None:
             hidden += 1
             continue
         record = widget_record(cheap["type"], f"{path}|{_widget_fingerprint(widget, path, ui_test)}", title, cheap["name"],
@@ -429,8 +451,7 @@ def find(a):
         budget -= len(json.dumps(record))
         widgets.append(record)
     return dict(
-        main_window=dict(width=round(ui.Workspace.get_main_window_width()),
-                         height=round(ui.Workspace.get_main_window_height()), dpi_scale=dpi),
+        main_window=dict(zip(("width", "height"), main_window_pixels()), dpi_scale=dpi),
         windows=windows() if not window else [w for w in windows() if window.lower() in w["title"].lower()],
         hidden_tabs=[t for t in hidden_tabs() if not window or window.lower() in t.lower()],
         menu_bar=_menu_bar(),
@@ -458,19 +479,16 @@ def readiness():
             return None
 
     em = omni.kit.app.get_app().get_extension_manager()
-    width, height = read(ui.Workspace.get_main_window_width), read(ui.Workspace.get_main_window_height)
+    width, height = read(main_window_pixels) or (None, None)
     return dict(ui_test_enabled=bool(em.is_extension_enabled("omni.kit.ui_test")), headless=bool(_headless()),
-                dpi_scale=read(ui.Workspace.get_dpi_scale),
-                main_window=dict(width=None if width is None else round(width),
-                                 height=None if height is None else round(height)))
+                dpi_scale=read(ui.Workspace.get_dpi_scale), main_window=dict(width=width, height=height))
 
 
 def zoom_rect(ref):
-    """The widget's rectangle (x, y = top-left) in window pixels, for the host to crop around. The ref
-    is checked as for an action: a stale, hidden or covered widget is refused."""
+    """The widget's centre (x, y, as find reports it) and size in window pixels, for the host to crop
+    around. The ref is checked as for an action: a stale, hidden or covered widget is refused."""
     x, y, hit = _resolve({"ref": ref})
-    w, h = hit["width"], hit["height"]
-    return dict(ref=ref, type=hit["type"], name=hit["name"], x=x - w // 2, y=y - h // 2, width=w, height=h)
+    return dict(ref=ref, type=hit["type"], name=hit["name"], x=x, y=y, width=hit["width"], height=hit["height"])
 
 
 def _resolve(a):
@@ -525,12 +543,19 @@ def _resolve(a):
     return x, y, None
 
 
-def _check_point(x, y):
+def main_window_pixels():
+    """The Isaac Sim window's size in pixels: the unit of x and y, of screenshots and of the X11 window.
+    omni.ui measures the workspace in UI points, so at a display scale of 1.5 a 1440x900 window says 960x600."""
     import omni.ui as ui
 
-    w, h = ui.Workspace.get_main_window_width(), ui.Workspace.get_main_window_height()
+    dpi = ui.Workspace.get_dpi_scale() or 1.0
+    return round(ui.Workspace.get_main_window_width() * dpi), round(ui.Workspace.get_main_window_height() * dpi)
+
+
+def _check_point(x, y):
+    w, h = main_window_pixels()
     if not (0 <= x < w and 0 <= y < h):
-        raise UIRefusal("OUT_OF_WINDOW", f"({x}, {y}) is outside the Isaac Sim window ({round(w)}x{round(h)} pixels).")
+        raise UIRefusal("OUT_OF_WINDOW", f"({x}, {y}) is outside the Isaac Sim window ({w}x{h} pixels).")
     return w, h
 
 
@@ -567,8 +592,9 @@ def check_step(a):
 
 def _batch_steps(a):
     """The batch's steps, every one checked before the first is run (its x/y points too; a ref or a window
-    title is resolved when its step runs, since an earlier step may open it). Top-level keys that are not
-    an action's own (internal flags the host adds) are passed to each step."""
+    title is resolved when its step runs, since an earlier step may open it). The top-level ``frames`` is
+    each step's wait unless the step gives its own; other top-level keys that are not an action's own
+    (internal flags the host adds) are passed to each step."""
     steps = a["actions"]
     if not isinstance(steps, list) or not 1 <= len(steps) <= MAX_BATCH:
         raise UIRefusal("INVALID_VALUE", f"actions: 1..{MAX_BATCH} action objects.")
@@ -576,12 +602,14 @@ def _batch_steps(a):
     given = [k for k in STEP_FIELDS if a.get(k) is not None and not (k in ("scroll_x", "scroll_y") and a[k] == 0)]
     if given:
         raise UIRefusal("INVALID_VALUE", f"With actions, give {', '.join(given)} inside each step, not at the top level.")
-    shared = {k: v for k, v in a.items() if k not in STEP_FIELDS + ("action", "actions", "frames", "find_after")}
+    shared = {k: v for k, v in a.items() if k not in STEP_FIELDS + ("action", "actions", "find_after")}
     out, frames = [], 0
     for i, step in enumerate(steps):
         if not isinstance(step, dict) or set(step) - set(STEP_FIELDS + ("action", "frames")):
-            raise UIRefusal("INVALID_VALUE", f"actions[{i}]: an object with action and its own arguments "
+            raise UIRefusal("INVALID_VALUE", f"actions[{i}]: an object with action (inside a step the key is "
+                                             f"action, not sub_action) and its own arguments "
                                              f"({', '.join(STEP_FIELDS)}, frames) only.")
+        step = {**shared, **step}
         try:
             frames += max(check_step(step), 2)
             if step["action"] in POINTER_ACTIONS and not step.get("ref"):
@@ -590,10 +618,10 @@ def _batch_steps(a):
                 _check_point(step["end_x"], step["end_y"])
         except UIRefusal as exc:
             raise UIRefusal(exc.code, f"actions[{i}]: {exc}") from None
-        out.append({**shared, **step})
+        out.append(step)
     if frames > MAX_BATCH_FRAMES:
-        raise UIRefusal("INVALID_VALUE", f"actions wait {frames} frames in all (each step at least 2); keep the "
-                                         f"batch at {MAX_BATCH_FRAMES} or less, or split it.")
+        raise UIRefusal("INVALID_VALUE", f"actions wait {frames} frames in all (a step counts as at least 2); "
+                                         f"keep the batch at {MAX_BATCH_FRAMES} or less, or split it.")
     return out
 
 
@@ -610,9 +638,10 @@ def _find_after(query):
 
 # ---------------------------------------------------------------- cursor badge (opt-in: the host passes badge=True)
 # The protocol of the host's mcp/twinsmith/cursor_badge.py, which Kit cannot import: while shown, the badge
-# keeps the flag file badge-<pid>-kit.shown, hides while a host screenshot holds capture.lock (probed with
-# a non-blocking exclusive flock) and deletes the flag once the hidden frame is drawn, so no screenshot
-# shows it. Recordings take no lock and show it.
+# keeps the flag file badge-<pid>-kit.shown (holding this process's start time, as cursor_badge.process_start
+# reads it), hides while a host screenshot holds capture.lock (probed with a non-blocking exclusive flock)
+# and deletes the flag once the hidden frame is drawn, so no screenshot shows it. Recordings take no lock
+# and show it.
 
 BADGE_TITLE = "twinsmith cursor badge"
 BADGE_SIZE, BADGE_OFFSET = 14, 6  # UI points; its corner sits below and right of the hotspot, never on it
@@ -647,6 +676,7 @@ class _KitBadge:
 
     def __init__(self):
         import os
+        from pathlib import Path
 
         import omni.ui as ui
 
@@ -661,6 +691,10 @@ class _KitBadge:
         directory = badge_dir()
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.flag = directory / f"badge-{os.getpid()}-kit.shown"
+        try:  # the host's cursor_badge.process_start: a reused PID is then not mistaken for this Kit
+            self.started = Path(f"/proc/{os.getpid()}/stat").read_text().rsplit(")", 1)[1].split()[19]
+        except (OSError, IndexError):
+            self.started = ""
         self.fd = os.open(directory / BADGE_LOCK, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
         self.window = ui.Window(BADGE_TITLE, width=BADGE_SIZE, height=BADGE_SIZE, flags=flags, visible=False)
         for attr in ("padding_x", "padding_y"):
@@ -692,9 +726,10 @@ class _KitBadge:
 
     def _show(self):
         """Flag, then probe, then show: a capture that locks after the probe still sees the flag."""
-        self.flag.touch(mode=0o600)
+        self.flag.write_text(self.started)
         if _capture_held(self.fd):
-            self.flag.unlink(missing_ok=True)
+            if not self.hiding:  # while hiding, the last shown frame may still be on screen: _update drops the flag
+                self.flag.unlink(missing_ok=True)
             return False
         self.hiding = 0
         self.window.visible = True
@@ -852,11 +887,24 @@ async def act(a):
         return dict(result, frames_waited=max(frames, 1))
 
     if action == "menu":
+        import omni.ui as ui
+
         path = menu
         ui_test = _ui_test()
-        try:
-            await ui_test.menu_click(path)
-        except Exception as exc:  # noqa: BLE001
+        top = path.split("/")[0]
+
+        async def close():
+            """Close the menu this action opened (Kit menus ignore an Escape keypress sent this way), so
+            none is left covering the viewport. True when it is closed."""
+            try:
+                await ui_test.menu_click(top, show=False)
+                await tick(2)
+                menu_ref = ui_test.get_menubar().find_menu(top)
+                return not getattr(getattr(menu_ref, "widget", None), "shown", False)
+            except Exception:  # noqa: BLE001
+                return False
+
+        def not_found(closed, effects):
             try:
                 level, items = menu_children(path)
             except Exception:  # noqa: BLE001
@@ -865,30 +913,33 @@ async def act(a):
             hint = (f" Items {where}: {', '.join(items)}." if items else
                     f" Nothing is listed {where}: its extension may not be loaded yet (for the Action Graph "
                     "editor use sim__graph__show).")
-            raise UIRefusal("MENU_NOT_FOUND", f"Could not open menu {path!r}.{hint} If a menu was left open, "
-                                              "action=menu with its top-level name (e.g. 'Window') opens and "
-                                              "closes it.") from exc
+            state = "" if closed else (" A menu may still be open: action=menu with its top-level name "
+                                       "(e.g. 'Window') opens and closes it.")
+            return UIRefusal("MENU_NOT_FOUND", f"Could not open menu {path!r}.{hint}{state}", effects=effects)
+
+        levels = menu_walk(path)[1:]
+        if any(not getattr(level, "visible", True) for level in levels):
+            # A hidden entry (its extension or layout is off): nothing was opened.
+            raise not_found(True, "No input was sent.")
+        try:
+            await ui_test.menu_click(path)
+        except Exception as exc:  # noqa: BLE001
+            if not levels:
+                raise not_found(True, "No input was sent.") from exc
+            closed = await close()
+            raise not_found(closed, "The menu was opened, and closed again." if closed else None) from exc
         await tick(frames)
-        if "/" not in path:
-            # A top-level menu: clicking it only opens it. Report what it offers, then close it again (Kit
-            # menus ignore an Escape keypress sent this way), so no menu is left covering the viewport.
+        if len(levels) == path.count("/") + 1 and isinstance(levels[-1], ui.Menu):
+            # A menu, not an item: clicking it only opens it. Report what it offers, then close it again.
             try:
                 _, items = menu_children(path, inside=True)
             except Exception:  # noqa: BLE001
                 items = []
             items = [t for t in items if t != "placeholder"]
-            left_open = None
-            try:
-                await ui_test.menu_click(path, show=False)
-                await tick(2)
-                menu_ref = ui_test.get_menubar().find_menu(path)
-                left_open = bool(getattr(getattr(menu_ref, "widget", None), "shown", False))
-            except Exception:  # noqa: BLE001
-                pass
-            return dict(result, menu=path, items=items, closed_again=left_open is False, frames_waited=frames,
-                        note=f"'{path}' is a top-level menu: it was opened to list its items" +
-                             (" and closed again" if left_open is False else
-                              "; it may still be open, check with a screenshot") +
+            closed = await close()
+            return dict(result, menu=path, items=items, closed_again=closed, frames_waited=frames,
+                        note=f"'{path}' is a menu, not an item: it was opened to list its items" +
+                             (" and closed again" if closed else "; it may still be open, check with a screenshot") +
                              f". Run an item with menu='{path}/<item>'.")
         return dict(result, menu=path, frames_waited=frames,
                     note="menu clicks move Kit's cursor through the menu; verify with a screenshot")
@@ -948,8 +999,9 @@ async def act(a):
         return dict(result, frames_waited=frames)
     if action == "scroll":
         sx, sy = scroll
-        # Same encoding as omni.kit.ui_test.emulate_mouse_scroll: the delta goes in both coordinate slots.
-        provider.buffer_mouse_event(mouse, MouseEventType.SCROLL, (sx / w, sy / h), 0, (float(sx), float(sy)))
+        # Kit reads the wheel steps from the first (normalised) slot as they are. Dividing them by the
+        # window size, as omni.kit.ui_test.emulate_mouse_scroll does, scrolls a hundredth of a step.
+        provider.buffer_mouse_event(mouse, MouseEventType.SCROLL, (float(sx), float(sy)), 0, (float(sx), float(sy)))
         await tick(frames)
         return dict(result, scroll=dict(x=sx, y=sy), frames_waited=frames)
     # drag

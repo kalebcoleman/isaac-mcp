@@ -135,7 +135,7 @@ def test_click_and_scroll_send_bounded_events_to_target(desktop_setup):
 
 def test_bad_geometry_or_covered_point_never_clicks(desktop_setup):
     disp, tools = desktop_setup
-    with pytest.raises(ValueError, match="size changed"):
+    with pytest.raises(ValueError, match="is 300x200, not the expected 299x200"):
         tools["computer_click"](101, 22, 20, 30, 299, 200)
     assert not disp.events and disp.closed and not disp.grabbed
     disp.covered = lambda x, y: True
@@ -321,3 +321,19 @@ def test_the_lock_probe_runs_once_per_tool_call(desktop_setup, monkeypatch):
     monkeypatch.setattr(desktop.screen, "_probe_locked", lambda: calls.append(1) or False)
     tools["computer_scroll"](101, 22, 10, 10, 300, 200, "down", 5)
     assert len(calls) == 1 and events(disp, X.ButtonPress) == [5] * 5
+
+
+def test_answers_and_refusals_name_what_was_sent_and_what_is_accepted(desktop_setup):
+    disp, tools = desktop_setup
+    assert tools["computer_click"](101, 22, 20, 30, 300, 200, "right", 2).startswith("sent double right click to")
+    assert tools["computer_click"](101, 22, 20, 30, 300, 200).startswith("sent click to window 101 at (20, 30)")
+    assert tools["computer_key"](101, 22, "a", ["ctrl"]).startswith("sent key ctrl+a to")
+    with pytest.raises(ValueError, match=r"\(300, 30\) is outside the 300x200 window"):
+        tools["computer_click"](101, 22, 300, 30, 300, 200)
+    with pytest.raises(ValueError, match="f1-f12 enter tab escape.*punctuation goes through action=type"):
+        tools["computer_key"](101, 22, "esc")
+    with pytest.raises(ValueError, match="key=enter"):
+        tools["computer_type"](101, 22, "a\nb")
+    disp.focus = disp.root
+    with pytest.raises(ValueError, match="send the key to its parent window"):
+        tools["computer_key"](101, 22, "escape")

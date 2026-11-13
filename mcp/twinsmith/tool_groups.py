@@ -82,7 +82,7 @@ GROUPS: Dict[str, tuple] = {
         "start": "start_screen_recording", "stop": "stop_screen_recording", "status": "screen_recording_status"}),
     "windows": ("Desktop windows: info, list, raise, move, tile.", {
         "info": "screen_info", "list": "list_windows", "raise": "raise_window", "move": "move_window", "tile": "tile_windows"}),
-    "computer": ("Mouse and keyboard into the focused window (opt-in group).", {
+    "computer": ("Mouse and keyboard into one X11 window, named by its id and PID (opt-in group).", {
         "click": "computer_click", "drag": "computer_drag", "scroll": "computer_scroll", "type": "computer_type",
         "key": "computer_key", "batch": "computer_batch"}),
     "sim__session": ("Simulators this server manages (opt-in group): launch, list, status, stop.", {

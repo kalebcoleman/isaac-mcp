@@ -45,7 +45,7 @@ def test_batch_runs_steps_in_order_under_one_lock_and_one_screenshot(batch):
                      {"action": "scroll", "x": 5, "y": 5, "direction": "down", "steps": 2}], screenshot_after=True)
     assert events(batch.disp, X.ButtonPress) == [1, 5, 5]
     assert events(batch.disp, X.KeyPress) == [38, 56, 36]
-    assert batch.locks == [1] and len(batch.shots) == 1 and batch.shots[0] == {"window_id": 101}
+    assert batch.locks == [1] and batch.shots == [{"window_id": 101, "settle": True}]
     assert out[0].startswith("batch ran all 4 step(s): 0: sent click") and "3: sent 2 scroll" in out[0]
 
 
@@ -154,7 +154,7 @@ def kit(monkeypatch):
 
     class Provider:
         def buffer_mouse_event(self, mouse, kind, norm, mods, pixel):
-            sent.append((kind, pixel))
+            sent.append((kind, pixel) if kind != "SCROLL" else (kind, norm))
 
         def buffer_keyboard_char_event(self, keyboard, ch, mods):
             sent.append(("char", ch))
@@ -275,3 +275,19 @@ def test_find_after_is_compact_and_a_find_error_is_only_a_note(kit, monkeypatch)
     with pytest.raises(kit.ui.UIRefusal) as err:   # a failed batch still reports what it finds
         kit.run({"actions": [{"action": "wait"}, {"action": "click", "ref": "Stage//Frame/Button[0]"}], "find_after": "b"})
     assert err.value.details["find_after"]["note"] == "find_after failed: headless"
+
+
+def test_kit_batch_steps_wait_the_top_level_frames_unless_they_give_their_own(kit):
+    out = kit.run({"frames": 7, "actions": [{"action": "wait"}, {"action": "wait", "frames": 9}]})
+    assert [step["frames_waited"] for step in out["steps"]] == [7, 9]
+    with pytest.raises(kit.ui.UIRefusal, match="frames in all"):
+        kit.run({"frames": 400, "actions": [{"action": "wait"}, {"action": "wait"}]})
+    with pytest.raises(kit.ui.UIRefusal, match="the key is action, not sub_action"):
+        kit.run({"actions": [{"sub_action": "wait"}]})
+
+
+def test_kit_scroll_sends_whole_wheel_steps(kit):
+    """Kit reads the wheel delta from the event's first slot as it is: divided by the window size (as
+    omni.kit.ui_test does) five steps moved a tree by a pixel."""
+    kit.run({"action": "scroll", "x": 10, "y": 10, "scroll_y": -5})
+    assert kit.sent[-1] == ("SCROLL", (0.0, -5.0))

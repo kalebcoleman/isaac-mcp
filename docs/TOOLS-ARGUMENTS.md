@@ -1432,12 +1432,12 @@ Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI thro
 - `end_y` (integer, optional): Drag end Y in window pixels.
 - `text` (string, optional): Text for action=type (1..500 characters, no newlines; send enter with keypress).
 - `keys` (array, optional): For action=keypress: one key plus optional modifiers, e.g. ["ctrl", "s"], ["enter"], ["shift", "tab"].
-- `window` (string, optional): For action=tab or close: the window or tab title, e.g. 'Console' or 'Content'.
+- `window` (string, optional): Window or tab title for tab and close, e.g. 'Console'.
 - `menu` (string, optional): For action=menu: a menu path, e.g. 'Create/Mesh/Cube' (a menu an extension adds exists only once it has loaded), or a top-level menu such as 'Layouts' (opened to list its items, then closed again).
 - `scroll_x` (integer, default `0`): Horizontal wheel steps for action=scroll (-20..20).
 - `scroll_y` (integer, default `0`): Vertical wheel steps for action=scroll (-20..20; negative scrolls down).
 - `frames` (integer, default `3`): Frames to wait after the action so the UI updates (0..600).
-- `actions` (array, optional): Batch: up to 10 action objects (each with action and its own arguments) run in order, stopping at the first failure; replaces the top-level action fields.
+- `actions` (array, optional): Batch of up to 10 steps, each an object with action (not sub_action) and that action's arguments. E.g. [{"action": "click", "ref": "..."}, {"action": "type", "text": "2"}]. Steps run in order and stop at the first failure; they replace the top-level action fields, and frames is then each step's default wait.
 - `coord_space` (string, default `"window"`): window (Isaac Sim window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image).
 - `screenshot_after` (boolean, default `false`): Also return a screenshot of the Isaac Sim window after the action(s).
 - `find_after` (string, optional): Also return up to 10 widgets matching this text after the action(s), compactly (same matching as sim__ui__find query).
@@ -1449,7 +1449,7 @@ Listed as `sim__ui(action="find")`.
 Find Isaac Sim UI widgets. Lists Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree views, and labels when a query is given) with their text, tooltip, current value, a ref, and their centre in pixels of the Isaac Sim window (the same pixels as screenshot(window_id=<Isaac Sim window>)), plus the visible Kit windows. Works while the desktop is locked or used remotely. Use the ref with sim__ui__act instead of guessing coordinates.
 
 - `query` (string, default `""`): Case-insensitive text to match in a widget's name, text, tooltip, identifier or type, e.g. 'play' or 'Add'. Empty lists interactive widgets only.
-- `window` (string, default `""`): Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'.
+- `window` (string, default `""`): Only windows whose title contains this, e.g. 'Stage'.
 - `limit` (integer, default `40`): Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).
 - `zoom_ref` (string, optional): Zoom on this widget ref instead of listing: returns an enlarged crop of the Isaac Sim window around it, with its own coord_space token.
 
@@ -1591,9 +1591,9 @@ Run 1-10 click, drag, scroll, type or key steps in one selected X11 window, in o
 
 - `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
-- `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
-- `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
-- `actions` (list[dict[str, Any]], required): 1-10 steps run in order, each {action, ...that action's arguments}, e.g. {"action": "click", "x": 10, "y": 20}.
+- `expected_width` (int, required): The window's own width in pixels (windows list), not a downscaled image's; it ends a coord_space token (/WxH). A changed size is refused.
+- `expected_height` (int, required): The window's own height in pixels, as for expected_width.
+- `actions` (list[dict[str, Any]], required): 1-10 steps run in order, each an object with action and that action's own arguments. E.g. [{"action": "click", "x": 10, "y": 20}, {"action": "type", "text": "hi"}].
 - `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).
 - `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
@@ -1607,8 +1607,8 @@ Click a visible point in one selected X11 window.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
 - `x` (int, required): X in window pixels (or image pixels, see coord_space), from a fresh screenshot.
 - `y` (int, required): Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.
-- `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
-- `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
+- `expected_width` (int, required): The window's own width in pixels (windows list), not a downscaled image's; it ends a coord_space token (/WxH). A changed size is refused.
+- `expected_height` (int, required): The window's own height in pixels, as for expected_width.
 - `button` (str, default `'left'`): left, middle or right.
 - `clicks` (int, default `1`): 1 or 2.
 - `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).
@@ -1626,8 +1626,8 @@ Drag with the left mouse button between two points in the same X11 window.
 - `y` (int, required): Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.
 - `end_x` (int, required): Drag end X, in the same space as x.
 - `end_y` (int, required): Drag end Y, in the same space as y.
-- `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
-- `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
+- `expected_width` (int, required): The window's own width in pixels (windows list), not a downscaled image's; it ends a coord_space token (/WxH). A changed size is refused.
+- `expected_height` (int, required): The window's own height in pixels, as for expected_width.
 - `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).
 - `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
@@ -1639,7 +1639,7 @@ Send one navigation/editing key or ASCII letter/digit to the focused X11 window.
 
 - `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
-- `key` (str, required): A navigation or editing key name, or an ASCII letter or digit, e.g. enter, tab, a.
+- `key` (str, required)
 - `modifiers` (list[str] | None, default `None`): Any of ctrl, shift, alt, super.
 - `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
@@ -1653,8 +1653,8 @@ Scroll up, down, left or right at a visible window point, at most ten steps per 
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
 - `x` (int, required): X in window pixels (or image pixels, see coord_space), from a fresh screenshot.
 - `y` (int, required): Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.
-- `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
-- `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
+- `expected_width` (int, required): The window's own width in pixels (windows list), not a downscaled image's; it ends a coord_space token (/WxH). A changed size is refused.
+- `expected_height` (int, required): The window's own height in pixels, as for expected_width.
 - `direction` (str, required): up, down, left or right.
 - `steps` (int, default `1`): Scroll steps, 1-10.
 - `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).

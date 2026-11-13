@@ -1416,6 +1416,22 @@ def coord_token(image_w: int, image_h: int, rect: tuple[int, int, int, int], win
     return f"img:{image_w}x{image_h}@{x},{y},{w}x{h}/{window_w}x{window_h}"
 
 
+def _token(coord_space: str, width: int, height: int) -> tuple[int, int, int, int, int, int]:
+    """A coord_space token's image size and window rectangle (iw, ih, rx, ry, rw, rh), checked against a
+    window that must still be ``width`` x ``height`` (the size it had when the token was printed)."""
+    match = _TOKEN.fullmatch(str(coord_space).strip())
+    if not match:
+        raise ValueError("coord_space must be 'window' or the coord_space token a screenshot printed, "
+                         "e.g. img:1600x900@0,0,2560x1440/2560x1440")
+    iw, ih, rx, ry, rw, rh, ww, wh = map(int, match.groups())
+    if (ww, wh) != (width, height):
+        raise ValueError(f"that screenshot showed a {ww}x{wh} window, but this one is {width}x{height}: it was "
+                         "resized, or the token is another window's; capture this window again")
+    if not (iw and ih and rw and rh) or rx + rw > ww or ry + rh > wh:
+        raise ValueError("coord_space token is inconsistent; capture the window again")
+    return iw, ih, rx, ry, rw, rh
+
+
 def map_point(coord_space: str | None, x: int, y: int, width: int, height: int) -> tuple[int, int]:
     """The one place image pixels become window pixels: (x, y) in ``coord_space`` -> original window pixels.
 
@@ -1423,16 +1439,7 @@ def map_point(coord_space: str | None, x: int, y: int, width: int, height: int) 
     token a capture printed; the window must still be ``width`` x ``height`` (the size it had then)."""
     if coord_space in (None, "", "window"):
         return x, y
-    match = _TOKEN.fullmatch(str(coord_space).strip())
-    if not match:
-        raise ValueError("coord_space must be 'window' or the coord_space token a screenshot printed, "
-                         "e.g. img:1600x900@0,0,2560x1440/2560x1440")
-    iw, ih, rx, ry, rw, rh, ww, wh = map(int, match.groups())
-    if (ww, wh) != (width, height):
-        raise ValueError(f"that screenshot showed a {ww}x{wh} window, but it is {width}x{height} now; "
-                         "capture it again")
-    if not (iw and ih and rw and rh) or rx + rw > ww or ry + rh > wh:
-        raise ValueError("coord_space token is inconsistent; capture the window again")
+    iw, ih, rx, ry, rw, rh = _token(coord_space, width, height)
     if type(x) is not int or type(y) is not int:
         raise ValueError(f"x and y must be integer pixels of that image, not {x!r} and {y!r}")
     if not (0 <= x < iw and 0 <= y < ih):
@@ -1446,19 +1453,23 @@ ZOOM_MAX = 4  # a crop is enlarged at most this much; beyond it pixels only get 
 
 def region_rect(region, coord_space: str | None, width: int, height: int) -> tuple[int, int, int, int]:
     """[x, y, width, height] in ``coord_space`` -> (x, y, width, height) in pixels of a ``width`` x
-    ``height`` window. Both corners go through map_point, so a region read off a downscaled screenshot
-    or an earlier zoom selects the same window pixels. Corners snap to the window pixel under each corner
-    pixel's centre, so a region of an image downscaled 2x or more can lose a window pixel at its leading edge."""
+    ``height`` window: every window pixel the region's image pixels show, so a region read off a
+    downscaled screenshot or an earlier zoom loses nothing at its edges."""
     if not (isinstance(region, (list, tuple)) and len(region) == 4 and all(type(v) is int for v in region)):
         raise ValueError("region must be [x, y, width, height] as integers")
     x, y, w, h = region
     if w < 1 or h < 1:
         raise ValueError("region width and height must be at least 1")
-    x0, y0 = map_point(coord_space, x, y, width, height)
-    x1, y1 = map_point(coord_space, x + w - 1, y + h - 1, width, height)  # last pixel, inclusive
-    if not (0 <= x0 <= x1 < width and 0 <= y0 <= y1 < height):
+    x0, y0, x1, y1 = x, y, x + w, y + h  # half-open, in window pixels
+    if coord_space not in (None, "", "window"):
+        iw, ih, rx, ry, rw, rh = _token(coord_space, width, height)
+        if not (0 <= x and x + w <= iw and 0 <= y and y + h <= ih):
+            raise ValueError(f"region {region} is outside that {iw}x{ih} image")
+        x0, x1 = rx + x * rw // iw, rx + -(-(x + w) * rw // iw)
+        y0, y1 = ry + y * rh // ih, ry + -(-(y + h) * rh // ih)
+    if not (0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height):
         raise ValueError(f"region {region} is outside the {width}x{height} window")
-    return x0, y0, x1 - x0 + 1, y1 - y0 + 1
+    return x0, y0, x1 - x0, y1 - y0
 
 
 def zoom_size(width: int, height: int, max_width: int) -> tuple[int, int]:
@@ -1467,11 +1478,33 @@ def zoom_size(width: int, height: int, max_width: int) -> tuple[int, int]:
     return max(1, round(width * scale)), max(1, round(height * scale))
 
 
+SETTLE_S = 1.0        # after an action, wait at most this long for the window to stop changing
+SETTLE_POLL_S = 0.12
+
+
+def _settled(win: dict) -> tuple[PILImage.Image, bool]:
+    """The window's image once two grabs SETTLE_POLL_S apart are equal, and whether it settled within
+    SETTLE_S. An app repaints some frames after its input arrives; a grab taken at once shows the old state."""
+    deadline = time.monotonic() + SETTLE_S
+    image = None
+    while True:
+        time.sleep(SETTLE_POLL_S)
+        with cursor_badge.capture_hold():  # every cursor badge is hidden while the pixels are read
+            latest = _grab_window_image(win)
+        if image is not None and latest.size == image.size and latest.tobytes() == image.tobytes():
+            return latest, True
+        if time.monotonic() > deadline:
+            return latest, False
+        image = latest
+
+
 def capture(monitor: int | None = None, window: str | None = None, window_id: int | None = None,
             max_width: int = SHOT_MAX_WIDTH, label: str | None = None, region: list[int] | None = None,
-            coord_space: str = "window", auto: Callable[[], dict | None] | None = None) -> list:
-    """What the screenshot tool returns: [Image, caption]. Also used after an action (screenshot_after)
-    and for zooms, so there is one capture path. ``auto`` picks the default window when none is named."""
+            coord_space: str = "window", auto: Callable[[], dict | None] | None = None,
+            settle: bool = False) -> list:
+    """What the screenshot tool returns: [Image, caption]. Also used after an action (screenshot_after,
+    with ``settle``: the window is read once it has stopped changing) and for zooms, so there is one
+    capture path. ``auto`` picks the default window when none is named."""
     SHOT_DIR.mkdir(parents=True, exist_ok=True)
     max_width = max(320, min(int(max_width), 3840))
     target = None
@@ -1484,8 +1517,13 @@ def capture(monitor: int | None = None, window: str | None = None, window_id: in
         raise ValueError("region zooms into a window: name one with window or window_id")
     if target is not None:
         win = target
-        with cursor_badge.capture_hold():  # every cursor badge is hidden while the pixels are read
-            full = _grab_window_image(win)
+        changing = False
+        if settle:
+            full, still = _settled(win)
+            changing = not still
+        else:
+            with cursor_badge.capture_hold():  # every cursor badge is hidden while the pixels are read
+                full = _grab_window_image(win)
         window_size = full.size
         rect = (0, 0, *window_size)
         if region is not None:
@@ -1531,6 +1569,9 @@ def capture(monitor: int | None = None, window: str | None = None, window_id: in
                         f"window, shown {inline.width / full.width:.2f}x")
         token = coord_token(inline.width, inline.height, rect, *window_size)
         caption += f"\ncoord_space: {token} (pass it with x/y measured in this image)"
+        if changing:
+            caption += (f"\nnote: the window was still changing after {SETTLE_S:g} s (an animation or a running "
+                        "simulation); this is one moment of it")
     elif inline.width != full.width:
         caption += "\ninput: screenshot the window (window_id) for a coord_space token; input tools map its points"
     if target is None and composed:
@@ -1553,13 +1594,17 @@ def display_backend(session_type: str | None, wayland: str | None, x_opens: bool
 
 
 def _x_extensions() -> dict:
-    """Whether the X server has XTEST (synthetic input) and SHAPE (the cursor badge). Never raises."""
+    """Whether the X server has XTEST (synthetic input) and SHAPE (the cursor badge), and whether a
+    compositing manager runs. Never raises."""
     try:
         disp = _xdisplay()
     except RuntimeError:
         return {"error": f"cannot open X display {DISPLAY}"}
     try:
-        return {"xtest": bool(disp.has_extension("XTEST")), "shape": bool(disp.has_extension("SHAPE"))}
+        # A compositing manager owns _NET_WM_CM_S<screen>; without one a covered window's pixels are lost.
+        compositor = disp.get_selection_owner(disp.intern_atom(f"_NET_WM_CM_S{disp.get_default_screen()}"))
+        return {"xtest": bool(disp.has_extension("XTEST")), "shape": bool(disp.has_extension("SHAPE")),
+                "compositing": compositor != X.NONE}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"X server query failed: {type(exc).__name__}"}
     finally:
@@ -1605,8 +1650,9 @@ def kit_readiness(host: str | None, port: int | None) -> dict:
     if answer.get("code") == "NO_UI":   # an older sim-tools checks headless first
         return {"reachable": True, "headless": True, "ui_test_enabled": "unknown"}
     if answer.get("status") == "error" and answer.get("code") != "LIMIT":
+        code, message = answer.get("code") or "error", str(answer.get("message", ""))
         return {"reachable": True, "readiness": "unknown",
-                "reason": f"{answer.get('code') or 'error'}: {str(answer.get('message', ''))[:100]}"}
+                "reason": (message if message.startswith(code) else f"{code}: {message}")[:200]}
     if "ui_test_enabled" not in answer:
         return {"reachable": True, "readiness": "unknown",
                 "reason": "this Kit's sim-tools predates the readiness probe: restart Kit from this checkout"}
@@ -1644,11 +1690,24 @@ def doctor_report(port: int | None, host: str | None, enabled: Iterable[str], ru
     else:
         sim_ui = True
     blockers = [f"{name}: {why.rstrip('.')}" for name, why in (("computer", computer), ("sim__ui", sim_ui)) if why is not True]
+    notes = []  # what works, with a limit an agent should know
+    if "error" not in x11:
+        if locked is None:
+            notes.append("lock state unknown (no screen saver service answered): computer input is sent unless "
+                         "another client holds the keyboard, as a lock screen does")
+        if backend == "xwayland":
+            notes.append("XWayland: computer reaches X11 windows only, and cannot see a native Wayland window "
+                         "that covers its target")
+        if not x11["compositing"]:
+            notes.append("no compositing manager: the part of a window that another covers is black in "
+                         "screenshot(window_id=...); raise the window first")
+    if sim_ui is True and bridge.get("ui_test_enabled") is False:
+        notes.append("omni.kit.ui_test is off in this Kit: the first sim__ui call turns it on")
     return {"backend": backend, "display": ENV_DISPLAY, "x11": x11, "locked": locked,
             "input_toolset": "input" in enabled, "cursor_badge": bool(cursor_badge), "kit_window": _kit_window(port),
             "bridge": {"port": port, **bridge}, "screenshot_max_width": SHOT_MAX_WIDTH,
             "ready": {"computer": computer is True, "sim__ui": sim_ui is True},
-            "next": "; ".join(blockers) or "computer and sim__ui are ready"}
+            "next": "; ".join(blockers) or "computer and sim__ui are ready", "notes": notes}
 
 
 # -------------------------------------------------------------------- tools

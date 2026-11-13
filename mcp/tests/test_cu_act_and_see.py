@@ -1,10 +1,12 @@
 """Act and see in one call: screenshot_after on the computer tools and on sim__ui act/find."""
 
 import asyncio
+import io
 import json
 
 from mcp.server.fastmcp import FastMCP, Image
 from mcp.shared.memory import create_connected_server_and_client_session
+from PIL import Image as PILImage
 
 from test_desktop_input import desktop_setup  # noqa: F401 - fixture
 from twinsmith import computer_use, grouped_tools, screen, server
@@ -46,7 +48,7 @@ def test_computer_click_returns_its_answer_and_the_window_after_every_lock_is_re
     assert [block.type for block in result.content] == ["text", "image", "text"]
     assert result.content[0].text == "sent click to window 101 at (20, 30)"
     assert result.content[2].text.startswith("coord_space:")
-    assert taken == [{"window_id": 101}]
+    assert taken == [{"window_id": 101, "settle": True}]  # read once the window has reacted
     assert disp.pointer == (120, 130)
 
 
@@ -155,3 +157,48 @@ def test_grouped_sim_ui_act_returns_the_picture_through_a_client(monkeypatch, tm
     canonical, params = sent[0]
     assert canonical == "sim.ui.act" and (params["x"], params["y"]) == (201, 101)   # image pixel centres
     assert not {"coord_space", "screenshot_after", "badge"} & set(params), "host-only arguments reached Kit"
+
+
+# ------------------------------------------------------------------------------- failures and settling
+
+
+def test_a_failed_single_action_with_screenshot_is_an_error_with_the_picture(desktop_setup, monkeypatch):
+    disp, _ = desktop_setup
+    disp.covered = lambda x, y: True
+    monkeypatch.setattr(screen, "capture", lambda **kw: [PNG, "coord_space: img:300x200@0,0,300x200/300x200"])
+    result = _computer_click(CLICK)
+    assert result.isError and [block.type for block in result.content] == ["text", "image", "text"]
+    assert "another window covers that point" in result.content[0].text
+    assert desktop.X.ButtonPress not in [kind for kind, *_ in disp.events], "a refusal sends no click"
+    # A stale token is refused the same way, and the picture brings the token to use instead.
+    stale = _computer_click({**CLICK, "coord_space": "img:150x100@0,0,600x400/600x400"})
+    assert stale.isError and "this one is 300x200" in stale.content[0].text
+    assert stale.content[2].text.startswith("coord_space:")
+    # Without screenshot_after a failure stays a plain error.
+    plain = _computer_click({**CLICK, "screenshot_after": False})
+    assert plain.isError and [block.type for block in plain.content] == ["text"]
+
+
+def test_the_picture_after_an_action_waits_for_the_window_to_stop_changing(monkeypatch, tmp_path):
+    frames = iter(["old", "repainting", "new", "new"])
+    monkeypatch.setattr(screen, "SHOT_DIR", tmp_path)
+    monkeypatch.setattr(screen.time, "sleep", lambda s: None)
+    monkeypatch.setattr(screen, "_match_window", lambda q, wid: dict(id=wid, title="t", x=0, y=0, width=4, height=2))
+    monkeypatch.setattr(screen, "_grab_window_image",
+                        lambda win: PILImage.new("RGB", (4, 2), {"old": 0, "repainting": 90, "new": 255}[next(frames)]))
+    image, caption = screen.capture(window_id=5, settle=True)
+    assert PILImage.open(io.BytesIO(image.data)).getpixel((0, 0)) == (255, 0, 0), "the settled frame, not the first"
+    assert next(frames, None) is None and "still changing" not in caption
+
+
+def test_a_window_that_never_settles_is_captured_with_a_note(monkeypatch, tmp_path):
+    shade = iter(range(256))
+    clock = iter(x * 0.3 for x in range(100))
+    monkeypatch.setattr(screen, "SHOT_DIR", tmp_path)
+    monkeypatch.setattr(screen.time, "sleep", lambda s: None)
+    monkeypatch.setattr(screen.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(screen, "_match_window", lambda q, wid: dict(id=wid, title="t", x=0, y=0, width=4, height=2))
+    monkeypatch.setattr(screen, "_grab_window_image", lambda win: PILImage.new("RGB", (4, 2), next(shade)))
+    _, caption = screen.capture(window_id=5, settle=True)
+    assert "note: the window was still changing after 1 s" in caption
+    assert next(shade) < 8, "bounded: a playing simulation costs a few grabs, not a wait for stillness"
