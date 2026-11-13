@@ -2,428 +2,116 @@
   "version": 1,
   "namespace": "ur5e_dt",
   "tools": {
-    "ur5e_dt.play_scene": {
-      "description": "Start/resume the simulation timeline. Restores the saved twin's Python ROS callbacks; Newton twin playback uses CPU and needs a stopped stage before first initialization. Does not rebuild saved graphs or switch physics engines.",
-      "parameters": {},
-      "fields": [],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.stop_scene": {
-      "description": "Stop the UR5e twin's simulation timeline, e.g. before generic sim__* edits. Stop rewinds physics to the authored start pose. For other scenes use sim__timeline__control.",
-      "parameters": {},
-      "fields": [],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.setup_camera_tf_graph": {
-      "description": "Import the RealSense camera, attach it to the UR5e wrist and build its ROS 2 action graph (camera image, camera_info and the /tf_cam transform tree). Requires the UR5e to be loaded (e.g. after quick_start_with_workstation).",
-      "parameters": {},
-      "fields": [],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.assemble_objects": {
-      "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). Assemble objects into a specified configuration.",
+    "ur5e_dt.workcell_quick_start": {
+      "description": "Build a stopped PhysX workcell from an external asset pack. Refuses unsaved stage changes unless explicitly allowed.",
       "parameters": {
-        "assembly": {
+        "config_path": {
           "type": "string",
-          "enum": [
-            "fmb1",
-            "fmb2",
-            "fmb3",
-            "fmb4",
-            "jenga",
-            "fmb_jenga"
-          ],
-          "description": "Assembly configuration; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
-        }
-      },
-      "fields": [
-        {
-          "name": "assembly",
-          "kind": "enum",
-          "enum": [
-            "fmb1",
-            "fmb2",
-            "fmb3",
-            "fmb4",
-            "jenga",
-            "fmb_jenga"
-          ],
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Assembly configuration; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
-        }
-      ],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.randomize_object_poses": {
-      "description": "Randomize the positions of non-base objects in /World/Objects of the UR5e twin, after ur5e_dt__add_objects.",
-      "parameters": {},
-      "fields": [],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.randomize_single_object": {
-      "description": "Randomize the position of a single named object in a clear workspace area, keeping all other objects fixed.",
-      "parameters": {
-        "object_name": {
-          "type": "string",
-          "description": "Name of the object to randomize (e.g. 'inverted_u_yellow')"
-        }
-      },
-      "fields": [
-        {
-          "name": "object_name",
-          "kind": "string",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Name of the object to randomize (e.g. 'inverted_u_yellow')"
-        }
-      ],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.save_scene_state": {
-      "description": "Save the UR5e twin's object poses to a JSON file in its scene_states folder, for ur5e_dt__restore_scene_state. A file of that name is replaced; with no name it gets a timestamp. Returns result, json_file_path and, on failure, error.",
-      "parameters": {
-        "json_file_path": {
-          "type": "string",
-          "description": "Path to save file. If omitted, a timestamped filename is used."
-        }
-      },
-      "fields": [
-        {
-          "name": "json_file_path",
-          "kind": "string",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Path to save file. If omitted, a timestamped filename is used."
-        }
-      ],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.restore_scene_state": {
-      "description": "Restore the UR5e twin's object poses from a JSON file made by ur5e_dt__save_scene_state. Returns result and, on failure, error.",
-      "parameters": {
-        "json_file_path": {
-          "type": "string",
-          "description": "Path to restore from. If omitted, the most recent save is used."
-        }
-      },
-      "fields": [
-        {
-          "name": "json_file_path",
-          "kind": "string",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Path to restore from. If omitted, the most recent save is used."
-        }
-      ],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.add_objects": {
-      "description": "Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). Add objects to the scene from a predefined assembly folder.",
-      "parameters": {
-        "assembly": {
-          "type": "string",
-          "enum": [
-            "fmb1",
-            "fmb2",
-            "fmb3",
-            "fmb4",
-            "jenga",
-            "fmb_jenga"
-          ],
-          "description": "Assembly folder; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
-        }
-      },
-      "fields": [
-        {
-          "name": "assembly",
-          "kind": "enum",
-          "enum": [
-            "fmb1",
-            "fmb2",
-            "fmb3",
-            "fmb4",
-            "jenga",
-            "fmb_jenga"
-          ],
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Assembly folder; fmb4 is Jenga, also accepted as jenga or fmb_jenga"
-        }
-      ],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.delete_objects": {
-      "description": "Delete all objects from /World/Objects of the UR5e twin and the associated pose publisher graph.",
-      "parameters": {},
-      "fields": [],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.setup_pose_publisher": {
-      "description": "Create an action graph publishing the UR5e twin's object poses to ROS 2 topic objects_poses_sim, after ur5e_dt__add_objects.",
-      "parameters": {},
-      "fields": [],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.start_ros_driver": {
-      "description": "Bring the ROS 2 driver of the lab's UR5e twin up, down or report status, so robot-motion tools have a driver. backend='fake' (default) is sim only, with mock hardware and no Docker, ready in seconds; 'ursim' needs Docker and is the path to mode='real' (not yet enabled). Refuses if another UR driver is detected. Stop the fake driver before stopping its simulator. Managed sim__launch sessions support only fake. Use once at startup.",
-      "parameters": {
+          "description": "Optional hardware configuration path."
+        },
         "mode": {
           "type": "string",
           "enum": [
-            "sim",
-            "real"
+            "physics",
+            "mirror_real"
           ],
-          "description": "'sim' (default) or 'real' (lab UR5e — not yet enabled; requires backend='ursim')."
+          "default": "physics",
+          "description": "Physics mode, or zero-gravity mirror mode."
         },
-        "action": {
-          "type": "string",
-          "enum": [
-            "up",
-            "down",
-            "status"
-          ],
-          "description": "'up' (default) brings the driver up, 'down' tears it down, 'status' reports state."
-        },
-        "backend": {
-          "type": "string",
-          "enum": [
-            "fake",
-            "ursim"
-          ],
-          "description": "'fake' (default) = apt ur_robot_driver fake hardware via launch_ur_fake.sh (lightweight, sim only); 'ursim' = URSim docker via sim_bringup.sh (needs Docker + ~/ros2_ws; required for mode='real'; unavailable in managed sessions)."
+        "discard_changes": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow replacement of an unsaved stage."
         }
       },
       "fields": [
+        {
+          "name": "config_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional hardware configuration path."
+        },
         {
           "name": "mode",
           "kind": "enum",
           "enum": [
-            "sim",
-            "real"
+            "physics",
+            "mirror_real"
           ],
           "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "'sim' (default) or 'real' (lab UR5e — not yet enabled; requires backend='ursim')."
+          "default": "physics",
+          "has_default": true,
+          "description": "Physics mode, or zero-gravity mirror mode."
         },
         {
-          "name": "action",
-          "kind": "enum",
-          "enum": [
-            "up",
-            "down",
-            "status"
-          ],
+          "name": "discard_changes",
+          "kind": "boolean",
+          "enum": null,
           "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "'up' (default) brings the driver up, 'down' tears it down, 'status' reports state."
-        },
-        {
-          "name": "backend",
-          "kind": "enum",
-          "enum": [
-            "fake",
-            "ursim"
-          ],
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "'fake' (default) = apt ur_robot_driver fake hardware via launch_ur_fake.sh (lightweight, sim only); 'ursim' = URSim docker via sim_bringup.sh (needs Docker + ~/ros2_ws; required for mode='real'; unavailable in managed sessions)."
+          "default": false,
+          "has_default": true,
+          "description": "Allow replacement of an unsaved stage."
         }
       ],
       "namespace": "ur5e_dt",
       "owner_id": "ur5e-dt"
     },
-    "ur5e_dt.sync_real_poses": {
-      "description": "Wait up to 3 seconds for /objects_poses_real and update matching sim objects. Reports an error if no message or matching objects arrive, and lists updated and snapped objects.",
+    "ur5e_dt.workcell_status": {
+      "description": "Read the current workcell build report.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",
       "owner_id": "ur5e-dt"
     },
-    "ur5e_dt.new_stage": {
-      "description": "Clear the entire USD stage and free accumulated memory. Use this when Isaac Sim's process memory has grown large after many scene loads/resets. This tears down all USD prims, Hydra render state, and PhysX allocations. The scene will be empty afterwards — use quick_start to rebuild it.",
+    "ur5e_dt.workcell_shutdown": {
+      "description": "Release workcell state without clearing the stage.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",
       "owner_id": "ur5e-dt"
     },
-    "ur5e_dt.quick_start": {
-      "description": "RISE lab UR5e digital twin; for a generic start, see sim__quick_start. One-click scene setup from public assets: loads the scene, imports NVIDIA's UR5e with action graphs, creates a workspace camera and starts simulation. Adds the RG2 gripper only when its files are in the asset folder; the result's gripper field says which happened. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.",
+    "ur5e_dt.robot_status": {
+      "description": "Read robot build details from the workcell report.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",
       "owner_id": "ur5e-dt"
     },
-    "ur5e_dt.start_recording": {
-      "description": "Start real-time viewport video recording using ffmpeg. Records frames from the viewport render buffer without blocking physics. Returns immediately — call stop_recording to finalize the video.",
-      "parameters": {
-        "file_name": {
-          "type": "string",
-          "description": "Output filename (e.g. 'my_recording.mp4'). Saved to the configured VIDEOS_DIR. Defaults to 'isaacsim_<timestamp>.mp4'."
-        },
-        "camera": {
-          "type": "string",
-          "description": "Camera prim path to record from (e.g. '/World/workspace_camera_sim'). If omitted, uses the active viewport camera."
-        },
-        "fps": {
-          "type": "integer",
-          "description": "Frames per second for the output video. Defaults to 30."
-        }
-      },
-      "fields": [
-        {
-          "name": "file_name",
-          "kind": "string",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Output filename (e.g. 'my_recording.mp4'). Saved to the configured VIDEOS_DIR. Defaults to 'isaacsim_<timestamp>.mp4'."
-        },
-        {
-          "name": "camera",
-          "kind": "string",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Camera prim path to record from (e.g. '/World/workspace_camera_sim'). If omitted, uses the active viewport camera."
-        },
-        {
-          "name": "fps",
-          "kind": "integer",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Frames per second for the output video. Defaults to 30."
-        }
-      ],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.stop_recording": {
-      "description": "Stop the current real-time viewport recording and finalize the MP4 video file. Returns the output file path and frame count.",
+    "ur5e_dt.perception_status": {
+      "description": "Read camera build details; this does not capture sensor data.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",
       "owner_id": "ur5e-dt"
     },
-    "ur5e_dt.get_recording_status": {
-      "description": "Check if viewport video recording is currently active. Returns status, frame count, elapsed time, output path, and FPS.",
+    "ur5e_dt.jenga_status": {
+      "description": "Read Jenga build details from the workcell report.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",
       "owner_id": "ur5e-dt"
     },
-    "ur5e_dt.load_workstation": {
-      "description": "Load the Vention bench as visual context under the lab's UR5e twin, at /World/Vention with its top at z=0. Uses your own lab file from the asset folder, which cannot be downloaded (see docs/ASSETS.md); a placeholder bench is used without it. Additive (cleared by new_stage), visual-only and safe while playing. Does not move the robot.",
+    "ur5e_dt.real2sim_status": {
+      "description": "Report the real-to-simulation interface availability; no synchronization is implemented.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",
       "owner_id": "ur5e-dt"
     },
-    "ur5e_dt.quick_start_with_workstation": {
-      "description": "RISE lab UR5e digital twin. Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.",
+    "ur5e_dt.planning_status": {
+      "description": "Report the planning interface availability; no planner is implemented.",
       "parameters": {},
       "fields": [],
       "namespace": "ur5e_dt",
       "owner_id": "ur5e-dt"
     },
-    "ur5e_dt.load_simple_room": {
-      "description": "Load Isaac's standard Simple Room environment (floor, walls, window, lamp) as a backdrop. Additive (cleared by new_stage): references the standard Isaac Simple_Room asset onto /World/SimpleRoom at z=-0.11 so it matches the source scene under the robot-base-at-0 convention (the Vention bench feet land on the room floor). Hides the default ground plane visual while keeping its z=0 collider, so object/robot physics are unchanged. Does not move the robot. Best used together with load_workstation.",
+    "ur5e_dt.eval_status": {
+      "description": "Report the evaluation interface availability; no evaluation is implemented.",
       "parameters": {},
       "fields": [],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.quick_start_with_workstation_and_simple_room": {
-      "description": "RISE lab UR5e digital twin. Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.",
-      "parameters": {},
-      "fields": [],
-      "namespace": "ur5e_dt",
-      "owner_id": "ur5e-dt"
-    },
-    "ur5e_dt.set_object_pose": {
-      "description": "Teleport a scene object under /World/Objects to an EXACT world pose. Use to set up controlled scenes — e.g. placing two parts close together to exercise neighbour-aware grasp gating. Applies via the same xformOp path randomize uses, so it persists under physics (object stays put on play). Mirror it with setup_pose_publisher so /objects_poses_sim reflects the new pose.",
-      "parameters": {
-        "object_name": {
-          "type": "string",
-          "description": "Object name under /World/Objects (e.g. 'u_brown')."
-        },
-        "position": {
-          "type": "array",
-          "description": "[x, y, z] world position in METERS."
-        },
-        "orientation": {
-          "type": "array",
-          "description": "Optional [w, x, y, z] quaternion. If given, overrides yaw_deg."
-        },
-        "yaw_deg": {
-          "type": "number",
-          "description": "Optional yaw rotation about world z in degrees (used when orientation is omitted). Default 0 (identity)."
-        }
-      },
-      "fields": [
-        {
-          "name": "object_name",
-          "kind": "string",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Object name under /World/Objects (e.g. 'u_brown')."
-        },
-        {
-          "name": "position",
-          "kind": "array",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "[x, y, z] world position in METERS."
-        },
-        {
-          "name": "orientation",
-          "kind": "array",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Optional [w, x, y, z] quaternion. If given, overrides yaw_deg."
-        },
-        {
-          "name": "yaw_deg",
-          "kind": "number",
-          "enum": null,
-          "required": false,
-          "default": null,
-          "has_default": false,
-          "description": "Optional yaw rotation about world z in degrees (used when orientation is omitted). Default 0 (identity)."
-        }
-      ],
       "namespace": "ur5e_dt",
       "owner_id": "ur5e-dt"
     }

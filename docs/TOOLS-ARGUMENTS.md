@@ -228,7 +228,6 @@ Launch a separate managed Isaac Sim instance, when explicitly asked.
 - `ros_domain` (int | None, default `None`): ROS_DOMAIN_ID 0-231. Omit for the first free, unclaimed domain in ISAAC_MCP_ROS_DOMAIN_RANGE, or upward from this server's domain.
 - `headless` (bool, default `False`): true: no window.
 - `allow_shared_domain` (bool, default `False`): true: allow a ROS domain another session already uses.
-- `show_ur5e_panel` (bool, default `False`): true: show the UR5e twin's panel in a graphical session.
 - `enable_motion_bvh` (bool, default `False`): true: accurate RTX LiDAR motion compensation; costs rendering time and GPU memory.
 - `physics_backend` (Literal['physx', 'newton'], default `'physx'`): Engine for this new process. Missing Newton dependencies fail with no fallback.
 
@@ -1562,195 +1561,78 @@ Fresh filename search across approved project/library roots. No network discover
 
 ## UR5e twin (`ur5e_dt__*`)
 
-Reference: [TOOLS-UR5E.md](TOOLS-UR5E.md). 23 tools.
+Reference: [TOOLS-UR5E.md](TOOLS-UR5E.md). 9 tools.
 
-### `ur5e_dt__add_objects`
+### `ur5e_dt__eval_status`
 
-Listed as `ur5e_dt__objects(action="add")`.
+Listed as `ur5e_dt__eval(action="status")`.
 
-Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). Add objects to the scene from a predefined assembly folder.
-
-- `assembly` (fmb1|fmb2|fmb3|fmb4|jenga|fmb_jenga, optional): Assembly folder; fmb4 is Jenga, also accepted as jenga or fmb_jenga
-
-### `ur5e_dt__assemble_objects`
-
-Listed as `ur5e_dt__objects(action="assemble")`.
-
-Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). Assemble objects into a specified configuration.
-
-- `assembly` (fmb1|fmb2|fmb3|fmb4|jenga|fmb_jenga, optional): Assembly configuration; fmb4 is Jenga, also accepted as jenga or fmb_jenga
-
-### `ur5e_dt__delete_objects`
-
-Listed as `ur5e_dt__objects(action="delete")`.
-
-Delete all objects from /World/Objects of the UR5e twin and the associated pose publisher graph.
+Report the evaluation interface availability; no evaluation is implemented.
 
 No arguments.
 
-### `ur5e_dt__get_recording_status`
+### `ur5e_dt__jenga_status`
 
-Listed as `ur5e_dt__recording(action="status")`.
+Listed as `ur5e_dt__jenga(action="status")`.
 
-Check if viewport video recording is currently active. Returns status, frame count, elapsed time, output path, and FPS.
-
-No arguments.
-
-### `ur5e_dt__load_simple_room`
-
-Listed as `ur5e_dt__scene(action="load_room")`.
-
-Load Isaac's standard Simple Room environment (floor, walls, window, lamp) as a backdrop. Additive (cleared by new_stage): references the standard Isaac Simple_Room asset onto /World/SimpleRoom at z=-0.11 so it matches the source scene under the robot-base-at-0 convention (the Vention bench feet land on the room floor). Hides the default ground plane visual while keeping its z=0 collider, so object/robot physics are unchanged. Does not move the robot. Best used together with load_workstation.
+Read Jenga build details from the workcell report.
 
 No arguments.
 
-### `ur5e_dt__load_workstation`
+### `ur5e_dt__perception_status`
 
-Listed as `ur5e_dt__scene(action="load_workstation")`.
+Listed as `ur5e_dt__perception(action="status")`.
 
-Load the Vention bench as visual context under the lab's UR5e twin, at /World/Vention with its top at z=0. Uses your own lab file from the asset folder, which cannot be downloaded (see docs/ASSETS.md); a placeholder bench is used without it. Additive (cleared by new_stage), visual-only and safe while playing. Does not move the robot.
-
-No arguments.
-
-### `ur5e_dt__new_stage`
-
-Listed as `ur5e_dt__scene(action="new_stage")`.
-
-Clear the entire USD stage and free accumulated memory. Use this when Isaac Sim's process memory has grown large after many scene loads/resets. This tears down all USD prims, Hydra render state, and PhysX allocations. The scene will be empty afterwards — use quick_start to rebuild it.
+Read camera build details; this does not capture sensor data.
 
 No arguments.
 
-### `ur5e_dt__play_scene`
+### `ur5e_dt__planning_status`
 
-Listed as `ur5e_dt__scene(action="play")`.
+Listed as `ur5e_dt__planning(action="status")`.
 
-Start/resume the simulation timeline. Restores the saved twin's Python ROS callbacks; Newton twin playback uses CPU and needs a stopped stage before first initialization. Does not rebuild saved graphs or switch physics engines.
-
-No arguments.
-
-### `ur5e_dt__quick_start`
-
-Listed as `ur5e_dt__scene(action="quick_start")`.
-
-RISE lab UR5e digital twin; for a generic start, see sim__quick_start. One-click scene setup from public assets: loads the scene, imports NVIDIA's UR5e with action graphs, creates a workspace camera and starts simulation. Adds the RG2 gripper only when its files are in the asset folder; the result's gripper field says which happened. Uses CPU physics in the selected engine; an existing non-CPU World is refused. Use after new_stage to rebuild a disposable scene.
+Report the planning interface availability; no planner is implemented.
 
 No arguments.
 
-### `ur5e_dt__quick_start_with_workstation`
+### `ur5e_dt__real2sim_status`
 
-Listed as `ur5e_dt__scene(action="quick_start_with_workstation")`.
+Listed as `ur5e_dt__real2sim(action="status")`.
 
-RISE lab UR5e digital twin. Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench (see load_workstation). One call builds the full robot+scene and drops the bench underneath. quick_start itself is unchanged.
-
-No arguments.
-
-### `ur5e_dt__quick_start_with_workstation_and_simple_room`
-
-Listed as `ur5e_dt__scene(action="quick_start_with_workstation_and_room")`.
-
-RISE lab UR5e digital twin. Uses your own lab files from the asset folder, which cannot be downloaded (see docs/ASSETS.md). A placeholder bench is used without them. Same as quick_start, then loads the Vention workstation bench AND the Simple Room backdrop. One call builds the full robot+scene, the bench under the robot, and the room around it. quick_start itself is unchanged.
+Report the real-to-simulation interface availability; no synchronization is implemented.
 
 No arguments.
 
-### `ur5e_dt__randomize_object_poses`
+### `ur5e_dt__robot_status`
 
-Listed as `ur5e_dt__objects(action="randomize")`.
+Listed as `ur5e_dt__robot(action="status")`.
 
-Randomize the positions of non-base objects in /World/Objects of the UR5e twin, after ur5e_dt__add_objects.
-
-No arguments.
-
-### `ur5e_dt__randomize_single_object`
-
-Listed as `ur5e_dt__objects(action="randomize_one")`.
-
-Randomize the position of a single named object in a clear workspace area, keeping all other objects fixed.
-
-- `object_name` (string, optional): Name of the object to randomize (e.g. 'inverted_u_yellow')
-
-### `ur5e_dt__restore_scene_state`
-
-Listed as `ur5e_dt__scene(action="restore_state")`.
-
-Restore the UR5e twin's object poses from a JSON file made by ur5e_dt__save_scene_state. Returns result and, on failure, error.
-
-- `json_file_path` (string, optional): Path to restore from. If omitted, the most recent save is used.
-
-### `ur5e_dt__save_scene_state`
-
-Listed as `ur5e_dt__scene(action="save_state")`.
-
-Save the UR5e twin's object poses to a JSON file in its scene_states folder, for ur5e_dt__restore_scene_state. A file of that name is replaced; with no name it gets a timestamp. Returns result, json_file_path and, on failure, error.
-
-- `json_file_path` (string, optional): Path to save file. If omitted, a timestamped filename is used.
-
-### `ur5e_dt__set_object_pose`
-
-Listed as `ur5e_dt__objects(action="set_pose")`.
-
-Teleport a scene object under /World/Objects to an EXACT world pose. Use to set up controlled scenes — e.g. placing two parts close together to exercise neighbour-aware grasp gating. Applies via the same xformOp path randomize uses, so it persists under physics (object stays put on play). Mirror it with setup_pose_publisher so /objects_poses_sim reflects the new pose.
-
-- `object_name` (string, optional): Object name under /World/Objects (e.g. 'u_brown').
-- `position` (array, optional): [x, y, z] world position in METERS.
-- `orientation` (array, optional): Optional [w, x, y, z] quaternion. If given, overrides yaw_deg.
-- `yaw_deg` (number, optional): Optional yaw rotation about world z in degrees (used when orientation is omitted). Default 0 (identity).
-
-### `ur5e_dt__setup_camera_tf_graph`
-
-Listed as `ur5e_dt__ros(action="camera_tf_graph")`.
-
-Import the RealSense camera, attach it to the UR5e wrist and build its ROS 2 action graph (camera image, camera_info and the /tf_cam transform tree). Requires the UR5e to be loaded (e.g. after quick_start_with_workstation).
+Read robot build details from the workcell report.
 
 No arguments.
 
-### `ur5e_dt__setup_pose_publisher`
+### `ur5e_dt__workcell_quick_start`
 
-Listed as `ur5e_dt__ros(action="pose_publisher")`.
+Listed as `ur5e_dt__workcell(action="quick_start")`.
 
-Create an action graph publishing the UR5e twin's object poses to ROS 2 topic objects_poses_sim, after ur5e_dt__add_objects.
+Build a stopped PhysX workcell from an external asset pack. Refuses unsaved stage changes unless explicitly allowed.
 
-No arguments.
+- `config_path` (string, optional): Optional hardware configuration path.
+- `mode` (physics|mirror_real, default `"physics"`): Physics mode, or zero-gravity mirror mode.
+- `discard_changes` (boolean, default `false`): Allow replacement of an unsaved stage.
 
-### `ur5e_dt__start_recording`
+### `ur5e_dt__workcell_shutdown`
 
-Listed as `ur5e_dt__recording(action="start")`.
+Listed as `ur5e_dt__workcell(action="shutdown")`.
 
-Start real-time viewport video recording using ffmpeg. Records frames from the viewport render buffer without blocking physics. Returns immediately — call stop_recording to finalize the video.
-
-- `file_name` (string, optional): Output filename (e.g. 'my_recording.mp4'). Saved to the configured VIDEOS_DIR. Defaults to 'isaacsim_<timestamp>.mp4'.
-- `camera` (string, optional): Camera prim path to record from (e.g. '/World/workspace_camera_sim'). If omitted, uses the active viewport camera.
-- `fps` (integer, optional): Frames per second for the output video. Defaults to 30.
-
-### `ur5e_dt__start_ros_driver`
-
-Listed as `ur5e_dt__ros(action="start_driver")`.
-
-Bring the ROS 2 driver of the lab's UR5e twin up, down or report status, so robot-motion tools have a driver. backend='fake' (default) is sim only, with mock hardware and no Docker, ready in seconds; 'ursim' needs Docker and is the path to mode='real' (not yet enabled). Refuses if another UR driver is detected. Stop the fake driver before stopping its simulator. Managed sim__launch sessions support only fake. Use once at startup.
-
-- `mode` (sim|real, optional): 'sim' (default) or 'real' (lab UR5e — not yet enabled; requires backend='ursim').
-- `action` (up|down|status, optional): 'up' (default) brings the driver up, 'down' tears it down, 'status' reports state.
-- `backend` (fake|ursim, optional): 'fake' (default) = apt ur_robot_driver fake hardware via launch_ur_fake.sh (lightweight, sim only); 'ursim' = URSim docker via sim_bringup.sh (needs Docker + ~/ros2_ws; required for mode='real'; unavailable in managed sessions).
-
-### `ur5e_dt__stop_recording`
-
-Listed as `ur5e_dt__recording(action="stop")`.
-
-Stop the current real-time viewport recording and finalize the MP4 video file. Returns the output file path and frame count.
+Release workcell state without clearing the stage.
 
 No arguments.
 
-### `ur5e_dt__stop_scene`
+### `ur5e_dt__workcell_status`
 
-Listed as `ur5e_dt__scene(action="stop")`.
+Listed as `ur5e_dt__workcell(action="status")`.
 
-Stop the UR5e twin's simulation timeline, e.g. before generic sim__* edits. Stop rewinds physics to the authored start pose. For other scenes use sim__timeline__control.
-
-No arguments.
-
-### `ur5e_dt__sync_real_poses`
-
-Listed as `ur5e_dt__objects(action="sync_real_poses")`.
-
-Wait up to 3 seconds for /objects_poses_real and update matching sim objects. Reports an error if no message or matching objects arrive, and lists updated and snapped objects.
+Read the current workcell build report.
 
 No arguments.

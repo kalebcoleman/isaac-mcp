@@ -7,7 +7,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT="${UR5E_DT_PORT:-${ISAAC_SIM_PORT:-8766}}"
 HEADLESS=0
-SHOW_UR5E_PANEL="${UR5E_DT_SHOW_PANEL:-0}"
 PHYSICS_BACKEND="${ISAAC_MCP_PHYSICS_BACKEND:-physx}"
 SHOW_HELP=0
 EXTRA_ARGS=()
@@ -51,10 +50,6 @@ while [ "$#" -gt 0 ]; do
       ;;
     --no-hot-reload)
       ISAAC_MCP_NO_HOT_RELOAD=1
-      shift
-      ;;
-    --ur5e-panel|--ur5e-dt)
-      SHOW_UR5E_PANEL=1
       shift
       ;;
     --port)
@@ -126,8 +121,6 @@ Options:
   --realtime     Cap the app at 60 frames per second, so sim time keeps to wall-clock time (for Nav2 with a headless app)
   --physics-backend physx|newton  Select this new session's engine (default: physx)
   --no-hot-reload  Do not reload extensions when their files change (or set ISAAC_MCP_NO_HOT_RELOAD=1)
-  --ur5e-panel   Show the UR5e panel (the tools are always enabled)
-  --ur5e-dt      Compatibility alias for --ur5e-panel
   --port N       Bridge port (default: 8766)
   -h, --help     Show this help message and exit
 EOF
@@ -146,11 +139,9 @@ case "$PHYSICS_BACKEND" in
   *) echo "--physics-backend must be physx or newton" >&2; exit 2 ;;
 esac
 
-# Defer binding until the twin tools register, so bridge readiness means the
-# default pack is ready whether or not its panel is visible.
+# Defer binding until the workcell tools register.
 export ISAAC_MCP_PORT="$PORT"
 export ISAAC_MCP_DEFER_START=1
-export UR5E_DT_SHOW_PANEL="$SHOW_UR5E_PANEL"
 export OMNI_KIT_ACCEPT_EULA=YES
 export PYTHONDONTWRITEBYTECODE=1
 export PATH="$HOME/.local/bin:$PATH"

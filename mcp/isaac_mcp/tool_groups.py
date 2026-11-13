@@ -56,21 +56,15 @@ GROUPS: Dict[str, tuple] = {
     "assets__pack": ("Named asset packs: list, check, dependencies, adopt a folder, pin, build.", {
         "list": "assets__packs", "doctor": "assets__pack_doctor", "dependencies": "assets__dependencies",
         "adopt": "assets__pack_adopt", "pin": "assets__pack_pin", "build": "assets__pack_build"}),
-    "ur5e_dt__scene": ("The RISE lab's UR5e twin: build its scene, load the bench or room, play, stop, save, restore.", {
-        "quick_start": "ur5e_dt__quick_start", "quick_start_with_workstation": "ur5e_dt__quick_start_with_workstation",
-        "quick_start_with_workstation_and_room": "ur5e_dt__quick_start_with_workstation_and_simple_room",
-        "new_stage": "ur5e_dt__new_stage", "load_workstation": "ur5e_dt__load_workstation",
-        "load_room": "ur5e_dt__load_simple_room", "play": "ur5e_dt__play_scene", "stop": "ur5e_dt__stop_scene",
-        "save_state": "ur5e_dt__save_scene_state", "restore_state": "ur5e_dt__restore_scene_state"}),
-    "ur5e_dt__objects": ("The twin's task objects: add, delete, assemble, randomize, place, sync from the real cell.", {
-        "add": "ur5e_dt__add_objects", "delete": "ur5e_dt__delete_objects", "assemble": "ur5e_dt__assemble_objects",
-        "randomize": "ur5e_dt__randomize_object_poses", "randomize_one": "ur5e_dt__randomize_single_object",
-        "set_pose": "ur5e_dt__set_object_pose", "sync_real_poses": "ur5e_dt__sync_real_poses"}),
-    "ur5e_dt__ros": ("The twin's ROS 2 side: camera TF graph, pose publisher, the UR driver.", {
-        "camera_tf_graph": "ur5e_dt__setup_camera_tf_graph", "pose_publisher": "ur5e_dt__setup_pose_publisher",
-        "start_driver": "ur5e_dt__start_ros_driver"}),
-    "ur5e_dt__recording": ("The twin's viewport recorder: start, stop, status.", {
-        "start": "ur5e_dt__start_recording", "stop": "ur5e_dt__stop_recording", "status": "ur5e_dt__get_recording_status"}),
+    "ur5e_dt__workcell": ("Build and inspect the pack-backed workcell.", {
+        "quick_start": "ur5e_dt__workcell_quick_start", "status": "ur5e_dt__workcell_status",
+        "shutdown": "ur5e_dt__workcell_shutdown"}),
+    "ur5e_dt__robot": ("Inspect the workcell robot.", {"status": "ur5e_dt__robot_status"}),
+    "ur5e_dt__perception": ("Inspect workcell cameras.", {"status": "ur5e_dt__perception_status"}),
+    "ur5e_dt__jenga": ("Inspect the workcell Jenga tower.", {"status": "ur5e_dt__jenga_status"}),
+    "ur5e_dt__real2sim": ("Real-to-simulation interface (not implemented).", {"status": "ur5e_dt__real2sim_status"}),
+    "ur5e_dt__planning": ("Planning interface (not implemented).", {"status": "ur5e_dt__planning_status"}),
+    "ur5e_dt__eval": ("Evaluation interface (not implemented).", {"status": "ur5e_dt__eval_status"}),
     "files": ("Files on the simulator's machine: write, read, check size and hash.", {
         "put": "put_file", "get": "get_file", "stat": "stat_file"}),
     "jobs": ("Every job, simulator or process: list, status (with wait_s), log tail, cancel.", {

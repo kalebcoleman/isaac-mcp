@@ -47,9 +47,9 @@ repository. If they are not installed, read the `SKILL.md` on GitHub instead.
 | Robot import and articulations | `urdf-mjcf-to-usd-conversion`, `usd-articulation`, `physx-to-newton-conversion` | `assets__import_path` (URDF, xacro, SDF, MJCF, USD, meshes), then `sim__joints__*` and `sim__body__state` |
 | Scene assembly and transforms | `usd-pipeline`, `usd-composition-architecture`, `spatial-reasoning` | `sim__stage__tree`, `sim__prim__get/find/create/set_transform`; `run_python` only for unsupported edits |
 | Assets will not load | `isaac-sim-assets` | `assets__roots`/`assets__info` for approved projects, `sim__logs__tail`, `run_python` for the asset root setting |
-| Cameras and sensors | `isaac-camera`, `isaac-sim-sensor`, `place-camera-aim-at`, `place-camera-max-coverage` | `sim__camera__create/capture`, `sim__lidar__*`, `screenshot`, `ur5e_dt__start_recording` |
+| Cameras and sensors | `isaac-camera`, `isaac-sim-sensor`, `place-camera-aim-at`, `place-camera-max-coverage` | `sim__camera__create/capture`, `sim__lidar__*`, `screenshot` |
 | Arm control | `manipulation-ik`, `motion-generation` | `sim__joints__command/state/drive`; `ur5e_dt__*` for the twin |
-| ROS 2 | `isaac-sim-ros2-bridge`, `isaac-sim-ros-workspaces` | `ur5e_dt__setup_camera_tf_graph`, `ur5e_dt__start_ros_driver` (fake backend) |
+| ROS 2 | `isaac-sim-ros2-bridge`, `isaac-sim-ros-workspaces` | `sim__ros2__tf_setup` |
 | Navigation | `navigation-primitives`, `occupancy-map`, `isaac-sim-robot-navigation`, `mobility-gen` | `run_python` |
 | Synthetic data | `data-collection-sim`, `action-and-event-data-generation` and the `actor-sdg-*` skills | `sim__camera__capture`, `sim__stage__save`, `get_file` for outputs |
 | Headless or remote runs | `isaac-sim-headless-deployment`, `isaac-sim-web-viewer` | `sim__launch` with `headless=true` |

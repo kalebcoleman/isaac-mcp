@@ -1,7 +1,7 @@
 # Host and bridge tools
 
 The host `isaac-mcp` process speaks MCP to the client. It provides the gateway and desktop tools below even when
-Kit is disconnected. The 23 UR5e tools are also listed from a packaged catalog, even with Kit down; a live twin
+Kit is disconnected. The 9 UR5e tools are also listed from a packaged catalog, even with Kit down; a live twin
 bridge is required to execute them. The seven bridge built-ins are listed the same way, from a packaged snapshot of the bridge's own
 verbs, and run on the selected bridge when called; they can be hidden from the host's MCP list with
 `ISAAC_MCP_BUILTINS=0`. Clients that ignore `tools/list_changed` (OpenCode) therefore see them from startup. Other packs are documented in the [UR5e](TOOLS-UR5E.md) and
@@ -50,7 +50,7 @@ python3 mcp/isaac_mcp/client.py ur5e_dt.play_scene '{}' --port 8766
 ```
 
 The CLI uses canonical bridge names with dots; the MCP server exposes namespaced tools using double underscores,
-such as `ur5e_dt__play_scene`.
+such as `ur5e_dt__workcell_status`.
 
 ## Grouped tools
 
@@ -84,10 +84,13 @@ tool takes it as `sub_action`.
 | `sim__logs` | The simulator's log: tail it, mark a place, summarise. | `tail` (`sim__logs__tail`), `mark` (`sim__logs__mark`), `summary` (`sim__logs__summary`) |
 | `assets__library` | Your asset folders: approved roots, files in one, a search, one file's details. | `roots` (`assets__roots`), `scan` (`assets__scan`), `search` (`assets__search`), `info` (`assets__info`) |
 | `assets__pack` | Named asset packs: list, check, dependencies, adopt a folder, pin, build. | `list` (`assets__packs`), `doctor` (`assets__pack_doctor`), `dependencies` (`assets__dependencies`), `adopt` (`assets__pack_adopt`), `pin` (`assets__pack_pin`), `build` (`assets__pack_build`) |
-| `ur5e_dt__scene` | The RISE lab's UR5e twin: build its scene, load the bench or room, play, stop, save, restore. | `quick_start` (`ur5e_dt__quick_start`), `quick_start_with_workstation` (`ur5e_dt__quick_start_with_workstation`), `quick_start_with_workstation_and_room` (`ur5e_dt__quick_start_with_workstation_and_simple_room`), `new_stage` (`ur5e_dt__new_stage`), `load_workstation` (`ur5e_dt__load_workstation`), `load_room` (`ur5e_dt__load_simple_room`), `play` (`ur5e_dt__play_scene`), `stop` (`ur5e_dt__stop_scene`), `save_state` (`ur5e_dt__save_scene_state`), `restore_state` (`ur5e_dt__restore_scene_state`) |
-| `ur5e_dt__objects` | The twin's task objects: add, delete, assemble, randomize, place, sync from the real cell. | `add` (`ur5e_dt__add_objects`), `delete` (`ur5e_dt__delete_objects`), `assemble` (`ur5e_dt__assemble_objects`), `randomize` (`ur5e_dt__randomize_object_poses`), `randomize_one` (`ur5e_dt__randomize_single_object`), `set_pose` (`ur5e_dt__set_object_pose`), `sync_real_poses` (`ur5e_dt__sync_real_poses`) |
-| `ur5e_dt__ros` | The twin's ROS 2 side: camera TF graph, pose publisher, the UR driver. | `camera_tf_graph` (`ur5e_dt__setup_camera_tf_graph`), `pose_publisher` (`ur5e_dt__setup_pose_publisher`), `start_driver` (`ur5e_dt__start_ros_driver`) |
-| `ur5e_dt__recording` | The twin's viewport recorder: start, stop, status. | `start` (`ur5e_dt__start_recording`), `stop` (`ur5e_dt__stop_recording`), `status` (`ur5e_dt__get_recording_status`) |
+| `ur5e_dt__workcell` | Build and inspect the workcell. | `quick_start` (`ur5e_dt__workcell_quick_start`), `status` (`ur5e_dt__workcell_status`), `shutdown` (`ur5e_dt__workcell_shutdown`) |
+| `ur5e_dt__robot` | Robot report. | `status` (`ur5e_dt__robot_status`) |
+| `ur5e_dt__perception` | Camera report. | `status` (`ur5e_dt__perception_status`) |
+| `ur5e_dt__jenga` | Tower report. | `status` (`ur5e_dt__jenga_status`) |
+| `ur5e_dt__real2sim` | Interface only. | `status` (`ur5e_dt__real2sim_status`) |
+| `ur5e_dt__planning` | Interface only. | `status` (`ur5e_dt__planning_status`) |
+| `ur5e_dt__eval` | Interface only. | `status` (`ur5e_dt__eval_status`) |
 | `files` | Files on the simulator's machine: write, read, check size and hash. | `put` (`put_file`), `get` (`get_file`), `stat` (`stat_file`) |
 | `jobs` | Every job, simulator or process: list, status (with wait_s), log tail, cancel. | `status` (`job_status`), `cancel` (`job_cancel`), `list` (`isaaclab__runs_list`), `tail` (`isaaclab__runs_tail`), `lab_status` (`isaaclab__runs_status`) |
 | `isaaclab__launch` | Start an Isaac Lab job and get its job_id: train, evaluate, play, record or check a task. | `train` (`isaaclab__train`), `eval` (`isaaclab__eval`), `play` (`isaaclab__play`), `record` (`isaaclab__record`), `env_check` (`isaaclab__env_check`) |
@@ -108,8 +111,8 @@ default. Five desktop input tools and four simulator-session tools are opt-in. `
 comma-separated list of group names and aliases; unset or empty means `all`. An unknown name stops the server at
 startup with a message listing the valid names; it never registers nothing silently.
 
-The number registered follows this setting: **134 tools** by default, **+5** with `screen_input` and **+4** with
-`sim_launch`, **143** with both. A client is shown **45 tools** of them ([grouped tools](#grouped-tools)). The server writes its tool count and filters to its log at startup; see
+The number registered follows this setting: **120 tools** by default, **+5** with `screen_input` and **+4** with
+`sim_launch`, **129** with both. A client is shown **48 tools** of them ([grouped tools](#grouped-tools)). The server writes its tool count and filters to its log at startup; see
 [diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log).
 
 | Group | Tools |
@@ -156,7 +159,7 @@ conservative destructive and open-world annotations. To enable the separate simu
   `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 71 generic `sim`/`assets`
   tools from both the offline catalog and live discovery. The default is `1`; UR5e, Isaac Lab
   and optional managed-session tools are unaffected. With standard local groups, opting out
-  keeps the other tiers, leaving 63 tools, offline or with a bridge. These are visibility controls, not isolation.
+  keeps the other tiers, leaving 49 tools, offline or with a bridge. These are visibility controls, not isolation.
 - `ISAAC_MCP_LOCAL_TOOLS` does **not** restrict bridge tools, so `readonly` is a read-only *local* profile, not a read-only
   server: with a bridge connected, bridge tools (`run_python`, `ur5e_dt__*`) remain and can change the scene. See
   [Limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach) for what restricting them takes.
@@ -257,7 +260,7 @@ creates files, and can affect the GPU and network. All four tools have conservat
 
 | MCP tool | Arguments | Use |
 |---|---|---|
-| `sim__launch` | `port=null`, `ros_domain=null`, `headless=false`, `allow_shared_domain=false`, `show_ur5e_panel=false`, `enable_motion_bvh=false`, `physics_backend="physx"` | Start a new process with a local bridge, UR5e tools, chosen ROS domain and separate output/log and persistent Kit settings. Omit `port` and `ros_domain` to take the first free, unclaimed values inside the configured ranges (or upward from the configured port and domain); the result reports what was chosen. Set `show_ur5e_panel=true` to show the panel in a graphical session. Optional Motion BVH enables RTX LiDAR motion effects; `physics_backend="newton"` selects the new process’s installed Newton engine with no fallback, and enables Newton's tensor extension at launch where the release ships it separately, so body and joint reads work from the first Play whoever starts it. Returns a session ID and PID before the bridge is ready. |
+| `sim__launch` | `port=null`, `ros_domain=null`, `headless=false`, `allow_shared_domain=false`, `enable_motion_bvh=false`, `physics_backend="physx"` | Start a new process with a local bridge, workcell tools, chosen ROS domain and separate output/log and persistent Kit settings. Omit `port` and `ros_domain` to select free values. Optional Motion BVH enables RTX LiDAR motion effects; `physics_backend="newton"` selects the installed Newton engine without fallback. Returns a session ID and PID before the bridge is ready. |
 | `sim__list` | `include_exited=false` | List simulators. Managed sessions have `managed: true`, including those started by an earlier server process; only the 3 newest exited ones are listed unless `include_exited=true` (their records and logs stay on disk). Advertised bridges started some other way have `managed: false`, an ID `external-<pid>-<port>`, and their PID, port, app and version from the portfile; the listing does not call them. |
 | `sim__status` | `session_id` | Managed session: check the original PID's identity, bridge and Kit readiness, and current memory snapshot. For a session launched with `physics_backend="newton"` that is running, `physics` reports whether Newton is the active engine and its tensor extension is on (`ready`, `engine`, `tensor_extension_enabled`); wait for `ready: true` before starting work on it. External ID: call that bridge's `status`, report its app, version and readiness, and report `port_conflict` if another PID answers. |
 | `sim__stop` | `session_id`, `expected_pid`, `confirm_discard=false`, `force=false` | With `confirm_discard=true`, send SIGINT to the matching managed process. Without it, the error includes the exact retry call. Poll status for exit; if normal shutdown fails, `force=true` sends SIGKILL. Unsaved changes may be lost. It always refuses an external bridge, because isaac-mcp did not start it. |
@@ -294,8 +297,7 @@ launched sessions; restart a session started with an older version so it receive
 `starting` means Kit reports it is still initializing. `readiness_unknown` means the bridge answered but cannot
 report Kit readiness (for example, an older bridge); verify the application before using scene tools. An unavailable
 bridge reports `starting_or_unresponsive`.
-The UR5e tools are enabled in either mode. To show their tab at launch, add `"show_ur5e_panel":true`.
-The `show_ur5e_panel_on_start` field records the launch choice, not whether it remains visible later.
+The workcell tools are enabled in either mode; the extension has no panel.
 The extension can also be enabled in an already running simulator; see [UR5e tools](TOOLS-UR5E.md#simulator-window).
 Use different ROS domains for isolated simulations; `allow_shared_domain=true` is an explicit exception when they
 intentionally need to communicate. Other ROS nodes must use the matching domain to communicate with a simulator.
@@ -337,7 +339,7 @@ as `scope: "process"`, and a forced stop there may leave child processes that re
 A project with its own environment can have `sim__launch` start its launcher instead of `run.sh`. Set
 `ISAAC_MCP_SIM_LAUNCHER` in the `env` of that project's MCP server entry. It is read when the server starts.
 
-The launcher gets the same arguments as `run.sh` (`--port N`, `--headless`, `--ur5e-panel`, `--motion-bvh`, then
+The launcher gets the same arguments as `run.sh` (`--port N`, `--headless`, `--motion-bvh`, then
 `-- <kit args>`) and the same environment, including `ISAAC_MCP_PHYSICS_BACKEND`, and runs in its own folder. It must
 end by `exec`ing Kit, because the PID that `sim__launch` records must be the simulator; otherwise `sim__status` reports
 `port_conflict`. The file must be executable, belong to you or root, and not be writable by group or others. For

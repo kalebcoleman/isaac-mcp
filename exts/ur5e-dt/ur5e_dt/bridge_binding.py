@@ -3,7 +3,8 @@
 OWNER_ID = "ur5e-dt"
 NAMESPACE = "ur5e_dt"
 DEFAULT_PORT = 8766
-READ_ONLY = frozenset({"get_recording_status"})     # the twin tools a read-only bridge still runs
+READ_ONLY = frozenset({"workcell_status", "robot_status", "perception_status", "jenga_status",
+                       "real2sim_status", "planning_status", "eval_status"})
 
 
 def attach(bridge, registry, instance, tool_type, *, requested_port=None, configured_port=None, host="localhost"):

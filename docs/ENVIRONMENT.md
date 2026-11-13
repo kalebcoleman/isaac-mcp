@@ -64,7 +64,6 @@ Details are in the [Isaac Lab reference](TOOLS-ISAACLAB.md).
 | `ISAAC_MCP_PYTHON` | see below | Simulator interpreter. `UR5E_DT_PYTHON` is a deprecated alias. |
 | `UR5E_DT_PORT` | `8766` | Bridge port for `run.sh`. `ISAAC_SIM_PORT` is an older alias; `--port` overrides both. |
 | `ISAAC_MCP_PHYSICS_BACKEND` | `physx` | Engine for a new session, same as `--physics-backend`. `newton` is experimental. |
-| `UR5E_DT_SHOW_PANEL` | `0` | `1` shows the UR5e panel, same as `--ur5e-panel`. |
 | `ISAAC_MCP_NO_HOT_RELOAD` | unset | `1` stops Kit reloading extensions when their files change, same as `--no-hot-reload`. `run.sh` passes `--/app/extensions/fsWatcherEnabled=0`. Use it for recorded runs, or when another process edits this checkout. `status` reports `extension.hot_reload`. See [hot reload](TOOLS-SCENE.md#extension-hot-reload). |
 | `UR5E_DT_HEADLESS` | `0` | Set by `run.sh --headless`. |
 | `OMNI_KIT_ACCEPT_EULA` | unset | `YES` accepts NVIDIA's EULA, same as the installer's `--accept-eula`. |

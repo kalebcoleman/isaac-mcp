@@ -171,8 +171,8 @@ Full details, including the UR5e twin's files: [Assets](docs/ASSETS.md).
 
 ## The tools
 
-A client is shown **45 tools** by default. Related tools are one tool with an `action` argument, for example
-`sim__prim(action="create")`; behind them are **134 single-purpose tools** (**143** with both optional groups), each
+A client is shown **48 tools** by default. Related tools are one tool with an `action` argument, for example
+`sim__prim(action="create")`; behind them are **120 single-purpose tools** (**129** with both optional groups), each
 still callable by its own name. The [table of groups](docs/TOOLS-HOST.md#grouped-tools) lists them all. Most scene work
 uses the first row.
 
@@ -182,7 +182,7 @@ uses the first row.
 | Isaac Lab | 18 | Find an install, list tasks, check an environment, train, evaluate, play and record, check GPU room, wait for a job and read its exit code and run folder, summarise evaluation pass counts, register baseline checkpoints, read metrics and checkpoints, cancel jobs. `run_script` runs any Python script as a managed job. No simulator needed. |
 | Host gateway and desktop | 13 | `isaac_help`, `refresh_tools`, `use_bridge`, and screenshots, recordings and window tools. |
 | Bridge built-ins | 9 | `status` (where am I, in one call), `run_python`, `job_status` and `job_cancel` for long simulator work, and file transfer into and out of the running simulator. |
-| UR5e digital twin | 23 | The RISE lab's UR5e twin, Kaleb's work with that robot. Only needed for that twin. |
+| UR5e digital twin | 9 | The RISE lab's UR5e twin, Kaleb's work with that robot. Only needed for that twin. |
 | Optional: desktop input, managed sessions | 9 | `window_*` desktop input and `sim__launch` managed simulator sessions, when you switch them on. |
 
 The ones you will meet first:

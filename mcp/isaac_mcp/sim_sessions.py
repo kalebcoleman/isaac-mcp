@@ -701,7 +701,7 @@ def _interpreter_release(env: Mapping[str, str], root: Path) -> str | None:
 
 def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | None = None,
             headless: bool = False, allow_shared_domain: bool = False,
-            show_ur5e_panel: bool = False, enable_motion_bvh: bool = False,
+            enable_motion_bvh: bool = False,
             physics_backend: Literal["physx", "newton"] = "physx") -> dict:
     if physics_backend not in ("physx", "newton"):
         raise ValueError("physics_backend must be physx or newton")
@@ -797,7 +797,6 @@ def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | N
             child_env.setdefault("ISAAC_MCP_PROJECT", str(project))
         user_config = directory / "user.config.json"
         args = ([str(launcher), "--port", str(port)] + (["--headless"] if headless else [])
-                + (["--ur5e-panel"] if show_ur5e_panel else [])
                 + (["--motion-bvh"] if enable_motion_bvh else [])
                 + ["--", f"--/app/userConfigPath={user_config}"])
         with log.open("wb") as stream:
@@ -816,7 +815,6 @@ def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | N
             raise RuntimeError(f"could not record simulator process identity; stopped PID {proc.pid}; see {log}")
         record = {"id": session_id, "pid": proc.pid, "start_ticks": identity[1], "boot_id": boot_id, "port": port,
                   "ros_domain": ros_domain, "headless": headless,
-                  "show_ur5e_panel_on_start": show_ur5e_panel,
                   "enable_motion_bvh": enable_motion_bvh,
                   "physics_backend": physics_backend,
                   **({"launcher": str(custom)} if custom is not None else {}),
@@ -979,7 +977,6 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
                    ros_domain: Annotated[int | None, Field(description="ROS_DOMAIN_ID 0-231. Omit for the first free, unclaimed domain in ISAAC_MCP_ROS_DOMAIN_RANGE, or upward from this server's domain.")] = None,
                    headless: Annotated[bool, Field(description="true: no window.")] = False,
                    allow_shared_domain: Annotated[bool, Field(description="true: allow a ROS domain another session already uses.")] = False,
-                   show_ur5e_panel: Annotated[bool, Field(description="true: show the UR5e twin's panel in a graphical session.")] = False,
                    enable_motion_bvh: Annotated[bool, Field(description="true: accurate RTX LiDAR motion compensation; costs rendering time and GPU memory.")] = False,
                    physics_backend: Annotated[Literal["physx", "newton"], Field(description="Engine for this new process. Missing Newton dependencies fail with no fallback.")] = "physx") -> dict:
         """Launch a separate managed Isaac Sim instance, when explicitly asked.
@@ -991,7 +988,7 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
         Launching runs configured local code: run.sh, or the launcher in the server's
         ISAAC_MCP_SIM_LAUNCHER setting. No tool argument can name a command.
         """
-        record = _launch(settings, port, ros_domain, headless, allow_shared_domain, show_ur5e_panel, enable_motion_bvh, physics_backend)
+        record = _launch(settings, port, ros_domain, headless, allow_shared_domain, enable_motion_bvh, physics_backend)
         if on_launch is not None:
             on_launch(record)
         return record
