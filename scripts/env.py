@@ -58,20 +58,6 @@ Set `TWINSMITH_WORKSPACE` to this folder to make it the default.
 """
 
 
-# ---------------------------------------------------------------- old variable names
-
-def _apply_old_names(env):
-    """The old variable names keep working for one release: see mcp/twinsmith/legacy.py."""
-    import importlib.util
-
-    path = REPO / "mcp" / "twinsmith" / "legacy.py"
-    if path.is_file():
-        spec = importlib.util.spec_from_file_location("twinsmith_legacy", path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        module.apply(env)
-
-
 # ---------------------------------------------------------------- versions
 
 def parse_version(text):
@@ -511,7 +497,6 @@ def main(argv=None):
               file=sys.stderr)
         return 2
     args = build_parser().parse_args(argv)
-    _apply_old_names(os.environ)
     env = os.environ
     return {"find": cmd_find, "resolve-python": cmd_resolve, "init": cmd_init,
             "where": cmd_where}[args.cmd](args, env)

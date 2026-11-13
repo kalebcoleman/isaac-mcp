@@ -5,38 +5,23 @@ persistent form into a Kit app's user configuration. Stdlib only; ``carb`` is im
 """
 
 import os
-import sys
 from typing import Any, Optional
 
 SETTINGS_SUBTREE = "/persistent/exts/twinsmith.bridge"
 
-_LEGACY = None
+# Variables of isaac-mcp (before 0.3.0) that nothing reads now. The bridge refuses to listen when one is set, as the
+# host does (mcp/twinsmith/config.py, which has the same rule): an old ISAAC_MCP_READ_ONLY=1 must not leave a
+# writable simulator without a word. ISAAC_MCP_ASSET_ROOT is a permanent alias of TWINSMITH_ASSET_ROOT, not one of them.
+OLD_PREFIXES = ("ISAAC_MCP_", "UR5E_DT_")
+OLD_VARIABLES = ("ISAAC_SIM_PORT", "ISAAC_SIM_PYTHON", "ISAACLAB_JOBS_DIR")
+ASSET_ROOT_ALIAS = "ISAAC_MCP_ASSET_ROOT"
 
 
-def legacy_module():
-    """``mcp/twinsmith/legacy.py``, loaded by its path (it is standard library only): the one file that holds the
-    old names and the table of old variable names. None when this extension is not inside a checkout."""
-    global _LEGACY
-    if _LEGACY is None:
-        import importlib.util
-
-        path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "mcp",
-                                             "twinsmith", "legacy.py"))
-        spec = importlib.util.spec_from_file_location("twinsmith_legacy", path) if os.path.isfile(path) else None
-        if spec is None:
-            _LEGACY = False
-        else:
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[spec.name] = module
-            spec.loader.exec_module(module)
-            _LEGACY = module
-    return _LEGACY or None
-
-
-def apply_legacy_aliases() -> list:
-    """Make the old variable names work for one release, as the host does (see legacy.py)."""
-    module = legacy_module()
-    return module.apply() if module else []
+def old_settings(environ=None) -> list:
+    """The isaac-mcp variables that are set, sorted."""
+    environ = os.environ if environ is None else environ
+    return sorted(name for name, value in environ.items() if str(value).strip() and name != ASSET_ROOT_ALIAS
+                  and (name.startswith(OLD_PREFIXES) or name in OLD_VARIABLES))
 
 
 class Knob:

@@ -15,17 +15,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import legacy
-
-LOG = logging.getLogger(__name__)
-
 ROOT_ENV = "TWINSMITH_ASSET_ROOT"
+# The asset root's name before 0.3.0. It stays a permanent alias of ROOT_ENV, with no warning and no removal date:
+# the work cell's lead asked for this. exts/workcell/workcell/asset_pack.py reads it too.
+ASSET_ROOT_ALIAS = "ISAAC_MCP_ASSET_ROOT"
 WORKSPACE_ENV = "TWINSMITH_WORKSPACE"
 PROJECT_ENV = "TWINSMITH_PROJECT"
 PROJECT_FILE = "twinsmith.json"
@@ -40,11 +38,6 @@ MAX_REPORTED = 200
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 
-# Environment variables the old model read. They are not read any more; if one is set the host says
-# once what replaces it, instead of ignoring it silently.
-REMOVED_ENVIRONMENT = {name: text.format(root=ROOT_ENV) for name, text in legacy.REMOVED_ASSET_SETTINGS.items()}
-_announced: set[str] = set()
-
 
 class ManifestError(ValueError):
     """A pack is missing, unsafe, or does not match its manifest."""
@@ -54,28 +47,6 @@ class RootError(ValueError):
     """No asset root could be found, or the setting is not usable."""
 
     code = "NO_ASSET_ROOT"
-
-
-# ---------------------------------------------------------------------------
-# Removed settings
-# ---------------------------------------------------------------------------
-
-
-def removed_environment(environ=None) -> list[str]:
-    """One sentence for each removed variable that is set in *environ* (default: the process)."""
-    environ = os.environ if environ is None else environ
-    return [f"{name} is no longer read. {text}" for name, text in REMOVED_ENVIRONMENT.items()
-            if str(environ.get(name, "")).strip()]
-
-
-def announce_removed_environment(environ=None) -> list[str]:
-    """Like :func:`removed_environment`, and logs each sentence once per process (stderr, never stdout)."""
-    messages = removed_environment(environ)
-    for message in messages:
-        if message not in _announced:
-            _announced.add(message)
-            LOG.warning(message)
-    return messages
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +102,7 @@ def workspace_dir(environ=None) -> Path:
 def resolve_asset_root(environ=None, workspace=None) -> AssetRoot:
     """The one asset root, in this order:
 
-    1. ``$TWINSMITH_ASSET_ROOT``.
+    1. ``$TWINSMITH_ASSET_ROOT`` (or its permanent alias ``$ISAAC_MCP_ASSET_ROOT``).
     2. ``<workspace>/assets`` if that folder exists.
     3. ``<workspace>/isaac-mcp-assets`` if it exists (the name is transitional: the result says so).
 
@@ -139,22 +110,20 @@ def resolve_asset_root(environ=None, workspace=None) -> AssetRoot:
     naming the setting.
     """
     environ = os.environ if environ is None else environ
-    warnings = list(announce_removed_environment(environ))
-    configured = str(environ.get(ROOT_ENV) or environ.get(legacy.ASSET_ROOT_ALIAS) or "").strip()   # the alias is permanent
+    configured = str(environ.get(ROOT_ENV) or environ.get(ASSET_ROOT_ALIAS) or "").strip()   # the alias is permanent
     if configured:
         path = Path(configured).expanduser()
         if not path.is_absolute():
             raise RootError(f"{ROOT_ENV} must be an absolute path, not {configured!r}.")
-        return AssetRoot(path.resolve(), "environment", tuple(warnings))
+        return AssetRoot(path.resolve(), "environment")
     base = Path(workspace).expanduser().resolve() if workspace is not None else workspace_dir(environ)
     standard = base / STANDARD_DIR
     if standard.is_dir():
-        return AssetRoot(standard, "workspace", tuple(warnings))
+        return AssetRoot(standard, "workspace")
     transitional = base / TRANSITIONAL_DIR
     if transitional.is_dir():
-        warnings.append(f"Using {transitional}: the name isaac-mcp-assets is transitional. Rename it to "
-                        f"{STANDARD_DIR}/ or set {ROOT_ENV} to it.")
-        return AssetRoot(transitional, "transitional", tuple(warnings))
+        return AssetRoot(transitional, "transitional", (f"Using {transitional}: the name isaac-mcp-assets is transitional. "
+                                                        f"Rename it to {STANDARD_DIR}/ or set {ROOT_ENV} to it.",))
     raise RootError(f"No asset root: neither {standard} nor {transitional} exists. Set {ROOT_ENV} to the folder "
                     f"that holds your packs (<pack id>/<version>/pack.yaml), or create {standard} "
                     f"(the workspace is {WORKSPACE_ENV}, else the folder holding the checkout if it has envs/ or assets/, else "
@@ -173,15 +142,15 @@ def project_file() -> Path | None:
     if override:
         path = Path(override).expanduser()
         if path.is_dir():
-            path = legacy.choose_file(path / PROJECT_FILE, path / legacy.OLD_PROJECT_JSON) or path / PROJECT_FILE
+            path = path / PROJECT_FILE
         return path.resolve() if path.is_file() else None
     try:
         here = Path.cwd().resolve()
     except OSError:
         return None
     for directory in (here, *here.parents):
-        candidate = legacy.choose_file(directory / PROJECT_FILE, directory / legacy.OLD_PROJECT_JSON)
-        if candidate is not None:
+        candidate = directory / PROJECT_FILE
+        if candidate.is_file():
             return candidate
     return None
 

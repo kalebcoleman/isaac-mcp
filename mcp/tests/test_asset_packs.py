@@ -16,7 +16,7 @@ from twinsmith import pack_manifest as pm
 from twinsmith.project_assets import Broker
 
 REPO = Path(__file__).resolve().parents[2]
-ENV = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_WORKSPACE", "TWINSMITH_PROJECT", "TWINSMITH_USD_PYTHON", *pm.REMOVED_ENVIRONMENT)
+ENV = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_WORKSPACE", "TWINSMITH_PROJECT", "TWINSMITH_USD_PYTHON")
 PROVENANCE = dict(source="unit test", license="test fixture")
 
 
@@ -47,7 +47,6 @@ def make_pack(root: Path, pack_id: str, version: str, files: dict, **extra) -> P
 def env(tmp_path, monkeypatch):
     for name in ENV:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(pm, "_announced", set())
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "home" / ".cache"))
     monkeypatch.setenv("TWINSMITH_PROJECT", str(tmp_path / "no-project"))
@@ -575,7 +574,7 @@ def test_convert_old_takes_hashes_from_the_files_not_from_sha256sums(env):
     put(old, "objects/fmb1.json", b"{}")
     put(old, "Isaac/Materials/m.mdl", b"mdl")
     (old / "SHA256SUMS").write_text(f"{'0' * 64}  robot/ur5e.usd\n")  # a wrong pin: ignored
-    (old / __import__("twinsmith.legacy", fromlist=["OLD_PACK_FILE"]).OLD_PACK_FILE).write_text('{"version": 1, "entries": []}')
+    (old / packs.OLD_FORMAT_FILES[1]).write_text('{"version": 1, "entries": []}')
     report = packs.convert_old(old, source_note="lab files", license_="private")
     assert report["pack"] == "workcell/v1" and report["files"] == 3 and report["converted_from"] == str(old)
     manifest = verifies(env, "workcell").manifest
@@ -630,13 +629,6 @@ def test_packs_tool_without_an_asset_root_says_which_setting_to_make(broker, mon
     result = tool("assets.packs", broker)
     assert result["asset_root"] is None and "TWINSMITH_ASSET_ROOT" in result["asset_root_error"] and result["listing"]["packs"] == []
     refused("NO_ASSET_ROOT", "assets.pack_doctor", broker, pack="p/v1")
-
-
-def test_packs_tool_says_once_what_replaces_a_removed_variable(env, broker, monkeypatch):
-    removed = next(iter(pm.REMOVED_ENVIRONMENT))
-    monkeypatch.setenv(removed, "1")
-    result = tool("assets.packs", broker)
-    assert any(removed in w and "TWINSMITH_ASSET_ROOT" in w for w in result["warnings"])
 
 
 def adopt(broker, **params):

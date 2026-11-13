@@ -132,6 +132,6 @@ Handshakes between the server's own processes. They are not meant to be set by h
 | `TWINSMITH_TF_DOCTOR_REEXEC` | unset | `scripts/ros2_tf_doctor.py` | Stops the doctor re-running itself in a second environment more than once. |
 
 A managed session's Kit also receives `TWINSMITH_SIM_SESSION_ID` and `TWINSMITH_SIM_SESSION_DIR` from the host; no code reads
-them, they identify the process to a person. Variables that were removed with the toolsets and with the old asset model are refused with the replacement, not read; see [MIGRATING.md](MIGRATING.md#settings-that-were-already-removed).
+them, they identify the process to a person. The pre-0.3.0 names of these variables, and the ones removed with the toolsets and the old asset model, are not read: a server or bridge that finds one set refuses to start and names it; see [MIGRATING.md](MIGRATING.md#environment-variables).
 
-Every variable above had another name before 0.3.0. [MIGRATING.md](MIGRATING.md#environment-variables) lists them; the old names still work in 0.3.x and print one warning each.
+Every variable above had another name before 0.3.0. [MIGRATING.md](MIGRATING.md#environment-variables) lists them. 0.3.x still read the old names; they are no longer read, except `ISAAC_MCP_ASSET_ROOT`, a permanent alias of `TWINSMITH_ASSET_ROOT`.

@@ -7,10 +7,6 @@ inside a running Isaac Sim and needs only the standard library. Both are importe
 
 import importlib
 
-from . import legacy
-
-legacy.apply()      # old environment names keep working for one release (see legacy.py)
-
 _LAZY = {"client": "client", "BridgeClient": "client", "BridgeError": "client", "call": "client",
          "server": "server", "mcp": "server", "main": "server"}
 __all__ = sorted(_LAZY)

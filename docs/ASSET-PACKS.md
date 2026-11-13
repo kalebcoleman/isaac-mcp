@@ -162,7 +162,7 @@ loaders. Do not copy a version that is not `redistributable` to a place you do n
 
 ## Settings that no longer exist
 
-The settings of the old asset model are not read. If one is set, the host says once which setting replaces it; the names and their replacements are in [MIGRATING.md](MIGRATING.md#settings-that-were-already-removed). The old default pack, the NVIDIA download fallback, `scripts/fetch_ur5e_assets.py`, `migrate`, `SHA256SUMS` pins and the old build-description file were removed with them.
+The settings of the old asset model are not read. If one is set, the MCP server refuses to start and names it; the names and their replacements are in [MIGRATING.md](MIGRATING.md#environment-variables). The old default pack, the NVIDIA download fallback, `scripts/fetch_ur5e_assets.py`, `migrate`, `SHA256SUMS` pins and the old build-description file were removed with them.
 
 ## Provenance
 
