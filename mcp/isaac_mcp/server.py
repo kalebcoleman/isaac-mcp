@@ -853,10 +853,11 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
         elif around["bridges"]:
             message = (f"Nothing answers on the port this server is set to use ({error}), but other bridges are "
                        f"advertised: call use_bridge(port={around['bridges'][0]['port']}) after confirming which "
-                       "simulator you mean.")
+                       "simulator you mean. The robosim, isaaclab (lab) and screen tools need no bridge.")
         else:
             message = ("Nothing is running: no Isaac Sim bridge answers. Start your configured simulator, then "
-                       "refresh_tools(wait_s=120). See toolsets for available host tools and optional launch support.")
+                       "refresh_tools(wait_s=120). See toolsets for available host tools and optional launch support. "
+                       "The robosim, isaaclab (lab) and screen tools need no bridge.")
         return {"running": False, "message": message, **around, "host": _host_brief(),
                 "physics": _physics_status(state), "toolsets": toolsets.describe(state.toolsets, state.runtime_enable)}
     if not isinstance(identity, dict):
@@ -1324,7 +1325,8 @@ async def _change_toolsets(server: FastMCP, action: str, names: Optional[List[st
             sorted(set(after_listed) - set(before_listed)) if action == "enable" else sorted(set(before_listed) - set(after_listed)),
         "on": [name for name in toolsets.TOOLSETS if name in state.toolsets],
         "scope": RUNTIME_SCOPE,
-        "note": ("Clients that ignore tools/list_changed can call the tools named in tools_available directly."
+        "note": ("Clients that ignore tools/list_changed can call the tools named in tools_available directly. "
+                 "If your client loads tools lazily, search for the tool by name (for example robosim) before calling it."
                  if action == "enable" and changed else "") + (" " + note if note else ""),
     }
     return {key: value for key, value in result.items() if value not in ("", None)}
