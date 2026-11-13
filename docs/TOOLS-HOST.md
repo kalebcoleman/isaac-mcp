@@ -87,7 +87,7 @@ tool takes it as `sub_action`.
 | `ur5e_dt__workcell` | Build and inspect the workcell. | `quick_start` (`ur5e_dt__workcell_quick_start`), `status` (`ur5e_dt__workcell_status`), `shutdown` (`ur5e_dt__workcell_shutdown`) |
 | `ur5e_dt__robot` | Robot report. | `status` (`ur5e_dt__robot_status`) |
 | `ur5e_dt__perception` | Camera report. | `status` (`ur5e_dt__perception_status`) |
-| `ur5e_dt__jenga` | Tower report. | `status` (`ur5e_dt__jenga_status`) |
+| `ur5e_dt__jenga` | Tower report and seeded rebuild. | `status` (`ur5e_dt__jenga_status`), `build` (`ur5e_dt__jenga_build`) |
 | `ur5e_dt__real2sim` | Interface only. | `status` (`ur5e_dt__real2sim_status`) |
 | `ur5e_dt__planning` | Interface only. | `status` (`ur5e_dt__planning_status`) |
 | `ur5e_dt__eval` | Interface only. | `status` (`ur5e_dt__eval_status`) |
@@ -111,8 +111,8 @@ default. Five desktop input tools and four simulator-session tools are opt-in. `
 comma-separated list of group names and aliases; unset or empty means `all`. An unknown name stops the server at
 startup with a message listing the valid names; it never registers nothing silently.
 
-The number registered follows this setting: **120 tools** by default, **+5** with `screen_input` and **+4** with
-`sim_launch`, **129** with both. A client is shown **48 tools** of them ([grouped tools](#grouped-tools)). The server writes its tool count and filters to its log at startup; see
+The number registered follows this setting: **121 tools** by default, **+5** with `screen_input` and **+4** with
+`sim_launch`, **130** with both. A client is shown **48 tools** of them ([grouped tools](#grouped-tools)). The server writes its tool count and filters to its log at startup; see
 [diagnosing disconnects](MCP-SERVER.md#diagnosing-disconnects-the-server-log).
 
 | Group | Tools |
@@ -159,7 +159,7 @@ conservative destructive and open-world annotations. To enable the separate simu
   `ISAAC_MCP_SCENE_TOOLS=0`, an optional startup preference hiding all 71 generic `sim`/`assets`
   tools from both the offline catalog and live discovery. The default is `1`; UR5e, Isaac Lab
   and optional managed-session tools are unaffected. With standard local groups, opting out
-  keeps the other tiers, leaving 49 tools, offline or with a bridge. These are visibility controls, not isolation.
+  keeps the other tiers, leaving 50 tools, offline or with a bridge. These are visibility controls, not isolation.
 - `ISAAC_MCP_LOCAL_TOOLS` does **not** restrict bridge tools, so `readonly` is a read-only *local* profile, not a read-only
   server: with a bridge connected, bridge tools (`run_python`, `ur5e_dt__*`) remain and can change the scene. See
   [Limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach) for what restricting them takes.

@@ -237,7 +237,7 @@ optional USD stage. It checks that:
 The audit walks the stage instead of trusting a manually curated list. A mesh anywhere
 outside a mapped part, or a report part whose prim is missing, fails the audit.
 
-## PhysX smoke
+## PhysX authoring/BOM smoke
 
 The release target is PhysX. Run the smoke only against an explicitly selected bridge and
 configuration:
@@ -250,7 +250,11 @@ python3 <repo>/scripts/workcell_smoke.py --host 127.0.0.1 --port <port> \
 `--config` must be absolute on the Kit host. `--discard-changes` is allowed only with
 explicit authorization because the smoke replaces the stage. The smoke checks the backend,
 stopped timeline, units, gravity, Jenga layout and per-part attributes. Pair it with the BOM
-audit on the returned parts before claiming a pass.
+audit on the returned parts before claiming a pass. Global gravity remains 9.81 m/s² in
+both modes; mirror mode disables gravity only on robot assembly rigid bodies. This is
+**stopped-stage authoring/BOM validation only**: no physics steps or rendered captures
+are performed. Dynamics and full-cell, wrist and overhead captures require separate
+home-PC qualification before claiming a runtime pass.
 
 ## Current status and gaps
 

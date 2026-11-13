@@ -181,6 +181,7 @@ class Workcell:
             stage = context.get_stage()
             UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
             UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+            UsdPhysics.SetStageKilogramsPerUnit(stage, 1.0)
             world = UsdGeom.Xform.Define(stage, "/World")
             stage.SetDefaultPrim(world.GetPrim())
             physics = UsdPhysics.Scene.Define(stage, "/World/PhysicsScene")
