@@ -27,6 +27,13 @@ def engine(device):
             "scope": "Compares images. It does not fit mass or friction."}
 
 
+ENGINES_SHORT = {"cpu": "MuJoCo (CPU)", "cuda:0": "MuJoCo-Warp (GPU)"}
+
+
+def engine_short(device):
+    return ENGINES_SHORT.get(device, "unknown")
+
+
 def _number(value, what):
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         raise ValueError(f"{what} must be a finite number.")
@@ -183,14 +190,26 @@ def centroid_displacement(first, last, name):
         sides[side] = None if a is None or b is None else [round(b[0] - a[0], 1), round(b[1] - a[1], 1)]
     clip, sim = sides["photo"], sides["sim"]
     entry = {"clip_px": clip, "sim_px": sim, "difference_px": None, "same_sign_x": None, "same_sign_y": None,
-             "magnitude_ratio": None}
+             "magnitude_ratio": None, "clip_length_px": None, "sim_length_px": None, "direction_error_deg": None}
     if clip is not None and sim is not None:
         entry["difference_px"] = [round(sim[0] - clip[0], 1), round(sim[1] - clip[1], 1)]
         entry["same_sign_x"] = bool(clip[0] * sim[0] > 0)
         entry["same_sign_y"] = bool(clip[1] * sim[1] > 0)
         length = math.hypot(*clip)
+        entry["clip_length_px"] = round(length, 1)
+        entry["sim_length_px"] = round(math.hypot(*sim), 1)
         entry["magnitude_ratio"] = round(math.hypot(*sim) / length, 3) if length else None
+        entry["direction_error_deg"] = direction_error_deg(clip, sim)
     return entry
+
+
+def direction_error_deg(a, b):
+    """The angle between two image displacements in degrees (0 to 180), or None if either has no length."""
+    la, lb = math.hypot(*a), math.hypot(*b)
+    if la < 1e-9 or lb < 1e-9:
+        return None
+    cosine = max(-1.0, min(1.0, (a[0] * b[0] + a[1] * b[1]) / (la * lb)))
+    return round(math.degrees(math.acos(cosine)), 1)
 
 
 _BODY_WRITE = re.compile(r"\bbody_qd?\s*\.\s*assign\s*\(")
@@ -206,3 +225,192 @@ def scene_problems(text):
             "rollout(push={'waypoints': [[seconds, x, y], ...]}), or write the free body's joint_q and joint_qd slices "
             "(entity.coord_start and entity.dof_start, as the template's place_free_body does).")
     return problems
+
+
+# ---- the bridge's own verdict --------------------------------------------------------------------
+VERDICT_THRESHOLDS = {
+    "matches": "magnitude_ratio from 0.5 to 2.0, direction_error_deg below 30 and end_frame_overlap above 0.2",
+    "moved, but not like the clip": "moved 3 px or more but at least one test for 'matches' failed",
+    "did not move": "the simulated displacement is under 3 px",
+    "magnitude_ratio_range": [0.5, 2.0], "direction_error_deg_below": 30.0, "end_frame_overlap_above": 0.2,
+    "did_not_move_below_px": 3.0,
+    "definitions": "displacement = image-centroid displacement of the mask from the first to the last anchor; "
+                   "magnitude_ratio = sim length / clip length; direction_error_deg = angle between the two "
+                   "displacements; end_frame_overlap = RSS's IoU at the last anchor.",
+}
+VERDICT_ORDER = ("did not move", "moved, but not like the clip", "matches")
+
+
+def bridge_verdict(moved, end_overlap):
+    """The bridge's own verdict for one object from its centroid displacement entry and end-frame IoU.
+
+    ``matches`` needs magnitude ratio 0.5-2.0, direction error under 30 degrees and end overlap above 0.2;
+    ``did not move`` is a simulated displacement under 3 px; anything else is ``moved, but not like the
+    clip`` and lists the numbers that failed. RSS's own score and verdict are not used.
+    """
+    t = VERDICT_THRESHOLDS
+    numbers = {"clip_px": moved.get("clip_px"), "sim_px": moved.get("sim_px"), "magnitude_ratio": moved.get("magnitude_ratio"),
+               "direction_error_deg": moved.get("direction_error_deg"), "end_frame_overlap": end_overlap,
+               "sim_length_px": moved.get("sim_length_px"), "clip_length_px": moved.get("clip_length_px")}
+    if moved.get("sim_px") is None or moved.get("clip_px") is None:
+        return {"verdict": "did not move", "failed": ["the object was not found in the masks at the first and last anchors"],
+                "numbers": numbers}
+    if moved["sim_length_px"] < t["did_not_move_below_px"]:
+        also = " (the clip's block moved only %.1f px too)" % moved["clip_length_px"] if moved["clip_length_px"] < t["did_not_move_below_px"] else ""
+        return {"verdict": "did not move", "numbers": numbers,
+                "failed": [f"simulated displacement {moved['sim_length_px']} px is under {t['did_not_move_below_px']:g} px{also}"]}
+    failed = []
+    ratio, error = moved["magnitude_ratio"], moved["direction_error_deg"]
+    low, high = t["magnitude_ratio_range"]
+    if ratio is None or not low <= ratio <= high:
+        failed.append(f"magnitude_ratio {ratio} is outside {low:g} to {high:g}")
+    if error is None or error >= t["direction_error_deg_below"]:
+        failed.append(f"direction_error_deg {error} is not under {t['direction_error_deg_below']:g}")
+    if end_overlap is None or end_overlap <= t["end_frame_overlap_above"]:
+        failed.append(f"end_frame_overlap {end_overlap} is not above {t['end_frame_overlap_above']:g}")
+    return {"verdict": "moved, but not like the clip" if failed else "matches", "failed": failed, "numbers": numbers}
+
+
+def overall_verdict(by_object):
+    """The least favourable per-object verdict (None for an empty mapping)."""
+    verdicts = [entry["verdict"] for entry in by_object.values()]
+    return min(verdicts, key=VERDICT_ORDER.index) if verdicts else None
+
+
+# ---- tune_push: a bounded search over the pusher path --------------------------------------------
+TUNE_DEFAULT_TRIALS = 6
+TUNE_MAX_TRIALS = 12
+TUNE_RATIO_OK = (0.8, 1.25)
+TUNE_DIRECTION_OK_DEG = 15.0
+TUNE_SCOPE = ("This tunes the PUSH PATH (the pusher's waypoints) so the block's image displacement matches the clip. "
+              "It does not change mass, friction, size or any other scene value, and it matches displacement only, "
+              "not the block's rotation.")
+
+
+def image_axes(eye, target):
+    """Orthographic image axes of a camera whose up is +z: ``((right_x, right_y), (down_x, down_y))``.
+
+    A table vector ``(vx, vy)`` appears in the image as ``(dot(v, right), dot(v, down))`` (up to scale).
+    """
+    f = [t - e for t, e in zip(target, eye)]
+    norm = math.sqrt(sum(c * c for c in f))
+    f = [c / norm for c in f]
+    right = [f[1], -f[0], 0.0]  # f x (0, 0, 1)
+    scale = math.hypot(right[0], right[1])
+    if scale < 1e-9:
+        raise ValueError("The camera looks straight down the vertical; its image axes are undefined.")
+    right = [c / scale for c in right]
+    up = [right[1] * f[2] - right[2] * f[1], right[2] * f[0] - right[0] * f[2], right[0] * f[1] - right[1] * f[0]]  # right x f
+    return (right[0], right[1]), (-up[0], -up[1])
+
+
+def table_angle(image_vector, axes):
+    """The direction of an image displacement on the table (radians, counter-clockwise from +x)."""
+    (rx, ry), (dx, dy) = axes
+    det = rx * dy - ry * dx
+    vx = (image_vector[0] * dy - image_vector[1] * ry) / det
+    vy = (rx * image_vector[1] - dx * image_vector[0]) / det
+    return math.atan2(vy, vx)
+
+
+def wrap_angle(angle):
+    return (angle + math.pi) % (2 * math.pi) - math.pi
+
+
+def transform_push(push, pivot, scale, rotation):
+    """The push with every waypoint scaled by ``scale`` and turned by ``rotation`` (radians) about ``pivot``.
+
+    The pivot is the object's start position, so the whole path, the approach and the travel past the
+    object alike, grows or shrinks together and the pusher still passes through the object.
+    """
+    c, s = math.cos(rotation), math.sin(rotation)
+    waypoints = []
+    for t, x, y in push["waypoints"]:
+        dx, dy = x - pivot[0], y - pivot[1]
+        waypoints.append([t, round(pivot[0] + scale * (c * dx - s * dy), 5), round(pivot[1] + scale * (s * dx + c * dy), 5)])
+    return {"waypoints": waypoints, "object_velocity": push.get("object_velocity")}
+
+
+def aimed_push(push, pivot, angle, reach=0.10, run_up=0.15):
+    """A straight push through ``pivot`` heading along ``angle``: it starts ``run_up`` before the pivot and ends
+    ``reach`` past it, over the same times as ``push``."""
+    u = (math.cos(angle), math.sin(angle))
+    times = [w[0] for w in push["waypoints"]]
+    return {"waypoints": [[times[0], round(pivot[0] - run_up * u[0], 5), round(pivot[1] - run_up * u[1], 5)],
+                          [times[-1], round(pivot[0] + reach * u[0], 5), round(pivot[1] + reach * u[1], 5)]],
+            "object_velocity": push.get("object_velocity")}
+
+
+def measure(clip_px, sim_px, axes):
+    """How the simulated displacement compares with the clip's: ratio, direction errors, the cost to minimise."""
+    clip_len, sim_len = math.hypot(*clip_px), math.hypot(*sim_px)
+    out = {"sim_length_px": round(sim_len, 1), "clip_length_px": round(clip_len, 1), "magnitude_ratio": None,
+           "direction_error_deg": None, "signed_error_rad": None, "moved": sim_len >= VERDICT_THRESHOLDS["did_not_move_below_px"]}
+    if clip_len > 0:
+        out["magnitude_ratio"] = round(sim_len / clip_len, 3)
+    if out["moved"] and clip_len > 0:
+        out["direction_error_deg"] = direction_error_deg(clip_px, sim_px)
+        out["signed_error_rad"] = wrap_angle(table_angle(clip_px, axes) - table_angle(sim_px, axes))
+        out["cost"] = abs(math.log(max(out["magnitude_ratio"], 1e-3))) + abs(out["signed_error_rad"])
+    else:
+        out["cost"] = 10.0
+    return out
+
+
+def within_tolerance(m):
+    low, high = TUNE_RATIO_OK
+    return bool(m["moved"] and m["magnitude_ratio"] is not None and low <= m["magnitude_ratio"] <= high
+                and m["direction_error_deg"] is not None and m["direction_error_deg"] < TUNE_DIRECTION_OK_DEG)
+
+
+def search_push(push, pivot, axes, evaluate, *, max_trials=TUNE_DEFAULT_TRIALS):
+    """Bounded search over the pusher path; ``evaluate(push, trial)`` returns ``{"clip_px", "sim_px", ...}``.
+
+    Trial 1 runs ``push`` as given. Each next trial rescales the path about ``pivot`` by the measured length
+    ratio (using the exponent seen so far, since displacement is not exactly proportional to travel) and
+    turns it by the measured direction error. A trial that did not move re-aims a straight push through the
+    pivot along the clip's direction. ``pivot`` is the object's start xy; an ``evaluate`` result's ``pivot`` replaces
+    it. Stops at the first trial within tolerance, else after ``max_trials``. Returns ``(trials, best, stopped_because)``; every trial row keeps ``push`` and the evaluate extras.
+    """
+    if isinstance(max_trials, bool) or not isinstance(max_trials, int) or not 1 <= max_trials <= TUNE_MAX_TRIALS:
+        raise ValueError(f"max_trials must be a whole number from 1 to {TUNE_MAX_TRIALS}.")
+    base, scale, rotation = push, 1.0, 0.0
+    trials, best, last = [], None, None
+    for number in range(1, max_trials + 1):
+        if (scale, rotation) == (1.0, 0.0):
+            trial_push = base
+        elif pivot is None:
+            raise ValueError("The object's start position is unknown, so the push cannot be scaled about it.")
+        else:
+            trial_push = transform_push(base, pivot, scale, rotation)
+        found = evaluate(trial_push, number)
+        pivot = found.get("pivot") or pivot
+        clip_px, sim_px = found["clip_px"], found["sim_px"]
+        if math.hypot(*clip_px) < VERDICT_THRESHOLDS["did_not_move_below_px"]:
+            raise ValueError("The clip's block moved less than 3 px between the first and last anchor: there is no displacement to match.")
+        m = measure(clip_px, sim_px, axes)
+        row = {"trial": number, "scale": round(scale, 3), "rotation_deg": round(math.degrees(rotation), 1), "push": trial_push,
+               "sim_px": sim_px, "clip_px": clip_px, "magnitude_ratio": m["magnitude_ratio"],
+               "direction_error_deg": m["direction_error_deg"], "cost": round(m["cost"], 3),
+               **{k: v for k, v in found.items() if k not in ("clip_px", "sim_px", "pivot")}}
+        trials.append(row)
+        if best is None or m["cost"] < best[1]:
+            best = (row, m["cost"])
+        if within_tolerance(m):
+            return trials, best[0], "within tolerance"
+        if number == max_trials:
+            break
+        if pivot is None:
+            raise ValueError("The object's start position is unknown, so the push cannot be changed about it.")
+        if not m["moved"]:
+            base = aimed_push(trial_push, pivot, table_angle(clip_px, axes))
+            scale, rotation, last = 1.0, 0.0, None
+            continue
+        exponent = 1.0
+        if last is not None and abs(math.log(scale / last[0])) > 1e-6 and last[1] > 0:
+            exponent = min(3.0, max(0.3, math.log(m["sim_length_px"] / last[1]) / math.log(scale / last[0])))
+        last = (scale, m["sim_length_px"])
+        factor = (m["clip_length_px"] / m["sim_length_px"]) ** (1.0 / exponent)
+        scale = min(6.0, max(0.1, scale * min(3.0, max(1 / 3, factor))))
+        rotation += max(-math.radians(60), min(math.radians(60), m["signed_error_rad"]))
+    return trials, best[0], "max_trials"
