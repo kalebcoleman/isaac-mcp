@@ -20,10 +20,8 @@ from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics
 from .public_robots import NVIDIA_ROBOTS
 from .stage_open import KIT_DEFAULT_ROOTS, SUFFIXES, stage_has_unsaved_work
 
-# Name -> (file in the twin's pack, prim name): the local copy wins, then NVIDIA. NVIDIA_ROBOTS come from the
-# running build's own assets root instead.
-PUBLIC_ROBOTS = {"ur5e": ("robot/ur5e.usd", "UR5e")}
-PUBLIC_PACK = "ur5e-dt"
+# Public names (NVIDIA_ROBOTS, ur5e included) come from the running build's own assets root; nothing is downloaded
+# by this package. A robot of your own is <pack id>/<version>/<file> in a pack under the asset root.
 WORLD, GROUND, PHYSICS_SCENE = "/World", "/World/GroundPlane", "/World/PhysicsScene"
 DOME, SUN, CAMERA = "/World/DomeLight", "/World/SunLight", "/World/Camera"
 GROUND_HALF_SIZE_M = 25.0
@@ -36,45 +34,32 @@ MIN_FRAMED_RADIUS_M = 0.3
 ROOM_TO_MOVE = 1.5  # an arm's first pose can be its flattest: leave room for it to rise
 
 
-def _resolved(relpath, pack, label, name):
-    """A resolver answer under the assets__* rules: the first local copy wins, then NVIDIA's URL if this
-    file has one and strict mode is off. A project store is searched but is not an approval."""
-    from isaac_mcp import assets
+def _resolved(ref, name):
+    """A file of a pack under the asset root, named ``<pack id>/<version>/<file>``: the manifest must list it and its
+    bytes must match. A plain path is returned, which USD resolves the same with or without Kit's URI resolver."""
+    from isaac_mcp import pack_manifest
 
-    resolver = assets.resolver(pack)
-    report = resolver.asset_source(relpath)
-    if report["source"] == "missing":
-        refuse("ASSET_MISSING", f"{label} has no local copy" + (" and strict mode forbids the download."
-               if resolver.remote_uri(relpath) else ", and it has no public source. See docs/ASSETS.md."), asset=relpath)
-    if report["source"] == "project":
-        from isaac_mcp.project_assets import approval_help
-
-        store = next((str(x) for x in assets.project_stores() if str(report["location"]).startswith(str(x))), None)
-        refuse("ROOT_NOT_APPROVED", f"{label} would come from a project file's asset_path ({report['location']}), which "
-               "is not an approval, because a cloned repository could name any folder. Approve that folder as a "
-               "trusted root, or put the file in your asset folder." + approval_help(store or report["location"]), asset=relpath)
     try:
-        # A plain path for a local file: USD resolves it the same with or without Kit's URI resolver.
-        uri = resolver.resolve_uri(relpath) if report["source"] == "remote" else str(resolver.resolve_path(relpath))
-    except assets.AssetCorrupt as exc:
-        refuse("ASSET_INVALID", str(exc)[:500], asset=relpath)
-    except assets.AssetMissing as exc:
-        refuse("ASSET_MISSING", str(exc)[:500], asset=relpath)
-    return dict(name=name, uri=uri, assets=[report])
+        path = pack_manifest.resolve_pack_file(pack_manifest.resolve_asset_root().path, ref)
+    except pack_manifest.RootError as exc:
+        refuse("ASSET_MISSING", str(exc)[:500], asset=ref)
+    except pack_manifest.ManifestError as exc:
+        text = str(exc)[:500]
+        refuse("INVALID_VALUE" if text.startswith("Invalid pack identifier") else "ASSET_MISSING",
+               f"{ref}: {text}. Put the file in a pack under the asset root (docs/ASSET-PACKS.md).", asset=ref)
+    report = dict(asset=ref, source="pack", location=str(path))
+    return dict(name=name, uri=str(path), assets=[report])
 
 
 def resolve_robot(robot, snapshot_id=None):
-    """What ``robot`` names, before anything changes. A public name, ``<pack>/<file>``, or a path the host
+    """What ``robot`` names, before anything changes. A pack file, or a path the host
     turned into a verified snapshot under an approved root or in a pack. A URDF always comes as a snapshot."""
-    if robot in PUBLIC_ROBOTS:
-        relpath, name = PUBLIC_ROBOTS[robot]
-        return _resolved(relpath, PUBLIC_PACK, f"The {robot} robot ({relpath})", name)
-    known = ", ".join(sorted({*PUBLIC_ROBOTS, *NVIDIA_ROBOTS}))
+    known = ", ".join(sorted(NVIDIA_ROBOTS))
     if isinstance(robot, str) and "://" in robot:
         refuse("INVALID_VALUE", f"robot {robot!r} is a URL, and this tool does not load URLs. Public names: {known}. For your own "
-               "file: <pack>/<file.usd>, or an absolute path under an approved root. Nothing was changed.")
+               "file: <pack id>/<version>/<file.usd>, or an absolute path under an approved root. Nothing was changed.")
     if not isinstance(robot, str) or not robot.strip():
-        refuse("INVALID_VALUE", f"robot: a public name ({known}), <pack>/<file.usd> or an absolute path under an approved root.")
+        refuse("INVALID_VALUE", f"robot: a public name ({known}), <pack id>/<version>/<file.usd> or an absolute path under an approved root.")
     is_urdf = robot.lower().endswith(".urdf")
     if snapshot_id and is_urdf:
         return dict(name=_prim_name(robot), snapshot=True, urdf=True, assets=[dict(asset=robot, source="snapshot", location=robot)])
@@ -82,7 +67,7 @@ def resolve_robot(robot, snapshot_id=None):
         from isaac_mcp.project_assets import approval_help
 
         refuse("ROOT_NOT_APPROVED", "A URDF goes through the MCP host, which checks it against your approved roots and "
-               "asset folder, and this call did not come through it. Name it as <pack>/<file.urdf> from your asset folder, or "
+               "asset root, and this call did not come through it. Name it as <pack id>/<version>/<file.urdf> from your asset root, or "
                "as an absolute path under an approved root. Nothing was changed." + approval_help(None))
     if os.path.isabs(os.path.expanduser(robot)):
         if not snapshot_id:
@@ -91,19 +76,14 @@ def resolve_robot(robot, snapshot_id=None):
             refuse("ROOT_NOT_APPROVED", "An absolute robot path goes through the MCP host, which checks it against your "
                    "approved roots (the same rule as assets__import_path). Nothing was changed." + approval_help(os.path.dirname(os.path.expanduser(robot))))
         return dict(name=_prim_name(robot), snapshot=True, assets=[dict(asset=robot, source="approved_root", location=robot)])
-    pack, _, relpath = robot.partition("/")
-    if not relpath:
-        refuse("INVALID_VALUE", f"Unknown robot {robot!r}. Public names: {known}. For your own file: <pack>/<file.usd>, "
-               "or an absolute path under an approved root.")
-    from isaac_mcp import assets
-
-    try:
-        pack = assets.validate_pack_name(pack)
-    except ValueError as exc:
-        refuse("INVALID_VALUE", str(exc)[:300])
+    parts = robot.split("/", 2)
+    if len(parts) != 3 or not parts[2]:
+        refuse("INVALID_VALUE", f"Unknown robot {robot!r}. Public names: {known}. For your own file: "
+               "<pack id>/<version>/<file.usd>, or an absolute path under an approved root.")
+    relpath = parts[2]
     if ".." in relpath.split("/") or not relpath.lower().endswith(SUFFIXES):
         refuse("INVALID_VALUE", f"{relpath} must be a USD file ({', '.join(SUFFIXES)}) inside the pack.")
-    return _resolved(relpath, pack, f"{relpath} in pack {pack}", _prim_name(relpath))
+    return _resolved(robot, _prim_name(relpath))
 
 
 def _prim_name(path):
@@ -136,14 +116,10 @@ def file_units(uri):
 
 
 def check_resolved_units(wanted, up_axis, meters_per_unit):
-    """Refuse a local file that does not match. A remote one may be unreachable from here, so a failed read
-    of it only means unknown; the reference then reports its own errors."""
-    remote = wanted["assets"][0]["source"] == "remote"
+    """Refuse a file that does not match the scene's axis and units, or that cannot be read. Returns True otherwise."""
     try:
         up, units = file_units(wanted["uri"])
     except Exception as exc:  # noqa: BLE001 - USD raises Tf.ErrorException
-        if remote:
-            return False
         refuse("IMPORT_FAILED", f"Could not read {wanted['uri']}: {str(exc)[:400]}. Nothing was changed.")
     if up != up_axis or not math.isclose(units, meters_per_unit, rel_tol=1e-9):
         refuse_units(wanted["uri"], up, units, up_axis, meters_per_unit)
@@ -359,9 +335,7 @@ async def run(ext, args):
                before_retry=stop_call(info["session_id"], info["stage_id"]))
     snapshot = args.get("snapshot_id"), args.get("manifest_sha256")
     if robot in NVIDIA_ROBOTS:
-        from isaac_mcp import assets
-
-        wanted = await locate(robot, assets_root(), client_stat, offline=assets.resolver(PUBLIC_PACK).offline())
+        wanted = await locate(robot, assets_root(), client_stat)
     else:
         wanted = resolve_robot(robot, snapshot[0]) if robot else None
     is_urdf = bool(wanted and wanted.get("urdf"))
@@ -373,7 +347,8 @@ async def run(ext, args):
         if info["up_axis"] != up_axis or not math.isclose(info["meters_per_unit"], meters_per_unit, rel_tol=1e-9):
             refuse_units("the robot file", info["up_axis"], info["meters_per_unit"], up_axis, meters_per_unit)
         scene.validate_project_materials(*snapshot)
-    units_checked = check_resolved_units(wanted, up_axis, meters_per_unit) if wanted and not wanted.get("snapshot") else True
+    if wanted and not wanted.get("snapshot"):
+        check_resolved_units(wanted, up_axis, meters_per_unit)
 
     ctx = omni.usd.get_context()
     stage = ctx.get_stage()
@@ -491,8 +466,6 @@ async def run(ext, args):
         result["assets"] = wanted["assets"]
         if wheels and root:
             result["robot"].update(wheels=wheels, cmd_vel_graph=cmd_vel_graph_args(root, wheels))
-        if not units_checked:
-            result["robot"]["units_note"] = "The remote file's up axis and units could not be read beforehand; check the result."
     view = None
     if environment_report:
         from . import jenga, warehouse

@@ -43,7 +43,9 @@ def fixture(tmp_path, monkeypatch):
         )
     )
     cache = tmp_path / "cache"
-    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(cache))
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(cache))
+    for name in ("ISAAC_MCP_WORKSPACE", "ISAAC_MCP_ASSET_PATH", "UR5E_DT_ASSET_CACHE"):
+        monkeypatch.delenv(name, raising=False)
     broker = Broker(str(cfg))
     scene = Scene(lambda: Usd.Stage.CreateInMemory(), object(), broker=broker)
     return project, cache, broker, scene
@@ -311,7 +313,7 @@ def test_existing_file_and_cache_inside_project_are_not_overwritten(
     with pytest.raises(AssetError, match="already exists"):
         scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
     assert existing.read_bytes() == b"keep me"
-    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", str(project / "cache"))
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(project / "cache"))
     with pytest.raises(AssetError, match="disjoint"):
         scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
 
@@ -322,40 +324,29 @@ def _prepare(project, broker, scene):
     return scene.prepare_workstation(snap["snapshot_id"], snap["manifest_sha256"])
 
 
-def test_prepare_writes_to_the_first_store_of_asset_path(fixture, tmp_path, monkeypatch):
-    project, legacy_cache, broker, scene = fixture
-    monkeypatch.delenv("UR5E_DT_ASSET_CACHE", raising=False)
-    first, second = tmp_path / "store-a", tmp_path / "store-b"
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", f"{first}{os.pathsep}{second}")
+def test_prepare_writes_under_the_one_asset_root(fixture, tmp_path, monkeypatch):
+    project, root, broker, scene = fixture
+    other = tmp_path / "other-root"
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(other))
     assert _prepare(project, broker, scene)["prepared"]
-    assert (first / "ur5e-dt" / "workstation" / "vention.usd").is_file()
-    assert not (second / "ur5e-dt").exists()
-    assert not (legacy_cache / "ur5e-dt" / "workstation").exists()
+    assert (other / "ur5e-dt" / "workstation" / "vention.usd").is_file()
+    assert not (root / "ur5e-dt").exists()
 
 
-def test_prepare_uses_the_workspace_asset_folder_and_never_the_old_name(
-    fixture, tmp_path, monkeypatch
-):
-    project, legacy_cache, broker, scene = fixture
-    monkeypatch.delenv("UR5E_DT_ASSET_CACHE", raising=False)
-    monkeypatch.delenv("ISAAC_MCP_ASSET_PATH", raising=False)
+def test_prepare_uses_the_workspace_assets_folder_when_no_root_is_set(fixture, tmp_path, monkeypatch):
+    project, _, broker, scene = fixture
+    monkeypatch.delenv("ISAAC_MCP_ASSET_ROOT")
     workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    (workspace / "assets").mkdir(mode=0o700)  # an older folder: read by the twin, never written
+    (workspace / "assets").mkdir(parents=True, mode=0o700)
     monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(workspace))
     assert _prepare(project, broker, scene)["prepared"]
-    assert (workspace / "isaac-mcp-assets" / "ur5e-dt" / "workstation" / "vention.usd").is_file()
-    assert not (workspace / "assets" / "ur5e-dt").exists()
-    assert not (legacy_cache / "ur5e-dt" / "workstation").exists()
+    assert (workspace / "assets" / "ur5e-dt" / "workstation" / "vention.usd").is_file()
 
 
-def test_prepare_defaults_to_the_asset_folder_next_to_the_checkout(fixture, tmp_path, monkeypatch):
-    import sim_tools.core as core
-
-    project, legacy_cache, broker, scene = fixture
-    for name in ("UR5E_DT_ASSET_CACHE", "ISAAC_MCP_ASSET_PATH", "ISAAC_MCP_WORKSPACE"):
-        monkeypatch.delenv(name, raising=False)
-    fake_core = tmp_path / "checkout" / "exts" / "sim-tools" / "sim_tools" / "core.py"
-    monkeypatch.setattr(core, "__file__", str(fake_core))
-    assert _prepare(project, broker, scene)["prepared"]
-    assert (tmp_path / "isaac-mcp-assets" / "ur5e-dt" / "workstation" / "vention.usd").is_file()
+def test_prepare_without_any_asset_root_says_which_setting_to_make(fixture, tmp_path, monkeypatch):
+    project, _, broker, scene = fixture
+    monkeypatch.delenv("ISAAC_MCP_ASSET_ROOT")
+    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(tmp_path / "empty-workspace"))
+    with pytest.raises(AssetError, match="ISAAC_MCP_ASSET_ROOT") as caught:
+        _prepare(project, broker, scene)
+    assert caught.value.code == "CONFIG"

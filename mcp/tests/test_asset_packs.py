@@ -1,4 +1,4 @@
-"""Pack listing, pinning, doctor, closure builds and the host-side assets__pack_* tools."""
+"""Adopt, convert, pin, doctor, closure builds and the host-side assets__pack_* tools, on the pack.yaml format."""
 
 from __future__ import annotations
 
@@ -12,12 +12,12 @@ from pathlib import Path
 import pytest
 
 from isaac_mcp import asset_packs as packs
-from isaac_mcp import assets
+from isaac_mcp import pack_manifest as pm
 from isaac_mcp.project_assets import Broker
 
 REPO = Path(__file__).resolve().parents[2]
-ENV = ("ISAAC_MCP_ASSET_PATH", "ISAAC_MCP_ASSET_PACK", "ISAAC_MCP_ASSET_STRICT", "ISAAC_MCP_PROJECT",
-       "ISAAC_MCP_WORKSPACE", "UR5E_DT_ASSET_CACHE", "ISAAC_MCP_USD_PYTHON")
+ENV = ("ISAAC_MCP_ASSET_ROOT", "ISAAC_MCP_WORKSPACE", "ISAAC_MCP_PROJECT", "ISAAC_MCP_USD_PYTHON", *pm.REMOVED_ENVIRONMENT)
+PROVENANCE = dict(source="unit test", license="test fixture")
 
 
 def sha(data: bytes) -> str:
@@ -31,17 +31,30 @@ def put(root: Path, rel: str, data="x") -> Path:
     return path
 
 
+def make_pack(root: Path, pack_id: str, version: str, files: dict, **extra) -> Path:
+    """A pack that verifies, written by hand (not by the code under test)."""
+    directory = root / pack_id / version
+    records = []
+    for rel, data in sorted(files.items()):
+        path = put(directory, rel, data)
+        records.append(dict(path=rel, sha256=sha(path.read_bytes()), source="lab source", license="lab licence",
+                            redistributable=False))
+    (directory / "pack.yaml").write_text(json.dumps(dict(id=pack_id, version=version, **extra, files=records)))
+    return directory
+
+
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     for name in ENV:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(pm, "_announced", set())
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "home" / ".cache"))
     monkeypatch.setenv("ISAAC_MCP_PROJECT", str(tmp_path / "no-project"))
-    store = tmp_path / "isaac-mcp-assets"
-    store.mkdir()
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(store))
-    return store
+    root = tmp_path / "assets"
+    root.mkdir()
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(root))
+    return root
 
 
 @pytest.fixture
@@ -71,107 +84,83 @@ def fake_closure(graph):
     return call
 
 
-# ---------------------------------------------------------------- listing
+def verifies(root: Path, pack_id: str, version: str = "v1") -> pm.AssetPack:
+    return pm.AssetPack(root, pack_id, version)  # the strict reader: raises if anything is off
 
 
-def test_list_packs_marks_packs_and_other_folders(env):
-    put(env / "bricksim", "SHA256SUMS", f"{sha(b'x')}  a.usd\n")
-    (env / "ur5e-dt").mkdir()
-    (env / "robot").mkdir()
-    put(env / "made", assets.PACK_FILE, json.dumps(dict(version=1, entries=["a.usd"])))
-    entry = packs.list_packs([env, env.parent / "absent"])
-    assert [p["name"] for p in entry[0]["packs"]] == ["bricksim", "made", "ur5e-dt"]
-    assert entry[0]["folders"] == ["robot"]
-    assert entry[0]["packs"][0]["pinned"] == 1 and entry[0]["packs"][1]["entries"] == 1
-    assert entry[1]["exists"] is False
+# ---------------------------------------------------------------- pin: rewrite hashes of an existing manifest
 
 
-def test_list_packs_reports_a_broken_pack_file_without_failing_the_rest(env):
-    put(env / "bad", assets.PACK_FILE, "not json")
-    assert "cannot read" in packs.list_packs([env])[0]["packs"][0]["error"]
-
-
-# ---------------------------------------------------------------- pin and unpin
-
-
-def test_pin_adds_new_files_without_force(env):
-    folder = env / "p"
-    put(folder, "a.usd", b"a")
-    report = packs.pin_pack(folder)
-    assert report["new"] == ["a.usd"] and assets.pins(folder) == {"a.usd": sha(b"a")}
+def test_pin_has_nothing_to_do_for_a_version_that_verifies(env):
+    directory = make_pack(env, "p", "v1", {"a.usd": b"a"})
+    before = (directory / "pack.yaml").read_bytes()
+    report = packs.pin_pack(env, "p", "v1")
+    assert report["pinned"] == 0 and report["verifies"] is True and "not modified" in report["note"]
+    assert (directory / "pack.yaml").read_bytes() == before
 
 
 def test_pin_refuses_a_changed_file_and_writes_nothing(env):
-    folder = env / "p"
-    path = put(folder, "a.usd", b"a")
-    packs.pin_pack(folder)
-    path.write_bytes(b"damaged")
-    before = (folder / "SHA256SUMS").read_bytes()
+    directory = make_pack(env, "p", "v1", {"a.usd": b"a"})
+    (directory / "a.usd").write_bytes(b"damaged")
+    before = (directory / "pack.yaml").read_bytes()
     with pytest.raises(packs.PackError) as caught:
-        packs.pin_pack(folder)
+        packs.pin_pack(env, "p", "v1")
     assert caught.value.code == "PIN_CHANGED"
     assert caught.value.details["changed"] == [dict(file="a.usd", pinned=sha(b"a"), actual=sha(b"damaged"))]
-    assert (folder / "SHA256SUMS").read_bytes() == before
+    assert (directory / "pack.yaml").read_bytes() == before
 
 
-def test_pin_refuses_a_removed_file_too(env):
-    folder = env / "p"
-    path = put(folder, "a.usd", b"a")
-    packs.pin_pack(folder)
-    path.unlink()
-    with pytest.raises(packs.PackError, match="would change"):
-        packs.pin_pack(folder)
-    assert packs.pin_pack(folder, force=True)["removed"] == ["a.usd"]
-    assert assets.pins(folder) == {}
+def test_pin_with_force_accepts_every_change_and_keeps_every_other_field(env):
+    directory = make_pack(env, "p", "v1", {"a.usd": b"a", "b.usd": b"b"}, qualification="candidate")
+    manifest = json.loads((directory / "pack.yaml").read_text())
+    manifest["files"][0]["fidelity"] = "flattened"
+    (directory / "pack.yaml").write_text(json.dumps(manifest))
+    (directory / "a.usd").write_bytes(b"a2")
+    (directory / "b.usd").write_bytes(b"b2")
+    report = packs.pin_pack(env, "p", "v1", force=True)
+    assert report["pinned"] == 2 and report["verifies"] is True
+    after = json.loads((directory / "pack.yaml").read_text())
+    assert after["qualification"] == "candidate" and after["files"][0]["fidelity"] == "flattened"
+    assert [f["sha256"] for f in after["files"]] == [sha(b"a2"), sha(b"b2")]
+    verifies(env, "p")
 
 
 def test_pin_accepts_a_named_change_and_leaves_others_alone(env):
-    folder = env / "p"
-    a, b = put(folder, "a.usd", b"a"), put(folder, "b.usd", b"b")
-    packs.pin_pack(folder)
-    a.write_bytes(b"a2")
-    put(folder, "new.usd", b"n")
-    packs.pin_pack(folder, files=["a.usd"])
-    assert assets.pins(folder) == {"a.usd": sha(b"a2"), "b.usd": sha(b"b")}
-    b.write_bytes(b"b2")
-    with pytest.raises(packs.PackError):
-        packs.pin_pack(folder, files=["a.usd"])
-    with pytest.raises(packs.PackError, match="not files of this pack"):
-        packs.pin_pack(folder, files=["nope.usd"])
+    directory = make_pack(env, "p", "v1", {"a.usd": b"a", "b.usd": b"b"})
+    (directory / "a.usd").write_bytes(b"a2")
+    (directory / "b.usd").write_bytes(b"b2")
+    with pytest.raises(packs.PackError, match="would change") as caught:
+        packs.pin_pack(env, "p", "v1", files=["a.usd"])  # b is still changed and not named
+    assert [c["file"] for c in caught.value.details["changed"]] == ["b.usd"]
+    report = packs.pin_pack(env, "p", "v1", files=["a.usd"], partial=True)
+    assert report["pinned"] == 1 and report["verifies"] is False
+    hashes = {f["path"]: f["sha256"] for f in json.loads((directory / "pack.yaml").read_text())["files"]}
+    assert hashes == {"a.usd": sha(b"a2"), "b.usd": sha(b"b")}
+    with pytest.raises(packs.PackError, match="not changed files"):
+        packs.pin_pack(env, "p", "v1", files=["nope.usd"])
 
 
-def test_pin_never_lists_the_pack_description(env):
-    folder = env / "p"
-    put(folder, "a.usd", b"a")
-    packs.write_pack_file(folder, ["a.usd"])
-    packs.pin_pack(folder)
-    assert set(assets.pins(folder)) == {"a.usd"}
-
-
-def test_unpin_removes_only_the_pin(env):
-    folder = env / "p"
-    put(folder, "a.usd", b"a")
-    put(folder, "b.usd", b"b")
-    packs.pin_pack(folder)
-    assert packs.unpin_files(folder, ["a.usd"]) == ["a.usd"]
-    assert set(assets.pins(folder)) == {"b.usd"} and (folder / "a.usd").is_file()
-    with pytest.raises(packs.PackError, match="not pinned"):
-        packs.unpin_files(folder, ["a.usd"])
-
-
-def test_entries_keep_accumulating_in_the_pack_file(env):
-    folder = env / "p"
-    folder.mkdir()
-    packs.write_pack_file(folder, ["a.usd"], ["missing.usd"])
-    packs.write_pack_file(folder, ["b.usd"])
-    assert packs.read_pack_file(folder) == dict(version=1, entries=["a.usd", "b.usd"], accepted_unresolved=["missing.usd"])
-
-
-def test_a_broken_pack_file_is_an_error(env):
-    put(env / "p", assets.PACK_FILE, '{"entries": "not a list"}')
+def test_pin_cannot_fix_a_missing_or_unlisted_file(env):
+    directory = make_pack(env, "p", "v1", {"a.usd": b"a", "b.usd": b"b"})
+    (directory / "a.usd").write_bytes(b"a2")
+    (directory / "b.usd").unlink()
     with pytest.raises(packs.PackError) as caught:
-        packs.read_pack_file(env / "p")
-    assert caught.value.code == "INVALID_PACK_FILE"
+        packs.pin_pack(env, "p", "v1", force=True)
+    assert caught.value.code == "UNPINNABLE" and caught.value.details["missing"] == ["b.usd"]
+    (directory / "b.usd").write_bytes(b"b")
+    (directory / "new.usd").write_bytes(b"n")
+    with pytest.raises(packs.PackError) as caught:
+        packs.pin_pack(env, "p", "v1", force=True)
+    assert caught.value.details["unlisted"] == ["new.usd"]
+    assert json.loads((directory / "pack.yaml").read_text())["files"][0]["sha256"] == sha(b"a")  # nothing was written
+
+
+def test_pin_dry_run_shows_the_change_and_writes_nothing(env):
+    directory = make_pack(env, "p", "v1", {"a.usd": b"a"})
+    (directory / "a.usd").write_bytes(b"a2")
+    before = (directory / "pack.yaml").read_bytes()
+    report = packs.pin_pack(env, "p", "v1", dry_run=True)
+    assert report["would_change"][0]["actual"] == sha(b"a2") and (directory / "pack.yaml").read_bytes() == before
 
 
 # ---------------------------------------------------------------- classification
@@ -198,128 +187,98 @@ def test_classify_reference(reference, kind):
 
 
 def doctor_setup(env):
-    folder = env / "p"
-    put(folder, "robot/ur5e.usd", b"root")
-    put(folder, "robot/SubUSDs/base.usd", b"base")
-    for name in "abcd":
-        put(folder, f"robot/configuration/{name}.usd", b"unused")
-    packs.pin_pack(folder)
+    files = {"robot/ur5e.usd": b"root", "robot/SubUSDs/base.usd": b"base",
+             **{f"robot/configuration/{n}.usd": b"cfg" + n.encode() for n in "abcd"}}
+    folder = make_pack(env, "p", "v1", files)
     root = str(folder.resolve() / "robot/ur5e.usd")
     graph = {root: ([str(folder.resolve() / "robot/SubUSDs/base.usd")],
                     [str(folder.resolve() / "robot/SubUSDs/Robotiq.usd"), "OmniPBR.mdl"])}
     return folder, fake_closure(graph)
 
 
-def test_doctor_reports_an_unresolved_reference_and_unused_files_as_information(env):
+def test_doctor_reports_an_unresolved_reference_and_runtime_materials(env):
     folder, closure = doctor_setup(env)
-    report = packs.doctor_folder(folder, closure=closure, entries=["robot/ur5e.usd"])
+    report = packs.doctor_pack(env, "p", "v1", closure=closure)
     assert [u["reference"] for u in report["dependencies"]["unresolved"]] == ["robot/SubUSDs/Robotiq.usd"]
     assert report["dependencies"]["runtime_materials"] == ["OmniPBR.mdl"]
-    assert report["unused"] == [f"robot/configuration/{n}.usd" for n in "abcd"] and report["unused_count"] == 4
-    assert report["ok"] is False
+    assert report["files"]["verified"] is True and report["ok"] is False
     assert len(report["problems"]) == 1 and "Robotiq" in report["problems"][0]
 
 
-def test_unused_files_alone_do_not_make_a_pack_fail(env):
-    folder = env / "p"
-    put(folder, "a.usd", b"a")
-    put(folder, "extra.usd", b"e")
-    packs.pin_pack(folder)
-    report = packs.doctor_folder(folder, closure=fake_closure({}), entries=["a.usd"])
-    assert report["unused"] == ["extra.usd"] and report["ok"] is True and report["problems"] == []
+def test_every_listed_usd_is_a_root_and_a_clean_pack_is_ok(env):
+    make_pack(env, "p", "v1", {"a.usd": b"a", "extra.usd": b"e"})
+    report = packs.doctor_pack(env, "p", "v1", closure=fake_closure({}))
+    assert report["ok"] is True and report["problems"] == [] and report["dependencies"]["entries"] == ["a.usd", "extra.usd"]
 
 
-def test_doctor_reports_corrupt_missing_and_unpinned_files(env):
+def test_doctor_reports_corrupt_missing_and_unlisted_files(env):
     folder, closure = doctor_setup(env)
     (folder / "robot/ur5e.usd").write_bytes(b"changed")
     (folder / "robot/configuration/a.usd").unlink()
     put(folder, "new.usd", b"new")
-    report = packs.doctor_folder(folder, closure=closure, entries=["robot/ur5e.usd"])
-    assert [c["file"] for c in report["files"]["corrupt"]] == ["robot/ur5e.usd"]
-    assert report["files"]["missing"] == ["robot/configuration/a.usd"]
-    assert report["files"]["unpinned"] == ["new.usd"]
-    assert any("does not match" in p for p in report["problems"]) and any("pinned but missing" in p for p in report["problems"])
-    assert not any("new.usd" in p for p in report["problems"])
+    report = packs.doctor_pack(env, "p", "v1", closure=closure)
+    text = "\n".join(report["problems"])
+    assert report["ok"] is False and report["files"]["verified"] is False
+    assert "Checksum mismatch: robot/ur5e.usd" in text and "Missing pack file: robot/configuration/a.usd" in text
+    assert "not listed in pack.yaml: new.usd" in text
 
 
-def test_doctor_reports_a_missing_entry_and_files_outside_the_pack(env, tmp_path):
-    folder = env / "p"
-    put(folder, "a.usd", b"a")
-    packs.pin_pack(folder)
+def test_doctor_reports_files_outside_the_pack(env, tmp_path):
+    folder = make_pack(env, "p", "v1", {"a.usd": b"a"})
     outside = str(tmp_path / "other.usd")
     closure = fake_closure({str(folder.resolve() / "a.usd"): ([outside], [])})
-    report = packs.doctor_folder(folder, closure=closure, entries=["a.usd", "gone.usd"])
-    assert report["dependencies"]["missing_entries"] == ["gone.usd"]
-    assert report["dependencies"]["outside_pack"][0]["file"] == outside
-    assert report["ok"] is False
+    report = packs.doctor_pack(env, "p", "v1", closure=closure)
+    assert report["dependencies"]["outside_pack"][0]["file"] == outside and report["ok"] is False
 
 
 def test_doctor_without_a_parser_says_so_and_is_not_ok(env, monkeypatch):
-    folder, _ = doctor_setup(env)
+    doctor_setup(env)
     monkeypatch.setattr(packs, "usd_python", lambda: None)
-    report = packs.doctor_folder(folder, closure=packs.ClosureBackend(), entries=["robot/ur5e.usd"])
+    report = packs.doctor_pack(env, "p", "v1", closure=packs.ClosureBackend())
     assert report["dependencies"]["checked"] is False and "No USD parser" in report["dependencies"]["reason"]
-    assert report["ok"] is False and report["problems"] == [] and report["unused"] is None
+    assert report["ok"] is False and report["problems"] == [] and report["dependencies_checked"] is False
 
 
-def test_doctor_uses_recorded_entries(env):
-    folder, closure = doctor_setup(env)
-    packs.write_pack_file(folder, ["robot/ur5e.usd"])
-    report = packs.doctor_folder(folder, closure=closure)
-    assert report["entry_source"] == "pack_file" and report["unused_count"] == 4
+def test_a_pack_with_nothing_to_parse_needs_no_parser(env, monkeypatch):
+    make_pack(env, "p", "v1", {"layout.json": b"{}", "tex.png": b"p"})
+    monkeypatch.setattr(packs, "usd_python", lambda: None)
+    report = packs.doctor_pack(env, "p", "v1", closure=packs.ClosureBackend())
+    assert report["ok"] is True and report["dependencies"]["checked"] is True
 
 
-def test_doctor_without_entries_treats_every_usd_as_a_root_and_names_no_unused(env):
-    folder, closure = doctor_setup(env)
-    report = packs.doctor_folder(folder, closure=closure)
-    assert report["entry_source"] == "all_usd" and report["unused"] is None
-
-
-def test_doctor_uses_the_twins_names_for_its_pack(env):
-    folder = env / "ur5e-dt"
-    put(folder, "robot/ur5e.usd", b"r")
-    put(folder, "Isaac/Sensors/rsd455.usd", b"s")
-    packs.pin_pack(folder)
-    manifest = dict(remote={"robot/ur5e.usd": "x", "sensors/rsd455.usd": "y"},
-                    fetch=[dict(id="g", files=[dict(target="sensors/rsd455.usd", cache_path="Isaac/Sensors/rsd455.usd")])],
-                    manual=[dict(target="workstation/vention.usd")], local=[dict(path="objects/fmb1")])
-    report = packs.doctor_folder(folder, closure=fake_closure({}), manifest=manifest)
-    assert report["entry_source"] == "twin_manifest"
-    assert report["dependencies"]["entries"] == ["Isaac/Sensors/rsd455.usd", "robot/ur5e.usd"]
-
-
-def test_doctor_checks_manifest_files_that_have_no_pin(env):
-    folder = env / "ur5e-dt"
-    put(folder, "Isaac/a.mdl", b"good")
-    put(folder, "Isaac/b.mdl", b"bad")
-    manifest = dict(fetch=[dict(id="g", files=[dict(target="Isaac/a.mdl", sha256=sha(b"good")),
-                                               dict(target="Isaac/b.mdl", sha256=sha(b"other"))])])
-    report = packs.doctor_folder(folder, closure=fake_closure({}), manifest=manifest, entries=["Isaac/a.mdl"])
-    assert report["files"]["manifest_ok"] == 1
-    assert [c["file"] for c in report["files"]["corrupt"]] == ["Isaac/b.mdl"]
+def test_a_urdf_only_pack_is_checked_without_a_usd_parser(env, monkeypatch):
+    make_pack(env, "p", "v1", {"robot.urdf": '<robot name="r"><link name="l"><visual><geometry><mesh filename="m.stl"/></geometry></visual></link></robot>',
+                               "m.stl": b"mesh"})
+    monkeypatch.setattr(packs, "usd_python", lambda: None)
+    report = packs.doctor_pack(env, "p", "v1", closure=packs.ClosureBackend())
+    assert report["ok"] is True, report["problems"]
 
 
 def test_doctor_changes_nothing(env):
     folder, closure = doctor_setup(env)
     os.chmod(folder, 0o775)
+
     def state():
         return sorted((str(p), p.stat().st_mtime_ns, stat.S_IMODE(p.stat().st_mode)) for p in folder.rglob("*")) + [
             stat.S_IMODE(folder.stat().st_mode)]
+
     before = state()
-    packs.doctor_pack("p", [env], closure=closure, entries=["robot/ur5e.usd"])
+    packs.doctor_pack(env, "p", "v1", closure=closure)
     assert state() == before
 
 
 def test_doctor_of_an_absent_pack_is_an_error(env):
     with pytest.raises(packs.PackError) as caught:
-        packs.doctor_pack("nope", [env])
+        packs.doctor_pack(env, "nope", "v1")
     assert caught.value.code == "PACK_NOT_FOUND"
 
 
-def test_doctor_rejects_an_unsafe_entry(env):
-    folder, closure = doctor_setup(env)
-    with pytest.raises(packs.PackError, match="unsafe"):
-        packs.doctor_folder(folder, closure=closure, entries=["../../etc/passwd"])
+def test_doctor_names_a_symlink_that_import_would_refuse(env):
+    folder = make_pack(env, "p", "v1", {"a.usda": "#usda 1.0\n"})
+    (folder / "link.usda").symlink_to(folder / "a.usda")
+    assert pm.symlinks(folder) == ["link.usda"]
+    report = packs.doctor_pack(env, "p", "v1", closure=fake_closure({}))
+    assert report["ok"] is False and any("Symlink in pack" in p and "link.usda" in p for p in report["problems"])
 
 
 # ---------------------------------------------------------------- real USD
@@ -335,16 +294,26 @@ def usda(*references):
 
 @pytest.fixture
 def lab(tmp_path, env):
-    """A source pack shaped like BrickSim's real need."""
-    source = env / "ur5e-dt"
-    put(source, "robot/ur5e.usda", usda("./SubUSDs/base.usda"))
-    put(source, "robot/SubUSDs/base.usda", usda())
-    for name in "abcd":
-        put(source, f"robot/configuration/{name}.usda", usda())
-    put(source, "gripper/QuickChanger.usda", usda("configuration/q.usda"))
-    put(source, "gripper/configuration/q.usda", usda())
-    put(source, "objects/never_used.usda", usda())
-    return source
+    """A source pack shaped like BrickSim's real need: a robot, a gripper, and files nothing refers to."""
+    return make_pack(env, "lab", "v1", {
+        "robot/ur5e.usda": usda("./SubUSDs/base.usda"), "robot/SubUSDs/base.usda": usda(),
+        **{f"robot/configuration/{n}.usda": usda() for n in "abcd"},
+        "gripper/QuickChanger.usda": usda("configuration/q.usda"), "gripper/configuration/q.usda": usda(),
+        "objects/never_used.usda": usda(),
+    })
+
+
+def build(env, lab, sources, pack="bricksim", version="v1", **kwargs):
+    """build_pack with ``lab/v1`` as the source pack; its records are inherited."""
+    inherit = {lab.resolve(): {r["path"]: r for r in json.loads((lab / "pack.yaml").read_text())["files"]}}
+    return packs.build_pack(env, pack, version, sources, USD, from_pack_dirs=[lab.resolve()], inherit=inherit,
+                            defaults=kwargs.pop("defaults", dict(redistributable=False)), **kwargs)
+
+
+def build_alone(env, sources, version="v1", pack="p", **kwargs):
+    """build_pack from files outside any pack: source and license are then required."""
+    kwargs.setdefault("defaults", dict(redistributable=False, **PROVENANCE))
+    return packs.build_pack(env, pack, version, sources, USD, **kwargs)
 
 
 def test_helper_reports_layers_and_unresolved(lab):
@@ -365,24 +334,46 @@ def test_helper_failure_is_a_clean_refusal(env):
     assert caught.value.code == "USD_FAILED"
 
 
-def test_build_copies_only_the_closure_keeps_layout_and_pins(lab, env):
-    dest = env / "bricksim"
-    report = packs.build_pack(dest, ["robot/ur5e.usda", "gripper/QuickChanger.usda"], USD, from_pack_dirs=[lab.resolve()])
+def test_build_copies_only_the_closure_keeps_layout_and_writes_a_verifying_manifest(lab, env):
+    report = build(env, lab, ["robot/ur5e.usda", "gripper/QuickChanger.usda"])
+    dest = env / "bricksim" / "v1"
     assert sorted(p.relative_to(dest).as_posix() for p in dest.rglob("*") if p.is_file()) == sorted([
-        assets.PACK_FILE, assets.PINS_FILE, "gripper/QuickChanger.usda", "gripper/configuration/q.usda",
-        "robot/SubUSDs/base.usda", "robot/ur5e.usda"])
-    assert report["copied"] == 4 and report["verified"]["self_contained"] is True
-    assert set(assets.pins(dest)) == {"gripper/QuickChanger.usda", "gripper/configuration/q.usda",
-                                      "robot/SubUSDs/base.usda", "robot/ur5e.usda"}
-    assert packs.read_pack_file(dest)["entries"] == ["gripper/QuickChanger.usda", "robot/ur5e.usda"]
-    assert report["load_as"] == ["bricksim/gripper/QuickChanger.usda", "bricksim/robot/ur5e.usda"]  # what quick_start takes
-    assert assets.resolve_info("robot/ur5e.usda", pack="bricksim")["status"] == "pinned"
+        "pack.yaml", "gripper/QuickChanger.usda", "gripper/configuration/q.usda", "robot/SubUSDs/base.usda", "robot/ur5e.usda"])
+    assert report["copied"] == 4 and report["verified"]["self_contained"] is True and report["pack"] == "bricksim/v1"
+    assert report["load_as"] == ["bricksim/v1/gripper/QuickChanger.usda", "bricksim/v1/robot/ur5e.usda"]  # what quick_start takes
+    manifest = verifies(env, "bricksim").manifest
+    assert {r["path"] for r in manifest["files"]} == {"gripper/QuickChanger.usda", "gripper/configuration/q.usda",
+                                                      "robot/SubUSDs/base.usda", "robot/ur5e.usda"}
+    assert all(r["source"] == "lab source" and r["license"] == "lab licence" and r["redistributable"] is False
+               for r in manifest["files"])  # inherited from the source pack
+    assert not [p for p in env.iterdir() if p.name.startswith(".staging")]
+
+
+def test_a_built_file_keeps_its_own_record_and_an_outside_file_takes_the_defaults(lab, env, tmp_path):
+    manifest = json.loads((lab / "pack.yaml").read_text())
+    manifest["files"][0].update(asset_id="arm", redistributable=True, fidelity="flattened")
+    (lab / "pack.yaml").write_text(json.dumps(manifest))
+    first = manifest["files"][0]["path"]
+    build(env, lab, [first])
+    record = next(r for r in verifies(env, "bricksim").manifest["files"] if r["path"] == first)
+    assert record["asset_id"] == "arm" and record["redistributable"] is True and record["fidelity"] == "flattened"
+    scene = put(tmp_path / "project", "scene.usda", usda())
+    build_alone(env, [str(scene)], pack="alone", layout_root=(tmp_path / "project").resolve())
+    alone = verifies(env, "alone").manifest["files"][0]
+    assert alone["source"] == "unit test" and alone["license"] == "test fixture" and alone["redistributable"] is False
+
+
+def test_files_with_no_record_need_a_source_and_a_license(env, tmp_path):
+    scene = put(tmp_path / "project", "scene.usda", usda())
+    with pytest.raises(packs.PackError) as caught:
+        packs.build_pack(env, "p", "v1", [str(scene)], USD, layout_root=(tmp_path / "project").resolve())
+    assert caught.value.code == "MISSING_PROVENANCE" and not (env / "p").exists()
 
 
 def test_a_scene_with_logical_references_is_read_and_not_copied(lab, env, tmp_path):
     scene = put(tmp_path / "project", "scene.usda", usda("robot/ur5e.usda", "gripper/QuickChanger.usda"))
-    dest = env / "bricksim"
-    report = packs.build_pack(dest, [str(scene)], USD, from_pack_dirs=[lab.resolve()])
+    report = build(env, lab, [str(scene)])
+    dest = env / "bricksim" / "v1"
     assert report["entries"] == ["gripper/QuickChanger.usda", "robot/ur5e.usda"]
     assert not (dest / "scene.usda").exists() and not (dest / "objects").exists()
     assert not (dest / "robot/configuration").exists()
@@ -390,41 +381,38 @@ def test_a_scene_with_logical_references_is_read_and_not_copied(lab, env, tmp_pa
 
 def test_build_refuses_an_unresolved_reference_and_writes_nothing(lab, env):
     put(lab, "robot/ur5e.usda", usda("./SubUSDs/base.usda", "./SubUSDs/Robotiq.usda"))
-    dest = env / "bricksim"
     with pytest.raises(packs.PackError) as caught:
-        packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()])
+        packs.build_pack(env, "bricksim", "v1", ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()],
+                         defaults=dict(redistributable=False, **PROVENANCE))
     assert caught.value.code == "UNRESOLVED_DEPENDENCIES"
     item = caught.value.details["unresolved"][0]
     assert item["reference"].endswith("SubUSDs/Robotiq.usda") and item["referenced_by"].endswith("robot/ur5e.usda")
-    assert not dest.exists()
+    assert not (env / "bricksim").exists()
 
 
-def test_allow_unresolved_builds_and_doctor_accepts_only_what_was_recorded(lab, env):
+def test_allow_unresolved_builds_and_doctor_names_what_was_recorded(lab, env):
     put(lab, "robot/ur5e.usda", usda("./SubUSDs/base.usda", "./SubUSDs/Robotiq.usda"))
-    dest = env / "bricksim"
-    report = packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()], allow_unresolved=True)
+    report = packs.build_pack(env, "bricksim", "v1", ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()],
+                              allow_unresolved=True, defaults=dict(redistributable=False, **PROVENANCE))
     assert report["copied"] == 2 and report["verified"]["accepted_unresolved"] == ["robot/SubUSDs/Robotiq.usda"]
-    # The accepted file is still missing, so the pack is not self-contained and cannot import yet.
     assert report["verified"]["self_contained"] is False
     assert report["importable"] is False and report["import_blockers"] == ["robot/SubUSDs/Robotiq.usda"]
-    doctor = packs.doctor_folder(dest, closure=USD)
+    assert json.loads((env / "bricksim/v1/pack.yaml").read_text())["accepted_unresolved"] == ["robot/SubUSDs/Robotiq.usda"]
+    doctor = packs.doctor_pack(env, "bricksim", "v1", closure=USD)
     assert doctor["ok"] is False
     assert any("accepted as unresolved" in p and "assets__import_path refuses" in p for p in doctor["problems"])
-    # Adding the file makes both agree again, without a rebuild.
-    put(dest, "robot/SubUSDs/Robotiq.usda", "#usda 1.0\n")
-    packs.pin_pack(dest, force=True)
-    doctor = packs.doctor_folder(dest, closure=USD)
-    assert doctor["ok"] is True and doctor["dependencies"]["accepted_unresolved"] == []
-    put(dest, "robot/ur5e.usda", usda("./SubUSDs/base.usda", "./SubUSDs/Robotiq.usda", "./Another.usda"))
-    packs.pin_pack(dest, force=True)
-    report = packs.doctor_folder(dest, closure=USD)
-    assert report["ok"] is False and [u["reference"] for u in report["dependencies"]["unresolved"]] == ["robot/Another.usda"]
+    # A version is never edited to add the file: the hash cannot fix it, and a new version can.
+    put(env / "bricksim/v1", "robot/SubUSDs/Robotiq.usda", "#usda 1.0\n")
+    with pytest.raises(packs.PackError) as caught:
+        packs.pin_pack(env, "bricksim", "v1", force=True)
+    assert caught.value.code == "UNPINNABLE"
 
 
 def test_a_remote_reference_refuses_the_build(lab, env):
     put(lab, "robot/ur5e.usda", usda("https://example.invalid/x.usd"))
     with pytest.raises(packs.PackError) as caught:
-        packs.build_pack(env / "b", ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()])
+        packs.build_pack(env, "b", "v1", ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()],
+                         defaults=dict(redistributable=False, **PROVENANCE))
     assert caught.value.details["remote"]
 
 
@@ -432,12 +420,11 @@ def test_a_dependency_outside_the_layout_is_never_copied(env, tmp_path):
     root = tmp_path / "project"
     put(tmp_path, "secret/other.usda", usda())
     scene = put(root, "a/scene.usda", usda("../../secret/other.usda"))
-    dest = env / "b"
     with pytest.raises(packs.PackError) as caught:
-        packs.build_pack(dest, [str(scene)], USD, layout_root=root.resolve())
+        build_alone(env, [str(scene)], pack="b", layout_root=root.resolve())
     assert caught.value.details["outside"][0]["file"].endswith("secret/other.usda")
-    report = packs.build_pack(dest, [str(scene)], USD, layout_root=root.resolve(), allow_unresolved=True)
-    assert report["outside"] and not list(dest.rglob("other.usda"))
+    report = build_alone(env, [str(scene)], pack="b", layout_root=root.resolve(), allow_unresolved=True)
+    assert report["outside"] and not list((env / "b").rglob("other.usda"))
     assert report["entries"] == ["a/scene.usda"]
 
 
@@ -445,76 +432,77 @@ def test_relative_reference_up_the_tree_works_with_a_wide_layout_root(env, tmp_p
     root = tmp_path / "project"
     put(root, "shared/other.usda", usda())
     scene = put(root, "a/scene.usda", usda("../shared/other.usda"))
-    dest = env / "b"
-    report = packs.build_pack(dest, [str(scene)], USD, layout_root=root.resolve())
-    assert report["verified"]["self_contained"] is True and (dest / "shared/other.usda").is_file()
+    report = build_alone(env, [str(scene)], pack="b", layout_root=root.resolve())
+    assert report["verified"]["self_contained"] is True and (env / "b/v1/shared/other.usda").is_file()
 
 
 def test_the_check_after_copying_catches_an_absolute_reference(env, tmp_path):
     root = tmp_path / "project"
     other = put(root, "other.usda", usda())
     scene = put(root, "scene.usda", usda(str(other.resolve())))
-    report = packs.build_pack(env / "b", [str(scene)], USD, layout_root=root.resolve())
+    report = build_alone(env, [str(scene)], pack="b", layout_root=root.resolve())
     assert report["verified"]["self_contained"] is False
     assert report["verified"]["outside_pack"][0]["file"] == str(other.resolve())
 
 
-def test_a_different_file_in_the_pack_is_refused_without_force(lab, env):
-    dest = env / "bricksim"
-    packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()])
-    put(dest, "robot/SubUSDs/base.usda", "#usda 1.0\n# lab edit\n")
-    packs.pin_pack(dest, force=True)
+def test_an_existing_version_is_never_modified_and_a_new_one_is_written(lab, env):
+    build(env, lab, ["robot/ur5e.usda"])
+    dest = env / "bricksim" / "v1"
+    before = {p.relative_to(dest).as_posix(): p.read_bytes() for p in dest.rglob("*") if p.is_file()}
+    put(lab, "robot/SubUSDs/base.usda", "#usda 1.0\n# lab edit\n")  # the source changes; the old version must not follow
     with pytest.raises(packs.PackError) as caught:
-        packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()])
-    assert caught.value.code == "CONFLICT" and b"lab edit" in (dest / "robot/SubUSDs/base.usda").read_bytes()
-    packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()], force=True)
-    assert b"lab edit" not in (dest / "robot/SubUSDs/base.usda").read_bytes()
-
-
-def test_building_again_changes_nothing(lab, env):
-    dest = env / "bricksim"
-    packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()])
-    report = packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()])
-    assert report["copied"] == 0 and report["identical"] == 2
+        build(env, lab, ["robot/ur5e.usda"])
+    assert caught.value.code == "VERSION_EXISTS" and "v2" in str(caught.value)
+    assert {p.relative_to(dest).as_posix(): p.read_bytes() for p in dest.rglob("*") if p.is_file()} == before
+    with pytest.raises(packs.PackError):  # a dry run refuses too: it would be a lie
+        build(env, lab, ["robot/ur5e.usda"], dry_run=True)
+    # The source pack was edited by hand, so it no longer verifies; the tool refuses to build from it (see the tool tests).
+    assert pm.inspect_pack(env, "lab", "v1")["verified"] is False
 
 
 def test_dry_run_writes_nothing(lab, env):
-    dest = env / "bricksim"
-    report = packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()], dry_run=True)
-    assert report["planned"] == ["robot/SubUSDs/base.usda", "robot/ur5e.usda"] and not dest.exists()
+    report = build(env, lab, ["robot/ur5e.usda"], dry_run=True)
+    assert report["planned"] == ["robot/SubUSDs/base.usda", "robot/ur5e.usda"] and not (env / "bricksim").exists()
+
+
+def test_a_failed_write_leaves_no_staging_folder_behind(lab, env, monkeypatch):
+    def boom(self):
+        raise packs.PackError("disk full", "FILESYSTEM")
+
+    monkeypatch.setattr(packs.Staging, "verify", boom)
+    with pytest.raises(packs.PackError, match="disk full"):
+        build(env, lab, ["robot/ur5e.usda"])
+    assert not (env / "bricksim" / "v1").exists() and not [p for p in env.iterdir() if p.name.startswith(".staging")]
 
 
 def test_a_source_that_is_not_usd_or_not_there_is_refused(env, tmp_path):
     text = put(tmp_path, "a.txt")
     for source, code in ((str(text), "UNSUPPORTED_FORMAT"), (str(tmp_path / "gone.usda"), "NOT_FOUND"), ("rel.usda", "NOT_FOUND")):
         with pytest.raises(packs.PackError) as caught:
-            packs.build_pack(env / "b", [source], USD)
+            build_alone(env, [source], pack="b")
         assert caught.value.code == code
 
 
 def test_an_unreadable_source_refuses_even_with_allow_unresolved(env, tmp_path):
     bad = put(tmp_path, "bad.usda", "not usd")
     with pytest.raises(packs.PackError) as caught:
-        packs.build_pack(env / "b", [str(bad)], USD, allow_unresolved=True)
+        build_alone(env, [str(bad)], pack="b", allow_unresolved=True)
     assert caught.value.code == "USD_UNREADABLE"
 
 
 def test_doctor_finds_a_corrupt_sublayer(lab, env):
-    dest = env / "bricksim"
-    packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()])
-    (dest / "robot/SubUSDs/base.usda").write_text("broken")
-    report = packs.doctor_folder(dest, closure=USD)
-    assert report["ok"] is False
-    assert [c["file"] for c in report["files"]["corrupt"]] == ["robot/SubUSDs/base.usda"]
+    build(env, lab, ["robot/ur5e.usda"])
+    (env / "bricksim/v1/robot/SubUSDs/base.usda").write_text("broken")
+    report = packs.doctor_pack(env, "bricksim", "v1", closure=USD)
+    assert report["ok"] is False and "Checksum mismatch: robot/SubUSDs/base.usda" in report["problems"]
     assert report["dependencies"]["unreadable"] or report["dependencies"]["unresolved"]
 
 
-def test_the_built_pack_composes_through_the_resolver(lab, env):
+def test_the_built_pack_composes(lab, env):
     from pxr import Usd
 
-    packs.build_pack(env / "bricksim", ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()])
-    path = assets.resolve_path("robot/ur5e.usda", pack="bricksim")
-    stage = Usd.Stage.Open(str(path))
+    build(env, lab, ["robot/ur5e.usda"])
+    stage = Usd.Stage.Open(str(env / "bricksim/v1/robot/ur5e.usda"))
     assert stage.GetPrimAtPath("/R0") and not stage.GetPrimAtPath("/R0").GetPrimStack() == []
 
 
@@ -530,10 +518,88 @@ def test_a_file_kit_finds_in_its_own_install_is_runtime_not_outside(lab, env, tm
             result["assets"].append(str(install / "kit/mdl/core/Base/OmniPBR.mdl"))
         return split_runtime(results, install)
 
-    dest = env / "bricksim"
-    report = packs.build_pack(dest, ["robot/ur5e.usda"], kit_like, from_pack_dirs=[lab.resolve()])
+    inherit = {lab.resolve(): {r["path"]: r for r in json.loads((lab / "pack.yaml").read_text())["files"]}}
+    report = packs.build_pack(env, "bricksim", "v1", ["robot/ur5e.usda"], kit_like, from_pack_dirs=[lab.resolve()],
+                              inherit=inherit, defaults=dict(redistributable=False))
     assert report["outside"] == [] and report["runtime_materials"] == ["OmniPBR.mdl"]
     assert report["verified"]["self_contained"] is True and report["verified"]["runtime_materials"] == ["OmniPBR.mdl"]
+
+
+# ---------------------------------------------------------------- adopt and convert (library)
+
+
+def test_adopt_writes_a_manifest_with_hashes_source_license_and_redistributable_false(env, tmp_path):
+    source = tmp_path / "src"
+    put(source, "robot/a.usd", b"a")
+    put(source, "notes.txt", b"not an asset")
+    report = packs.adopt_folder(env, "mine", "v1", source, source_note="vendor CAD", license_="private")
+    assert report["files"] == 1 and report["pack"] == "mine/v1"
+    record = verifies(env, "mine").manifest["files"][0]
+    assert record == dict(path="robot/a.usd", sha256=sha(b"a"), source="vendor CAD", license="private", redistributable=False)
+    assert not (env / "mine/v1/notes.txt").exists()
+
+
+def test_adopt_can_say_redistributable_and_asks_for_provenance(env, tmp_path):
+    source = tmp_path / "src"
+    put(source, "a.usd")
+    packs.adopt_folder(env, "mine", "v1", source, source_note="s", license_="MIT", redistributable=True)
+    assert verifies(env, "mine").manifest["files"][0]["redistributable"] is True
+    for bad in (dict(source_note=None, license_="x"), dict(source_note="x", license_=None), dict(source_note="", license_="x"),
+                dict(source_note="two\nlines", license_="x"), dict(source_note="x" * 301, license_="x")):
+        with pytest.raises(packs.PackError) as caught:
+            packs.adopt_folder(env, "other", "v1", source, **bad)
+        assert caught.value.code in ("MISSING_PROVENANCE", "INVALID_VALUE")
+    with pytest.raises(packs.PackError, match="redistributable"):
+        packs.adopt_folder(env, "other", "v1", source, source_note="s", license_="l", redistributable="yes")
+    assert not (env / "other").exists()
+
+
+def test_adopt_is_immutable_and_dry_run_refuses_too(env, tmp_path):
+    source = tmp_path / "src"
+    put(source, "a.usd", b"a")
+    packs.adopt_folder(env, "mine", "v1", source, source_note="s", license_="l")
+    before = (env / "mine/v1/pack.yaml").read_bytes()
+    put(source, "b.usd", b"b")
+    for dry in (False, True):
+        with pytest.raises(packs.PackError) as caught:
+            packs.adopt_folder(env, "mine", "v1", source, source_note="s", license_="l", dry_run=dry)
+        assert caught.value.code == "VERSION_EXISTS"
+    assert (env / "mine/v1/pack.yaml").read_bytes() == before and not (env / "mine/v1/b.usd").exists()
+    packs.adopt_folder(env, "mine", "v2", source, source_note="s", license_="l")
+    assert len(verifies(env, "mine", "v2").manifest["files"]) == 2
+
+
+def test_convert_old_takes_hashes_from_the_files_not_from_sha256sums(env):
+    old = env / "ur5e-dt"
+    put(old, "robot/ur5e.usd", b"robot")
+    put(old, "objects/fmb1.json", b"{}")
+    put(old, "Isaac/Materials/m.mdl", b"mdl")
+    (old / "SHA256SUMS").write_text(f"{'0' * 64}  robot/ur5e.usd\n")  # a wrong pin: ignored
+    (old / "isaac-mcp-pack.json").write_text('{"version": 1, "entries": []}')
+    report = packs.convert_old(old, source_note="lab files", license_="private")
+    assert report["pack"] == "ur5e-dt/v1" and report["files"] == 3 and report["converted_from"] == str(old)
+    manifest = verifies(env, "ur5e-dt").manifest
+    assert {r["path"]: r["sha256"] for r in manifest["files"]}["robot/ur5e.usd"] == sha(b"robot")
+    assert sorted(r["path"] for r in manifest["files"]) == ["Isaac/Materials/m.mdl", "objects/fmb1.json", "robot/ur5e.usd"]
+    assert (old / "SHA256SUMS").exists() and (old / "robot/ur5e.usd").exists()  # the old files are left in place
+    assert any("old files are still in" in n for n in report["notes"])
+    assert [p["id"] for p in pm.list_packs(env)["packs"]] == ["ur5e-dt"] and pm.list_packs(env)["old_format"] == []
+
+
+def test_convert_old_refuses_a_second_time_a_symlink_and_a_wrong_id(env, tmp_path):
+    old = env / "old"
+    put(old, "a.usd", b"a")
+    (old / "link.usd").symlink_to(old / "a.usd")
+    report = packs.convert_old(old, source_note="s", license_="l", dry_run=True)
+    assert report["planned"] == ["a.usd"] and any("link.usd" in n for n in report["notes"])
+    packs.convert_old(old, source_note="s", license_="l")
+    with pytest.raises(packs.PackError) as caught:
+        packs.convert_old(old, source_note="s", license_="l")
+    assert caught.value.code == "VERSION_EXISTS"
+    with pytest.raises(packs.PackError, match="folder's name"):
+        packs.convert_old(old, pack_id="other", source_note="s", license_="l")
+    with pytest.raises(packs.PackError):
+        packs.convert_old(env / "absent", source_note="s", license_="l")
 
 
 # ---------------------------------------------------------------- the tools' trust rules
@@ -551,23 +617,41 @@ def refused(code, name, broker, **params):
 
 
 def test_packs_tool_reports_what_it_resolved(env, broker, capsys):
-    (env / "ur5e-dt").mkdir()
+    make_pack(env, "p", "v1", {"a.usd": b"a"})
     result = tool("assets.packs", broker)
-    assert result["selected_pack"] == "ur5e-dt" and result["pack_source"] == "default"
-    assert result["write_store"] == str(env.resolve()) and result["listing"][0]["packs"][0]["name"] == "ur5e-dt"
-    assert capsys.readouterr().out == ""
+    assert result["asset_root"] == str(env.resolve()) and result["asset_root_source"] == "environment"
+    assert result["selected_pack"] is None and result["listing"]["packs"][0]["id"] == "p"
+    assert capsys.readouterr().out == ""  # stdout is the MCP protocol
+
+
+def test_packs_tool_without_an_asset_root_says_which_setting_to_make(broker, monkeypatch, tmp_path):
+    monkeypatch.delenv("ISAAC_MCP_ASSET_ROOT")
+    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(tmp_path / "empty-ws"))
+    result = tool("assets.packs", broker)
+    assert result["asset_root"] is None and "ISAAC_MCP_ASSET_ROOT" in result["asset_root_error"] and result["listing"]["packs"] == []
+    refused("NO_ASSET_ROOT", "assets.pack_doctor", broker, pack="p/v1")
+
+
+def test_packs_tool_says_once_what_replaces_a_removed_variable(env, broker, monkeypatch):
+    monkeypatch.setenv("UR5E_DT_OFFLINE", "1")
+    result = tool("assets.packs", broker)
+    assert any("UR5E_DT_OFFLINE" in w and "ISAAC_MCP_ASSET_ROOT" in w for w in result["warnings"])
+
+
+def adopt(broker, **params):
+    return tool("assets.pack_adopt", broker, **{**PROVENANCE, **params})
 
 
 def test_adopt_refuses_a_folder_outside_approved_roots(env, broker, tmp_path):
     outside = tmp_path / "outside"
     put(outside, "a.usd")
-    refused("ROOT_NOT_APPROVED", "assets.pack_adopt", broker, pack="p", source_path=str(outside))
+    refused("ROOT_NOT_APPROVED", "assets.pack_adopt", broker, pack="p/v1", source_path=str(outside), **PROVENANCE)
     assert not (env / "p").exists()
 
 
-def test_adopt_does_not_treat_a_store_as_approved(env, broker):
+def test_adopt_does_not_treat_the_asset_root_as_approved(env, broker):
     put(env / "other", "a.usd")
-    refused("ROOT_NOT_APPROVED", "assets.pack_adopt", broker, pack="p", source_path=str(env / "other"))
+    refused("ROOT_NOT_APPROVED", "assets.pack_adopt", broker, pack="p/v1", source_path=str(env / "other"), **PROVENANCE)
 
 
 def test_a_symlink_inside_an_approved_root_cannot_reach_outside(env, broker, tmp_path):
@@ -575,7 +659,7 @@ def test_a_symlink_inside_an_approved_root_cannot_reach_outside(env, broker, tmp
     put(outside, "a.usd")
     root = broker.roots["demo"][0]
     (root / "link").symlink_to(outside)
-    refused("ROOT_NOT_APPROVED", "assets.pack_adopt", broker, pack="p", source_path=str(root / "link"))
+    refused("ROOT_NOT_APPROVED", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root / "link"), **PROVENANCE)
 
 
 def test_a_config_error_refuses_writes_with_no_fallback(env, tmp_path):
@@ -584,81 +668,108 @@ def test_a_config_error_refuses_writes_with_no_fallback(env, tmp_path):
     bad = Broker(str(config))
     root = put(tmp_path, "project2/a.usd").parent
     with pytest.raises(Exception, match="Configuration refused"):
-        tool("assets.pack_adopt", bad, pack="p", source_path=str(root))
+        adopt(bad, pack="p/v1", source_path=str(root))
 
 
 @pytest.mark.parametrize("path", ["relative/path", "/a/../b", "http://x/y", "/a//b"])
 def test_adopt_refuses_bad_source_paths(env, broker, path):
-    refused("INVALID_PATH", "assets.pack_adopt", broker, pack="p", source_path=path)
+    refused("INVALID_PATH", "assets.pack_adopt", broker, pack="p/v1", source_path=path, **PROVENANCE)
 
 
-def test_adopt_copies_pins_and_never_overwrites_without_force(env, broker, capsys):
+def test_adopt_copies_writes_the_manifest_and_never_modifies_a_version(env, broker, capsys):
     root = broker.roots["demo"][0]
     put(root, "robot/a.usd", b"a")
     put(root, "notes.txt", b"not an asset")
-    first = tool("assets.pack_adopt", broker, pack="p", source_path=str(root))
-    assert first["added"] == 1 and assets.pins(env / "p") == {"robot/a.usd": sha(b"a")}
-    assert not (env / "p/notes.txt").exists()
-    put(env / "p", "robot/a.usd", b"lab edit")
-    refused("CONFLICT", "assets.pack_adopt", broker, pack="p", source_path=str(root))
-    assert (env / "p/robot/a.usd").read_bytes() == b"lab edit"
-    tool("assets.pack_adopt", broker, pack="p", source_path=str(root), force=True)
-    assert (env / "p/robot/a.usd").read_bytes() == b"a"
+    first = adopt(broker, pack="p/v1", source_path=str(root), redistributable=True)
+    assert first["files"] == 1 and first["pack"] == "p/v1"
+    record = verifies(env, "p").manifest["files"][0]
+    assert record["sha256"] == sha(b"a") and record["redistributable"] is True and not (env / "p/v1/notes.txt").exists()
+    put(env / "p/v1", "robot/a.usd", b"lab edit")
+    refused("VERSION_EXISTS", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root), **PROVENANCE)
+    assert (env / "p/v1/robot/a.usd").read_bytes() == b"lab edit"
+    assert adopt(broker, pack="p/v2", source_path=str(root))["files"] == 1
     assert capsys.readouterr().out == ""
 
 
 def test_adopt_dry_run_writes_nothing(env, broker):
     root = broker.roots["demo"][0]
     put(root, "a.usd")
-    result = tool("assets.pack_adopt", broker, pack="p", source_path=str(root), dry_run=True)
+    result = adopt(broker, pack="p/v1", source_path=str(root), dry_run=True)
     assert result["planned"] == ["a.usd"] and not (env / "p").exists()
 
 
-def test_adopt_with_no_source_creates_an_empty_pack_once(env, broker):
-    result = tool("assets.pack_adopt", broker, pack="fresh")
-    assert result["created"] is True and (env / "fresh" / assets.PACK_FILE).is_file()
-    assert tool("assets.pack_adopt", broker, pack="fresh")["created"] is False
-    assert [p["name"] for p in tool("assets.packs", broker)["listing"][0]["packs"]] == ["fresh"]
+def test_adopt_needs_exactly_one_of_a_source_folder_or_an_old_pack(env, broker):
+    refused("INVALID_VALUE", "assets.pack_adopt", broker, pack="fresh/v1", **PROVENANCE)
+    refused("INVALID_VALUE", "assets.pack_adopt", broker, pack="fresh/v1", source_path="/tmp", from_old="x", **PROVENANCE)
+    assert not (env / "fresh").exists()
+
+
+def test_adopt_requires_source_and_license(env, broker):
+    root = broker.roots["demo"][0]
+    put(root, "a.usd")
+    refused("MISSING_PROVENANCE", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root))
+    refused("MISSING_PROVENANCE", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root), source="x")
+    assert not (env / "p").exists()
+
+
+def test_adopt_from_old_converts_a_pack_in_the_asset_root(env, broker):
+    old = env / "ur5e-dt"
+    put(old, "robot/ur5e.usd", b"r")
+    (old / "SHA256SUMS").write_text("")
+    listing = tool("assets.packs", broker)["listing"]
+    assert [o["id"] for o in listing["old_format"]] == ["ur5e-dt"] and listing["packs"] == []
+    result = adopt(broker, pack="ur5e-dt/v1", from_old="ur5e-dt")
+    assert result["files"] == 1 and result["converted_from"] == str(old.resolve())
+    verifies(env, "ur5e-dt")
+    refused("INVALID_PACK", "assets.pack_adopt", broker, pack="other/v1", from_old="ur5e-dt", **PROVENANCE)  # the id is the folder
+    refused("INVALID_VALUE", "assets.pack_adopt", broker, pack="ur5e-dt/v2", from_old="../x", **PROVENANCE)
 
 
 def test_adopt_refuses_a_source_overlapping_the_pack(env, tmp_path, monkeypatch, broker):
     root = broker.roots["demo"][0]
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(root))
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(root))
     put(root, "p/a.usd")
-    refused("OVERLAP", "assets.pack_adopt", broker, pack="p", source_path=str(root / "p"))
-    refused("OVERLAP", "assets.pack_adopt", broker, pack="p", source_path=str(root))
+    refused("OVERLAP", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root / "p"), **PROVENANCE)
+    refused("OVERLAP", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root), **PROVENANCE)
 
 
-@pytest.mark.parametrize("name", ["../escape", "a/b", "..", ""])
+@pytest.mark.parametrize("name", ["../escape/v1", "a/b/c", "..", "", "p", "p/", "/v1", "p/..", "bad name/v1", ".hidden/v1"])
 def test_write_tools_refuse_invalid_pack_names(env, broker, name):
-    refused("INVALID_PACK", "assets.pack_adopt", broker, pack=name)
+    refused("INVALID_PACK", "assets.pack_adopt", broker, pack=name, **PROVENANCE)
     refused("INVALID_PACK", "assets.pack_build", broker, pack=name, sources=["/x.usd"])
 
 
-def test_write_tools_refuse_a_store_inside_the_repository(env, broker, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(REPO / "tmp-never-created"))
-    refused("INSIDE_REPOSITORY", "assets.pack_adopt", broker, pack="p")
+def test_write_tools_refuse_an_asset_root_inside_the_repository(env, broker, monkeypatch):
+    root = broker.roots["demo"][0]
+    put(root, "a.usd")
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(REPO / "tmp-never-created"))
+    refused("INSIDE_REPOSITORY", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root), **PROVENANCE)
     assert not (REPO / "tmp-never-created").exists()
 
 
 def test_write_tools_refuse_a_pack_that_lands_inside_the_repository(env, broker, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", str(REPO.parent))
-    refused("INSIDE_REPOSITORY", "assets.pack_adopt", broker, pack=REPO.name)
+    root = broker.roots["demo"][0]
+    put(root, "a.usd")
+    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(REPO.parent))
+    refused("INSIDE_REPOSITORY", "assets.pack_adopt", broker, pack=f"{REPO.name}/v1", source_path=str(root), **PROVENANCE)
 
 
 def test_write_tools_refuse_a_symlinked_pack_folder(env, broker, tmp_path):
+    root = broker.roots["demo"][0]
+    put(root, "a.usd")
     target = tmp_path / "elsewhere"
-    target.mkdir()
+    (target / "v1").mkdir(parents=True)
     (env / "p").symlink_to(target)
-    refused("UNSAFE_DESTINATION", "assets.pack_adopt", broker, pack="p")
-    refused("UNSAFE_DESTINATION", "assets.pack_pin", broker, pack="p")
+    refused("UNSAFE_DESTINATION", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root), **PROVENANCE)
+    refused("UNSAFE_DESTINATION", "assets.pack_pin", broker, pack="p/v1")
 
 
 def test_no_write_tool_accepts_a_destination_path():
     from isaac_mcp.scene_contracts import REGISTRY
 
     for name in ("assets.pack_adopt", "assets.pack_pin", "assets.pack_build"):
-        assert not {"store", "destination", "dest", "target"} & set(REGISTRY[name]["parameters"])
+        assert not {"store", "root", "asset_root", "destination", "dest", "target"} & set(REGISTRY[name]["parameters"])
+    assert "force" not in REGISTRY["assets.pack_adopt"]["parameters"] and "force" not in REGISTRY["assets.pack_build"]["parameters"]
 
 
 def test_no_tool_can_approve_a_folder():
@@ -670,58 +781,65 @@ def test_no_tool_can_approve_a_folder():
 
 
 def test_pin_tool_needs_force_for_a_changed_file(env, broker):
-    folder = env / "p"
-    path = put(folder, "a.usd", b"a")
-    assert tool("assets.pack_pin", broker, pack="p")["new"] == ["a.usd"]
-    path.write_bytes(b"b")
-    assert refused("PIN_CHANGED", "assets.pack_pin", broker, pack="p").details["changed"][0]["actual"] == sha(b"b")
-    assert tool("assets.pack_pin", broker, pack="p", force=True)["changed"][0]["actual"] == sha(b"b")
+    directory = make_pack(env, "p", "v1", {"a.usd": b"a"})
+    assert tool("assets.pack_pin", broker, pack="p/v1")["pinned"] == 0
+    (directory / "a.usd").write_bytes(b"b")
+    assert refused("PIN_CHANGED", "assets.pack_pin", broker, pack="p/v1").details["changed"][0]["actual"] == sha(b"b")
+    assert tool("assets.pack_pin", broker, pack="p/v1", force=True)["changed"][0]["actual"] == sha(b"b")
+    verifies(env, "p")
 
 
-def test_pin_tool_only_touches_the_write_store(env, broker, tmp_path, monkeypatch):
-    second = tmp_path / "second"
-    put(second / "p", "a.usd")
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PATH", f"{env}{os.pathsep}{second}")
-    refused("PACK_NOT_FOUND", "assets.pack_pin", broker, pack="p")
-    assert not (second / "p" / "SHA256SUMS").exists()
+def test_pin_tool_only_touches_the_asset_root(env, broker, tmp_path):
+    other = tmp_path / "other-root"
+    make_pack(other, "p", "v1", {"a.usd": b"a"})
+    (other / "p/v1/a.usd").write_bytes(b"changed")
+    refused("PACK_NOT_FOUND", "assets.pack_pin", broker, pack="p/v1")
+    assert json.loads((other / "p/v1/pack.yaml").read_text())["files"][0]["sha256"] == sha(b"a")
 
 
-def test_pin_tool_defaults_to_the_selected_pack(env, broker, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_ASSET_PACK", "chosen")
-    put(env / "chosen", "a.usd", b"a")
-    assert tool("assets.pack_pin", broker)["pack_dir"].endswith("/chosen")
-    assert assets.pins(env / "chosen")
+def test_pin_and_doctor_default_to_the_project_files_pack(env, broker, monkeypatch, tmp_path):
+    directory = make_pack(env, "chosen", "v1", {"a.usd": b"a"})
+    (directory / "a.usd").write_bytes(b"b")
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "isaac-mcp.json").write_text(json.dumps({"pack": "chosen/v1"}))
+    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(project))
+    assert tool("assets.packs", broker)["selected_pack"] == "chosen/v1"
+    assert tool("assets.pack_pin", broker, force=True)["pack_dir"].endswith("/chosen/v1")
+    refused("INVALID_PACK", "assets.pack_doctor", broker, pack="no-version")
 
 
 def test_dependencies_tool_checks_trust_before_parsing(env, broker, tmp_path, monkeypatch):
     calls = []
     monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", "/nonexistent/python")
     outside = put(tmp_path, "outside.usda")
+
     def kit(name, args):
         calls.append(name)
         return {}
+
     with pytest.raises(packs.PackError) as caught:
         packs.run_tool("assets.dependencies", dict(paths=[str(outside)]), broker, kit_call=kit)
     assert caught.value.code == "ROOT_NOT_APPROVED" and not calls
     refused("LIMIT", "assets.dependencies", broker, paths=[])
 
 
-def test_dependencies_tool_on_a_store_and_a_root(env, broker, monkeypatch):
+def test_dependencies_tool_on_the_asset_root_and_a_root(env, broker, monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
     root = broker.roots["demo"][0]
-    a = put(env / "p", "a.usda", usda("./missing.usda"))
+    a = put(env / "p" / "v1", "a.usda", usda("./missing.usda"))
     b = put(root, "b.usda", usda())
     result = tool("assets.dependencies", broker, paths=[str(a), str(b)])
     assert result["backend"] == "usd_helper"
-    assert result["results"][0]["unresolved"][0].endswith("p/missing.usda")
+    assert result["results"][0]["unresolved"][0].endswith("p/v1/missing.usda")
     assert result["results"][0]["referenced_by"]
 
 
 def test_build_tool_refuses_sources_outside_trust(env, broker, tmp_path, monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
     outside = put(tmp_path, "outside.usda", usda())
-    refused("ROOT_NOT_APPROVED", "assets.pack_build", broker, pack="p", sources=[str(outside)])
-    refused("ROOT_NOT_APPROVED", "assets.pack_build", broker, pack="p", sources=[str(outside)], layout_root=str(tmp_path))
+    refused("ROOT_NOT_APPROVED", "assets.pack_build", broker, pack="p/v1", sources=[str(outside)], **PROVENANCE)
+    refused("ROOT_NOT_APPROVED", "assets.pack_build", broker, pack="p/v1", sources=[str(outside)], layout_root=str(tmp_path), **PROVENANCE)
     assert not (env / "p").exists()
 
 
@@ -731,78 +849,63 @@ def test_build_tool_does_not_copy_a_dependency_outside_trust(env, broker, tmp_pa
     root = broker.roots["demo"][0]
     secret = put(tmp_path, "private/secret.usda", usda())
     scene = put(root, "scene.usda", usda(str(secret.resolve())))
-    error = refused("UNRESOLVED_DEPENDENCIES", "assets.pack_build", broker, pack="p", sources=[str(scene)], layout_root=str(root))
+    error = refused("UNRESOLVED_DEPENDENCIES", "assets.pack_build", broker, pack="p/v1", sources=[str(scene)],
+                    layout_root=str(root), **PROVENANCE)
     assert error.details["outside"][0]["file"] == str(secret.resolve())
-    result = tool("assets.pack_build", broker, pack="p", sources=[str(scene)], layout_root=str(root), allow_unresolved=True)
+    result = tool("assets.pack_build", broker, pack="p/v1", sources=[str(scene)], layout_root=str(root), allow_unresolved=True,
+                  **PROVENANCE)
     assert result["status"] == "ok" and not list((env / "p").rglob("secret.usda"))
 
 
-def test_build_tool_from_a_scene_in_a_root_and_a_pack_in_a_store(env, broker, lab, monkeypatch):
+def test_build_tool_from_a_scene_in_a_root_and_a_pack_in_the_asset_root(env, broker, lab, monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
     root = broker.roots["demo"][0]
     scene = put(root, "scene.usda", usda("robot/ur5e.usda"))
-    result = tool("assets.pack_build", broker, pack="bricksim", sources=[str(scene)], from_pack="ur5e-dt")
+    result = tool("assets.pack_build", broker, pack="bricksim/v1", sources=[str(scene)], from_pack="lab/v1")
     assert result["status"] == "ok" and result["backend"] == "usd_helper"
-    assert result["verified"]["self_contained"] is True and (env / "bricksim/robot/ur5e.usda").is_file()
-    doctor = tool("assets.pack_doctor", broker, pack="bricksim")
-    assert doctor["ok"] is True and doctor["folders"][0]["dependencies"]["backend"] == "usd_helper"
+    assert result["verified"]["self_contained"] is True and (env / "bricksim/v1/robot/ur5e.usda").is_file()
+    assert verifies(env, "bricksim").manifest["files"][0]["source"] == "lab source"
+    doctor = tool("assets.pack_doctor", broker, pack="bricksim/v1")
+    assert doctor["ok"] is True and doctor["dependencies"]["backend"] == "usd_helper"
 
 
-def project_store(tmp_path, monkeypatch):
-    """A repository whose isaac-mcp.json claims a folder, as a cloned third-party repo could."""
+def test_build_tool_refuses_to_copy_out_of_a_pack_that_does_not_verify(env, broker, lab, monkeypatch):
+    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
+    (lab / "robot/ur5e.usda").write_text("#usda 1.0\n# edited by hand\n")
+    refused("PACK_NOT_VERIFIED", "assets.pack_build", broker, pack="b/v1", sources=["robot/ur5e.usda"], from_pack="lab/v1")
+    assert not (env / "b").exists()
+
+
+def test_a_project_file_with_an_asset_path_is_an_error_not_an_approval(env, broker, tmp_path, monkeypatch):
     claimed = tmp_path / "claimed"
-    claimed.mkdir()
+    put(claimed, "scene.usda", usda())
     repo = tmp_path / "cloned-repo"
     repo.mkdir()
     (repo / "isaac-mcp.json").write_text(json.dumps(dict(asset_path=[str(claimed)])))
     monkeypatch.setenv("ISAAC_MCP_PROJECT", str(repo))
-    assert claimed.resolve() in assets.project_stores()
-    return claimed
+    with pytest.raises(packs.PackError, match="not supported any more") as caught:
+        tool("assets.pack_build", broker, pack="p/v1", sources=[str(claimed / "scene.usda")])
+    assert caught.value.code == "INVALID_PACK" and not (env / "p").exists()
 
 
-def test_a_project_file_is_not_an_approval_for_building(env, broker, tmp_path, monkeypatch):
+def test_an_approved_folder_works(env, tmp_path, monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
-    claimed = project_store(tmp_path, monkeypatch)
+    claimed = tmp_path / "claimed"
     scene = put(claimed, "scene.usda", usda())
-    put(claimed / "somepack", "a.usda", usda())
-    refused("ROOT_NOT_APPROVED", "assets.pack_build", broker, pack="p", sources=[str(scene)])
-    refused("ROOT_NOT_APPROVED", "assets.pack_build", broker, pack="p", sources=[str(scene)], layout_root=str(claimed))
-    refused("PACK_NOT_FOUND", "assets.pack_build", broker, pack="p", sources=["a.usda"], from_pack="somepack")
-    refused("ROOT_NOT_APPROVED", "assets.dependencies", broker, paths=[str(scene)])
-    assert not (env / "p").exists()
-
-
-def test_a_project_store_gets_pin_checks_but_no_usd_parsing(env, broker, tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
-    claimed = project_store(tmp_path, monkeypatch)
-    put(claimed / "somepack", "a.usda", usda())
-    report = tool("assets.pack_doctor", broker, pack="somepack")
-    folder = report["folders"][0]
-    assert folder["files"]["total"] == 1 and folder["dependencies"]["checked"] is False
-    assert "approving" in folder["dependencies"]["reason"] and report["ok"] is False
-
-
-def test_an_approved_project_folder_works(env, tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
-    claimed = project_store(tmp_path, monkeypatch)
-    scene = put(claimed, "scene.usda", usda())
-    staging = tmp_path / "staging2"
-    staging.mkdir(mode=0o700)
-    config = tmp_path / "approval2.json"
-    config.write_text(json.dumps(dict(version=1, profile="trusted_project", roots={"c": str(claimed)}, staging=str(staging))))
-    result = tool("assets.pack_build", Broker(str(config)), pack="p", sources=[str(scene)], layout_root=str(claimed))
-    assert result["status"] == "ok" and (env / "p/scene.usda").is_file()
+    config = config_for(tmp_path, {"c": str(claimed)}, "approval2.json")
+    result = tool("assets.pack_build", Broker(config), pack="p/v1", sources=[str(scene)], layout_root=str(claimed), **PROVENANCE)
+    assert result["status"] == "ok" and (env / "p/v1/scene.usda").is_file()
 
 
 def test_build_tool_refuses_an_absent_or_overlapping_source_pack(env, broker, lab, monkeypatch):
     monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
-    refused("PACK_NOT_FOUND", "assets.pack_build", broker, pack="p", sources=["a.usda"], from_pack="absent")
-    refused("OVERLAP", "assets.pack_build", broker, pack="ur5e-dt", sources=["robot/ur5e.usda"], from_pack="ur5e-dt")
+    refused("PACK_NOT_VERIFIED", "assets.pack_build", broker, pack="p/v1", sources=["a.usda"], from_pack="absent/v1")
+    refused("VERSION_EXISTS", "assets.pack_build", broker, pack="lab/v1", sources=["robot/ur5e.usda"], from_pack="lab/v1")
 
 
 def test_build_without_any_parser_says_how_to_get_one(env, broker, lab, monkeypatch):
     monkeypatch.setattr(packs, "usd_python", lambda: None)
-    error = refused("USD_UNAVAILABLE", "assets.pack_build", broker, pack="p", sources=["robot/ur5e.usda"], from_pack="ur5e-dt")
+    error = refused("USD_UNAVAILABLE", "assets.pack_build", broker, pack="p/v1", sources=["robot/ur5e.usda"], from_pack="lab/v1")
     assert "ISAAC_MCP_USD_PYTHON" in str(error)
 
 
@@ -814,18 +917,20 @@ def test_without_a_host_parser_the_kit_computes_the_closure(env, broker, lab, mo
         seen.append(name)
         return dict(results=USD(args["paths"]))
 
-    result = tool("assets.pack_build", broker, kit_call=kit, pack="b", sources=["robot/ur5e.usda"], from_pack="ur5e-dt")
-    assert result["backend"] == "kit" and set(seen) == {"assets.dependencies"} and (env / "b/robot/ur5e.usda").is_file()
+    result = tool("assets.pack_build", broker, kit_call=kit, pack="b/v1", sources=["robot/ur5e.usda"], from_pack="lab/v1")
+    assert result["backend"] == "kit" and set(seen) == {"assets.dependencies"} and (env / "b/v1/robot/ur5e.usda").is_file()
 
 
 def test_doctor_tool_with_no_parser_and_a_dead_bridge_says_it_did_not_check(env, broker, monkeypatch):
     monkeypatch.setattr(packs, "usd_python", lambda: None)
-    put(env / "p", "a.usda", usda())
+    make_pack(env, "p", "v1", {"a.usda": usda()})
+
     def dead(name, args):
         raise OSError("connection refused")
-    result = tool("assets.pack_doctor", broker, kit_call=dead, pack="p")
+
+    result = tool("assets.pack_doctor", broker, kit_call=dead, pack="p/v1")
     assert result["status"] == "ok" and result["dependencies_checked"] is False and result["ok"] is False
-    assert "connection refused" in result["folders"][0]["dependencies"]["reason"]
+    assert "connection refused" in result["dependencies"]["reason"]
 
 
 def test_invalid_project_pack_reaches_the_caller_as_an_error(env, tmp_path, monkeypatch):
@@ -842,14 +947,18 @@ def test_invalid_project_pack_reaches_the_caller_as_an_error(env, tmp_path, monk
 def test_host_tools_run_through_the_gateway_without_kit(env, monkeypatch):
     from isaac_mcp import server as gw
 
-    put(env / "p", "a.usd", b"a")
+    directory = make_pack(env, "p", "v1", {"a.usd": b"a"})
+    (directory / "a.usd").write_bytes(b"b")
     state = gw._BridgeState()
     state.asset_broker = Broker("")
-    assert json.loads(gw._dispatch("assets.packs", {}, state))["listing"][0]["folders"] == ["p"]
-    result = json.loads(gw._dispatch("assets.pack_pin", dict(pack="p"), state))
-    assert result["status"] == "ok" and assets.pins(env / "p") == {"a.usd": sha(b"a")}
-    refusal = json.loads(gw._dispatch("assets.pack_adopt", dict(pack="q", source_path="/tmp"), state))
+    listing = json.loads(gw._dispatch("assets.packs", {}, state))["listing"]
+    assert [(p["id"], p["version"], p["verified"]) for p in listing["packs"]] == [("p", "v1", False)]
+    result = json.loads(gw._dispatch("assets.pack_pin", dict(pack="p/v1", force=True), state))
+    assert result["status"] == "ok" and result["pinned"] == 1
+    refusal = json.loads(gw._dispatch("assets.pack_adopt", dict(pack="q/v1", source_path="/tmp", **PROVENANCE), state))
     assert refusal["code"] == "ROOT_NOT_APPROVED"
+    missing = json.loads(gw._dispatch("assets.pack_doctor", dict(pack="nope/v1"), state))
+    assert missing["status"] == "error" and missing["code"] == "PACK_NOT_FOUND"
 
 
 def test_tool_annotations_match_what_each_tool_does(monkeypatch):
@@ -868,7 +977,7 @@ def test_only_the_dependency_tool_is_served_by_kit():
     from isaac_mcp.scene_contracts import HOST_ONLY, REGISTRY
 
     source = (REPO / "exts/sim-tools/sim_tools/extension.py").read_text()
-    assert "assets.user_stores()" in source and "assets.stores()" not in source
+    assert "pack_manifest.resolve_asset_root()" in source and "assets.user_stores()" not in source
     assert "canonical not in HOST_ONLY" in source and 'name == "assets.dependencies"' in source
     assert gw.HOST_RUN_TOOLS == HOST_ONLY and HOST_ONLY <= set(REGISTRY)
     assert "assets.dependencies" not in HOST_ONLY
@@ -907,7 +1016,7 @@ def test_every_pack_tool_publishes_string_arrays(monkeypatch):
                 array = next(v for v in variants if v.get("type") == "array")
                 assert array["items"]["type"] == "string", (canonical, name)
                 checked.append(name)
-    assert sorted(set(checked)) == ["entries", "files", "include", "paths", "sources"]
+    assert sorted(set(checked)) == ["files", "include", "paths", "sources"]
 
 
 def test_pack_tools_take_their_arguments_through_a_real_mcp_session(env, tmp_path, monkeypatch):
@@ -931,19 +1040,18 @@ def test_pack_tools_take_their_arguments_through_a_real_mcp_session(env, tmp_pat
         assert not failed, text
         return json.loads(text)
 
-    built = call("assets__pack_build", pack="p", sources=[str(root / "robot/a.usda")], layout_root=str(root))
+    built = call("assets__pack_build", pack="p/v1", sources=[str(root / "robot/a.usda")], layout_root=str(root), **PROVENANCE)
     assert built["status"] == "ok" and built["verified"]["self_contained"] is True
-    doctor = call("assets__pack_doctor", pack="p", entries=["robot/a.usda"])
-    assert doctor["ok"] is True
+    assert call("assets__pack_doctor", pack="p/v1")["ok"] is True
     assert call("assets__dependencies", paths=[str(root / "robot/a.usda")])["results"][0]["error"] is None
-    adopted = call("assets__pack_adopt", pack="q", source_path=str(root), include=["xyz"])
-    assert adopted["status"] == "ok" and (env / "q/extra/notes.xyz").is_file()
-    (env / "q/extra/c.usda").write_text("#usda 1.0\n# edit\n")
-    failed, text = mcp_call(server, "assets__pack_pin", dict(pack="q"))
+    adopted = call("assets__pack_adopt", pack="q/v1", source_path=str(root), include=["xyz"], **PROVENANCE)
+    assert adopted["status"] == "ok" and (env / "q/v1/extra/notes.xyz").is_file()
+    (env / "q/v1/extra/c.usda").write_text("#usda 1.0\n# edit\n")
+    failed, text = mcp_call(server, "assets__pack_pin", dict(pack="q/v1"))
     assert failed and "PIN_CHANGED" in text  # a refusal reaches the client as a tool error
-    assert call("assets__pack_pin", pack="q", files=["extra/c.usda"])["status"] == "ok"
+    assert call("assets__pack_pin", pack="q/v1", files=["extra/c.usda"])["status"] == "ok"
     assert call("assets__packs")["status"] == "ok"
-    failed, text = mcp_call(server, "assets__pack_pin", dict(pack="q", store="/tmp"))
+    failed, text = mcp_call(server, "assets__pack_pin", dict(pack="q/v1", store="/tmp"))
     assert failed or "store" in text
 
 
@@ -968,12 +1076,12 @@ def textured(root, *textures, extra=""):
 def test_build_copies_materialx_textures_and_only_those(env, tmp_path):
     root = tmp_path / "src"
     textured(root, "tex/a.jpg", "tex/b.jpg")
-    dest = env / "p"
-    report = packs.build_pack(dest, [str(root / "scene.usda")], USD, layout_root=root.resolve())
+    report = build_alone(env, [str(root / "scene.usda")], layout_root=root.resolve())
+    dest = env / "p/v1"
     assert (dest / "materials/tex/a.jpg").is_file() and (dest / "materials/tex/b.jpg").is_file()
     assert not (dest / "materials/tex/unused.jpg").exists()
     assert report["verified"]["self_contained"] is True and report["material_references"] == 2
-    assert {"materials/tex/a.jpg", "materials/tex/b.jpg"} <= set(assets.pins(dest))
+    assert {"materials/tex/a.jpg", "materials/tex/b.jpg"} <= {r["path"] for r in verifies(env, "p").manifest["files"]}
 
 
 def test_a_missing_texture_refuses_the_build(env, tmp_path):
@@ -981,22 +1089,21 @@ def test_a_missing_texture_refuses_the_build(env, tmp_path):
     textured(root, "tex/a.jpg")
     (root / "materials/tex/a.jpg").unlink()
     with pytest.raises(packs.PackError) as caught:
-        packs.build_pack(env / "p", [str(root / "scene.usda")], USD, layout_root=root.resolve())
+        build_alone(env, [str(root / "scene.usda")], layout_root=root.resolve())
     assert caught.value.code == "UNRESOLVED_DEPENDENCIES" and "tex/a.jpg" in str(caught.value)
     assert not (env / "p").exists()
 
 
-def test_a_texture_removed_later_fails_doctor(env, tmp_path):
+def test_a_texture_missing_from_a_pack_fails_doctor(env, tmp_path):
     root = tmp_path / "src"
     textured(root, "tex/a.jpg")
-    dest = env / "p"
-    packs.build_pack(dest, [str(root / "scene.usda")], USD, layout_root=root.resolve())
-    assert packs.doctor_folder(dest, closure=USD)["ok"] is True
-    (dest / "materials/tex/a.jpg").unlink()
-    packs.unpin_files(dest, ["materials/tex/a.jpg"])
-    report = packs.doctor_folder(dest, closure=USD)
+    build_alone(env, [str(root / "scene.usda")], layout_root=root.resolve())
+    assert packs.doctor_pack(env, "p", "v1", closure=USD)["ok"] is True
+    (env / "p/v1/materials/tex/a.jpg").unlink()
+    report = packs.doctor_pack(env, "p", "v1", closure=USD)
     assert report["ok"] is False and report["dependencies"]["self_contained"] is False
     assert report["dependencies"]["unresolved"][0]["reference"] == "materials/tex/a.jpg"
+    assert "Missing pack file: materials/tex/a.jpg" in report["problems"]
 
 
 def test_a_texture_outside_the_layout_is_not_copied(env, tmp_path):
@@ -1004,7 +1111,7 @@ def test_a_texture_outside_the_layout_is_not_copied(env, tmp_path):
     put(tmp_path, "secret/t.jpg", b"private")
     textured(root, "../../secret/t.jpg")
     with pytest.raises(packs.PackError) as caught:
-        packs.build_pack(env / "p", [str(root / "scene.usda")], USD, layout_root=root.resolve())
+        build_alone(env, [str(root / "scene.usda")], layout_root=root.resolve())
     assert caught.value.details["outside"][0]["file"].endswith("secret/t.jpg")
 
 
@@ -1014,21 +1121,19 @@ def test_nested_materialx_is_followed(env, tmp_path):
     put(root, "a.mtlx", '<materialx version="1.38"><xi:include xmlns:xi="x" href="b.mtlx"/></materialx>')
     put(root, "b.mtlx", mtlx("t.jpg"))
     put(root, "t.jpg", b"p")
-    dest = env / "p"
-    report = packs.build_pack(dest, [str(root / "scene.usda")], USD, layout_root=root.resolve())
-    assert (dest / "t.jpg").is_file() and report["verified"]["self_contained"] is True
+    report = build_alone(env, [str(root / "scene.usda")], layout_root=root.resolve())
+    assert (env / "p/v1/t.jpg").is_file() and report["verified"]["self_contained"] is True
 
 
 @pytest.mark.parametrize("texture,extra", [("tex/{UDIM}.jpg", ""), ("tex/a.jpg", 'fileprefix="tex/"')])
 def test_a_reference_that_cannot_be_followed_is_never_self_contained(env, tmp_path, texture, extra):
     root = tmp_path / "src"
     textured(root, texture, extra=extra)
-    dest = env / "p"
     notes = []
-    report = packs.build_pack(dest, [str(root / "scene.usda")], USD, layout_root=root.resolve(), notes=notes)
+    report = build_alone(env, [str(root / "scene.usda")], layout_root=root.resolve(), notes=notes)
     assert report["unfollowable"] and report["verified"]["self_contained"] is False
     assert any("self_contained is false" in n for n in notes)
-    doctor = packs.doctor_folder(dest, closure=USD)
+    doctor = packs.doctor_pack(env, "p", "v1", closure=USD)
     assert doctor["dependencies"]["unfollowable"] and doctor["dependencies"]["self_contained"] is False
     assert doctor["warnings"]
 
@@ -1038,11 +1143,10 @@ def test_mdl_literal_textures_are_followed_and_custom_modules_are_named(env, tmp
     put(root, "scene.usda", '#usda 1.0\ndef Shader "S" {\n uniform asset info:mdl:sourceAsset = @./m.mdl@\n}\n')
     put(root, "m.mdl", 'mdl 1.6;\nimport ::tex::*;\ntexture_2d t = texture_2d("tex/a.png");\n')
     put(root, "tex/a.png", b"p")
-    dest = env / "p"
-    report = packs.build_pack(dest, [str(root / "scene.usda")], USD, layout_root=root.resolve())
-    assert (dest / "tex/a.png").is_file() and report["verified"]["self_contained"] is True
+    report = build_alone(env, [str(root / "scene.usda")], layout_root=root.resolve())
+    assert (env / "p/v1/tex/a.png").is_file() and report["verified"]["self_contained"] is True
     put(root, "m.mdl", 'mdl 1.6;\nimport ::nvidia::core_definitions::*;\n')
-    report = packs.build_pack(env / "q", [str(root / "scene.usda")], USD, layout_root=root.resolve())
+    report = build_alone(env, [str(root / "scene.usda")], pack="q", layout_root=root.resolve())
     assert "custom MDL module" in report["unfollowable"][0]["reason"]
     assert report["verified"]["self_contained"] is False
 
@@ -1053,7 +1157,7 @@ def test_the_shared_parser_matches_what_the_import_validator_uses():
     assert "ET.fromstring" not in source  # no second parser
 
 
-# ---------------------------------------------------------------- adopt: named files and entries
+# ---------------------------------------------------------------- adopt: named files
 
 
 def test_adopt_can_copy_only_named_files_and_folders(env, broker):
@@ -1063,16 +1167,16 @@ def test_adopt_can_copy_only_named_files_and_folders(env, broker):
     put(root, "tex/deep/u.png", b"u")
     put(root, "cards/preview.png", b"no")
     put(root, "notes.xyz", b"named")
-    result = tool("assets.pack_adopt", broker, pack="p", source_path=str(root), files=["a.usda", "tex", "notes.xyz"])
-    assert result["added"] == 4 and not (env / "p/cards").exists()
-    assert set(assets.pins(env / "p")) == {"a.usda", "tex/t.jpg", "tex/deep/u.png", "notes.xyz"}
+    result = adopt(broker, pack="p/v1", source_path=str(root), files=["a.usda", "tex", "notes.xyz"])
+    assert result["files"] == 4 and not (env / "p/v1/cards").exists()
+    assert {r["path"] for r in verifies(env, "p").manifest["files"]} == {"a.usda", "tex/t.jpg", "tex/deep/u.png", "notes.xyz"}
 
 
 @pytest.mark.parametrize("name,code", [("../up.usda", "REFUSED"), ("/etc/passwd", "REFUSED"), ("gone.usda", "NOT_FOUND")])
 def test_adopt_refuses_a_named_file_outside_the_source(env, broker, name, code):
     root = broker.roots["demo"][0]
     put(root, "a.usda", usda())
-    refused(code, "assets.pack_adopt", broker, pack="p", source_path=str(root), files=[name])
+    refused(code, "assets.pack_adopt", broker, pack="p/v1", source_path=str(root), files=[name], **PROVENANCE)
     assert not (env / "p").exists()
 
 
@@ -1081,38 +1185,18 @@ def test_adopt_refuses_a_named_symlink(env, broker, tmp_path):
     secret = put(tmp_path, "secret/s.jpg", b"s")
     (root / "link.jpg").symlink_to(secret)
     (root / "dir").symlink_to(secret.parent)
-    refused("UNSAFE_ENTRY", "assets.pack_adopt", broker, pack="p", source_path=str(root), files=["link.jpg"])
-    refused("UNSAFE_ENTRY", "assets.pack_adopt", broker, pack="p", source_path=str(root), files=["dir/s.jpg"])
+    refused("UNSAFE_ENTRY", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root), files=["link.jpg"], **PROVENANCE)
+    refused("UNSAFE_ENTRY", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root), files=["dir/s.jpg"], **PROVENANCE)
 
 
-def test_adopt_records_named_entries_for_doctor(env, broker):
+def test_adopt_with_no_asset_files_says_so_and_writes_nothing(env, broker):
     root = broker.roots["demo"][0]
-    put(root, "a.usda", usda())
-    put(root, "b.usda", usda())
-    result = tool("assets.pack_adopt", broker, pack="p", source_path=str(root), entries=["a.usda"])
-    assert result["entries"] == ["a.usda"] and result["entries_source"] == "argument"
-    report = packs.doctor_folder(env / "p", closure=USD)
-    assert report["entry_source"] == "pack_file" and report["unused"] == ["b.usda"]
-    refused("NOT_FOUND", "assets.pack_adopt", broker, pack="q", source_path=str(root), entries=["nope.usda"])
+    put(root, "notes.txt")
+    refused("NOT_FOUND", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root), **PROVENANCE)
+    assert not (env / "p").exists()
 
 
-def test_adopt_infers_a_sole_top_level_usd(env, broker):
-    root = broker.roots["demo"][0]
-    put(root, "Teapot.usd", usda())
-    put(root, "sub/part.usda", usda())
-    assert tool("assets.pack_adopt", broker, pack="p", source_path=str(root))["entries_source"] == "inferred"
-    assert packs.read_pack_file(env / "p")["entries"] == ["Teapot.usd"]
-
-
-def test_adopt_with_several_top_level_usds_infers_nothing_and_says_so(env, broker):
-    root = broker.roots["demo"][0]
-    put(root, "a.usda", usda())
-    put(root, "b.usda", usda())
-    result = tool("assets.pack_adopt", broker, pack="p", source_path=str(root))
-    assert result["entries"] == [] and any("entries" in n for n in result["notes"])
-
-
-# ---------------------------------------------------------------- approval and store packs
+# ---------------------------------------------------------------- approval and packs in the asset root
 
 
 def config_for(tmp_path, roots, name="approval3.json"):
@@ -1189,48 +1273,43 @@ def test_the_helper_can_set_up_staging_alone(tmp_path):
     assert made.config_error is None and made.staging == tmp_path / "st" and made.roots == {}
 
 
-def test_a_user_store_pack_can_be_located_and_snapshotted(env, tmp_path):
+def test_a_pack_in_the_asset_root_can_be_located_and_snapshotted(env, tmp_path):
     made = Broker(config_for(tmp_path, {}))
-    path = put(env / "chess", "scene.usda", usda())
-    packs.pin_pack(env / "chess")
-    root_id, rel = made.locate(str(path))
+    make_pack(env, "chess", "v1", {"scene.usda": usda()})
+    root_id, rel = made.locate(str(env.resolve() / "chess/v1/scene.usda"))
     assert rel == "scene.usda" and root_id.startswith("pack:")
     snapshot = made.snapshot(root_id, rel)
     assert made.verify(snapshot["snapshot_id"], snapshot["manifest_sha256"])[1]["entry"] == "scene.usda"
 
 
-def test_a_corrupt_store_pack_is_refused(env, tmp_path):
+def test_a_pack_that_does_not_verify_is_refused(env, tmp_path):
     made = Broker(config_for(tmp_path, {}))
-    path = put(env / "chess", "scene.usda", usda())
-    put(env / "chess", "other.usda", usda())
-    packs.pin_pack(env / "chess")
-    path.write_text("#usda 1.0\n# changed\n")
-    (env / "chess" / "other.usda").unlink()
-    with pytest.raises(Exception, match="do not match its pins") as caught:
-        made.locate(str(path))
+    directory = make_pack(env, "chess", "v1", {"scene.usda": usda(), "other.usda": usda()})
+    (directory / "scene.usda").write_text("#usda 1.0\n# changed\n")
+    (directory / "other.usda").unlink()
+    with pytest.raises(Exception, match="does not verify") as caught:
+        made.locate(str(env.resolve() / "chess/v1/scene.usda"))
     assert caught.value.code == "PACK_CORRUPT"
-    assert "changed: ['scene.usda']" in str(caught.value)
-    assert "missing: ['other.usda']" in str(caught.value)
+    assert "Checksum mismatch: scene.usda" in str(caught.value) and "Missing pack file: other.usda" in str(caught.value)
 
 
-def test_a_project_file_store_or_a_flat_store_file_is_still_not_approval(env, tmp_path, monkeypatch):
+def test_a_file_that_is_not_in_a_pack_version_is_still_not_approval(env, tmp_path, monkeypatch):
     made = Broker(config_for(tmp_path, {}))
-    claimed = project_store(tmp_path, monkeypatch)
-    in_project = put(claimed / "somepack", "a.usda", usda())
     flat = put(env, "flat.usda", usda())
-    for path in (in_project, flat):
+    two_deep = put(env, "chess/scene.usda", usda())  # a version is required: <id>/<version>/<file>
+    outside = put(tmp_path, "elsewhere/scene.usda", usda())
+    for path in (flat, two_deep, outside):
         with pytest.raises(Exception, match="outside all user-approved") as caught:
             made.locate(str(path))
         assert caught.value.code == "ROOT_NOT_APPROVED"
 
 
-def test_a_symlink_in_a_store_pack_is_refused_by_the_snapshot(env, tmp_path):
+def test_a_symlink_in_a_pack_is_refused(env, tmp_path):
     made = Broker(config_for(tmp_path, {}))
-    path = put(env / "chess", "scene.usda", usda())
-    (env / "chess/evil.png").symlink_to(put(tmp_path, "secret.png", b"s"))
-    root_id, rel = made.locate(str(path))
-    with pytest.raises(Exception, match="symlink"):
-        made.snapshot(root_id, rel)
+    directory = make_pack(env, "chess", "v1", {"scene.usda": usda()})
+    (directory / "evil.png").symlink_to(put(tmp_path, "secret.png", b"s"))
+    with pytest.raises(Exception, match="[Ss]ymlink"):
+        made.locate(str(env.resolve() / "chess/v1/scene.usda"))
 
 
 # ---------------------------------------------------------------- refusals that say what to do
@@ -1246,23 +1325,13 @@ def test_a_units_mismatch_says_what_to_change():
 
 
 def test_approval_helper_refuses_a_second_root_rather_than_dropping_the_first(tmp_path, capsys):
-    import pytest as _pytest
-
     from isaac_mcp import project_assets as _assets
 
-    with _pytest.raises(SystemExit):
+    with pytest.raises(SystemExit):
         _assets.main(["--config", str(tmp_path / "c.json"), "--trust-project", "--root-id", "a", "--root", str(tmp_path),
                       "--root-id", "b", "--root", str(tmp_path)])
     assert "can be given once" in capsys.readouterr().err
     assert not (tmp_path / "c.json").exists()
-
-
-def test_doctor_names_a_symlink_that_import_would_refuse(tmp_path):
-    from isaac_mcp import asset_packs
-
-    (tmp_path / "a.usda").write_text("#usda 1.0\n")
-    (tmp_path / "link.usda").symlink_to(tmp_path / "a.usda")
-    assert asset_packs._pack_symlinks(tmp_path) == ["link.usda"]
 
 
 def test_adopt_reports_a_symlink_it_did_not_copy(env, broker):
@@ -1272,47 +1341,15 @@ def test_adopt_reports_a_symlink_it_did_not_copy(env, broker):
     (root / "link").symlink_to(root / "real", target_is_directory=True)
     (root / "alias.usda").symlink_to(root / "solo.usda")
 
-    out = packs.run_tool("assets.pack_adopt",
-                         {"pack": "linked", "source_path": str(root)}, broker)
+    out = adopt(broker, pack="linked/v1", source_path=str(root))
     assert out["status"] == "ok"
     assert out["skipped_symlinks"] == ["alias.usda", "link/"]
     assert any("symbolic link" in note and "alias.usda" in note for note in out["notes"])
-    assert (env / "linked/real/a.usda").is_file()
-    assert (env / "linked/solo.usda").is_file()
-    assert not (env / "linked/link").exists()
-    assert not (env / "linked/alias.usda").exists()
+    assert (env / "linked/v1/real/a.usda").is_file()
+    assert (env / "linked/v1/solo.usda").is_file()
+    assert not (env / "linked/v1/link").exists()
+    assert not (env / "linked/v1/alias.usda").exists()
 
-    dry = packs.run_tool("assets.pack_adopt",
-                         {"pack": "linked2", "source_path": str(root), "dry_run": True}, broker)
+    dry = adopt(broker, pack="linked2/v1", source_path=str(root), dry_run=True)
     assert dry["skipped_symlinks"] == ["alias.usda", "link/"]
     assert not (env / "linked2").exists()
-
-
-def test_origin_is_recorded_once_kept_and_listed(lab, env, tmp_path):
-    dest = env / "bricksim"
-    packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()], source_note="https://example.test/repo @ abc123")
-    packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()], source_note="https://example.test/repo @ abc123")
-    assert packs.read_pack_file(dest)["origin"] == ["https://example.test/repo @ abc123"]  # the same note is not added twice
-    packs.write_pack_file(dest, [])  # a later write without a note keeps it
-    assert packs.read_pack_file(dest)["origin"] == ["https://example.test/repo @ abc123"]
-    packs.write_pack_file(dest, [], origin="a second source")
-    assert packs.read_pack_file(dest)["origin"] == ["https://example.test/repo @ abc123", "a second source"]
-    listed = packs.list_packs([env])[0]["packs"]
-    assert [p["origin"] for p in listed if p["name"] == "bricksim"] == [["https://example.test/repo @ abc123", "a second source"]]
-
-
-def test_a_pack_with_no_origin_lists_none_and_writes_no_field(lab, env):
-    dest = env / "plain"
-    packs.build_pack(dest, ["robot/ur5e.usda"], USD, from_pack_dirs=[lab.resolve()])
-    assert "origin" not in packs.read_pack_file(dest)
-
-
-@pytest.mark.parametrize("bad", ["two\nlines", "x" * 301, "tab\there", 5, ["a"]])
-def test_origin_must_be_one_short_line_of_text(bad):
-    with pytest.raises(packs.PackError) as caught:
-        packs.clean_origin(bad)
-    assert caught.value.code == "INVALID_VALUE"
-
-
-def test_origin_blank_means_none():
-    assert packs.clean_origin(None) is None and packs.clean_origin("") is None and packs.clean_origin("   ") is None

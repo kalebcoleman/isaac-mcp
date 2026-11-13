@@ -329,7 +329,7 @@ def test_init_creates_layout_idempotent_and_never_overwrites(world):
     target = world.tmp / "newws"
     r = run_cli(world, "init", "--workspace", str(target))
     assert r.returncode == 0 and f'export ISAAC_MCP_WORKSPACE="{target}"' in r.stdout
-    assert "asset_path" in r.stdout
+    assert "ISAAC_MCP_ASSET_ROOT" in r.stdout and "my-robot/v1" in r.stdout
     for d in ("isaac-mcp-assets", "envs", "projects", "runs"):
         assert (target / d).is_dir()
     assert "Try the Isaac MCP first" in (target / "AGENTS.md").read_text()

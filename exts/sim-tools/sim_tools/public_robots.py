@@ -23,6 +23,7 @@ def _wheels(left, right, radius, separation, base):
 
 
 NVIDIA_ROBOTS = {
+    "ur5e": dict(prim="UR5e", paths=[ROBOTS + "UniversalRobots/ur5e/ur5e.usd"]),
     "franka": dict(prim="Franka", paths=[ROBOTS + "FrankaRobotics/FrankaPanda/franka.usd"]),
     "turtlebot3_burger": dict(prim="TurtleBot3", paths=[_TB3 + "tb3_burger_processed.usda", _TB3 + "turtlebot3_burger.usd"],
                               wheels=_wheels("wheel_left_joint", "wheel_right_joint", 0.033, 0.16, "base_link")),
@@ -71,17 +72,14 @@ async def client_stat(url):
     return stat_found(result, omni.client.Result.OK, omni.client.Result.ERROR_NOT_FOUND)
 
 
-async def locate(name, root, stat, offline=False):
+async def locate(name, root, stat):
     """What sim.quick_start needs for this name: the first path this build has, or a refusal naming the choices."""
     entry = NVIDIA_ROBOTS[name]
     known = ", ".join(sorted(NVIDIA_ROBOTS))
     if not root:
         refuse("ASSETS_UNAVAILABLE", f"{name} comes from Isaac Sim's assets root, and this simulator has none configured. "
-               "Set persistent.isaac.asset_root.default, or use <pack>/<file.usd> from your asset folder. Nothing was changed.")
+               "Set persistent.isaac.asset_root.default, or use <pack id>/<version>/<file.usd> from a pack. Nothing was changed.")
     root = root.rstrip("/")
-    if offline and "://" in root and not root.startswith("file:"):
-        refuse("ASSET_MISSING", f"{name} would load from {root}, and strict mode forbids the download. "
-               "Use <pack>/<file.usd> from your asset folder. Nothing was changed.")
     tried, failed = [], None
     for path in entry["paths"]:
         url = f"{root}/{path}"
@@ -97,4 +95,4 @@ async def locate(name, root, stat, offline=False):
         refuse("ASSETS_UNAVAILABLE", f"Could not reach this simulator's assets root to check {name} ({failed}). "
                f"Tried: {', '.join(tried)}. Nothing was changed.", tried=tried)
     refuse("ROBOT_NOT_ON_THIS_BUILD", f"This simulator's assets root has no {name}. Tried: {', '.join(tried)}. "
-           f"Other public names: {known}, ur5e. Nothing was changed.", tried=tried, names=sorted(NVIDIA_ROBOTS) + ["ur5e"])
+           f"Other public names: {known}. Nothing was changed.", tried=tried, names=sorted(NVIDIA_ROBOTS))

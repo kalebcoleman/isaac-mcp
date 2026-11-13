@@ -462,7 +462,7 @@ class Broker:
             return found
         refuse(
             "ROOT_NOT_APPROVED",
-            "The path is outside all user-approved project roots and user asset stores." + approval_help(source if isinstance(source, (str, os.PathLike)) else None),
+            "The path is outside all user-approved project roots and the asset root." + approval_help(source if isinstance(source, (str, os.PathLike)) else None),
         )
 
     def locate_folder(self, source_path):
@@ -542,47 +542,42 @@ class Broker:
             usd_path(rel)
 
     def _store_pack(self, source, kind="usd"):
-        """Map a path in a pack of a user store to a root; the user put it there.
+        """Map a path in a pack version under the asset root to a root; the user put it there.
 
-        Only ``user_stores``: a project file's ``asset_path`` is found from the working directory,
-        so a cloned repository could name any folder. A pack whose files fail their pins is refused.
+        Only the asset root: a project file cannot name another folder. A pack that does not verify
+        against its ``pack.yaml`` (a changed, missing or unlisted file, or a symlink) is refused.
         """
-        from . import asset_packs, assets
+        from . import pack_manifest
 
-        for store in assets.Resolver(assets.DEFAULT_PACK).user_stores():
-            try:
-                pack, *rest = source.relative_to(store).parts
-            except ValueError:
-                continue
-            if not rest:
-                continue
-            try:
-                assets.validate_pack_name(pack)
-            except assets.InvalidPackName:
-                continue
-            folder = store / pack
-            rel = "/".join(rest)
-            self._check_kind(rel, kind)
-            changes = asset_packs.pin_changes(folder)
-            missing = changes["removed"]
-            changed = [item["file"] for item in changes["changed"]]
-            if missing or changed:
-                parts = []
-                if changed:
-                    parts.append(f"changed: {changed[:10]}")
-                if missing:
-                    parts.append(f"missing: {missing[:10]}")
-                refuse("PACK_CORRUPT", f"Pack {pack} has files that do not match its pins ({'; '.join(parts)}). "
-                       "Run assets__pack_doctor, then restore the missing files or re-pin the changed ones "
-                       "with assets__pack_pin.")
-            root_id = f"pack:{folder}"
-            fd = open_dir(folder)
-            try:
-                self._pack_roots.setdefault(root_id, (folder, signature(os.fstat(fd))[:2]))
-            finally:
-                os.close(fd)
-            return root_id, rel
-        return None
+        try:
+            root = pack_manifest.resolve_asset_root().path
+        except pack_manifest.RootError:
+            return None
+        try:
+            pack_id, version, *rest = source.relative_to(root).parts
+        except ValueError:
+            return None
+        if not rest:
+            return None
+        try:
+            pack_manifest.identifier(pack_id), pack_manifest.identifier(version)
+        except pack_manifest.ManifestError:
+            return None
+        folder = root / pack_id / version
+        rel = "/".join(rest)
+        self._check_kind(rel, kind)
+        report = pack_manifest.inspect_pack(root, pack_id, version)
+        if not report["verified"]:
+            refuse("PACK_CORRUPT", f"Pack {pack_id}/{version} does not verify against its pack.yaml "
+                   f"({'; '.join(report['problems'][:5])}). Run assets__pack_doctor; write a corrected new "
+                   "version with assets__pack_adopt or assets__pack_build.")
+        root_id = f"pack:{folder}"
+        fd = open_dir(folder)
+        try:
+            self._pack_roots.setdefault(root_id, (folder, signature(os.fstat(fd))[:2]))
+        finally:
+            os.close(fd)
+        return root_id, rel
 
     def root_fd(self, root_id):
         known = self.roots.get(root_id) or self._pack_roots.get(root_id)

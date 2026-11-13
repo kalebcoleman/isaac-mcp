@@ -64,7 +64,7 @@ def route(broker, params: dict) -> tuple[str, dict, dict]:
             # A folder outside every approved root: say how to approve it, instead of that its name is not a format.
             from .project_assets import approval_help
 
-            refuse("ROOT_NOT_APPROVED", "That folder is outside all user-approved project roots and user asset stores." + approval_help(Path(source)))
+            refuse("ROOT_NOT_APPROVED", "That folder is outside all user-approved project roots and the asset root." + approval_help(Path(source)))
         if fmt is None:
             refuse("UNSUPPORTED_FORMAT", f"{PurePosixPath(str(source)).name} is not a format the import knows. {_HELP}")
     info["format"] = fmt

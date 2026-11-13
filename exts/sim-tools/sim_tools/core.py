@@ -1222,27 +1222,20 @@ class Scene:
         materials = self.validate_project_materials(snapshot_id, manifest_sha256)
         _, manifest = self.broker.verify(snapshot_id, manifest_sha256)
         source_root = filename.parents[len(Path(manifest["entry"]).parts) - 1]
-        # Same primary asset folder as the twin's resolver: the first entry of
-        # ISAAC_MCP_ASSET_PATH (or its legacy name); else <ISAAC_MCP_WORKSPACE>/isaac-mcp-assets
-        # (an older <workspace>/assets is only read, never written); else the isaac-mcp-assets
-        # folder next to the checkout. The bench goes into its ur5e-dt pack folder, where the
-        # resolver looks first, so an existing copy is never silently shadowed.
+        # The one asset root (ISAAC_MCP_ASSET_ROOT, else <workspace>/assets). The bench goes into an
+        # old-format ur5e-dt folder there; this tool is slated for removal with the workstation it served.
         repo = Path(__file__).resolve().parents[3]
-        override = os.getenv("ISAAC_MCP_ASSET_PATH", "").strip()
-        override = override.split(os.pathsep)[0].strip() if override else ""
-        override = override or os.getenv("UR5E_DT_ASSET_CACHE", "").strip()
-        if not override:
-            workspace = os.getenv("ISAAC_MCP_WORKSPACE", "").strip()
-            if workspace:
-                override = str(Path(workspace).expanduser() / "isaac-mcp-assets")
-            else:
-                override = str(repo.parent / "isaac-mcp-assets")
+        from isaac_mcp import pack_manifest
+
+        try:
+            override = str(pack_manifest.resolve_asset_root().path)
+        except pack_manifest.RootError as exc:
+            refuse("CONFIG", str(exc))
         cache = Path(override).expanduser() / "ur5e-dt"
         if not cache.is_absolute() or ".." in cache.parts:
             refuse(
                 "CONFIG",
-                "The asset store (ISAAC_MCP_ASSET_PATH, or the deprecated "
-                "UR5E_DT_ASSET_CACHE) must be an absolute local directory.",
+                "The asset root (ISAAC_MCP_ASSET_ROOT) must be an absolute local directory.",
             )
         if cache == repo or repo in cache.parents:
             refuse("CONFIG", "Workstation cache must be outside the repository.")
