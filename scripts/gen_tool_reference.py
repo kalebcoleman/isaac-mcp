@@ -257,16 +257,23 @@ def block_files():
     return found
 
 
-def stale_pages():
-    """The repo-relative pages whose generated content differs from the code."""
+def _shown(path):
+    try:
+        return str(Path(path).relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def stale_pages(output=None, files=None):
+    """The pages whose generated content differs from the code."""
+    output = OUTPUT if output is None else output
     stale = []
-    text = render()
-    if not OUTPUT.is_file() or OUTPUT.read_text() != text:
-        stale.append(str(OUTPUT.relative_to(ROOT)))
-    for path in block_files():
+    if not output.is_file() or output.read_text() != render():
+        stale.append(_shown(output))
+    for path in block_files() if files is None else files:
         current = path.read_text(encoding="utf-8")
         if refresh_blocks(current) != current:
-            stale.append(str(path.relative_to(ROOT)))
+            stale.append(_shown(path))
     return stale
 
 
@@ -278,18 +285,18 @@ def main():
     args = parser.parse_args()
     if args.write:
         OUTPUT.write_text(render())
-        print(f"wrote {OUTPUT.relative_to(ROOT)}")
+        print(f"wrote {_shown(OUTPUT)}")
         for path in block_files():
             current = path.read_text(encoding="utf-8")
             if refresh_blocks(current) != current:
                 path.write_text(refresh_blocks(current), encoding="utf-8")
-                print(f"updated {path.relative_to(ROOT)}")
+                print(f"updated {_shown(path)}")
         return 0
     stale = stale_pages()
     if stale:
         print("stale: " + ", ".join(stale) + ". Run python3 scripts/gen_tool_reference.py --write")
         return 1
-    print(f"{OUTPUT.relative_to(ROOT)} and the generated count blocks are current")
+    print(f"{_shown(OUTPUT)} and the generated count blocks are current")
     return 0
 
 

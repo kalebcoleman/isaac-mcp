@@ -89,10 +89,10 @@ def check_retired_phrases(errors, files=None):
                               "the target engine is stated once, in docs/COMPATIBILITY.md")
 
 
-def check_generated(errors):
+def check_generated(errors, output=None, files=None):
     """docs/TOOLS-ARGUMENTS.md and every generated count block must equal what the code produces."""
     from gen_tool_reference import stale_pages
-    for page in stale_pages():
+    for page in stale_pages(output, files):
         errors.append(f"{page} is stale: run python3 scripts/gen_tool_reference.py --write")
 
 

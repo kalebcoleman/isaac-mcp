@@ -120,7 +120,8 @@ def execute(name, args, output, client_factory, metadata):
 
 def main(argv=None, client_factory=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("toolset", choices=[*TOOLSETS, "all"])
+    parser.add_argument("toolset", nargs="?", choices=[*TOOLSETS, "all"],
+                        help="the toolset to check, or all; optional only with --list")
     parser.add_argument("--backend", choices=("newton", "physx"))
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8766)
@@ -137,6 +138,10 @@ def main(argv=None, client_factory=None):
     parser.add_argument("--discard-changes", action="store_true")
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args(argv)
+    if args.toolset is None:
+        if not args.list:
+            parser.error("a toolset (or all) is required unless --list is given")
+        args.toolset = "all"
     selected = TOOLSETS if args.toolset == "all" else {args.toolset: TOOLSETS[args.toolset]}
     if args.list:
         print("Toolset     Check                               GPU   Running simulator")
