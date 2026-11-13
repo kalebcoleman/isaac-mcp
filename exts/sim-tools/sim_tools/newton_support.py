@@ -23,7 +23,7 @@ from copy import deepcopy
 
 from pxr import Usd, UsdPhysics
 
-from isaac_mcp.project_assets import AssetError, refuse
+from twinsmith.project_assets import AssetError, refuse
 
 MAX_BUFFER = 8_000_000
 MIN_CONTACTS, MIN_CONSTRAINTS = 512, 2048

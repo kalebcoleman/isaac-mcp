@@ -6,17 +6,17 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from isaac_mcp import contact_sheet, screen
+from twinsmith import contact_sheet, screen
 
 
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     h = tmp_path / "home"
-    (h / "Videos" / "screen-mcp").mkdir(parents=True)
-    (h / "Pictures" / "screen-mcp").mkdir(parents=True)
-    monkeypatch.setattr(screen, "VIDEO_DIR", h / "Videos" / "screen-mcp")
-    monkeypatch.setattr(screen, "SHOT_DIR", h / "Pictures" / "screen-mcp")
-    monkeypatch.setattr(screen, "_allowed_roots", lambda: [h.resolve(), (h / "Videos" / "screen-mcp").resolve()])
+    (h / "Videos" / "twinsmith").mkdir(parents=True)
+    (h / "Pictures" / "twinsmith").mkdir(parents=True)
+    monkeypatch.setattr(screen, "VIDEO_DIR", h / "Videos" / "twinsmith")
+    monkeypatch.setattr(screen, "SHOT_DIR", h / "Pictures" / "twinsmith")
+    monkeypatch.setattr(screen, "_allowed_roots", lambda: [h.resolve(), (h / "Videos" / "twinsmith").resolve()])
     return h
 
 
@@ -33,11 +33,11 @@ def parse(text):
 
 
 def test_sheet_matches_times_across_videos(home):
-    a = make_clip(home / "Videos" / "screen-mcp" / "a.mp4")
-    b = make_clip(home / "Videos" / "screen-mcp" / "b.mp4", pattern="smptebars")
+    a = make_clip(home / "Videos" / "twinsmith" / "a.mp4")
+    b = make_clip(home / "Videos" / "twinsmith" / "b.mp4", pattern="smptebars")
     out = parse(screen._contact_sheet([str(a), "b.mp4"], None, [0.5, 1, 2, 3], "cmp.png"))
     png = Path(out["path"])
-    assert png == (home / "Pictures" / "screen-mcp").resolve() / "cmp.png" and png.is_file()
+    assert png == (home / "Pictures" / "twinsmith").resolve() / "cmp.png" and png.is_file()
     with Image.open(png) as im:
         assert im.size[0] == 4 * contact_sheet.CELL_WIDTH and im.size[1] > 2 * 200 and im.format == "PNG"
     assert out["rows"] == "a.mp4, b.mp4" and out["times_s"] == "0.5, 1, 2, 3"
@@ -47,7 +47,7 @@ def test_sheet_matches_times_across_videos(home):
 
 
 def test_default_times_follow_the_recording_convention(home):
-    a = make_clip(home / "Videos" / "screen-mcp" / "a.mp4", seconds=10)
+    a = make_clip(home / "Videos" / "twinsmith" / "a.mp4", seconds=10)
     out = parse(screen._contact_sheet([str(a)], None, None, None))
     assert out["times_s"] == "0.5, 1, 2, 4, 6, 9" and Path(out["path"]).name.startswith("sheet-")
     with Image.open(out["path"]) as im:
@@ -55,14 +55,14 @@ def test_default_times_follow_the_recording_convention(home):
 
 
 def test_time_past_the_end_is_an_error_and_writes_nothing(home):
-    a = make_clip(home / "Videos" / "screen-mcp" / "a.mp4", seconds=3)
+    a = make_clip(home / "Videos" / "twinsmith" / "a.mp4", seconds=3)
     with pytest.raises(ValueError, match="lasts 3.00 s.*4, 9 s do not exist"):
         screen._contact_sheet([str(a)], None, [1, 4, 9], "x.png")
-    assert not list((home / "Pictures" / "screen-mcp").iterdir())
+    assert not list((home / "Pictures" / "twinsmith").iterdir())
 
 
 def test_never_overwrites_and_validates(home):
-    a = make_clip(home / "Videos" / "screen-mcp" / "a.mp4")
+    a = make_clip(home / "Videos" / "twinsmith" / "a.mp4")
     screen._contact_sheet([str(a)], None, [1], "x.png")
     with pytest.raises(ValueError, match="already exists"):
         screen._contact_sheet([str(a)], None, [1], "x.png")
@@ -75,8 +75,8 @@ def test_never_overwrites_and_validates(home):
 
 
 def test_job_id_uses_the_jobs_videos(home, monkeypatch):
-    a = make_clip(home / "Videos" / "screen-mcp" / "a.mp4")
-    from isaac_mcp.isaaclab import jobs
+    a = make_clip(home / "Videos" / "twinsmith" / "a.mp4")
+    from twinsmith.isaaclab import jobs
 
     monkeypatch.setattr(jobs, "runs_status", lambda j: {"video_paths": [str(a)]} if j == "20261102-100000-T" else {})
     out = parse(screen._contact_sheet(None, "20261102-100000-T", [1, 2], "j.png"))
@@ -86,7 +86,7 @@ def test_job_id_uses_the_jobs_videos(home, monkeypatch):
 
 
 def test_missing_ffmpeg_fails_clearly(home, monkeypatch):
-    a = make_clip(home / "Videos" / "screen-mcp" / "a.mp4")
+    a = make_clip(home / "Videos" / "twinsmith" / "a.mp4")
 
     def boom():
         raise RuntimeError("ffmpeg is not available")

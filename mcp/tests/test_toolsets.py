@@ -6,11 +6,11 @@ import json
 import pytest
 from mcp.server.fastmcp import FastMCP
 
-from isaac_mcp import config, host_catalog, local_tools, server, tool_groups, toolsets
+from twinsmith import config, host_catalog, local_tools, server, tool_groups, toolsets
 
 
 def build(selection="default"):
-    return server.build_server({"ISAAC_MCP_TOOLSETS": selection})
+    return server.build_server({"TWINSMITH_TOOLSETS": selection})
 
 
 def test_registry_owns_every_registered_tool():
@@ -67,12 +67,13 @@ def test_legacy_settings_fail_with_replacement(variable):
         server.build_server({variable: "all,screen_input,sim_launch"})
     assert variable in str(error.value)
     assert config.replacement(variable, "all,screen_input,sim_launch") in str(error.value)
-    assert config.replacement("ISAAC_MCP_LOCAL_TOOLS", "all,screen_input,sim_launch") == "ISAAC_MCP_TOOLSETS=all,+input,+launch"
+    local = next(name for name in config.LEGACY if name.endswith("LOCAL_TOOLS"))
+    assert config.replacement(local, "all,screen_input,sim_launch") == "TWINSMITH_TOOLSETS=all,+input,+launch"
 
 
 def test_five_source_precedence_and_backend(tmp_path):
     home, project = tmp_path / "home", tmp_path / "project"
-    user = home / ".config/isaac-mcp/config.toml"
+    user = home / ".config/twinsmith/config.toml"
     user.parent.mkdir(parents=True)
     child = project / "nested"
     child.mkdir(parents=True)
@@ -82,13 +83,13 @@ def test_five_source_precedence_and_backend(tmp_path):
     user.write_text('[tools]\ntoolsets = ["minimal", "+lab"]\n[sim]\nphysics_backend = "newton"\n')
     assert resolve().toolsets == {"core", "lab"}
     assert resolve().physics_backend == "newton"
-    (project / "isaac-mcp.toml").write_text('[tools]\ntoolsets = ["minimal", "+screen"]\n')
+    (project / "twinsmith.toml").write_text('[tools]\ntoolsets = ["minimal", "+screen"]\n')
     assert resolve().toolsets == {"core", "screen"}
-    assert resolve({"ISAAC_MCP_TOOLSETS": "minimal,+assets"}).toolsets == {"core", "assets"}
-    assert resolve({"ISAAC_MCP_TOOLSETS": "minimal,+assets"}, "minimal,+code").toolsets == {"core", "code"}
-    assert resolve({"ISAAC_MCP_PHYSICS_BACKEND": "physx"}).physics_backend == "physx"
+    assert resolve({"TWINSMITH_TOOLSETS": "minimal,+assets"}).toolsets == {"core", "assets"}
+    assert resolve({"TWINSMITH_TOOLSETS": "minimal,+assets"}, "minimal,+code").toolsets == {"core", "code"}
+    assert resolve({"TWINSMITH_PHYSICS_BACKEND": "physx"}).physics_backend == "physx"
     with pytest.raises(ValueError, match="physics_backend"):
-        resolve({"ISAAC_MCP_PHYSICS_BACKEND": "invalid"})
+        resolve({"TWINSMITH_PHYSICS_BACKEND": "invalid"})
 
 
 def test_registration_requires_ownership_and_annotations():
@@ -104,8 +105,8 @@ def test_live_visibility_uses_same_selection():
     state = server._state_for(instance)
     assert server._visible("demo.ping", {"namespace": "demo"}, state)
     assert not server._visible("sim.stage.info", {"namespace": "sim"}, state)
-    assert not server._visible("ur5e_dt.future_tool", {"namespace": "ur5e_dt"}, state)
-    assert toolsets.owner("ur5e_dt.future_tool", "ur5e_dt") == "workcell"
+    assert not server._visible("workcell.future_tool", {"namespace": "workcell"}, state)
+    assert toolsets.owner("workcell.future_tool", "workcell") == "workcell"
     with pytest.raises(ValueError, match="no toolset"):
         toolsets.owner("sim.unknown", "sim")
 
@@ -123,7 +124,7 @@ def test_listing_size(profile, budget):
 
 @pytest.mark.parametrize("enabled", [True, False])
 def test_capture_directories_follow_screen_toolset(tmp_path, monkeypatch, enabled):
-    from isaac_mcp import screen
+    from twinsmith import screen
     shots, videos = tmp_path / "shots", tmp_path / "videos"
     monkeypatch.setattr(screen, "SHOT_DIR", shots)
     monkeypatch.setattr(screen, "VIDEO_DIR", videos)
@@ -133,7 +134,7 @@ def test_capture_directories_follow_screen_toolset(tmp_path, monkeypatch, enable
 
 
 def test_cli_table_and_override(monkeypatch, capsys):
-    monkeypatch.setenv("ISAAC_MCP_TOOLSETS", "minimal")
+    monkeypatch.setenv("TWINSMITH_TOOLSETS", "minimal")
     server.main(["--toolsets", "minimal,+lab", "toolsets"])
     output = capsys.readouterr().out
     assert "Toolset" in output
@@ -151,24 +152,24 @@ def test_status_resource_and_help_share_selection(selection, monkeypatch):
     monkeypatch.setattr(server, "_surroundings", lambda state: {"bridges": []})
     expected = toolsets.describe(state.toolsets)
     assert server._where_am_i({}, state)["toolsets"] == expected
-    contents = asyncio.run(instance.read_resource("isaac-mcp://toolsets"))
+    contents = asyncio.run(instance.read_resource("twinsmith://toolsets"))
     assert json.loads(list(contents)[0].content) == expected
-    help_tool = instance._tool_manager._tools["isaac_help"]
+    help_tool = instance._tool_manager._tools["help"]
     answer = help_tool.fn(task="train a policy")
     if "lab" in state.toolsets:
         assert "isaaclab__train" in answer
     else:
         assert "Toolsets off:" in answer and "lab" in answer
-        assert "ISAAC_MCP_TOOLSETS" in answer
+        assert "TWINSMITH_TOOLSETS" in answer
         assert "isaaclab__train" not in answer
 
 
 def test_help_respects_disabled_code_and_mixed_topics(monkeypatch):
     monkeypatch.setattr(server, "_record_help_gap", lambda *args: None)
-    answer = server._isaac_help("simulate cloth tearing", enabled={"core"})
+    answer = server._help("simulate cloth tearing", enabled={"core"})
     assert "run_python" not in answer
     assert "Toolsets off: code" in answer
-    answer = server._isaac_help("where am i", enabled={"core"})
+    answer = server._help("where am i", enabled={"core"})
     assert "Available: status" in answer
     assert "sim__launch" not in answer
     assert "launch" in answer
@@ -180,10 +181,10 @@ def test_instructions_are_short_and_selection_neutral():
     assert "isaaclab__" not in server.SERVER_INSTRUCTIONS
 
 
-def test_workcell_owns_the_whole_ur5e_dt_namespace():
+def test_workcell_owns_the_whole_workcell_namespace():
     owned = {name for name in build("minimal,+workcell")._tool_manager._tools if toolsets.owner(name) == "workcell"}
-    assert owned and all(name.startswith("ur5e_dt__") for name in owned)
-    assert {"ur5e_dt__jenga", "ur5e_dt__jenga_build", "ur5e_dt__workcell"} <= owned
+    assert owned and all(name.startswith("workcell__") for name in owned)
+    assert {"workcell__jenga", "workcell__jenga_build", "workcell__cell"} <= owned
 
 
 # ---- enabling and disabling toolsets at run time ----
@@ -193,7 +194,7 @@ RUNTIME = [name for name, spec in toolsets.TOOLSETS.items() if name != "core" an
 
 def offline_build(selection="default", extra=None):
     """A server with no bridge to find, so run-time changes use only host tools and the catalog."""
-    instance = server.build_server({"ISAAC_MCP_TOOLSETS": selection, **(extra or {})})
+    instance = server.build_server({"TWINSMITH_TOOLSETS": selection, **(extra or {})})
     state = server._state_for(instance)
     state.get_client = lambda: (_ for _ in ()).throw(ConnectionRefusedError("Connection refused"))
     return instance, state
@@ -277,7 +278,7 @@ def test_explicit_only_toolsets_can_never_be_enabled_at_run_time(name):
     before = registered(instance)
     with pytest.raises(ToolError) as error:
         change(instance, "enable", ["lab", name])
-    assert "explicit-only" in str(error.value) and "ISAAC_MCP_TOOLSETS" in str(error.value)
+    assert "explicit-only" in str(error.value) and "TWINSMITH_TOOLSETS" in str(error.value)
     assert "restart" in str(error.value) and "Nothing changed" in str(error.value)
     assert registered(instance) == before and state.toolsets == {"core"}      # refused whole, "lab" too
     assert name not in server._where_am_i({}, state)["toolsets"]["can_enable"]
@@ -311,18 +312,18 @@ def test_core_cannot_be_disabled_and_unknown_names_are_refused():
 def test_runtime_enable_switch_turns_the_feature_off(how, tmp_path, monkeypatch):
     from mcp.server.fastmcp.exceptions import ToolError
     home = tmp_path / "home"
-    (home / ".config/isaac-mcp").mkdir(parents=True)
+    (home / ".config/twinsmith").mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.chdir(tmp_path)
     extra = {}
     if how == "env":
-        extra = {"ISAAC_MCP_RUNTIME_ENABLE": "0"}
+        extra = {"TWINSMITH_RUNTIME_ENABLE": "0"}
     elif how == "env_false":
-        extra = {"ISAAC_MCP_RUNTIME_ENABLE": "false"}
+        extra = {"TWINSMITH_RUNTIME_ENABLE": "false"}
     elif how == "user_file":
-        (home / ".config/isaac-mcp/config.toml").write_text("[tools]\nruntime_enable = false\n")
+        (home / ".config/twinsmith/config.toml").write_text("[tools]\nruntime_enable = false\n")
     else:
-        (tmp_path / "isaac-mcp.toml").write_text("[tools]\nruntime_enable = false\n")
+        (tmp_path / "twinsmith.toml").write_text("[tools]\nruntime_enable = false\n")
     instance, state = offline_build("minimal", extra)
     assert state.runtime_enable is False
     for action in ("enable", "disable"):
@@ -331,14 +332,14 @@ def test_runtime_enable_switch_turns_the_feature_off(how, tmp_path, monkeypatch)
     assert registered(instance) == registered(build("minimal"))
     listing = change(instance, "list")                       # reading is always allowed
     assert listing["runtime_enable"] is False and listing["can_enable"] == []
-    assert "off" in listing["enable"].lower() and "startup" in listing["enable"] or "ISAAC_MCP_TOOLSETS" in listing["enable"]
+    assert "off" in listing["enable"].lower() and "startup" in listing["enable"] or "TWINSMITH_TOOLSETS" in listing["enable"]
 
 
 def test_runtime_enable_default_and_bad_value():
     assert config.resolve({}).runtime_enable is True
-    assert config.resolve({"ISAAC_MCP_RUNTIME_ENABLE": "1"}).runtime_enable is True
-    with pytest.raises(ValueError, match="ISAAC_MCP_RUNTIME_ENABLE"):
-        config.resolve({"ISAAC_MCP_RUNTIME_ENABLE": "maybe"})
+    assert config.resolve({"TWINSMITH_RUNTIME_ENABLE": "1"}).runtime_enable is True
+    with pytest.raises(ValueError, match="TWINSMITH_RUNTIME_ENABLE"):
+        config.resolve({"TWINSMITH_RUNTIME_ENABLE": "maybe"})
 
 
 def test_a_tool_list_change_is_announced_once_and_only_when_something_changed():
@@ -363,13 +364,13 @@ def test_server_advertises_list_changed_for_the_tool():
 
 
 def test_workcell_and_robosim_register_without_a_bridge_or_checkout(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(tmp_path))
-    monkeypatch.setenv("ISAAC_MCP_ROBOSIM_ROOT", str(tmp_path / "no-checkout"))
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("TWINSMITH_ROBOSIM_ROOT", str(tmp_path / "no-checkout"))
     instance, _ = offline_build("minimal")
     result = change(instance, "enable", ["workcell", "robosim"])
-    assert {"robosim", "ur5e_dt__workcell", "ur5e_dt__jenga"} <= set(result["tools_available"])
+    assert {"robosim", "workcell__cell", "workcell__jenga"} <= set(result["tools_available"])
     assert "dial the selected bridge" in result["note"]
-    answer = asyncio.run(instance.call_tool("ur5e_dt__workcell", {"action": "status"}))
+    answer = asyncio.run(instance.call_tool("workcell__cell", {"action": "status"}))
     text = str(answer)
     assert "not available" in text and "no Isaac Sim bridge could be reached" in text
     answer = asyncio.run(instance.call_tool("robosim", {"action": "status"}))
@@ -392,10 +393,10 @@ def test_status_toolsets_field_says_how_to_enable():
     assert field["can_enable"] == [name for name in toolsets.TOOLSETS if name not in state.toolsets
                                    and name not in toolsets.explicit_only()]
     assert field["tools"]["scene"] == 6 and field["tools"]["lab"] == 4 and field["tools"]["workcell"] == 7
-    contents = asyncio.run(instance.read_resource("isaac-mcp://toolsets"))
+    contents = asyncio.run(instance.read_resource("twinsmith://toolsets"))
     assert json.loads(list(contents)[0].content) == field
     change(instance, "enable", ["lab"])
-    assert "lab" in json.loads(list(asyncio.run(instance.read_resource("isaac-mcp://toolsets")))[0].content)["on"]
+    assert "lab" in json.loads(list(asyncio.run(instance.read_resource("twinsmith://toolsets")))[0].content)["on"]
 
 
 def test_listed_tool_counts_match_what_a_full_server_lists():
@@ -408,12 +409,12 @@ def test_listed_tool_counts_match_what_a_full_server_lists():
 
 
 def test_help_names_the_enable_call_for_a_toolset_that_is_off():
-    answer = server._isaac_help("train a policy")
+    answer = server._help("train a policy")
     assert 'toolsets(action="enable", names=["lab"])' in answer
-    switched_off = server._isaac_help("train a policy", runtime_enable=False)
+    switched_off = server._help("train a policy", runtime_enable=False)
     assert 'toolsets(action="enable"' not in switched_off and "switched off" in switched_off
-    assert 'names=["launch"]' not in server._isaac_help("start a simulator")
-    assert "Explicit-only" in server._isaac_help("start a simulator")
+    assert 'names=["launch"]' not in server._help("start a simulator")
+    assert "Explicit-only" in server._help("start a simulator")
 
 
 @pytest.mark.parametrize("bridges", [[], [{"port": 8766, "pid": 1}]])

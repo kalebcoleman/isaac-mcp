@@ -12,7 +12,7 @@ This page describes behavior and limits. For each tool's arguments and defaults,
 aimed at the origin. It uses the current stage if that is new and empty; otherwise it makes a new one. Called again with `robot` on a scene it
 built, it adds that robot and keeps what you made (`kept_scene` in the result); `discard_changes=true` starts over. It adds no real-robot
 wiring, so there is no mirror graph, gripper, `/joint_states` subscriber or force publisher. The lab's UR5e Jenga work cell is built
-by `ur5e_dt__workcell(action="quick_start")`, documented in its [README](../exts/ur5e-dt/workcell/README.md).
+by `workcell__cell(action="quick_start")`, documented in its [README](../exts/workcell/workcell/README.md).
 
 Its arguments (`robot`, `environment`, `ros`, `play`, `up_axis`, `meters_per_unit`, `discard_changes` and the robot-file options) are in
 the [tool arguments](TOOLS-ARGUMENTS.md#sim__quick_start). A public robot name (`ur5e`, `franka`, `unitree_h1`, `unitree_g1`,
@@ -80,7 +80,7 @@ anything that replaces the stage. The calls below ran against a live 6.2.0.0 hea
 1. **Identify:** `sim__stage__info`, then `sim__stage__tree` with `root="/"` and `depth=2`.
 2. **Author on a stopped timeline.** A parent must already exist, and a new stage has no `/World`, so create it first:
    `sim__prim__create` with `path="/World"` and `kind="Xform"`, then `kind="PhysicsScene"`, `"Cube"`, and so on.
-3. **Look:** `sim__camera__create`, then `sim__camera__capture`. Output goes to `ISAAC_MCP_SCENE_OUTPUT`, which
+3. **Look:** `sim__camera__create`, then `sim__camera__capture`. Output goes to `TWINSMITH_SCENE_OUTPUT`, which
    defaults to a per-process temp directory; set it at Kit launch to keep results.
 4. **Initialize:** `sim__timeline__control` with `action="initialize"` briefly plays a stopped
    timeline and pauses it in one call; physics may advance. A runtime read confirms readiness.
@@ -103,13 +103,13 @@ The user runs this outside the model-facing tool interface:
 
 ```bash
 # From the checkout root:
-uv run --locked --isolated --project mcp --python 3.12 python -m isaac_mcp.project_assets --config /absolute/private/approval.json \
+uv run --locked --isolated --project mcp --python 3.12 python -m twinsmith.project_assets --config /absolute/private/approval.json \
   --root-id project --root /absolute/project/assets \
   --staging /absolute/private/staging --trust-project
 ```
 
-Set `ISAAC_MCP_ASSET_CONFIG=/absolute/private/approval.json` in **both** the MCP host and
-Kit launch environments, then restart them. `run.sh` enables `sim-tools`. Direct Kit users enable `sim-tools` beside `isaac.mcp.bridge` from this checkout.
+Set `TWINSMITH_ASSET_CONFIG=/absolute/private/approval.json` in **both** the MCP host and
+Kit launch environments, then restart them. `run.sh` enables `sim-tools`. Direct Kit users enable `sim-tools` beside `twinsmith.bridge` from this checkout.
 No manifest or hand-written Python is needed. Approval is explicit configuration, not a universal
 MCP approval dialog. No tool can grant roots. Launching outside the project works because paths
 are absolute. Default configuration grants no roots.
@@ -142,7 +142,7 @@ A missing/different mount produces an error, never an implicit transfer via `put
 ## Tools
 
 Names below are registered only when their toolset is enabled (`scene`, `physics`, `sensors`, `assets`, `ros2`, `kit_debug`;
-`status` shows which are on, and `ISAAC_MCP_TOOLSETS=default,+ros2,+kit_debug` adds the optional ones; see [toolsets](TOOLSETS.md)).
+`status` shows which are on, and `TWINSMITH_TOOLSETS=default,+ros2,+kit_debug` adds the optional ones; see [toolsets](TOOLSETS.md)).
 Every tool and argument is in the generated [tool arguments](TOOLS-ARGUMENTS.md). The rows below are only the tools whose contract
 says more than their generated description: refusals, error codes, limits and side effects. A tool with no row is fully described
 there.
@@ -172,7 +172,7 @@ bridge/extension. The optional `sim__session` process tools are separate (see [h
 | `assets__search` | Fresh filename search across approved project/library roots. No network discovery, semantic service, manifest or fixed robot count. Refresh by calling again. A folder deeper than eight levels is skipped and named in `skipped_deep`, with `depth_limit`, instead of failing the whole search. |
 | `sim__joints__inspect` | Inspect bounded authored joint limits/drives below an articulation, reporting USD degrees versus stage units. No runtime-state claim. On an articulation root, it returns the joints connected to it through its rigid bodies, with their authored limits and drives, plus `scope` and `articulation_root`; the root may be a joint (often `<robot>/root_joint`), a link carrying the articulation API, or the prim holding all of them. `limit` then caps the prims visited to find joints. A joint excluded from the articulation is left out. |
 | `sim__joints__drive` | Set one revolute/prismatic joint drive target and gains in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention. A target that is past an authored limit only by float32 rounding is put on the limit, and the result says so: a limit authored from 1.0 rad is stored as 57.2957764 degrees, one step below the exact conversion. `sim__joints__command` does the same with runtime limits. |
-| `sim__simulation__run` | Run your own controller in the physics loop, as a job: every step it gets one rigid body's measured state and returns the force and torque for that step. A `tcp://127.0.0.1:<port>` controller is your own process; a `module:function` controller is code in Kit and needs `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`. Writes a CSV log. See [controller runs](#controller-runs-jobs-and-replay). |
+| `sim__simulation__run` | Run your own controller in the physics loop, as a job: every step it gets one rigid body's measured state and returns the force and torque for that step. A `tcp://127.0.0.1:<port>` controller is your own process; a `module:function` controller is code in Kit and needs `TWINSMITH_ENABLE_SCENE_SCRIPTS=1`. Writes a CSV log. See [controller runs](#controller-runs-jobs-and-replay). |
 | `sim__camera__list` | List `Camera` prims under `root` with focal length and aperture (mm), clipping range (stage units and metres), projection, world pose and whether each is the active viewport camera. Bounded by `limit` and a 10,000-prim visit cap. Headless or no viewport reports `viewport_available=false`; a listed camera is not proof of render resources. |
 | `sim__camera__create` | Create a persistent RTX camera on a stopped timeline, under any existing parent prim (e.g. a robot link). `target=[x,y,z]` aims it at a world point, so `position` and `target` are enough to watch something. Orientation as a `[w,x,y,z]` quaternion or as `rotate_xyz` Euler degrees (USD rotateXYZ; with `frame=local` authored as translate + rotateXYZ ops, as in the Property panel). Optional `focal_length` and `horizontal_aperture` (mm) and `clipping_range` (metres, default 0.01..1000, converted to stage units). Returns optics, horizontal FOV, local and world pose. Build identity and owned-CPU Replicator capabilities are checked; experimental.rtx is not required. USD axes: -Z forward, +Y up. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate: set a ROS rate on the camera helper (`frameSkipCount`). |
 | `sim__camera__capture` | Capture RTX camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for the first render completion, four further frames AND a matching renderer CPU transfer; no stale annotator fallback. Frame-number baseline is the first completion observed after the request, so an immediately created camera needs no caller-side warm-up. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. |
@@ -384,8 +384,8 @@ Each new or opened stage leaves about 40 to 55 MB behind in Kit, which a 45-minu
 ## Extension hot reload
 
 Kit watches extension folders. When a file in `exts/sim-tools` changes, Kit stops and restarts that extension inside the
-running process, with the same PID. An edit to `isaac.mcp.bridge` restarts all three extensions. To prevent this, launch
-with `./run.sh --no-hot-reload` or `ISAAC_MCP_NO_HOT_RELOAD=1`; see [ENVIRONMENT.md](ENVIRONMENT.md).
+running process, with the same PID. An edit to `twinsmith.bridge` restarts all three extensions. To prevent this, launch
+with `./run.sh --no-hot-reload` or `TWINSMITH_NO_HOT_RELOAD=1`; see [ENVIRONMENT.md](ENVIRONMENT.md).
 
 After a reload, `session_id` and `stage_id` change and the tools forget which prims they created. The stage itself is
 unchanged. A call with an old `session_id` gets `STALE_TARGET` saying this happened. `sim__logs__tail` shows a
@@ -394,7 +394,7 @@ counts it under `extension.reloads`.
 
 If a sim tool call is running when the reload happens, the sim and asset tools are missing until that call finishes,
 then return by themselves. A wait over 30 s is logged as an error. The work cell does not have this: if a work-cell call is
-running when `exts/ur5e-dt` reloads, its startup fails with a message saying so, and it needs another reload or a restart.
+running when `exts/workcell` reloads, its startup fails with a message saying so, and it needs another reload or a restart.
 
 ## Joint control by name, gains, settling and teleport
 
@@ -504,16 +504,16 @@ The wrench acts at the body's centre of mass for one physics step, in the world 
 
 - **`tcp://127.0.0.1:<port>`**: your own process. The simulator connects, then sends one JSON line per step and
   reads one back. Nothing of yours runs inside Kit, so this needs no setting, and the controller can be any language.
-  `isaac_mcp.controller_server.serve(fn, port)` is a ready-made server (one stdlib file); start it as a managed job
-  with `run_script`. Only loopback is accepted unless `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`.
+  `twinsmith.controller_server.serve(fn, port)` is a ready-made server (one stdlib file); start it as a managed job
+  with `run_script`. Only loopback is accepted unless `TWINSMITH_ENABLE_SCENE_SCRIPTS=1`.
 - **`package.module:function`** or **`/abs/path/file.py:function`**: a Python callable loaded into Kit. This is
-  arbitrary code in the simulator process, so it needs `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1` in Kit's launch
+  arbitrary code in the simulator process, so it needs `TWINSMITH_ENABLE_SCENE_SCRIPTS=1` in Kit's launch
   environment, the same opt-in as `sim__controller__*`. It is not a sandbox.
 
 ```python
 # hover.py, started with run_script(script="/abs/hover.py"), then
 # sim__simulation__run(body="/World/Drone/base", controller="tcp://127.0.0.1:9123", duration_s=10)
-from isaac_mcp.controller_server import serve
+from twinsmith.controller_server import serve
 
 def hover(state):
     error = 1.0 - state["position"][2]
@@ -582,7 +582,7 @@ session-layer overrides, and the prims go back to where they were when the job e
 - With `camera` (from `sim__camera__create`; `adopt=true` for a camera that came with an opened scene) each frame is
   saved as `<name>-00001.png` in the output folder through `sim__camera__capture`, so it works headless and on a
   locked screen. When the job has ended, `job_status` adds `video_path`: the MCP server encodes the frames with the
-  bundled ffmpeg and draws `label` on every frame. The MP4 goes to `~/Videos/screen-mcp/<filename>`. If the server
+  bundled ffmpeg and draws `label` on every frame. The MP4 goes to `~/Videos/twinsmith/<filename>`. If the server
   cannot read Kit's output folder (Kit on another machine) the result says so and keeps the frames;
   `join_videos(mode="frames")` encodes frames from any folder.
 - Without `camera` nothing is saved: the poses are shown at wall-clock pace, for `start_screen_recording`. Use
@@ -741,7 +741,7 @@ This is a pose snapshot, not a solver checkpoint. Runtime mass/COM velocities ar
 conversion. Validation is scoped to the recorded Newton/MuJoCo and PhysX configurations.
 
 Controller tools execute arbitrary Python through ScriptNode and require the user's launch-time
-`ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1`. That explicitly enables Kit's ScriptNode consent setting;
+`TWINSMITH_ENABLE_SCENE_SCRIPTS=1`. That explicitly enables Kit's ScriptNode consent setting;
 it is not OS isolation. By default both tools return `SCRIPT_DISABLED`, and `sim__graph__build` refuses any node that takes `inputs:script` or `inputs:scriptPath` the same way. A file you open can still hold a ScriptNode; opening a file is trusting it, as Kit's own consent setting applies. The graph topology is
 fixed to playback tick → inline ScriptNode; update recompiles owned code while stopped.
 Controller USD edits must respect layer strength (for pack-authored geometry, use its session

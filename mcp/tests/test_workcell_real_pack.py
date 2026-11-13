@@ -16,7 +16,7 @@ np = pytest.importorskip("numpy")
 pytest.importorskip("pxr.Usd")
 from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
-PACKAGE = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt"
+PACKAGE = Path(__file__).resolve().parents[2] / "exts/workcell/workcell"
 if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 

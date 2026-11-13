@@ -614,8 +614,8 @@ wheels = [
 ]
 
 [[package]]
-name = "isaac-mcp"
-version = "0.2.0"
+name = "twinsmith-sim"
+version = "0.3.0"
 source = { virtual = "." }
 dependencies = [
     { name = "isaacsim", extra = ["all", "extscache"] },

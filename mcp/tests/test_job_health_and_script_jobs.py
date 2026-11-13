@@ -11,13 +11,13 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import isaac_mcp.server as gw
-from isaac_mcp.isaaclab import jobs, ledger
+import twinsmith.server as gw
+from twinsmith.isaaclab import jobs, ledger
 
 
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])
     jobs._active.clear()
     yield
@@ -78,7 +78,7 @@ def test_iterations_are_read_from_what_the_library_prints(tmp_path, log, expecte
 
 
 def test_a_job_s_own_progress_line_wins_over_the_guess(tmp_path):
-    out = jobs.run_script(sys.executable, script(tmp_path, "print('Learning iteration 1/100')\nprint('ISAAC_MCP_PROGRESS: 3/4 almost')\n"))
+    out = jobs.run_script(sys.executable, script(tmp_path, "print('Learning iteration 1/100')\nprint('TWINSMITH_PROGRESS: 3/4 almost')\n"))
     status = wait_done(out["job_id"])
     assert status["progress"]["fraction"] == 0.75 and status["progress"]["text"] == "almost"
     out = jobs.run_script(sys.executable, script(tmp_path, "print('Learning iteration 30/60')\n", "t.py"))
@@ -180,14 +180,14 @@ def tool(name):
 
 
 def test_run_script_needs_no_install(tmp_path, monkeypatch):
-    for variable in ("ISAACLAB_PYTHON", "ISAACLAB_ROOT", "ISAACLAB_INSTALLS", "ISAAC_MCP_PROJECT"):
+    for variable in ("ISAACLAB_PYTHON", "ISAACLAB_ROOT", "ISAACLAB_INSTALLS", "TWINSMITH_PROJECT"):
         monkeypatch.delenv(variable, raising=False)
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [{"host": "127.0.0.1", "port": 8766, "pid": 1}])
     general = tool("run_script")
-    assert "no simulator and no Isaac Lab" in general.description and "isaac_help(tool=" in general.description   # the full text is one call away
+    assert "no simulator and no Isaac Lab" in general.description and "help(tool=" in general.description   # the full text is one call away
     assert "jobs action=status" in gw._tool_help(gw.mcp, "run_script")   # named as a client is shown it
     assert general.parameters["properties"]["uses_gpu"]["default"] is False
-    body = "import sys\nprint('ISAAC_MCP_PROGRESS: 1/1 done')\nprint(sys.argv[1])\n"
+    body = "import sys\nprint('TWINSMITH_PROGRESS: 1/1 done')\nprint(sys.argv[1])\n"
     out = json.loads(asyncio.run(general.fn(script=str(script(tmp_path, body)), args=["hello"], label="convert")))
     assert "job_id" in out, out
     assert out["command"][0] == (shutil.which("python3") or sys.executable)

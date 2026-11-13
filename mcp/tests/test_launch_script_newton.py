@@ -7,7 +7,7 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "run_ur5e_dt.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "run_kit.py"
 TENSORS = "isaacsim.physics.newton.tensors"
 
 
@@ -32,7 +32,7 @@ def launch(monkeypatch, backend, installed=(), refuse=(), engine="newton"):
     for name, module in modules.items():
         monkeypatch.setitem(sys.modules, name, module)
     if backend is not None:
-        monkeypatch.setenv("ISAAC_MCP_PHYSICS_BACKEND", backend)
+        monkeypatch.setenv("TWINSMITH_PHYSICS_BACKEND", backend)
     with pytest.raises(SystemExit) as done:
         runpy.run_path(str(SCRIPT), run_name="__main__")
     assert done.value.code == 0
@@ -74,14 +74,14 @@ def test_a_build_with_no_engine_query_is_only_physx_and_launches(monkeypatch):
 
 
 def test_the_script_reads_the_configured_backend_when_run_directly(monkeypatch, tmp_path):
-    """No ISAAC_MCP_PHYSICS_BACKEND (run.sh always sets it): the one configuration module decides."""
-    from isaac_mcp import config
-    monkeypatch.delenv("ISAAC_MCP_PHYSICS_BACKEND", raising=False)
+    """No TWINSMITH_PHYSICS_BACKEND (run.sh always sets it): the one configuration module decides."""
+    from twinsmith import config
+    monkeypatch.delenv("TWINSMITH_PHYSICS_BACKEND", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "isaac-mcp.toml").write_text('[sim]\nphysics_backend = "newton"\n')
+    (tmp_path / "twinsmith.toml").write_text('[sim]\nphysics_backend = "newton"\n')
     assert launch_without_env(monkeypatch, installed=["isaacsim.physics.newton"]) == ["isaacsim.physics.newton"]
-    (tmp_path / "isaac-mcp.toml").unlink()
+    (tmp_path / "twinsmith.toml").unlink()
     assert config.DEFAULT_PHYSICS_BACKEND in config.PHYSICS_BACKENDS
 
 

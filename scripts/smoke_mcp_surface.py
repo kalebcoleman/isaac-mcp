@@ -4,12 +4,12 @@ Goes through the same FastMCP dispatch an MCP client uses (argument validation, 
 tools, bridge forwarding), so it exercises the full registered surface.
 
     uv run --project mcp python scripts/smoke_mcp_surface.py offline
-    UR5E_DT_PORT=8780 uv run --project mcp python scripts/smoke_mcp_surface.py live PLAN.json
+    TWINSMITH_PORT=8780 uv run --project mcp python scripts/smoke_mcp_surface.py live PLAN.json
 
 ``offline`` calls the host/Isaac Lab tools, then two read-only bridge tools with the bridge pinned to a
 closed port, so it never reaches a running simulator and shows the errors a client gets without one.
 ``live`` runs a JSON plan
-(list of {"tool": name, "args": {...}}) against the bridge selected by UR5E_DT_PORT; it changes
+(list of {"tool": name, "args": {...}}) against the bridge selected by TWINSMITH_PORT; it changes
 the stage, so use a disposable simulator. Prints a markdown table.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ import os
 import sys
 import time
 
-os.environ.setdefault("ISAAC_MCP_TOOLSETS", "all,+launch")
+os.environ.setdefault("TWINSMITH_TOOLSETS", "all,+launch")
 
 # Nothing listens on port 1 without root; a pin takes precedence over bridge discovery.
 OFFLINE_PORT = "1"
@@ -31,7 +31,7 @@ OFFLINE_PLAN = [
     ("isaaclab__runs_list", {}), ("isaaclab__checkpoints_list", {}),
     ("assets__roots", {}), ("assets__scan", {"root_id": "does-not-exist"}),
     ("assets__search", {"query": "ur5e"}),
-    ("sim__stage__info", {}), ("ur5e_dt__get_recording_status", {}),
+    ("sim__stage__info", {}), ("workcell__get_recording_status", {}),
 ]
 
 
@@ -51,7 +51,7 @@ def _flatten(result) -> tuple[bool, str]:
 
 
 async def run(plan) -> list[dict]:
-    from isaac_mcp.server import build_server
+    from twinsmith.server import build_server
     server = build_server(dict(os.environ))
     rows = []
     for name, args in plan:
@@ -81,7 +81,7 @@ class Live:
         self.ids: dict = {}
 
     async def start(self):
-        from isaac_mcp.server import build_server
+        from twinsmith.server import build_server
         self.server = build_server(dict(os.environ))
         await self.server.call_tool("refresh_tools", {})
         await self.refresh_ids()
@@ -127,7 +127,7 @@ def main(argv: list[str]) -> int:
         print("usage: smoke_mcp_surface.py offline | live PLAN.json [OUT.json]", file=sys.stderr)
         return 2
     if mode == "offline":
-        os.environ["UR5E_DT_PORT"] = OFFLINE_PORT
+        os.environ["TWINSMITH_PORT"] = OFFLINE_PORT
     plan = OFFLINE_PLAN if mode == "offline" else [(p["tool"], p.get("args", {})) for p in json.load(open(argv[2]))]
     rows = asyncio.run(run(plan))
     if len(argv) > 3:

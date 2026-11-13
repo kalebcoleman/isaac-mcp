@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from isaac_mcp import server as gw
-from isaac_mcp_bridge import source_state as state
+from twinsmith import server as gw
+from twinsmith_bridge import source_state as state
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -25,10 +25,10 @@ def old_mtime(path):
 def tree(tmp_path):
     root = tmp_path / "tree"
     (root / "exts/sim-tools").mkdir(parents=True)
-    (root / "mcp/isaac_mcp").mkdir(parents=True)
+    (root / "mcp/twinsmith").mkdir(parents=True)
     (root / "docs").mkdir()
     (root / "exts/sim-tools/a.py").write_text("a = 1\n")
-    (root / "mcp/isaac_mcp/c.py").write_text("c = 1\n")
+    (root / "mcp/twinsmith/c.py").write_text("c = 1\n")
     (root / "docs/x.md").write_text("doc\n")
     git(root, "init", "-q", "-b", "main")
     git(root, "add", ".")
@@ -53,8 +53,8 @@ def test_edit_in_an_extension_is_dirty_and_named(tree):
 
 
 def test_same_size_edit_with_a_new_mtime_is_dirty(tree):
-    (tree / "mcp/isaac_mcp/c.py").write_text("c = 2\n")
-    assert state.dirty_paths(tree) == ["mcp/isaac_mcp/c.py"]
+    (tree / "mcp/twinsmith/c.py").write_text("c = 2\n")
+    assert state.dirty_paths(tree) == ["mcp/twinsmith/c.py"]
 
 
 def test_touching_a_file_without_changing_it_is_not_dirty(tree):
@@ -112,8 +112,8 @@ def test_never_starts_a_process(tree, monkeypatch):
 
 
 def test_status_builtin_reports_extension():
-    from isaac_mcp_bridge.bridge import McpBridge
-    from isaac_mcp_bridge.builtins import cmd_status
+    from twinsmith_bridge.bridge import McpBridge
+    from twinsmith_bridge.builtins import cmd_status
 
     assert cmd_status(McpBridge(schedule_coroutine=lambda coro: None))["extension"]["root"] == str(REPO)
 

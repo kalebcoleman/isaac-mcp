@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
-from isaac_mcp import server as gw
-from isaac_mcp.scene_contracts import REGISTRY
-from isaac_mcp.host_catalog import load_catalog
+from twinsmith import server as gw
+from twinsmith.scene_contracts import REGISTRY
+from twinsmith.host_catalog import load_catalog
 
 _GRAPH_BUILD = Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/graph_build.py"
 _spec = importlib.util.spec_from_file_location("sim_tools_graph_build_gateway", _GRAPH_BUILD)
@@ -22,13 +22,12 @@ def single_purpose_tool_list(member_listing):
 
 
 def test_full_catalog_and_errors(monkeypatch):
-    monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     catalog = load_catalog()
     builtins = {"run_python", "status", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
     assert len(catalog) == 10 + len(REGISTRY) + len(builtins)
     assert {k for k in catalog if "." not in k} == builtins
-    assert len([k for k in catalog if k.startswith("ur5e_dt.")]) == 10
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    assert len([k for k in catalog if k.startswith("workcell.")]) == 10
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
 
     class Offline:
         def call(self, *args, **kw):
@@ -108,39 +107,37 @@ def test_brokers_are_per_server(tmp_path):
             )
         )
     )
-    a = gw.build_server({"ISAAC_MCP_ASSET_CONFIG": str(config)})
+    a = gw.build_server({"TWINSMITH_ASSET_CONFIG": str(config)})
     b = gw.build_server({})
     assert list(gw._state_for(a).asset_broker.roots) == ["one"]
     assert not gw._state_for(b).asset_broker.roots
 
 
 def test_generic_filters(monkeypatch):
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "minimal,+scene"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "minimal,+scene"})
     names = server._tool_manager._tools
     assert "sim__stage__info" in names and "assets__roots" not in names
-    assert not any(x.startswith("ur5e_dt__") for x in names)
+    assert not any(x.startswith("workcell__") for x in names)
 
 
 def test_unavailable_profile_does_not_start_trusted_server(tmp_path):
     cfg = tmp_path / "cfg.json"
     cfg.write_text('{"version":1,"profile":"isolated_untrusted"}')
     with pytest.raises(RuntimeError, match="No restricted endpoint"):
-        gw.build_server({"ISAAC_MCP_ASSET_CONFIG": str(cfg)})
+        gw.build_server({"TWINSMITH_ASSET_CONFIG": str(cfg)})
 
 
 def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch):
-    from isaac_mcp.client import BridgeClient
+    from twinsmith.client import BridgeClient
     from bridge_testing import LiveBridge, td
 
-    monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
-    monkeypatch.delenv("ISAAC_MCP_BUILTINS", raising=False)
-    hidden = gw.build_server({"ISAAC_MCP_TOOLSETS": "minimal,+code,+workcell"})
-    visible = gw.build_server({"ISAAC_MCP_TOOLSETS": "default,+workcell"})
+    hidden = gw.build_server({"TWINSMITH_TOOLSETS": "minimal,+code,+workcell"})
+    visible = gw.build_server({"TWINSMITH_TOOLSETS": "default,+workcell"})
     # The 7 bridge built-ins are listed offline too, so offline == with a bridge.
     assert "run_python" in visible._tool_manager._tools and "status" in hidden._tool_manager._tools
     assert "sim__stage__info" in visible._tool_manager._tools
     assert "sim__stage__info" not in hidden._tool_manager._tools
-    assert sum(n.startswith("ur5e_dt__") for n in hidden._tool_manager._tools) == 17  # 10 members and their 7 groups
+    assert sum(n.startswith("workcell__") for n in hidden._tool_manager._tools) == 17  # 10 members and their 7 groups
     with LiveBridge() as bridge:
         owner = bridge.bridge.register_owner("generic-sim", "sim")
         owner.add(td("stage.info", lambda: {"selected": True}))
@@ -157,7 +154,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
                     names = {t.name for t in (await client.list_tools()).tools}
                     assert ("sim__stage__info" in names) == enabled
                     assert ("assets__roots" in names) == enabled
-                    assert "run_python" in names and "ur5e_dt__workcell_status" in names
+                    assert "run_python" in names and "workcell__workcell_status" in names
                     if not enabled:
                         refused = await client.call_tool("sim__stage__info", {})
                         assert refused.isError
@@ -166,10 +163,13 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
 
 
 def test_scene_opt_out_rejects_typo_and_keeps_managed_sessions():
-    with pytest.raises(ValueError, match="ISAAC_MCP_SCENE_TOOLS"):
-        gw.build_server({"ISAAC_MCP_SCENE_TOOLS": "of"})
+    from twinsmith import legacy
+
+    retired = next(name for name in legacy.STOPS_STARTUP if name.endswith("SCENE_TOOLS"))
+    with pytest.raises(ValueError, match=retired):
+        gw.build_server({retired: "of"})
     server = gw.build_server(
-        {"ISAAC_MCP_TOOLSETS": "minimal,+launch"}
+        {"TWINSMITH_TOOLSETS": "minimal,+launch"}
     )
     assert "sim__launch" in server._tool_manager._tools
     assert "sim__stage__info" not in server._tool_manager._tools
@@ -225,7 +225,7 @@ def test_absolute_path_is_snapshotted_before_bridge_dispatch(tmp_path, tool):
             )
         )
     )
-    server = gw.build_server({"ISAAC_MCP_ASSET_CONFIG": str(config)})
+    server = gw.build_server({"TWINSMITH_ASSET_CONFIG": str(config)})
     state = gw._state_for(server)
     seen = []
 
@@ -266,7 +266,7 @@ def _urdf_state(tmp_path):
     staging.mkdir(mode=0o700)
     config = tmp_path / "config.json"
     config.write_text(json.dumps(dict(version=1, profile="trusted_project", roots={"project": str(root)}, staging=str(staging))))
-    state = gw._state_for(gw.build_server({"ISAAC_MCP_ASSET_CONFIG": str(config)}))
+    state = gw._state_for(gw.build_server({"TWINSMITH_ASSET_CONFIG": str(config)}))
     seen = []
 
     class Client:
@@ -324,8 +324,8 @@ def _urdf_pack(store, files):
 def test_quick_start_sends_a_pack_urdf_through_the_host(tmp_path, monkeypatch):
     store = tmp_path / "store"
     _urdf_pack(store, {"r.urdf": '<robot name="r"><link name="a"/></robot>'})
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(store))
-    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(tmp_path / "none"))
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(store))
+    monkeypatch.setenv("TWINSMITH_PROJECT", str(tmp_path / "none"))
     state, _, seen = _urdf_state(tmp_path)
     assert json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/v1/r.urdf"), state))["status"] == "ok"
     assert seen[0][0] == "sim.quick_start" and seen[0][1]["robot"] == "bot/v1/r.urdf" and seen[0][2]["root_name"] == "v1"
@@ -343,8 +343,8 @@ def test_quick_start_sends_a_pack_urdf_through_the_host(tmp_path, monkeypatch):
 def test_quick_start_refuses_a_pack_xacro_with_the_guidance(tmp_path, monkeypatch):
     store = tmp_path / "store"
     _urdf_pack(store, {"r.urdf.xacro": "<robot/>"})
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(store))
-    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(tmp_path / "none"))
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(store))
+    monkeypatch.setenv("TWINSMITH_PROJECT", str(tmp_path / "none"))
     state, _, seen = _urdf_state(tmp_path)
     out = json.loads(gw._dispatch("sim.quick_start", dict(robot="bot/v1/r.urdf.xacro"), state))
     assert out["code"] == "XACRO" and not seen
@@ -372,7 +372,7 @@ def test_a_newer_bridge_parameter_does_not_break_discovery():
 
 def test_scene_tools_refuse_unknown_arguments():
     # properties={...} was silently dropped by sim__graph__build and nothing was applied.
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
 
     async def run():
         async with create_connected_server_and_client_session(server._mcp_server) as client:
@@ -390,7 +390,7 @@ def test_scene_tools_refuse_unknown_arguments():
 
 
 def test_serialized_graph_payload_reaches_parser_through_mcp():
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
     seen = []
 
     class Bridge:
@@ -427,7 +427,7 @@ def test_serialized_graph_payload_reaches_parser_through_mcp():
 
 
 def test_graph_schema_and_serialization_errors_at_mcp_boundary():
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
     seen = []
 
     class Bridge:
@@ -483,7 +483,7 @@ def test_graph_schema_and_serialization_errors_at_mcp_boundary():
 
 
 def test_body_path_aliases_reach_the_bridge():
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
     seen = []
     class Bridge:
         def call(self, name, args):

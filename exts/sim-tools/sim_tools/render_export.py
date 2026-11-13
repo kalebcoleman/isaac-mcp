@@ -7,7 +7,7 @@ export policy authorizes the omission; the checks only constrain its scope.
 import re
 
 from pxr import Sdf, Usd, UsdGeom
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 
 PRODUCER = "isaacsim.core.nodes.IsaacCreateRenderProduct"
 _ROS_NAMESPACES = ("isaacsim.ros2.bridge.", "isaacsim.ros2.nodes.")

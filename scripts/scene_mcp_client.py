@@ -2,7 +2,7 @@
 
 Usage: python scripts/scene_mcp_client.py --port 18861 sim__stage__info '{}'
        python scripts/scene_mcp_client.py --port 18861 list_tools   # every tool, with its arguments'
-Uses this checkout's host server. ISAAC_MCP_ASSET_CONFIG is user launch configuration.
+Uses this checkout's host server. TWINSMITH_ASSET_CONFIG is user launch configuration.
 """
 
 import argparse
@@ -17,24 +17,23 @@ from mcp.client.stdio import stdio_client
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "mcp") not in sys.path:
     sys.path.insert(0, str(ROOT / "mcp"))
-from isaac_mcp import tool_groups  # noqa: E402  (pure data; needs no MCP SDK)
+from twinsmith import tool_groups  # noqa: E402  (pure data; needs no MCP SDK)
 
 
 def parameters(port, toolsets=None):
-    """Server parameters for one bridge. ``toolsets`` (an ISAAC_MCP_TOOLSETS value such as
+    """Server parameters for one bridge. ``toolsets`` (an TWINSMITH_TOOLSETS value such as
     "all" or "default,+kit_debug") overrides the environment; without it an exported
-    ISAAC_MCP_TOOLSETS opts in, else a scene-only client is started."""
+    TWINSMITH_TOOLSETS opts in, else a scene-only client is started."""
     return StdioServerParameters(
         command=sys.executable,
-        args=["-m", "isaac_mcp.server"],
+        args=["-m", "twinsmith.server"],
         env={
             # Defaults for a scene-only client; an exported value opts in (e.g. default,+input).
-            "ISAAC_MCP_TOOLSETS": "default,-code",
+            "TWINSMITH_TOOLSETS": "default,-code",
             **os.environ,
-            **({"ISAAC_MCP_TOOLSETS": toolsets} if toolsets else {}),
+            **({"TWINSMITH_TOOLSETS": toolsets} if toolsets else {}),
             "PYTHONPATH": str(ROOT / "mcp"),
-            "ISAAC_MCP_PORT": str(port),
-            "UR5E_DT_PORT": str(port),
+            "TWINSMITH_PORT": str(port),
         },
     )
 

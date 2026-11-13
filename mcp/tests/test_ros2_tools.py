@@ -108,10 +108,10 @@ def test_namespace_applies_to_joint_states_and_odometry_but_tf_stays_global():
 
 
 def test_each_namespace_gets_its_own_graph():
-    assert ros2.graph_path("") == "/Graph/isaac_mcp_ros2"
+    assert ros2.graph_path("") == "/Graph/twinsmith_ros2"
     assert ros2.graph_path("a/b") != ros2.graph_path("a")
     assert ros2.graph_path("a/b") != ros2.graph_path("a_b")  # one-to-one
-    assert ros2.graph_path("/robot1/").startswith("/Graph/isaac_mcp_ros2_robot1_")
+    assert ros2.graph_path("/robot1/").startswith("/Graph/twinsmith_ros2_robot1_")
 
 
 @pytest.mark.parametrize("kw", [
@@ -126,7 +126,7 @@ def test_invalid_layouts_are_refused(kw):
 
 def test_the_tool_contract_is_registered():
     sys.path.insert(0, str(REPO / "mcp"))
-    from isaac_mcp.scene_contracts import REGISTRY
+    from twinsmith.scene_contracts import REGISTRY
 
     params = REGISTRY["sim.ros2.tf_setup"]["parameters"]
     assert {"session_id", "stage_id", "robot", "base", "world_frame", "link_frames", "extra_frames"} <= set(params)
@@ -334,14 +334,14 @@ def test_isaac_ros_env_finds_the_bundled_ros_for_each_install_layout(tmp_path, m
     assert env["PYTHONPATH"].split(":")[0] == str(root / "exts" / "isaacsim.ros2.core" / "jazzy" / "rclpy")
     assert env["ROS_DOMAIN_ID"] == "7"  # kept, as run.sh does
     assert env["RMW_IMPLEMENTATION"] == "rmw_cyclonedds_cpp" and env["ROS_LOCALHOST_ONLY"] == "1"
-    assert env["ISAAC_MCP_TF_DOCTOR_REEXEC"] == "1"
+    assert env["TWINSMITH_TF_DOCTOR_REEXEC"] == "1"
 
 
 def test_isaac_ros_reexec_drops_the_flag_and_returns_the_child_status(monkeypatch):
     import subprocess as sp
 
     calls = []
-    monkeypatch.delenv("ISAAC_MCP_TF_DOCTOR_REEXEC", raising=False)
+    monkeypatch.delenv("TWINSMITH_TF_DOCTOR_REEXEC", raising=False)
     monkeypatch.setattr(doctor, "isaac_ros_env", lambda: ("/isaac/python", {"X": "1"}))
     monkeypatch.setattr(doctor.subprocess, "run",
                         lambda cmd, env=None: calls.append((cmd, env)) or sp.CompletedProcess(cmd, 1))
@@ -424,7 +424,7 @@ def test_clock_can_be_left_to_an_existing_publisher():
 
 def test_the_contract_offers_clock_modes():
     sys.path.insert(0, str(REPO / "mcp"))
-    from isaac_mcp.scene_contracts import REGISTRY
+    from twinsmith.scene_contracts import REGISTRY
 
     assert REGISTRY["sim.ros2.tf_setup"]["parameters"]["clock"]["default"] == "auto"
 
@@ -504,7 +504,7 @@ def test_a_timeline_restart_is_a_warning_not_an_error(monkeypatch, capsys):
 
 
 def test_tf_far_from_the_clock_is_an_error():
-    # The twin's clock keeps counting across stop/play while TF restarted at 0.
+    # The work cell's clock keeps counting across stop/play while TF restarted at 0.
     edges = GOOD[:1] + [e("base_link", "tool0", stamp=2.0)]
     errors, *_ = doctor.analyze(edges, "world", clock_seen=True, clock_publishers=["/twin"], clock_times=[121.9, 122.0])
     assert any("1 frame(s) differ from /clock" in x and "tool0 -120.0 s" in x for x in errors)
@@ -596,7 +596,7 @@ def test_publisher_scan_walks_subgraphs_skips_own_and_disabled_and_marks_tool_gr
 
 def test_the_clock_option_is_an_enum_in_the_contract():
     sys.path.insert(0, str(REPO / "mcp"))
-    from isaac_mcp.scene_contracts import REGISTRY
+    from twinsmith.scene_contracts import REGISTRY
 
     assert REGISTRY["sim.ros2.tf_setup"]["parameters"]["clock"]["enum"] == ["auto", "publish", "skip"]
 
@@ -967,7 +967,7 @@ def test_attach_to_with_a_renamed_base_is_refused():
 
 
 def test_contract_exposes_attach_to_as_a_string():
-    from isaac_mcp.scene_contracts import REGISTRY
+    from twinsmith.scene_contracts import REGISTRY
 
     assert REGISTRY["sim.ros2.tf_setup"]["parameters"]["attach_to"]["type"] == "string"
 

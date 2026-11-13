@@ -1,6 +1,6 @@
 """Backend-specific runtime observations. Never substitute authored USD state."""
 
-from isaac_mcp.project_assets import AssetError, refuse
+from twinsmith.project_assets import AssetError, refuse
 from .core import vector
 
 # Qualified by the disposable two-cycle motion/joint/timing/export trials on all
@@ -38,7 +38,7 @@ def manager():
         )
     if engine == "newton":
         from .runtime import runtime_identity
-        from isaac_mcp.sim_versions import newton_stack_issues
+        from twinsmith.sim_versions import newton_stack_issues
 
         issues = newton_stack_issues(runtime_identity())
         if issues:

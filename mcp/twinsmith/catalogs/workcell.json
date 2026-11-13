@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "namespace": "workcell",
+  "tools": {
+    "workcell.workcell_quick_start": {
+      "description": "Build a stopped PhysX workcell from an external asset pack. Refuses unsaved stage changes unless explicitly allowed.",
+      "parameters": {
+        "config_path": {
+          "type": "string",
+          "description": "Optional hardware configuration path."
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "physics",
+            "mirror_real"
+          ],
+          "default": "physics",
+          "description": "Physics mode, or zero-gravity mirror mode."
+        },
+        "discard_changes": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow replacement of an unsaved stage."
+        }
+      },
+      "fields": [
+        {
+          "name": "config_path",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional hardware configuration path."
+        },
+        {
+          "name": "mode",
+          "kind": "enum",
+          "enum": [
+            "physics",
+            "mirror_real"
+          ],
+          "required": false,
+          "default": "physics",
+          "has_default": true,
+          "description": "Physics mode, or zero-gravity mirror mode."
+        },
+        {
+          "name": "discard_changes",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Allow replacement of an unsaved stage."
+        }
+      ],
+      "namespace": "workcell",
+      "owner_id": "workcell"
+    },
+    "workcell.workcell_status": {
+      "description": "Read the current workcell build report.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "workcell",
+      "owner_id": "workcell"
+    },
+    "workcell.workcell_shutdown": {
+      "description": "Release workcell state without clearing the stage.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "workcell",
+      "owner_id": "workcell"
+    },
+    "workcell.robot_status": {
+      "description": "Read robot build details from the workcell report.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "workcell",
+      "owner_id": "workcell"
+    },
+    "workcell.perception_status": {
+      "description": "Read camera build details; this does not capture sensor data.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "workcell",
+      "owner_id": "workcell"
+    },
+    "workcell.jenga_status": {
+      "description": "Read Jenga build details from the workcell report.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "workcell",
+      "owner_id": "workcell"
+    },
+    "workcell.jenga_build": {
+      "description": "Replace the Jenga tower in the current workcell on a stopped timeline using configured or overridden variation. Resamples blocks; not a physics-state reset.",
+      "parameters": {
+        "profile": {
+          "type": "string",
+          "description": "Optional name in jenga.variation_profiles; omitted uses the configured variation_profile."
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Optional integer seed; omitted uses the configured variation_seed. A selected profile requires a seed."
+        }
+      },
+      "fields": [
+        {
+          "name": "profile",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional name in jenga.variation_profiles; omitted uses the configured variation_profile."
+        },
+        {
+          "name": "seed",
+          "kind": "integer",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Optional integer seed; omitted uses the configured variation_seed. A selected profile requires a seed."
+        }
+      ],
+      "namespace": "workcell",
+      "owner_id": "workcell"
+    },
+    "workcell.real2sim_status": {
+      "description": "Report the real-to-simulation interface availability; no synchronization is implemented.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "workcell",
+      "owner_id": "workcell"
+    },
+    "workcell.planning_status": {
+      "description": "Report the planning interface availability; no planner is implemented.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "workcell",
+      "owner_id": "workcell"
+    },
+    "workcell.eval_status": {
+      "description": "Report the evaluation interface availability; no evaluation is implemented.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "workcell",
+      "owner_id": "workcell"
+    }
+  }
+}

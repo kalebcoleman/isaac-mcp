@@ -1,10 +1,10 @@
-# How isaac-mcp works
+# How twinsmith works
 
 This page explains the whole system: how an MCP client connects, what the host server, the bridge and the Kit extensions
 each do, how Isaac Lab jobs, asset packs and RoboSimStudio fit in, and where each setting is read. For setup steps see
 [Linux setup](LINUX-SETUP.md) and [MCP server](MCP-SERVER.md); for every tool see the [tool arguments](TOOLS-ARGUMENTS.md).
 
-![The MCP client talks to the isaac-mcp host server over stdio. The server answers some tools itself, forwards simulator tools over TCP to the bridge extension inside Isaac Sim, and runs Isaac Lab and script jobs as separate processes. Assets, staging, outputs and job logs are files on the same machine.](media/architecture.svg)
+![The MCP client talks to the twinsmith host server over stdio. The server answers some tools itself, forwards simulator tools over TCP to the bridge extension inside Isaac Sim, and runs Isaac Lab and script jobs as separate processes. Assets, staging, outputs and job logs are files on the same machine.](media/architecture.svg)
 
 The diagram source is [`architecture.drawio`](architecture.drawio) (open it at [diagrams.net](https://app.diagrams.net)).
 
@@ -14,14 +14,14 @@ The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is how an AI
 OpenCode and others) uses outside tools. The client starts an **MCP server** as a child process, asks it which tools it
 has, and calls them by name with JSON arguments. The server does the work and returns text or images.
 
-`isaac-mcp` is such a server. It is a small Python program that starts in about a second and needs no simulator to
+`twinsmith` is such a server. It is a small Python program that starts in about a second and needs no simulator to
 start. Its tools are grouped into [toolsets](TOOLSETS.md), and a client is shown only the enabled ones. A tool is one of
 three kinds:
 
 | Kind | Examples | Where the work happens |
 |---|---|---|
-| Host tool | `isaac_help`, `screenshot`, `join_videos`, `robosim` | In the server process itself |
-| Simulator tool | `sim__*`, `assets__*`, `status`, `run_python`, the work cell's `ur5e_dt__*` | Inside a running Isaac Sim, reached over a local TCP connection |
+| Host tool | `help`, `screenshot`, `join_videos`, `robosim` | In the server process itself |
+| Simulator tool | `sim__*`, `assets__*`, `status`, `run_python`, the work cell's `workcell__*` | Inside a running Isaac Sim, reached over a local TCP connection |
 | Job tool | `isaaclab__launch`, `run_script` | In a separate process the server starts and watches |
 
 ## The pieces
@@ -29,12 +29,12 @@ three kinds:
 | Piece | Where | What it is |
 |---|---|---|
 | MCP client | Your agent | Starts the host server and speaks MCP to it on stdin and stdout. |
-| Host server | `mcp/isaac_mcp/` (command `isaac-mcp`) | The MCP server. Speaks MCP to the client; is a TCP client of the bridge; runs the host tools and the job tools. |
-| Bridge | `exts/isaac.mcp.bridge/` | A Kit extension inside Isaac Sim: a TCP server that runs tool calls on Kit's main thread. Robot-agnostic. |
+| Host server | `mcp/twinsmith/` (command `twinsmith`) | The MCP server. Speaks MCP to the client; is a TCP client of the bridge; runs the host tools and the job tools. |
+| Bridge | `exts/twinsmith.bridge/` | A Kit extension inside Isaac Sim: a TCP server that runs tool calls on Kit's main thread. Robot-agnostic. |
 | Scene tools | `exts/sim-tools/` | A Kit extension that registers the generic `sim.*` and `assets.*` tools on the bridge. |
-| Work cell | `exts/ur5e-dt/` | One lab's UR5e Jenga work cell: the `ur5e_dt.*` tools on the same bridge. Its assets come from an [asset pack](ASSET-PACKS.md). See its [README](../exts/ur5e-dt/workcell/README.md). |
-| Isaac Lab jobs | `mcp/isaac_mcp/isaaclab/` | Train, evaluate, play and record in separate processes the host starts. |
-| RoboSimStudio bridge | `mcp/isaac_mcp/robosim/` | Runs RoboSimStudio in its own Python environment from one grouped tool. |
+| Work cell | `exts/workcell/` | One lab's UR5e Jenga work cell: the `workcell.*` tools on the same bridge. Its assets come from an [asset pack](ASSET-PACKS.md). See its [README](../exts/workcell/workcell/README.md). |
+| Isaac Lab jobs | `mcp/twinsmith/isaaclab/` | Train, evaluate, play and record in separate processes the host starts. |
+| RoboSimStudio bridge | `mcp/twinsmith/robosim/` | Runs RoboSimStudio in its own Python environment from one grouped tool. |
 | Launch and checks | `run.sh`, `install.sh`, `scripts/` | Start Isaac Sim with the extensions, install the host, run checks. |
 
 They are separate on purpose. The host must start instantly and must never need the 20 GB simulator environment just to
@@ -47,15 +47,15 @@ the repository: they live in packs in the local asset root.
 The client's configuration names a command to run (see [client configuration](MCP-SERVER.md#4-client-configuration)):
 
 ```json
-{"mcpServers": {"isaac": {"command": "isaac-mcp", "env": {"ISAAC_MCP_PYTHON": "<sim-python>"}}}}
+{"mcpServers": {"twinsmith": {"command": "twinsmith", "env": {"TWINSMITH_SIM_PYTHON": "<sim-python>"}}}}
 ```
 
-The client starts `isaac-mcp`, and the two exchange JSON-RPC messages on the process's stdin and stdout: `initialize`,
+The client starts `twinsmith`, and the two exchange JSON-RPC messages on the process's stdin and stdout: `initialize`,
 `tools/list`, then `tools/call` for each tool the agent uses. Each client gets its own server process, so two agents do not
 share a server, though they can talk to the same simulator.
 
 The server lists the tools of the enabled toolsets from the first `tools/list`, whether or not Isaac Sim is running. The
-simulator tools are listed from a snapshot packaged with the server (`mcp/isaac_mcp/catalogs/`); each one dials the selected
+simulator tools are listed from a snapshot packaged with the server (`mcp/twinsmith/catalogs/`); each one dials the selected
 bridge only when it is called, and answers with what to do if none is there. `status` is the one check-in call: it says which
 simulator answered, what else is running, the IDs the scene tools need and which toolsets are on, or that nothing is running.
 
@@ -88,14 +88,14 @@ their record in one folder in one format, so a job can still be read after the s
 
 ## How the server reaches Isaac Sim
 
-**The bridge.** `isaac.mcp.bridge` listens on one TCP port per Kit process, on loopback by default. The protocol is one JSON
+**The bridge.** `twinsmith.bridge` listens on one TCP port per Kit process, on loopback by default. The protocol is one JSON
 object per line each way ([protocol](../mcp/docs/protocol.md)). Tool packages register their tools on it under a namespace, so
 two projects can each have a `play_scene` (`arm.play_scene`, `rover.play_scene`). Three rules decide when a call runs: tools
 that only read the bridge's own state (`status`, `job_status`) are answered at once, off the main thread; a tool that advances
 the app itself (`run_python`) runs alone; every other tool runs in arrival order. The bridge also keeps background jobs.
 
 **Who may connect, and what they may do.** Every connection presents a token. The bridge writes it to a file only your account
-can read, and clients on that account read it from there. Started with `ISAAC_MCP_READ_ONLY=1`, the bridge runs only tools that
+can read, and clients on that account read it from there. Started with `TWINSMITH_READ_ONLY=1`, the bridge runs only tools that
 change nothing and refuses the rest, for every client. Toolsets do not replace either: they only change what is listed.
 
 **Starting a simulator.** `./run.sh` (add `--headless` for no window) starts Isaac Sim with the bridge, the scene tools, the
@@ -103,12 +103,12 @@ work-cell extension and NVIDIA's bundled ROS 2 bridge enabled, on port 8766 unle
 `launch` toolset is enabled, does the same for the agent, on a free port with its own ROS domain and output folder, after
 checking GPU and memory headroom. The server never starts a simulator on its own.
 
-**Finding it.** A running bridge writes a small portfile (`$XDG_RUNTIME_DIR/isaac-mcp/`, or `/tmp/isaac-mcp-<uid>/`) with its
+**Finding it.** A running bridge writes a small portfile (`$XDG_RUNTIME_DIR/twinsmith/`, or `/tmp/twinsmith-<uid>/`) with its
 PID and port. The server picks the bridge to dial in this order:
 
 1. An explicit choice: `use_bridge(port)` in the session, or `--port` on the command-line client.
-2. `UR5E_DT_PORT`, the older name for the port.
-3. `ISAAC_MCP_PORT`.
+2. `TWINSMITH_PORT`, the older name for the port.
+3. `TWINSMITH_PORT`.
 4. Portfile discovery, when exactly one bridge is advertised. With several and no explicit choice it refuses to guess and
    lists them.
 
@@ -116,10 +116,10 @@ PID and port. The server picks the bridge to dial in this order:
 |---|---|
 | 8766 | The default bridge port of `run.sh` and client configurations. |
 | 8767 | Convention for a second bridge, such as the Isaac Lab bridge example. |
-| any | `./run.sh --port 0` asks the OS for a free port; `sim__session` picks one in `ISAAC_MCP_PORT_RANGE`. |
+| any | `./run.sh --port 0` asks the OS for a free port; `sim__session` picks one in `TWINSMITH_PORT_RANGE`. |
 
 A configured port that is already taken refuses at startup rather than moving somewhere no client could predict.
-`ISAAC_MCP_BIND` can change the bind address; the bridge runs arbitrary Python by design, so beyond loopback use an SSH tunnel or
+`TWINSMITH_BIND` can change the bind address; the bridge runs arbitrary Python by design, so beyond loopback use an SSH tunnel or
 a private network, and give the client the token ([protocol](../mcp/docs/protocol.md#several-simulators-and-other-machines)).
 
 **The physics engine.** Each Kit process runs one engine for its lifetime; `status` reports the stage's `physics_engine`.
@@ -134,11 +134,11 @@ python3 scripts/install.py            # --dry-run to preview, --remove to undo
 ```
 
 This edits the app's `user.config.json`, as the Extensions window's autoload checkbox does: it adds `exts/` to the search path,
-enables `isaac.mcp.bridge`, and stores the port (8766). Close the app first; with several Kit apps installed, name one with
+enables `twinsmith.bridge`, and stores the port (8766). Close the app first; with several Kit apps installed, name one with
 `--config`. A script that is not an MCP client can use the bridge too, with the standard-library client:
 
 ```python
-from isaac_mcp.client import BridgeClient, call
+from twinsmith.client import BridgeClient, call
 
 call("status")                                       # one call
 with BridgeClient(port=8766) as bridge:              # many calls on one connection
@@ -146,8 +146,8 @@ with BridgeClient(port=8766) as bridge:              # many calls on one connect
 ```
 
 ```bash
-python3 mcp/isaac_mcp/client.py --list-bridges
-python3 mcp/isaac_mcp/client.py <tool> ['{"json": "arguments"}'] [--port N]
+python3 mcp/twinsmith/client.py --list-bridges
+python3 mcp/twinsmith/client.py <tool> ['{"json": "arguments"}'] [--port N]
 ```
 
 `client.py` uses only the standard library and can be copied on its own. Exit codes: 0 success, 1 the bridge answered with an
@@ -167,7 +167,7 @@ the task, which these tools do not override. See [Isaac Lab tools](TOOLS-ISAACLA
 ## Asset packs
 
 Assets are not in the repository. They live in an **asset root** of versioned **packs**, each a folder with one `pack.yaml`
-that lists every file with its hash, source and licence (`mcp/isaac_mcp/pack_manifest.py` reads it; the host tools in
+that lists every file with its hash, source and licence (`mcp/twinsmith/pack_manifest.py` reads it; the host tools in
 `asset_packs.py` list, check, adopt, pin and build packs), and in project folders the user has approved. The server will only
 read a file inside one of those; only the user can approve a folder. `assets__import_path` picks the format, converts URDF,
 xacro, SDF and MuJoCo files on the host without running any code from them, and hands Kit a verified snapshot in a staging
@@ -189,8 +189,8 @@ under `<workspace>/runs/robosim/`. See [ROBOSIM.md](ROBOSIM.md).
 | An Isaac Lab task | `isaaclab__launch` with `record`, or `play` with `--video` | An Isaac Lab install. Works headless. |
 | Saved clips and frames | `join_videos` (join, contact sheet, frames to MP4) | Nothing but the files. |
 
-Screenshots and recordings go to `~/Pictures/screen-mcp` and `~/Videos/screen-mcp`. Camera captures, frames and controller
-logs go to the simulator's output folder (`ISAAC_MCP_SCENE_OUTPUT`).
+Screenshots and recordings go to `~/Pictures/twinsmith` and `~/Videos/twinsmith`. Camera captures, frames and controller
+logs go to the simulator's output folder (`TWINSMITH_SCENE_OUTPUT`).
 
 ## Where each setting is read
 
@@ -200,26 +200,26 @@ its default and reader, and a test keeps it exact. The ones that shape the syste
 
 | Setting | Read by | Purpose |
 |---|---|---|
-| `[tools] toolsets` in the config files, `ISAAC_MCP_TOOLSETS`, `--toolsets` | Host server | Which toolsets are on. These control visibility, not security. |
-| `[sim] physics_backend`, `ISAAC_MCP_PHYSICS_BACKEND`, `run.sh --physics-backend` | Host server, `run.sh`, Kit | The physics engine of a new simulator. |
-| `ISAAC_MCP_PORT` | Host server, Kit | The bridge port to dial, and to listen on. |
-| `ISAAC_MCP_PYTHON` | `run.sh`, the host (`sim__session`) | The Isaac Sim interpreter to start. |
-| `ISAAC_MCP_ASSET_ROOT` | Host server, Kit | The asset root. |
-| `ISAAC_MCP_SCENE_OUTPUT` | Kit | Where scene tools write captures, saves and logs. |
+| `[tools] toolsets` in the config files, `TWINSMITH_TOOLSETS`, `--toolsets` | Host server | Which toolsets are on. These control visibility, not security. |
+| `[sim] physics_backend`, `TWINSMITH_PHYSICS_BACKEND`, `run.sh --physics-backend` | Host server, `run.sh`, Kit | The physics engine of a new simulator. |
+| `TWINSMITH_PORT` | Host server, Kit | The bridge port to dial, and to listen on. |
+| `TWINSMITH_SIM_PYTHON` | `run.sh`, the host (`sim__session`) | The Isaac Sim interpreter to start. |
+| `TWINSMITH_ASSET_ROOT` | Host server, Kit | The asset root. |
+| `TWINSMITH_SCENE_OUTPUT` | Kit | Where scene tools write captures, saves and logs. |
 | `ISAACLAB_PYTHON`, `ISAACLAB_ROOT` | Host server | The default Isaac Lab install. |
-| `ISAAC_MCP_READ_ONLY`, `ISAAC_MCP_AUTH`, `ISAAC_MCP_TOKEN` | Kit (the token also by clients) | Enforced by the bridge: read-only mode, and the token connections must present. |
-| `ISAAC_MCP_ENABLE_SCENE_SCRIPTS` | Kit | Opt in to tools that run the caller's Python inside Kit. |
+| `TWINSMITH_READ_ONLY`, `TWINSMITH_AUTH`, `TWINSMITH_TOKEN` | Kit (the token also by clients) | Enforced by the bridge: read-only mode, and the token connections must present. |
+| `TWINSMITH_ENABLE_SCENE_SCRIPTS` | Kit | Opt in to tools that run the caller's Python inside Kit. |
 
-The server reads two files for settings: `~/.config/isaac-mcp/config.toml` and the nearest `isaac-mcp.toml` above the
+The server reads two files for settings: `~/.config/twinsmith/config.toml` and the nearest `twinsmith.toml` above the
 working directory. Precedence is: defaults, user file, project file, environment, command line.
 
 ## Naming rules
 
 | Entity | Rule | Examples |
 |---|---|---|
-| Kit extension ID and folder | The folder under `exts/` is the extension ID | `ur5e-dt`, `sim-tools`, `isaac.mcp.bridge` |
-| Python package | The ID with underscores | `ur5e_dt`, `sim_tools`, `isaac_mcp_bridge`, `isaac_mcp` |
-| Command and server name | One name, no aliases | `isaac-mcp` |
+| Kit extension ID and folder | The folder under `exts/` is the extension ID | `workcell`, `sim-tools`, `twinsmith.bridge` |
+| Python package | The ID with underscores | `workcell`, `sim_tools`, `twinsmith_bridge`, `twinsmith` |
+| Command and server name | One name, no aliases | `twinsmith` |
 | Tool | `<namespace>.<tool>` in Kit, `<namespace>__<tool>` in MCP | `sim.stage.info`, `sim__stage__info` |
 
 ## ROS 2 and DDS

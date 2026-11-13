@@ -137,7 +137,7 @@ The repository ships no robots or props, so anything you load comes from one of 
 | **Your asset root** | Make a pack of a project folder and load a file by name, such as `so_arm100/v1/so100.urdf`. | Your own robots, props and scenes, and open-source ones you download. |
 | **Any other folder** | You approve the folder once as a trusted root, then the agent can import from it. | A project that has to stay where it is. |
 
-**Your asset root** is one folder on your machine (`ISAAC_MCP_ASSET_ROOT`, else `<workspace>/assets`). It holds **packs**:
+**Your asset root** is one folder on your machine (`TWINSMITH_ASSET_ROOT`, else `<workspace>/assets`). It holds **packs**:
 `<pack id>/<version>/` with a `pack.yaml` that lists every file with its checksum, source and licence. To add one:
 
 1. Ask your agent: *"Make a pack so_arm100/v1 from the folder I approved, source <where it came from>, licence <licence>."*
@@ -145,7 +145,7 @@ The repository ships no robots or props, so anything you load comes from one of 
 2. Ask for it by name: *"Make a scene with the so_arm100/v1/so100.urdf robot."*
 
 The agent uses `assets__pack` (`adopt`, `list`, `doctor`) and `sim__quick_start`. From a terminal, the same is
-`python3 scripts/isaac_assets.py adopt <folder> --pack so_arm100/v1 --source ... --license ...`. Set `ISAAC_MCP_ASSET_ROOT`
+`python3 scripts/assets.py adopt <folder> --pack so_arm100/v1 --source ... --license ...`. Set `TWINSMITH_ASSET_ROOT`
 before starting Isaac Sim to keep the folder somewhere else.
 
 **Good to know**

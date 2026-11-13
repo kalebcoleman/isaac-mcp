@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import evalsummary as ev
-from isaac_mcp.isaaclab import tools
+from twinsmith.isaaclab import evalsummary as ev
+from twinsmith.isaaclab import tools
 
 
 def write(tmp_path, name, data):

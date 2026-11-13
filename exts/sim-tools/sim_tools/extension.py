@@ -7,9 +7,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "mcp"))
 import omni.ext
 import omni.usd
 import omni.timeline
-from isaac_mcp_bridge import get_mcp_bridge, ToolDefinition
-from isaac_mcp.scene_contracts import HOST_ONLY, READ_ONLY, REGISTRY
-from isaac_mcp.project_assets import AssetError
+from twinsmith_bridge import get_mcp_bridge, ToolDefinition
+from twinsmith.scene_contracts import HOST_ONLY, READ_ONLY, REGISTRY
+from twinsmith.project_assets import AssetError
 from .core import STAGE_TOOLS, TIMELINE_TOOLS, Scene, attribute_change, bounded, facts, stop_call
 from .render_export import validate_native_binding
 from .reload import draining, register_when_free
@@ -73,7 +73,7 @@ class Extension(omni.ext.IExt):
             .get_stage_event_stream()
             .create_subscription_to_pop(self._stage_event)
         )
-        if os.getenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS") == "1":
+        if os.getenv("TWINSMITH_ENABLE_SCENE_SCRIPTS") == "1":
             import omni.kit.app as kit_app
             import carb.settings
 
@@ -123,7 +123,7 @@ class Extension(omni.ext.IExt):
         """Say that this extension restarted inside a running Kit. Diagnostics only."""
         try:
             import carb
-            from isaac_mcp_bridge.source_state import note_start
+            from twinsmith_bridge.source_state import note_start
 
             started = note_start("sim-tools")
             self.scene.previous_sessions = list(started.get("session_ids", []))
@@ -157,7 +157,7 @@ class Extension(omni.ext.IExt):
                 carb.log_error(f"[sim-tools] shutdown step failed: {exc}")
 
         def remember_session():
-            from isaac_mcp_bridge.source_state import note_stop
+            from twinsmith_bridge.source_state import note_stop
 
             note_stop("sim-tools", session_ids=(self.scene.previous_sessions + [self.scene.session_id])[-8:])
 
@@ -249,7 +249,7 @@ class Extension(omni.ext.IExt):
         restoring the edit target. Also used by tools that need physics to run briefly."""
         import asyncio
         import omni.kit.app as kit_app
-        from isaac_mcp.project_assets import refuse
+        from twinsmith.project_assets import refuse
         from .timeline import complete_requested_stop, settle_stop
 
         timeline_target = (args["session_id"], args["stage_id"])
@@ -358,7 +358,7 @@ class Extension(omni.ext.IExt):
         """A clean stopped state from wherever a failed run left things: cancel this pack's jobs, stop
         the viewport follow, and stop the timeline through the guarded path. Safe to repeat."""
         import omni.kit.app as kit_app
-        from isaac_mcp.project_assets import refuse
+        from twinsmith.project_assets import refuse
 
         s = self.scene
         ids = dict(session_id=args["session_id"], stage_id=args["stage_id"])
@@ -391,10 +391,10 @@ class Extension(omni.ext.IExt):
         session layer."""
         import asyncio
         import omni.kit.app as kit_app
-        from isaac_mcp.project_assets import refuse
+        from twinsmith.project_assets import refuse
 
         from .graph import validate_occupancy
-        from isaac_mcp.project_assets import AssetError
+        from twinsmith.project_assets import AssetError
 
         s = self.scene
         ids = dict(session_id=args["session_id"], stage_id=args["stage_id"])
@@ -438,7 +438,7 @@ class Extension(omni.ext.IExt):
 
     async def _wait_sensor_frame(self, name, args):
         """Observe ordinary rendering without changing timeline or re-entering Kit."""
-        from isaac_mcp.project_assets import refuse
+        from twinsmith.project_assets import refuse
         import time
 
         s = self.scene
@@ -760,9 +760,9 @@ class Extension(omni.ext.IExt):
         """Closures for files this Kit may parse: under its approved roots or the asset root.
 
         Not project stores: a project file found from the working directory is not an approval."""
-        from isaac_mcp import pack_manifest
-        from isaac_mcp.project_assets import refuse
-        from isaac_mcp.usd_closure import closures, split_runtime
+        from twinsmith import pack_manifest
+        from twinsmith.project_assets import refuse
+        from twinsmith.usd_closure import closures, split_runtime
 
         self.scene.broker.require_profile()
         folders = [root for root, _ in self.scene.broker.roots.values()]
@@ -795,7 +795,7 @@ class Extension(omni.ext.IExt):
         if seen is not None and time.monotonic() - at < cls._ASSET_ENVIRONMENT_TTL_S:
             return dict(seen)
         try:
-            from isaac_mcp import pack_manifest
+            from twinsmith import pack_manifest
 
             project = pack_manifest.project_file()
             try:
@@ -865,7 +865,7 @@ class Extension(omni.ext.IExt):
             or (name == "sim.timeline.control" and a.get("action") != "stop")
         ):
             import omni.kit.app as kit_app
-            from isaac_mcp.project_assets import refuse
+            from twinsmith.project_assets import refuse
 
             if not kit_app.get_app().is_app_ready():
                 refuse(
@@ -903,7 +903,7 @@ class Extension(omni.ext.IExt):
             contains = a.get("contains", "")
             kind = a.get("type_name", "")
             limit = a.get("limit", 100)
-            from isaac_mcp.project_assets import refuse
+            from twinsmith.project_assets import refuse
 
             if not isinstance(contains, str) or len(contains) > 128 or len(kind) > 128:
                 refuse("LIMIT", "Search strings <=128 characters required.")
@@ -978,7 +978,7 @@ class Extension(omni.ext.IExt):
             from .advanced import physics_manager
 
             physics_manager()
-            from isaac_mcp.project_assets import refuse
+            from twinsmith.project_assets import refuse
             from pxr import UsdPhysics
 
             from .physics import body_path
@@ -1017,7 +1017,7 @@ class Extension(omni.ext.IExt):
                 return dict(bodies=[dict(read(p), path=p) for p in paths], time_s=s.timeline.get_current_time())
             return read(a["path"])
         if name == "sim.timeline.control":
-            from isaac_mcp.project_assets import refuse
+            from twinsmith.project_assets import refuse
 
             if a["action"] not in ("play", "pause", "stop"):
                 refuse(
@@ -1053,7 +1053,7 @@ class Extension(omni.ext.IExt):
                 frame_viewport_selection,
             )
             from omni.kit.undo import disabled
-            from isaac_mcp.project_assets import refuse
+            from twinsmith.project_assets import refuse
             from .viewport import frame, place
 
             follow = a.get("follow")

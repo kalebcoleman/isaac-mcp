@@ -6,15 +6,15 @@ import os
 from pathlib import Path
 import shutil
 import uuid
-from isaac_mcp.project_assets import AssetError, refuse
+from twinsmith.project_assets import AssetError, refuse
 
 
 class RobotImport:
     """Mixed into Advanced: uses its scene (``self.s``), sensors and ``physics_manager``."""
 
     def import_urdf(self, stage, snapshot_id, manifest_sha256, prim_path, fixed_base=True, default_drives=True, joint_targets=None, **pose):
-        from isaac_mcp import urdf_physics, urdf_refs
-        from isaac_mcp.project_assets import Broker, open_dir, signature
+        from twinsmith import urdf_physics, urdf_refs
+        from twinsmith.project_assets import Broker, open_dir, signature
 
         from .validate import apply_joint_targets, joint_summary, validate
         from .urdf import (
@@ -150,8 +150,8 @@ class RobotImport:
         The host checked that every file the model names is inside the approved folder before it made the snapshot, and
         this method checks again against the snapshot's own file list, so the importer reads nothing else.
         """
-        from isaac_mcp import mjcf_refs, urdf_refs
-        from isaac_mcp.project_assets import Broker, open_dir, signature
+        from twinsmith import mjcf_refs, urdf_refs
+        from twinsmith.project_assets import Broker, open_dir, signature
 
         from .validate import apply_joint_targets, joint_summary, validate
         from .mjcf import (convert, importer_identity, mjcf_default_gains, movable_joint_count,

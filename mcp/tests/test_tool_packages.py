@@ -5,7 +5,7 @@ import sys
 import pytest
 
 from bridge_testing import dispatch, make_bridge
-from isaac_mcp_bridge import knobs, packages
+from twinsmith_bridge import knobs, packages
 
 
 @pytest.fixture
@@ -80,21 +80,21 @@ def test_a_package_that_fails_to_load_fails_the_startup_and_leaves_nothing_regis
 
 
 def test_settings_come_from_the_environment_then_the_default(monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_TOOL_MODULES", "a.b, c ,")
+    monkeypatch.setenv("TWINSMITH_TOOL_MODULES", "a.b, c ,")
     assert knobs.listed(knobs.TOOL_MODULES.read()) == ["a.b", "c"]
-    monkeypatch.delenv("ISAAC_MCP_TOOL_MODULES")
+    monkeypatch.delenv("TWINSMITH_TOOL_MODULES")
     assert knobs.listed(knobs.TOOL_MODULES.read()) == [] and knobs.listed(["x", " y "]) == ["x", "y"]
-    assert knobs.PORT.path == "/persistent/exts/isaac.mcp.bridge/autostartPort"
-    monkeypatch.setenv("ISAAC_MCP_AUTH", "0")
+    assert knobs.PORT.path == "/persistent/exts/twinsmith.bridge/autostartPort"
+    monkeypatch.setenv("TWINSMITH_AUTH", "0")
     assert knobs.AUTH.flag() is False
-    monkeypatch.delenv("ISAAC_MCP_AUTH")
+    monkeypatch.delenv("TWINSMITH_AUTH")
     assert knobs.AUTH.flag() is True and knobs.READ_ONLY.flag() is False
 
 
 def test_the_template_package_loads_and_its_tools_run(monkeypatch):
     from pathlib import Path
 
-    from isaac_mcp_bridge import load_tool_modules
+    from twinsmith_bridge import load_tool_modules
 
     bridge = make_bridge()
     templates = str(Path(__file__).resolve().parents[1] / "templates")

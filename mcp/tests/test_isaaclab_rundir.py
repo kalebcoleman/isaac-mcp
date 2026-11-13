@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import jobs, rundir, tools
+from twinsmith.isaaclab import jobs, rundir, tools
 
 
 def status_tool(**kw):
@@ -26,7 +26,7 @@ def status_tool(**kw):
 def _dirs(tmp_path, monkeypatch):
     logs = tmp_path / "logs"
     logs.mkdir()
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     monkeypatch.setenv("ISAACLAB_LOGS_DIR", str(logs))
     monkeypatch.setenv("ISAACLAB_ALLOW_TMP", "1")
     return logs

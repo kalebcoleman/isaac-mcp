@@ -13,9 +13,9 @@ import pytest
 pytest.importorskip("pxr.Usd")
 np = pytest.importorskip("numpy")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
-from isaac_mcp import controller_server
-from isaac_mcp.project_assets import AssetError
-from isaac_mcp_bridge import jobs
+from twinsmith import controller_server
+from twinsmith.project_assets import AssetError
+from twinsmith_bridge import jobs
 from sim_tools import control_run, physics
 
 DT = 0.01

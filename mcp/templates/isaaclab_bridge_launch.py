@@ -4,8 +4,8 @@ A Lab script starts its own Kit app, so three things differ from the Isaac Sim a
 
 * The bridge is enabled by this script through ``--kit_args``; what ``scripts/install.py`` stores
   for the Isaac Sim app does not apply here.
-* It is configured by environment variables only, set before the app starts: ``ISAAC_MCP_PORT``,
-  ``ISAAC_MCP_TOOL_PATHS``, ``ISAAC_MCP_TOOL_MODULES``.
+* It is configured by environment variables only, set before the app starts: ``TWINSMITH_PORT``,
+  ``TWINSMITH_TOOL_PATHS``, ``TWINSMITH_TOOL_MODULES``.
 * The script owns the main loop, and the bridge answers only while Kit updates. On Lab 3.0.0
   ``sim.step()`` updates Kit only with a windowed Kit visualizer, so the loop below calls
   ``simulation_app.update()`` itself, with physics playback switched off around it so Kit does not
@@ -17,14 +17,14 @@ Every bridge needs its own port. The Isaac Sim app usually has 8766, so this def
 import argparse
 import os
 
-os.environ.setdefault("ISAAC_MCP_PORT", "8767")
+os.environ.setdefault("TWINSMITH_PORT", "8767")
 # Your own tool package, as for Isaac Sim:
-# os.environ.setdefault("ISAAC_MCP_TOOL_PATHS", "<project>/isaac")
-# os.environ.setdefault("ISAAC_MCP_TOOL_MODULES", "myproj_tools")
+# os.environ.setdefault("TWINSMITH_TOOL_PATHS", "<project>/isaac")
+# os.environ.setdefault("TWINSMITH_TOOL_MODULES", "myproj_tools")
 
-# This file is in <repo>/mcp/templates; ISAAC_MCP_EXTS names the extensions folder if yours is elsewhere.
+# This file is in <repo>/mcp/templates; TWINSMITH_EXTS names the extensions folder if yours is elsewhere.
 EXTENSIONS = os.path.normpath(os.environ.get(
-    "ISAAC_MCP_EXTS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "exts")))
+    "TWINSMITH_EXTS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "exts")))
 
 from isaaclab.app import AppLauncher  # noqa: E402
 
@@ -32,7 +32,7 @@ parser = argparse.ArgumentParser(description="An Isaac Lab script with the MCP b
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 # Kit takes "--enable <name>" with a space; "--enable=<name>" is ignored without an error.
-args.kit_args = f"{args.kit_args or ''} --ext-folder {EXTENSIONS} --enable isaac.mcp.bridge".strip()
+args.kit_args = f"{args.kit_args or ''} --ext-folder {EXTENSIONS} --enable twinsmith.bridge".strip()
 simulation_app = AppLauncher(args).app
 
 # Isaac Lab imports come after the app has started.

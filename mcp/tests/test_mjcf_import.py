@@ -7,10 +7,10 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from isaac_mcp import asset_packs as packs
-from isaac_mcp import mjcf_refs
-from isaac_mcp.project_assets import AssetError, Broker
-from isaac_mcp.scene_contracts import REGISTRY
+from twinsmith import asset_packs as packs
+from twinsmith import mjcf_refs
+from twinsmith.project_assets import AssetError, Broker
+from twinsmith.scene_contracts import REGISTRY
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "exts" / "sim-tools"))
@@ -71,7 +71,7 @@ def test_locate_accepts_an_xml_only_as_mjcf_and_says_where_an_xml_belongs(broker
 def test_the_snapshot_of_an_mjcf_verifies_and_resolves_inside_itself(broker):
     snap = broker.snapshot("m", "arm.xml", kind="mjcf")
     filename, manifest = broker.verify(snap["snapshot_id"], snap["manifest_sha256"], kind="mjcf")
-    from isaac_mcp import urdf_refs
+    from twinsmith import urdf_refs
 
     project_dir = filename.parents[len(Path(manifest["entry"]).parts) - 1]
     project = urdf_refs.project_from_manifest(project_dir, manifest["files"])
@@ -94,7 +94,7 @@ def test_dependencies_reads_an_mjcf_on_the_host_without_a_usd_parser(tmp_path):
 
 
 def test_pack_build_refuses_an_unapproved_mujoco_model_and_a_xacro_with_a_pointer(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(tmp_path / "assets"))
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(tmp_path / "assets"))
     with pytest.raises(packs.PackError) as caught:
         packs.run_tool("assets.pack_build", dict(pack="p/v1", sources=[str(tmp_path / "arm.xml")]), Broker())
     assert caught.value.code in ("ROOT_NOT_APPROVED", "NOT_FOUND", "USD_UNAVAILABLE")
@@ -196,7 +196,7 @@ def test_legacy_equality_does_not_guess_when_joint_names_normalize_to_the_same_u
 
 def test_legacy_normalization_merges_named_defaults_and_avoids_mesh_stem_collision(tmp_path):
     import shutil
-    from isaac_mcp.urdf_refs import project_from_folder
+    from twinsmith.urdf_refs import project_from_folder
     from sim_tools.mjcf import _legacy_input
 
     original = tmp_path / 'original'
@@ -209,8 +209,8 @@ def test_legacy_normalization_merges_named_defaults_and_avoids_mesh_stem_collisi
     (original / 'robot.xml').write_text(model)
     (original / 'assets/link.stl').write_bytes(b'stl')
     (original / 'assets/link.obj').write_bytes(b'obj')
-    (original / 'assets/link__isaac_mcp_1.obj').write_bytes(b'do not overwrite')
-    (original / 'assets/link__isaac_mcp_2.stl').write_bytes(b'same stem, different extension')
+    (original / 'assets/link__twinsmith_1.obj').write_bytes(b'do not overwrite')
+    (original / 'assets/link__twinsmith_2.stl').write_bytes(b'same stem, different extension')
     found = mjcf_refs.resolve('robot.xml', project_from_folder(original))
     assert not found['problems']
     private = tmp_path / 'private'
@@ -221,15 +221,15 @@ def test_legacy_normalization_merges_named_defaults_and_avoids_mesh_stem_collisi
     assert [e.get('class') for e in result.find('default').findall('default')] == ['one', 'two']
     meshes = result.find('asset').findall('mesh')
     assert meshes[0].get('file') == 'link.stl'
-    assert meshes[1].get('file') == 'link__isaac_mcp_3.obj' and meshes[1].get('name') == 'link'
-    assert (private / 'assets/link__isaac_mcp_3.obj').read_bytes() == b'obj'
-    assert (private / 'assets/link__isaac_mcp_1.obj').read_bytes() == b'do not overwrite'
+    assert meshes[1].get('file') == 'link__twinsmith_3.obj' and meshes[1].get('name') == 'link'
+    assert (private / 'assets/link__twinsmith_3.obj').read_bytes() == b'obj'
+    assert (private / 'assets/link__twinsmith_1.obj').read_bytes() == b'do not overwrite'
     assert (original / 'robot.xml').read_text() == model
-    assert not (original / 'assets/link__isaac_mcp_3.obj').exists()
+    assert not (original / 'assets/link__twinsmith_3.obj').exists()
 
 
 def test_legacy_normalization_refuses_ambiguous_defaults(tmp_path):
-    from isaac_mcp.urdf_refs import project_from_folder
+    from twinsmith.urdf_refs import project_from_folder
     from sim_tools.mjcf import _legacy_input
 
     (tmp_path / 'robot.xml').write_text('<mujoco><default><joint damping="1"/></default><default><joint damping="2"/></default></mujoco>')
@@ -241,7 +241,7 @@ def test_legacy_normalization_refuses_ambiguous_defaults(tmp_path):
 
 def test_legacy_normalization_resolves_submodel_meshes_in_their_own_scope(tmp_path):
     import shutil
-    from isaac_mcp.urdf_refs import project_from_folder
+    from twinsmith.urdf_refs import project_from_folder
     from sim_tools.mjcf import _legacy_input
 
     source = tmp_path / 'source'
@@ -259,12 +259,12 @@ def test_legacy_normalization_resolves_submodel_meshes_in_their_own_scope(tmp_pa
     shutil.copytree(source, private)
     _legacy_input(private, 'robot.xml', found)
     meshes = ET.parse(private / 'sub/model.xml').getroot().find('asset').findall('mesh')
-    assert [mesh.get('file') for mesh in meshes] == ['link.stl', 'link__isaac_mcp_1.obj']
-    assert (private / 'sub/link__isaac_mcp_1.obj').read_bytes() == b'sub obj'
+    assert [mesh.get('file') for mesh in meshes] == ['link.stl', 'link__twinsmith_1.obj']
+    assert (private / 'sub/link__twinsmith_1.obj').read_bytes() == b'sub obj'
 
 
 def test_legacy_shared_include_only_refuses_ambiguous_mesh_when_collision_needs_rewrite(tmp_path):
-    from isaac_mcp.urdf_refs import project_from_folder
+    from twinsmith.urdf_refs import project_from_folder
     from sim_tools.mjcf import _legacy_input
 
     (tmp_path / 'a').mkdir()

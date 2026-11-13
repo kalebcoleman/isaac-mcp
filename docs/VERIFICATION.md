@@ -87,7 +87,7 @@ test are not successful scene loads; unexplained missing or corrupt assets need 
 ## How the smoke runner behaves
 
 Existing fixture prerequisites still apply. Use repeated `--check` to select individual validators.
-The runner starts each check's own MCP server with the toolsets that check needs (`ISAAC_MCP_TOOLSETS`,
+The runner starts each check's own MCP server with the toolsets that check needs (`TWINSMITH_TOOLSETS`,
 see `CHECK_TOOLSETS` in `scripts/smoke.py`; `--toolsets` overrides it for every check) and calls tools by
 their listed names. It waits, up to 60 s, for the simulator's reported engine to settle on the requested
 one before it refuses a mismatch with exit 2 (the bridge answers `status` a few seconds before Newton is the
@@ -108,7 +108,7 @@ and a backend mismatch stops the run.
 ## Records of earlier runs
 
 <a id="last-live-check"></a><a id="headless-physx-check"></a>
-On 2026-11-03, headless PhysX checks on Sim 6.2 passed the 20-check smoke of the twin that preceded the work cell, and generic scene checks with the stated test setup. They do not establish all tools,
+On 2026-11-03, headless PhysX checks on Sim 6.2 passed the 20-check smoke of the work cell that preceded the work cell, and generic scene checks with the stated test setup. They do not establish all tools,
 versions, windowed workflows, hardware or backends.
 
 LiDAR save and reopen behaviour and recovery are described in [scene tools](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
@@ -130,7 +130,7 @@ From the repository root, use an interpreter with Isaac Sim installed and an acc
 ```bash
 (
   ISAACSIM_PYTHON="/path/to/isaacsim-env/bin/python"
-  validation_log=$(mktemp "${TMPDIR:-/tmp}/isaac-mcp-generic-scene.XXXXXX") || {
+  validation_log=$(mktemp "${TMPDIR:-/tmp}/twinsmith-generic-scene.XXXXXX") || {
     printf 'Could not create validation log.\n' >&2
     exit 1
   }
@@ -192,7 +192,7 @@ uname -srmo
 cat /etc/os-release
 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
 printf 'DISPLAY=%s XDG_SESSION_TYPE=%s\n' "${DISPLAY:-unset}" "${XDG_SESSION_TYPE:-unset}"
-SIM_PYTHON="${ISAAC_MCP_PYTHON:-$PWD/.venv/bin/python}"
+SIM_PYTHON="${TWINSMITH_SIM_PYTHON:-$PWD/.venv/bin/python}"
 "$SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.executable); print(sys.version); print({n:m.version(n) for n in ("isaacsim", "isaacsim-kernel", "numpy", "torch", "mcp")})'
 uv pip check --python "$SIM_PYTHON"
 uv tool list

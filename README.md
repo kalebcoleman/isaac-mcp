@@ -1,4 +1,4 @@
-# isaac-mcp
+# twinsmith
 
 A tool for building and driving robot simulations and digital twins from an AI agent: you describe what you want, and
 the agent builds the scene, moves the robot, looks through its cameras and reads its sensors. It works with
@@ -6,8 +6,8 @@ NVIDIA Isaac Sim and Isaac Lab today, and adds ROS 2, folders of verified assets
 and a bridge to RoboSimStudio. It speaks [MCP](https://modelcontextprotocol.io), so Claude Code, Codex, OpenCode
 and other MCP clients can use it.
 
-[![CI](https://github.com/kalebcoleman/isaac-mcp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kalebcoleman/isaac-mcp/actions/workflows/ci.yml)
-[![Source version 0.2.0](docs/media/badges/version.svg)](mcp/pyproject.toml)
+[![CI](https://github.com/kalebcoleman/twinsmith/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kalebcoleman/twinsmith/actions/workflows/ci.yml)
+[![Source version 0.3.0](docs/media/badges/version.svg)](mcp/pyproject.toml)
 [![Isaac Sim scoped tests](docs/media/badges/sim.svg)](docs/COMPATIBILITY.md)
 [![Host Python 3.10+, Sim Python 3.12](docs/media/badges/python.svg)](docs/LINUX-SETUP.md#which-environment-does-what)
 [![License and asset notices](docs/media/badges/license.svg)](docs/VENDORING.md)
@@ -24,18 +24,18 @@ root. If you have no Isaac Sim yet, read the [Linux setup](docs/LINUX-SETUP.md#n
 **1. Install the server.**
 
 ```bash
-git clone https://github.com/kalebcoleman/isaac-mcp.git
-cd isaac-mcp
-python3 scripts/isaac_env.py find     # lists the Isaac Sim installs it can see
+git clone https://github.com/kalebcoleman/twinsmith.git
+cd twinsmith
+python3 scripts/env.py find     # lists the Isaac Sim installs it can see
 ./install.sh --no-sim                 # installs only the MCP server
 export PATH="$HOME/.local/bin:$PATH"
-isaac-mcp toolsets                    # prints the toolset table
+twinsmith toolsets                    # prints the toolset table
 ```
 
 You should see `find` list at least one Isaac Sim; with none it prints `no Isaac Sim / Isaac Lab environment found`, and you
-set `ISAACSIM_PATH` or `ISAAC_MCP_PYTHON` (see [Linux setup](docs/LINUX-SETUP.md#what-is-auto-detected-and-where-it-looks)).
+set `ISAACSIM_PATH` or `TWINSMITH_SIM_PYTHON` (see [Linux setup](docs/LINUX-SETUP.md#what-is-auto-detected-and-where-it-looks)).
 The installer prints `== using the Isaac Sim already installed: ...` and ends with `== install complete`.
-`isaac-mcp toolsets` prints one row per toolset with `on` or `off` and a tool count.
+`twinsmith toolsets` prints one row per toolset with `on` or `off` and a tool count.
 
 **2. Start a simulator** and leave that terminal open. The first start can take minutes while shaders compile.
 
@@ -46,7 +46,7 @@ The installer prints `== using the Isaac Sim already installed: ...` and ends wi
 You should see Kit's startup log and no `FAIL:` line. When it is ready, this prints JSON that contains `"app_ready": true`:
 
 ```bash
-python3 mcp/isaac_mcp/client.py status --port 8766
+python3 mcp/twinsmith/client.py status --port 8766
 ```
 
 **3. Connect a client.** For Claude Code:
@@ -58,7 +58,7 @@ python3 mcp/isaac_mcp/client.py status --port 8766
 For another client, add this to its MCP configuration (see [client configuration](docs/MCP-SERVER.md#4-client-configuration)):
 
 ```json
-{"mcpServers": {"isaac": {"command": "isaac-mcp", "env": {"ISAAC_MCP_PORT": "8766"}}}}
+{"mcpServers": {"twinsmith": {"command": "twinsmith", "env": {"TWINSMITH_PORT": "8766"}}}}
 ```
 
 Start a new client session. The client should list the tools of the default toolsets (see the table below).
@@ -101,7 +101,7 @@ which keeps the tool list small. The counts below are listed tools; related tool
 | `extensions` | on | 0 | Tools from uncatalogued extension namespaces |
 <!-- /generated -->
 
-Turn one on in `~/.config/isaac-mcp/config.toml`, with `ISAAC_MCP_TOOLSETS` or with `--toolsets`:
+Turn one on in `~/.config/twinsmith/config.toml`, with `TWINSMITH_TOOLSETS` or with `--toolsets`:
 
 ```toml
 [tools]
@@ -117,7 +117,7 @@ argument is in [TOOLS-ARGUMENTS.md](docs/TOOLS-ARGUMENTS.md), generated from the
 > [!WARNING]
 > `run_python`, the file tools and trusted asset loading run with your account's permissions and are not sandboxed.
 > Keep the bridge on loopback and approve only project folders you trust. The bridge accepts only connections that
-> present its token, which your own account's clients find automatically, and `ISAAC_MCP_READ_ONLY=1` starts a simulator
+> present its token, which your own account's clients find automatically, and `TWINSMITH_READ_ONLY=1` starts a simulator
 > that agents can inspect but not change. Toolsets control what is listed, not what is allowed.
 > See the [trust limits](docs/TOOLS-HOST.md#trust-and-operational-limits).
 
@@ -134,7 +134,7 @@ argument is in [TOOLS-ARGUMENTS.md](docs/TOOLS-ARGUMENTS.md), generated from the
 | Use scene, physics and sensor tools | [Scene tools](docs/TOOLS-SCENE.md) |
 | Train a policy with Isaac Lab | [Isaac Lab tools](docs/TOOLS-ISAACLAB.md) |
 | Use ROS 2, RViz 2 or Nav2 | [ROS 2 and RViz 2](docs/ROS2-RVIZ.md) |
-| Run the lab's UR5e work cell | [Work cell](exts/ur5e-dt/workcell/README.md) · [work-cell tools](docs/TOOLS-UR5E.md) |
+| Run the lab's UR5e work cell | [Work cell](exts/workcell/workcell/README.md) · [work-cell tools](docs/TOOLS-WORKCELL.md) |
 | Use RoboSimStudio | [RoboSimStudio](docs/ROBOSIM.md) |
 | Run LEGO bricks (BrickSim) | [BrickSim](docs/BRICKSIM.md) |
 | Check a machine or read the test matrix | [Verification](docs/VERIFICATION.md) · [Compatibility](docs/COMPATIBILITY.md) |
@@ -161,7 +161,7 @@ simulator environment.
 
 ## Credits and license
 
-MIT licensed. This project grew out of work by Aldrin Inbaraj, a lab mate at the RISE lab: the UR5e twin began as a fork of
+MIT licensed. This project grew out of work by Aldrin Inbaraj, a lab mate: the UR5e work cell began as a fork of
 his MIT-licensed [isaac-sim-mcp](https://github.com/inbarajaldrin/isaac-sim-mcp), and the bridge and client were first
 built on his [omni-kit-mcp](https://github.com/inbarajaldrin/omni-kit-mcp) before being rewritten here. Thank you, Aldrin.
 Component and asset terms differ, so read [VENDORING](docs/VENDORING.md) and the

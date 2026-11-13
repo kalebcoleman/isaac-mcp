@@ -12,8 +12,8 @@ import time
 import uuid
 from pxr import Ar, Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdUtils
 from .compat import composition_errors
-from isaac_mcp import material_refs
-from isaac_mcp.project_assets import (
+from twinsmith import material_refs
+from twinsmith.project_assets import (
     units_mismatch_message,
     Broker,
     AssetError,
@@ -168,7 +168,7 @@ def visuals_report(stage, root):
 
 
 # Tools which change the stage or timeline themselves, by event family. Anything else that may
-# run code (run_python, twin tools, Kit UI input) can only be reported as "was running".
+# run code (run_python, work cell tools, Kit UI input) can only be reported as "was running".
 STAGE_TOOLS = {"sim.stage.open": "sim__stage__open", "sim.quick_start": "sim__quick_start"}
 TIMELINE_TOOLS = {"sim.timeline.control": "sim__timeline__control", "sim.map.occupancy": "sim__map__occupancy",
                   "sim.quick_start": "sim__quick_start"}
@@ -224,8 +224,8 @@ class Scene:
         self.output = Path(
             output
             or os.getenv(
-                "ISAAC_MCP_SCENE_OUTPUT",
-                tempfile.gettempdir() + "/isaac-mcp-scenes-" + str(os.getpid()),
+                "TWINSMITH_SCENE_OUTPUT",
+                tempfile.gettempdir() + "/twinsmith-scenes-" + str(os.getpid()),
             )
         )
         self.session_id = uuid.uuid4().hex
@@ -267,7 +267,7 @@ class Scene:
         if session_id in self.previous_sessions:
             return ("Session changed: sim-tools hot-reloaded inside this same Kit process (a file in its folder "
                     "changed), so that session_id ended. The stage is unchanged, but the tools forgot which prims "
-                    "they created. See sim__logs__tail; launch with ISAAC_MCP_NO_HOT_RELOAD=1 to prevent this."), None
+                    "they created. See sim__logs__tail; launch with TWINSMITH_NO_HOT_RELOAD=1 to prevent this."), None
         if session_id != self.session_id:
             return ("Session changed: this session_id is not this Kit process (Kit restarted, or the IDs "
                     "came from another bridge)."), None
@@ -314,7 +314,7 @@ class Scene:
 
     def check_runtime_edit(self, stage):
         if self._runtime_edit_target is None:
-            # Play came from outside these tools (the UI, a script, ur5e_dt__quick_start), so this
+            # Play came from outside these tools (the UI, a script, workcell__quick_start), so this
             # session never moved physics writeback to the session layer. It cannot be moved now:
             # frames already played wrote to the selected layer, and Stop would restore poses to a
             # different layer than those writes, leaving them behind.
@@ -1250,14 +1250,14 @@ class Scene:
 
         handles, camera_repairs = camera_handles(stage, reset_camera_render_handles, self.render_binding)
         folder = self.save_directory(directory)
-        from isaac_mcp.project_assets import open_dir
+        from twinsmith.project_assets import open_dir
 
         fd = open_dir(folder)
         tmp = None
         try:
             # Export to private temporary file; hard-link publication is no-replace,
             # unlike an exists check followed by Export to the destination.
-            handle, tmp = tempfile.mkstemp(prefix=".isaac-mcp-tmp-", suffix=".usda", dir=folder)
+            handle, tmp = tempfile.mkstemp(prefix=".twinsmith-tmp-", suffix=".usda", dir=folder)
             os.close(handle)
             layer = stage.Flatten()
             from .flatten import drop_unused_prototypes

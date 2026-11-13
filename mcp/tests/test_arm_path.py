@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
-from isaac_mcp.project_assets import AssetError
+from twinsmith.project_assets import AssetError
 from sim_tools.arm_path import straight
 
 

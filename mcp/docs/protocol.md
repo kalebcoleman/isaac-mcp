@@ -1,8 +1,8 @@
 # The bridge protocol
 
-How a client talks to the bridge inside Kit. MCP clients never see this: the `isaac-mcp` server
+How a client talks to the bridge inside Kit. MCP clients never see this: the `twinsmith` server
 speaks it for them. Read it to script the bridge directly or to write another client.
-`mcp/isaac_mcp/client.py` is the reference client: one file, standard library only.
+`mcp/twinsmith/client.py` is the reference client: one file, standard library only.
 
 ## Messages
 
@@ -25,25 +25,25 @@ reply     {"id": 7, "status": "success", "result": {...}}
 ## Finding a bridge
 
 A bridge writes `<pid>-<port>.json` into a folder only its account can read:
-`$XDG_RUNTIME_DIR/isaac-mcp`, or `/tmp/isaac-mcp-<uid>`. The file names the app, PID, port and
+`$XDG_RUNTIME_DIR/twinsmith`, or `/tmp/twinsmith-<uid>`. The file names the app, PID, port and
 address, and whether the bridge is read-only or needs a token. The reference client uses, in order:
-the port it was given, `UR5E_DT_PORT` or `ISAAC_MCP_PORT`, the one bridge advertised. With several
+the port it was given, `TWINSMITH_PORT`, the one bridge advertised. With several
 advertised and none chosen it refuses and lists them.
 
 ```bash
-python3 mcp/isaac_mcp/client.py --list-bridges
-python3 mcp/isaac_mcp/client.py status --port 8766
-python3 mcp/isaac_mcp/client.py sim.stage.info
+python3 mcp/twinsmith/client.py --list-bridges
+python3 mcp/twinsmith/client.py status --port 8766
+python3 mcp/twinsmith/client.py sim.stage.info
 ```
 
 Exit codes: 0 success, 1 the bridge answered with an error, 2 unreachable or bad usage.
 
 ## The token
 
-A bridge requires a token unless it was started with `ISAAC_MCP_AUTH=0`. At start it makes a
-random one, or uses `ISAAC_MCP_TOKEN`, and writes it to `<pid>-<port>.token` beside its portfile,
+A bridge requires a token unless it was started with `TWINSMITH_AUTH=0`. At start it makes a
+random one, or uses `TWINSMITH_TOKEN`, and writes it to `<pid>-<port>.token` beside its portfile,
 readable by its own account only. A client on the same account reads that file, so nothing needs
-configuring on one machine. From another machine, or another account, set `ISAAC_MCP_TOKEN` for
+configuring on one machine. From another machine, or another account, set `TWINSMITH_TOKEN` for
 the client to the same value. A connection shows its token in its first request: either a small one of its own,
 `{"type": "auth", "token": "..."}`, as the reference client sends, or the first call itself if that is
 under 64 KiB. Without a valid token it gets `AUTH_REQUIRED` and is closed.
@@ -72,7 +72,7 @@ and how many wait (`busy`).
 
 ## Read-only mode
 
-Started with `ISAAC_MCP_READ_ONLY=1`, a bridge runs only the tools registered as read-only and
+Started with `TWINSMITH_READ_ONLY=1`, a bridge runs only the tools registered as read-only and
 answers every other with the code `READ_ONLY`, before the tool is called. `run_python` and
 `put_file` are refused. `list_tools` marks each tool's `read_only`, and `status` and the portfile
 say the bridge is read-only. This is enforced inside Kit, so it holds for every client.
@@ -86,8 +86,8 @@ wait costs no simulator time. `job_cancel` stops one.
 
 Each job also has a record on disk, `<jobs folder>/<job_id>/job.json`, in the same format as an
 Isaac Lab job with `"runner": "kit"`. The host reads it when the simulator has gone, and lists
-simulator and Lab jobs together. The jobs folder is `ISAACLAB_JOBS_DIR`, or
-`~/.local/share/isaac-mcp/jobs`.
+simulator and Lab jobs together. The jobs folder is `TWINSMITH_JOBS_DIR`, or
+`~/.local/share/twinsmith/jobs`.
 
 ## Several simulators, and other machines
 
@@ -96,10 +96,10 @@ so, rather than move to a port no client expects. Every bridge advertises itself
 `--list-bridges` shows them all, and a client that was given no port refuses to pick between them.
 
 The bridge listens on `localhost` only, because it runs code. From another machine the simplest
-way in is an SSH tunnel to the port. To listen on a private address instead, set `ISAAC_MCP_BIND`
+way in is an SSH tunnel to the port. To listen on a private address instead, set `TWINSMITH_BIND`
 to that address (never `0.0.0.0` on a machine the internet can reach) and give the client the
-token as `ISAAC_MCP_TOKEN`, with `ISAAC_MCP_HOST` and `ISAAC_MCP_PORT`. A remote client cannot
+token as `TWINSMITH_TOKEN`, with `TWINSMITH_HOST` and `TWINSMITH_PORT`. A remote client cannot
 read the portfiles; the `status` tool, asked of any bridge it can reach, lists the others
 on that machine.
 
-Every setting is listed in [ENVIRONMENT.md](../../docs/ENVIRONMENT.md#bridge-isaacmcpbridge).
+Every setting is listed in [ENVIRONMENT.md](../../docs/ENVIRONMENT.md#bridge-twinsmithbridge).

@@ -306,9 +306,9 @@ def test_wire_dropped_tells_a_refused_connection_from_a_made_one():
 
 def test_script_nodes_stay_off_without_the_users_consent(monkeypatch):
     # sim__graph__build must not be a way around SCRIPT_DISABLED: a ScriptNode runs Python on Play.
-    monkeypatch.delenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS", raising=False)
+    monkeypatch.delenv("TWINSMITH_ENABLE_SCENE_SCRIPTS", raising=False)
     assert gb.scripts_disabled()
-    monkeypatch.setenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS", "1")
+    monkeypatch.setenv("TWINSMITH_ENABLE_SCENE_SCRIPTS", "1")
     assert not gb.scripts_disabled()
     assert set(gb.SCRIPT_PORTS) == {"inputs:script", "inputs:scriptPath"}
 

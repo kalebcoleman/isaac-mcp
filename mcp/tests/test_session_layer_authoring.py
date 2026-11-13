@@ -9,7 +9,7 @@ import pytest
 pytest.importorskip("pxr.Usd")
 from test_scene_usd import scene  # noqa: F401 - the fixture, and it registers the extension package path
 from pxr import Usd, UsdGeom, UsdPhysics
-from isaac_mcp.project_assets import AssetError, Broker
+from twinsmith.project_assets import AssetError, Broker
 from sim_tools import map_import, mesh_import
 from sim_tools.validate import apply_joint_targets
 

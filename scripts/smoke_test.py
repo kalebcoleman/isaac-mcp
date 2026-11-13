@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Smoke test for a machine: does this checkout's MCP server work here?
 
-    "$(uv tool dir)/isaac-mcp/bin/python" scripts/smoke_test.py [--task Isaac-Cartpole] [--no-lab]
+    "$(uv tool dir)/twinsmith/bin/python" scripts/smoke_test.py [--task Isaac-Cartpole] [--no-lab]
 
 Checks, in order, and prints PASS / FAIL / SKIP for each (exit 1 on any FAIL):
-  1. the host server builds and lists isaac_help and the Isaac Lab tools;
-  2. isaac_help and isaaclab__preflight answer (no GPU or simulator needed; preflight reports what it sees);
+  1. the host server builds and lists help and the Isaac Lab tools;
+  2. help and isaaclab__preflight answer (no GPU or simulator needed; preflight reports what it sees);
   3. with an Isaac Lab install (ISAACLAB_PYTHON / ISAACLAB_ROOT, or found automatically): isaaclab__env_check and
      isaaclab__record on a small task, each as a real job (about a minute; uses the GPU lightly).
 Nothing is written outside the job folder Isaac Lab jobs already use.
@@ -49,13 +49,13 @@ async def wait_job(server, job_id, limit_s):
 
 
 async def main(task, lab):
-    from isaac_mcp import server as gw
+    from twinsmith import server as gw
     server = gw.build_server()
     names = set(server._tool_manager._tools)
-    need = {"isaac_help", "isaaclab__preflight", "isaaclab__env_check", "isaaclab__record"}
+    need = {"help", "isaaclab__preflight", "isaaclab__env_check", "isaaclab__record"}
     report("PASS" if need <= names else "FAIL", "server lists the new tools", ", ".join(sorted(need - names)))
-    out = await call(server, "isaac_help", {"task": "record a video"})
-    report("PASS" if "screenshot" in str(out) else "FAIL", "isaac_help answers")
+    out = await call(server, "help", {"task": "record a video"})
+    report("PASS" if "screenshot" in str(out) else "FAIL", "help answers")
     pf = await call(server, "isaaclab__preflight", {})
     report("PASS" if isinstance(pf, dict) and "can_start" in pf else "FAIL", "isaaclab__preflight answers",
            f"can_start={pf.get('can_start')} reasons={pf.get('reasons')}" if isinstance(pf, dict) else str(pf)[:200])

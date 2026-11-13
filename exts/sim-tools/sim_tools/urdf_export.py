@@ -11,7 +11,7 @@ import re
 import shutil
 import xml.etree.ElementTree as ET
 
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}")
 LOST = ("Not in a URDF, so not exported: drive gains and targets, physics materials, sensors and cameras, lights, and USD "

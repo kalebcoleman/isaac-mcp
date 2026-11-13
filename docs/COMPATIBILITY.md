@@ -8,7 +8,7 @@ The primary tested pairings are **Isaac Sim 5.1 with Isaac Lab 2.3.2** and **Isa
 ## Target engine
 
 **Newton is the target engine. PhysX is still the default until the Newton checks pass; choose an engine with
-`[sim] physics_backend`, `ISAAC_MCP_PHYSICS_BACKEND` or `--physics-backend`.**
+`[sim] physics_backend`, `TWINSMITH_PHYSICS_BACKEND` or `--physics-backend`.**
 
 This is the one place the sentence is written; other pages link here. The rules that go with it do not change:
 
@@ -34,7 +34,7 @@ this repository, so they are **not yet verified live here**.
 | A Franka joint move (`sim__joints(action="move")`) | **Does not yet settle within the PhysX tolerance.** |
 | Raycast (`sim__physics(action="raycast")`) | **Not available**: refused with `RAYCAST_UNSUPPORTED`. |
 | Occupancy-map start checks | Skipped (they are PhysX overlap queries); the result lists them in `checks_skipped`. |
-| Work cell (`workcell` toolset) | Qualified on PhysX only; see its [README](../exts/ur5e-dt/workcell/README.md). |
+| Work cell (`workcell` toolset) | Qualified on PhysX only; see its [README](../exts/workcell/workcell/README.md). |
 
 Earlier records, kept as they were observed. Narrow 6.2 Newton experiments used MuJoCo Warp on CPU; earlier tests also produced
 native crashes, invalid state, rendering and contact failures. On 2026-11-06 a 6.2 headless Newton session reported the MuJoCo
@@ -73,8 +73,8 @@ A listed tool does not establish that a compatible bridge is running.
 | `6.0.1.0` | Best effort; partial test | The 20-check smoke completed in headless and windowed sessions, including decodable recordings. Simulated object and camera transform messages were received. Kit logged asynchronous task errors; Lab and physical hardware were not tested. |
 | `6.0.0.1` | Best effort; partial test | Headless and windowed 20-check smoke runs completed, including a decodable recording. Simulated object and camera transforms were received. Kit logged asynchronous task errors. Lab and physical hardware were not tested. |
 | `6.0.0.0` | Best effort; partial test | The initial object-pose graph failed because this release uses an older ROS publisher. With the compatibility fix, headless and windowed 20-check smoke runs passed, and simulated object and camera transforms were received. Kit logged asynchronous task errors; Lab and physical hardware were not tested. |
-| Other 6.x releases | Not tested | A shared major version does not establish that this bridge, the twin or Lab jobs work on a new release. |
-| `5.1.0.0` | **Claimed, with Isaac Lab 2.3.2.** Not auto-detected for the Sim tools, so name its interpreter with `ISAAC_MCP_PYTHON`; the Isaac Lab job tools can target it per call with `install` (for example `install="lab-2.3.2"`) while 3.0.0 stays the default. `run.sh` finds its bundled ROS libraries and `sim-tools` has adapters for its older APIs | Representative USD, URDF, xacro, SDF, MJCF, glTF and ROS map imports; warehouse quick start with a Carter driving 15.7 m; and Lab train, resume, compare, eval and play were exercised. On 2026-11-06, the previously failing SO-101 and Panda MJCF models imported and each moved one joint; Go2 imported with a floating base and fell under gravity. Limits: URDF export writes an empty robot on this build, so it is refused with a reason; `sim__lidar__create` needs `config`; USD scenes keep their own units, so check them. Earlier: the PR 70 retest and one project scene, where most generic tools worked. Isaac Sim 5.1 has no Newton, so it runs PhysX only. The work cell's full workflow was not verified on this build. |
+| Other 6.x releases | Not tested | A shared major version does not establish that this bridge, the work cell or Lab jobs work on a new release. |
+| `5.1.0.0` | **Claimed, with Isaac Lab 2.3.2.** Not auto-detected for the Sim tools, so name its interpreter with `TWINSMITH_SIM_PYTHON`; the Isaac Lab job tools can target it per call with `install` (for example `install="lab-2.3.2"`) while 3.0.0 stays the default. `run.sh` finds its bundled ROS libraries and `sim-tools` has adapters for its older APIs | Representative USD, URDF, xacro, SDF, MJCF, glTF and ROS map imports; warehouse quick start with a Carter driving 15.7 m; and Lab train, resume, compare, eval and play were exercised. On 2026-11-06, the previously failing SO-101 and Panda MJCF models imported and each moved one joint; Go2 imported with a floating base and fell under gravity. Limits: URDF export writes an empty robot on this build, so it is refused with a reason; `sim__lidar__create` needs `config`; USD scenes keep their own units, so check them. Earlier: the PR 70 retest and one project scene, where most generic tools worked. Isaac Sim 5.1 has no Newton, so it runs PhysX only. The work cell's full workflow was not verified on this build. |
 | Earlier releases | Not tested | No compatibility claim. |
 
 The 6.2 lock selects NumPy 2.3.1, matching the inspected `isaacsim-kernel` 6.2.0.0 wheel.
@@ -121,7 +121,7 @@ The bridge's `status` also reports the running app's version and PID. Its app ve
 package-version segment, so use the package metadata to distinguish exact builds. For a workstation installation,
 NVIDIA also documents Help > About and the installation's `VERSION` file.
 
-An existing separate environment can be selected with `ISAAC_MCP_PYTHON=/absolute/path/to/sim-env/bin/python` for
+An existing separate environment can be selected with `TWINSMITH_SIM_PYTHON=/absolute/path/to/sim-env/bin/python` for
 `./run.sh`, or in the MCP server's environment before using `sim__launch`. Selecting an interpreter is not a version
 or dependency check. Keep the locked 6.2 environment intact when experimenting, use a disposable scene and an
 unused bridge port and ROS domain, and verify the selected PID before scene-changing calls. See

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import jobs, ledger, preflight
+from twinsmith.isaaclab import jobs, ledger, preflight
 from test_isaaclab_jobs import make_fake_python, make_lab_root, wait_for_status
 
 H = 3600.0
@@ -16,7 +16,7 @@ H = 3600.0
 
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     monkeypatch.delenv(ledger.BUDGET_ENV, raising=False)
     monkeypatch.delenv(ledger.LEDGER_ENV, raising=False)
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])
@@ -139,7 +139,7 @@ def test_launch_refused_when_budget_spent_and_allowed_when_not(tmp_path, monkeyp
     assert pf["can_start"] is False and any("budget is spent" in x for x in pf["reasons"]) and pf["gpu_hours"]["exhausted"]
     monkeypatch.setenv(ledger.BUDGET_ENV, "20")
     monkeypatch.undo()  # real clock for the launched job
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     monkeypatch.setenv(ledger.BUDGET_ENV, "100000000")
     monkeypatch.setenv("FAKE_MODE", "ok")
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])

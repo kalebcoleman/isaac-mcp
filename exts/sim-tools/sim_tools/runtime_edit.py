@@ -14,7 +14,7 @@ def stop_edit_target_guard(scene, stage):
         if previous is not None and scene._runtime_edit_target is None and current == previous:
             expected, previous = previous, None
         if current != expected:
-            from isaac_mcp.project_assets import refuse
+            from twinsmith.project_assets import refuse
 
             refuse("EDIT_TARGET_CHANGED", "Selected edit target changed during native Stop completion; the external target was preserved.")
 

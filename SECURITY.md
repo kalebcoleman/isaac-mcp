@@ -9,4 +9,4 @@ To report a security problem, use the repository's **Security** tab, "Report a v
 Please say which commit and Isaac Sim build you used, and how to reproduce it.
 
 Crash dumps stay on your machine by default: `run.sh` and Isaac Lab jobs turn off Kit's upload to NVIDIA. See
-[`ISAAC_MCP_CRASH_UPLOAD`](docs/ENVIRONMENT.md).
+[`TWINSMITH_CRASH_UPLOAD`](docs/ENVIRONMENT.md).

@@ -10,10 +10,10 @@ import time
 import pytest
 
 from bridge_testing import LiveBridge, dispatch, make_bridge, receive, roundtrip, send, td
-from isaac_mcp_bridge import protocol
-from isaac_mcp_bridge.bridge import ToolDefinition, is_portfile_name, runtime_dir, valid_portfile
-from isaac_mcp_bridge.protocol import ToolError
-from isaac_mcp_bridge.schema import field_specs
+from twinsmith_bridge import protocol
+from twinsmith_bridge.bridge import ToolDefinition, is_portfile_name, runtime_dir, valid_portfile
+from twinsmith_bridge.protocol import ToolError
+from twinsmith_bridge.schema import field_specs
 
 
 # ---- registry ----
@@ -66,7 +66,7 @@ def test_unregistering_removes_only_that_owner_s_tools():
     assert "one.x" not in bridge.get_registered_tools() and "two.y" in bridge.get_registered_tools()
     assert dispatch(bridge, "one.x")["code"] == "UNKNOWN_TOOL" and "two.y" in dispatch(bridge, "one.x")["known_tools"]
     bridge.register_owner("a", "one")   # free again at once
-    assert bridge.unregister_owner("isaac.mcp.bridge") is False, "the built-ins cannot be removed"
+    assert bridge.unregister_owner("twinsmith.bridge") is False, "the built-ins cannot be removed"
 
 
 def test_an_owner_with_a_call_running_stays_reserved_until_the_call_ends():
@@ -269,13 +269,13 @@ def test_a_caller_that_hangs_up_does_not_leave_its_waiting_call_to_run():
 
 def test_a_bridge_that_requires_its_token_refuses_a_connection_without_it(tmp_path):
     with LiveBridge(auth=True) as live:
-        info = json.loads(next(p for p in (tmp_path / "xdg" / "isaac-mcp").iterdir() if p.suffix == ".json").read_text())
+        info = json.loads(next(p for p in (tmp_path / "xdg" / "twinsmith").iterdir() if p.suffix == ".json").read_text())
         token_file = info["token_file"]
         assert info["auth"] is True and os.stat(token_file).st_mode & 0o077 == 0, "only this account can read the token"
         token = open(token_file).read()
         with live.client() as sock:
             refused = roundtrip(sock, {"id": 9, "type": "status"})
-            assert refused["code"] == "AUTH_REQUIRED" and refused["id"] == 9 and "ISAAC_MCP_TOKEN" in refused["message"]
+            assert refused["code"] == "AUTH_REQUIRED" and refused["id"] == 9 and "TWINSMITH_TOKEN" in refused["message"]
             assert sock.recv(10) == b"", "and the connection is closed"
         with live.client() as sock:
             assert roundtrip(sock, {"type": "status", "token": "wrong" * 8})["code"] == "AUTH_REQUIRED"
@@ -288,14 +288,14 @@ def test_a_bridge_that_requires_its_token_refuses_a_connection_without_it(tmp_pa
 
 
 def test_the_client_finds_the_token_by_itself_and_an_explicit_one_wins(monkeypatch):
-    from isaac_mcp.client import BridgeClient, BridgeError, call, discover_bridges
+    from twinsmith.client import BridgeClient, BridgeError, call, discover_bridges
 
     with LiveBridge(auth=True) as live:
-        monkeypatch.delenv("ISAAC_MCP_TOKEN", raising=False)
+        monkeypatch.delenv("TWINSMITH_TOKEN", raising=False)
         assert call("status", port=live.port, timeout=5)["auth"] is True
         (advertised,) = discover_bridges()
         assert advertised["port"] == live.port and "token_file" not in advertised and "token" not in advertised
-        monkeypatch.setenv("ISAAC_MCP_TOKEN", "not-the-token-" * 4)
+        monkeypatch.setenv("TWINSMITH_TOKEN", "not-the-token-" * 4)
         with pytest.raises(BridgeError, match="AUTH_REQUIRED"):
             BridgeClient(port=live.port, timeout=5).call("status")
 
@@ -321,9 +321,9 @@ def test_read_only_mode_runs_only_tools_declared_read_only():
 
 
 def test_read_only_comes_from_the_environment_at_launch(monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_READ_ONLY", "1")
+    monkeypatch.setenv("TWINSMITH_READ_ONLY", "1")
     assert make_bridge().read_only is True
-    monkeypatch.setenv("ISAAC_MCP_READ_ONLY", "0")
+    monkeypatch.setenv("TWINSMITH_READ_ONLY", "0")
     assert make_bridge().read_only is False
 
 
@@ -331,7 +331,7 @@ def test_read_only_comes_from_the_environment_at_launch(monkeypatch):
 
 def test_a_listening_bridge_advertises_itself_and_cleans_up(tmp_path):
     with LiveBridge() as live:
-        folder = tmp_path / "xdg" / "isaac-mcp"
+        folder = tmp_path / "xdg" / "twinsmith"
         assert runtime_dir() == str(folder) and oct(folder.stat().st_mode & 0o777) == "0o700"
         (portfile,) = folder.iterdir()
         info = json.loads(portfile.read_text())
@@ -359,7 +359,7 @@ def test_a_client_that_stops_reading_does_not_stop_the_others(tmp_path):
     """A tool's answer is sent from the main loop: a client that never reads a large one must not hold it."""
     import time
 
-    from isaac_mcp.client import BridgeClient
+    from twinsmith.client import BridgeClient
 
     big = tmp_path / "big.bin"
     big.write_bytes(b"x" * (24 << 20))
@@ -382,7 +382,7 @@ def test_a_large_file_goes_out_and_comes_back_whole(tmp_path):
     import base64
     import os as _os
 
-    from isaac_mcp.client import BridgeClient
+    from twinsmith.client import BridgeClient
 
     data = _os.urandom(5 << 20)
     with LiveBridge() as live, BridgeClient(port=live.port, timeout=20) as client:
@@ -423,13 +423,13 @@ def test_the_tool_listing_is_built_once_per_change_of_the_registry():
 
 
 def test_the_client_offers_its_token_once_per_connection(monkeypatch):
-    from isaac_mcp import client as bridge_client
+    from twinsmith import client as bridge_client
 
     seen = []
     with LiveBridge(auth=True, token="t" * 32) as live:
         original = live.bridge._frame
         monkeypatch.setattr(live.bridge, "_frame", lambda connection, line: (seen.append(json.loads(line)), original(connection, line))[1])
-        monkeypatch.setenv("ISAAC_MCP_TOKEN", "t" * 32)
+        monkeypatch.setenv("TWINSMITH_TOKEN", "t" * 32)
         with bridge_client.BridgeClient(port=live.port, timeout=5) as client:
             client.call("status")
             client.call("status")
@@ -442,7 +442,7 @@ def test_the_client_offers_its_token_once_per_connection(monkeypatch):
 # ---- findings of the independent review -------------------------------------------------
 
 def test_an_owner_is_told_when_its_last_call_has_ended():
-    """The twin releases its state in this callback: at once when idle, else when its calls are done."""
+    """The work cell releases its state in this callback: at once when idle, else when its calls are done."""
     release = threading.Event()
 
     async def slow():
@@ -470,7 +470,7 @@ def test_an_owner_is_told_when_its_last_call_has_ended():
 
 def test_the_token_is_written_only_into_a_folder_that_is_this_account_s(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    folder = tmp_path / "isaac-mcp"
+    folder = tmp_path / "twinsmith"
     folder.mkdir(mode=0o777)
     os.chmod(folder, 0o777)
     outside = tmp_path / "outside.txt"
@@ -529,7 +529,7 @@ def test_before_its_token_a_connection_may_send_only_a_small_request():
 
 
 def test_get_file_refuses_what_is_not_a_file_and_what_is_too_large(tmp_path, monkeypatch):
-    from isaac_mcp_bridge import builtins as bridge_builtins
+    from twinsmith_bridge import builtins as bridge_builtins
 
     bridge = make_bridge()
     assert dispatch(bridge, "get_file", {"path": "/dev/zero"})["code"] == "NOT_FOUND"

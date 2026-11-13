@@ -5,7 +5,7 @@ import sys
 from types import SimpleNamespace
 import pytest
 from test_scene_usd import scene
-from isaac_mcp.project_assets import AssetError
+from twinsmith.project_assets import AssetError
 from sim_tools.advanced import Advanced
 from sim_tools.camera_capture import CameraFrame
 from pxr import Usd, UsdPhysics, UsdGeom, UsdShade
@@ -175,7 +175,7 @@ def test_protected_and_invalid_no_effect(advanced, monkeypatch):
             "sim.light.create", st, dict(path="/World/Bad", color=[float("nan"), 1, 1])
         )
     assert st.GetSessionLayer().ExportToString() == before
-    monkeypatch.delenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS", raising=False)
+    monkeypatch.delenv("TWINSMITH_ENABLE_SCENE_SCRIPTS", raising=False)
     with pytest.raises(AssetError, match="opt in"):
         advanced.execute(
             "sim.controller.create",

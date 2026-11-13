@@ -5,7 +5,7 @@ from xml.etree import ElementTree
 import pytest
 
 pytest.importorskip("pxr.Usd")
-from isaac_mcp.project_assets import AssetError
+from twinsmith.project_assets import AssetError
 from pxr import Usd, UsdGeom, UsdPhysics
 from sim_tools.urdf_export import _lost_its_structure, robot_root
 

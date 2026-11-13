@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Generate the host's packaged tool catalog from the extensions' own tool registries.
 
-The MCP host lists the UR5e twin's tools, the generic scene tools and the bridge built-ins even
-when no Kit bridge is running, from snapshots shipped in the wheel (``mcp/isaac_mcp/catalogs/*.json``,
-read by ``isaac_mcp.host_catalog``).
+The MCP host lists the UR5e work cell's tools, the generic scene tools and the bridge built-ins even
+when no Kit bridge is running, from snapshots shipped in the wheel (``mcp/twinsmith/catalogs/*.json``,
+read by ``twinsmith.host_catalog``).
 This script is the only thing that writes that snapshot, and it derives every byte from the
 sources of truth:
 
-* ``MCP_TOOL_REGISTRY`` in ``exts/ur5e-dt/ur5e_dt/extension.py`` (read with ``ast``; the file
+* ``MCP_TOOL_REGISTRY`` in ``exts/workcell/workcell/extension.py`` (read with ``ast``; the file
   imports Kit modules, so it is never executed), and
-* ``isaac_mcp_bridge.schema.field_specs`` - the one interpreter of the parameter vocabulary.
+* ``twinsmith_bridge.schema.field_specs`` - the one interpreter of the parameter vocabulary.
 
-The entries are shaped like the bridge's ``list_tools`` answer (the twin registers every registry
-tool under owner ``ur5e-dt`` and namespace ``ur5e_dt``; see ``ur5e_dt/bridge_binding.py``).
+The entries are shaped like the bridge's ``list_tools`` answer (the work cell registers every registry
+tool under owner ``workcell`` and namespace ``workcell``; see ``workcell/bridge_binding.py``).
 
     python3 scripts/gen_host_catalog.py --write   # regenerate the snapshot
     python3 scripts/gen_host_catalog.py --check   # exit 1 when the snapshot has drifted (default)
@@ -30,9 +30,9 @@ from pathlib import Path
 from typing import Any, Dict
 
 ROOT = Path(__file__).resolve().parents[1]
-EXTENSION = ROOT / "exts/ur5e-dt/ur5e_dt/extension.py"
-BINDING = ROOT / "exts/ur5e-dt/ur5e_dt/bridge_binding.py"
-OUTPUT = ROOT / "mcp/isaac_mcp/catalogs/ur5e_dt.json"
+EXTENSION = ROOT / "exts/workcell/workcell/extension.py"
+BINDING = ROOT / "exts/workcell/workcell/bridge_binding.py"
+OUTPUT = ROOT / "mcp/twinsmith/catalogs/workcell.json"
 CATALOG_VERSION = 1
 
 
@@ -46,13 +46,13 @@ def _literal_assignment(path: Path, name: str) -> Any:
 
 
 def _field_specs():
-    sys.path.insert(0, str(ROOT / "exts/isaac.mcp.bridge"))
-    from isaac_mcp_bridge.schema import field_specs  # noqa: PLC0415 - path set just above
+    sys.path.insert(0, str(ROOT / "exts/twinsmith.bridge"))
+    from twinsmith_bridge.schema import field_specs  # noqa: PLC0415 - path set just above
     return field_specs
 
 
 def build_ur5e_catalog() -> Dict[str, Any]:
-    """The catalog document for the UR5e twin, exactly as ``--write`` stores it."""
+    """The catalog document for the UR5e work cell, exactly as ``--write`` stores it."""
     registry = _literal_assignment(EXTENSION, "MCP_TOOL_REGISTRY")
     owner_id = _literal_assignment(BINDING, "OWNER_ID")
     namespace = _literal_assignment(BINDING, "NAMESPACE")
@@ -73,18 +73,18 @@ def build_ur5e_catalog() -> Dict[str, Any]:
     return document
 
 
-BUILTINS_OUTPUT = ROOT / "mcp/isaac_mcp/catalogs/builtins.json"
+BUILTINS_OUTPUT = ROOT / "mcp/twinsmith/catalogs/builtins.json"
 
 
 def build_builtins_catalog() -> Dict[str, Any]:
     """The bridge's own bare-named verbs (run_python, status, ...), as ``list_tools`` serves them.
 
-    Read from ``isaac_mcp_bridge.builtins.builtin_tools`` (pure Python outside Kit). Internal verbs
+    Read from ``twinsmith_bridge.builtins.builtin_tools`` (pure Python outside Kit). Internal verbs
     (``list_tools``) are left out, as the bridge leaves them out of its own listing."""
     _field_specs()   # puts the bridge package on sys.path
-    from isaac_mcp_bridge.bridge import BUILTIN_OWNER_ID  # noqa: PLC0415
-    from isaac_mcp_bridge.builtins import builtin_tools  # noqa: PLC0415
-    from isaac_mcp_bridge.schema import field_specs  # noqa: PLC0415
+    from twinsmith_bridge.bridge import BUILTIN_OWNER_ID  # noqa: PLC0415
+    from twinsmith_bridge.builtins import builtin_tools  # noqa: PLC0415
+    from twinsmith_bridge.schema import field_specs  # noqa: PLC0415
     tools = {}
     for definition in builtin_tools(None):
         if definition.internal:
@@ -111,14 +111,14 @@ def main(argv=None) -> int:
     parser.add_argument("--output", type=Path, default=OUTPUT, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     sys.path.insert(0, str(ROOT / "mcp"))
-    from isaac_mcp.scene_contracts import REGISTRY
+    from twinsmith.scene_contracts import REGISTRY
     for namespace in ("assets", "sim"):
         tools = {}
         for canonical, meta in REGISTRY.items():
             if canonical.startswith(namespace + "."):
                 tools[canonical] = dict(**meta, fields=_field_specs()(meta["parameters"]),
                                         namespace=namespace, owner_id="generic-"+namespace)
-        dest = ROOT / "mcp/isaac_mcp/catalogs" / (namespace+".json")
+        dest = ROOT / "mcp/twinsmith/catalogs" / (namespace+".json")
         expected = render(dict(version=1,namespace=namespace,tools=tools))
         if args.write:
             dest.write_text(expected)

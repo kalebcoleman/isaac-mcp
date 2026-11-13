@@ -7,11 +7,11 @@
 BrickSim's own launcher accepts extra extensions. From a BrickSim checkout, using its own environment:
 
 ```bash
-ISAAC_MCP_PORT=8766 OMNI_KIT_ACCEPT_EULA=YES .venv/bin/bricksim \
-    --ext-folder <isaac-mcp>/exts --enable isaac.mcp.bridge --enable sim-tools demos/demo_assembly.py
+TWINSMITH_PORT=8766 OMNI_KIT_ACCEPT_EULA=YES .venv/bin/bricksim \
+    --ext-folder <twinsmith>/exts --enable twinsmith.bridge --enable sim-tools demos/demo_assembly.py
 ```
 
-Use `.venv/bin/bricksim`, not `uv run`, so that nothing in its environment is changed. Add `--enable ur5e-dt` only if you want the work cell's tools. The window opens with BrickSim's scene, the tools of the enabled toolsets answer, and `status` reports app version 5.1.0 (the 2026-11-06 run counted 69 tools before the toolsets existed).
+Use `.venv/bin/bricksim`, not `uv run`, so that nothing in its environment is changed. Add `--enable workcell` only if you want the work cell's tools. The window opens with BrickSim's scene, the tools of the enabled toolsets answer, and `status` reports app version 5.1.0 (the 2026-11-06 run counted 69 tools before the toolsets existed).
 
 ## Start a demo from an agent
 

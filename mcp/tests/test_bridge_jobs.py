@@ -6,11 +6,11 @@ import types
 
 import pytest
 
-from isaac_mcp_bridge import builtins as bi
-from isaac_mcp_bridge import jobs
-from isaac_mcp_bridge.bridge import McpBridge
-from isaac_mcp_bridge.protocol import ToolError
-from isaac_mcp_bridge.sessions import SessionStore
+from twinsmith_bridge import builtins as bi
+from twinsmith_bridge import jobs
+from twinsmith_bridge.bridge import McpBridge
+from twinsmith_bridge.protocol import ToolError
+from twinsmith_bridge.sessions import SessionStore
 
 
 @pytest.fixture

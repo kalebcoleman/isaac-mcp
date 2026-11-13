@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 
 MAX_BOXES = 4000
 MAX_PIXELS = 25_000_000
@@ -87,8 +87,8 @@ def rectangles(occupied, width, height):
 
 
 def run(ext, args: dict) -> dict:
-    from isaac_mcp import urdf_refs, xacro_lite
-    from isaac_mcp.urdf_refs import normal_path
+    from twinsmith import urdf_refs, xacro_lite
+    from twinsmith.urdf_refs import normal_path
     from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
     s = ext.scene
@@ -103,7 +103,7 @@ def run(ext, args: dict) -> dict:
     s.new_path(stage, prim_path)
     up, units = str(UsdGeom.GetStageUpAxis(stage)), UsdGeom.GetStageMetersPerUnit(stage)
     if up != "Z" or not math.isclose(units, 1.0, rel_tol=1e-9):
-        from isaac_mcp.project_assets import units_mismatch_message
+        from twinsmith.project_assets import units_mismatch_message
 
         # The walls are built Z up in metres: on any other stage they would lie on their side or be the wrong size.
         refuse("UNITS_MISMATCH", units_mismatch_message("Z", 1.0, up, units), retry_with=dict(up_axis="Z", meters_per_unit=1.0))

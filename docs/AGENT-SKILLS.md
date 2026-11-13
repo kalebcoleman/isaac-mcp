@@ -1,4 +1,4 @@
-# Agent skill: `isaac-mcp`
+# Agent skill: `twinsmith`
 
 The repository ships one Agent Skill (a `SKILL.md` folder in the open format read by Claude Code,
 Codex, OpenCode and Antigravity) that teaches an agent how to drive
@@ -9,13 +9,13 @@ references ([TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md) and the `TOOLS-*.md` pages)
 and when to stop and ask.
 
 ```
-.agents/skills/isaac-mcp/          canonical copy (Codex, OpenCode, Antigravity)
+.agents/skills/twinsmith/          canonical copy (Codex, OpenCode, Antigravity)
 ├── SKILL.md                       ground rules, first calls, Lab and Sim workflows, troubleshooting
 └── references/
     ├── isaac-lab.md               train/eval/play, Isaac Lab 3 conventions, guards, reading metrics
     ├── isaac-sim.md               bridge selection, generic scene/assets, run_python, capture, work cell
-    └── official-skills.md         NVIDIA's Isaac Lab and Isaac Sim skills, mapped to isaac-mcp tools
-.claude/skills/isaac-mcp           symlink to the canonical copy (Claude Code)
+    └── official-skills.md         NVIDIA's Isaac Lab and Isaac Sim skills, mapped to twinsmith tools
+.claude/skills/twinsmith           symlink to the canonical copy (Claude Code)
 ```
 
 The skill only helps if the client also has the MCP server configured; see
@@ -41,9 +41,9 @@ Inside this repository nothing needs installing: start the agent in the checkout
 
 | Client | Project skills | User-wide skills | Checked here |
 |---|---|---|---|
-| Claude Code | `.claude/skills/<name>/` | `~/.claude/skills/<name>/` | yes: lists `isaac-mcp` (2.1.316, through the symlink) |
-| Codex | `.agents/skills/` in each directory from the working directory up to the repo root | `~/.agents/skills/` | yes: lists `isaac-mcp` |
-| OpenCode | `.opencode/skills/`, `.claude/skills/`, `.agents/skills/` | `~/.config/opencode/skills/`, `~/.claude/skills/`, `~/.agents/skills/` | yes: lists `isaac-mcp` |
+| Claude Code | `.claude/skills/<name>/` | `~/.claude/skills/<name>/` | yes: lists `twinsmith` (2.1.316, through the symlink) |
+| Codex | `.agents/skills/` in each directory from the working directory up to the repo root | `~/.agents/skills/` | yes: lists `twinsmith` |
+| OpenCode | `.opencode/skills/`, `.claude/skills/`, `.agents/skills/` | `~/.config/opencode/skills/`, `~/.claude/skills/`, `~/.agents/skills/` | yes: lists `twinsmith` |
 | Antigravity | `.agents/skills/` (legacy `.agent/skills/` still read) | `~/.gemini/config/skills/` | no: from [Antigravity's skills docs](https://antigravity.google/docs/skills) only |
 
 Sources: [Codex skills](https://developers.openai.com/codex/skills),
@@ -57,11 +57,11 @@ To have the skill everywhere, link the canonical directory into each client's us
 directory. Linking (not copying) keeps one maintained copy that updates with `git pull`:
 
 ```bash
-SKILL="$PWD/.agents/skills/isaac-mcp"            # run from the isaac-mcp checkout
+SKILL="$PWD/.agents/skills/twinsmith"            # run from the twinsmith checkout
 mkdir -p ~/.agents/skills ~/.claude/skills ~/.gemini/config/skills
-ln -sfn "$SKILL" ~/.agents/skills/isaac-mcp        # Codex and OpenCode
-ln -sfn "$SKILL" ~/.claude/skills/isaac-mcp        # Claude Code (OpenCode also reads this)
-ln -sfn "$SKILL" ~/.gemini/config/skills/isaac-mcp # Antigravity
+ln -sfn "$SKILL" ~/.agents/skills/twinsmith        # Codex and OpenCode
+ln -sfn "$SKILL" ~/.claude/skills/twinsmith        # Claude Code (OpenCode also reads this)
+ln -sfn "$SKILL" ~/.gemini/config/skills/twinsmith # Antigravity
 ```
 
 Codex documents that it follows symlinked skill folders. The skill's references point at
@@ -72,9 +72,9 @@ Codex documents that it follows symlinked skill folders. The skill's references 
 NVIDIA maintains Agent Skills in [isaac-sim/IsaacLab](https://github.com/isaac-sim/IsaacLab/tree/main/skills)
 (BSD-3-Clause) and [isaac-sim/IsaacSim](https://github.com/isaac-sim/IsaacSim/tree/release/6.3/skills)
 (Apache-2.0). They cover environment design, RL debugging, assets, sensors, ROS 2 and migrations;
-the isaac-mcp skill does not repeat them. `references/official-skills.md` maps each one to the
-isaac-mcp tools that carry it out and says which wins when they disagree (NVIDIA for Isaac APIs,
-isaac-mcp for tool use and safety gates).
+the twinsmith skill does not repeat them. `references/official-skills.md` maps each one to the
+twinsmith tools that carry it out and says which wins when they disagree (NVIDIA for Isaac APIs,
+twinsmith for tool use and safety gates).
 
 NVIDIA's [Isaac Sim documentation MCP server](https://docs.isaacsim.omniverse.nvidia.com/latest/development_tools/isaac_sim_mcp.html)
 and its [Kit/USD agent tools](https://github.com/NVIDIA-Omniverse/kit-usd-agents) search documentation,
@@ -99,7 +99,7 @@ user skills directory.
 ## Keeping it current
 
 `scripts/check_docs.py` checks the skill's local links and that every tool name it mentions is registered: a `sim__*`,
-`assets__*`, `isaaclab__*` or `ur5e_dt__*` name, or the action of a `group(action="...")` call. It also fails on retired tool
+`assets__*`, `isaaclab__*` or `workcell__*` name, or the action of a `group(action="...")` call. It also fails on retired tool
 names and retired phrases, and on tool counts that differ from the code: counts in the skill and in `AGENTS.md` sit in generated
 blocks that `python3 scripts/gen_tool_reference.py --write` refreshes, so nobody types them. Renaming a tool fails CI until the
 skill is updated. When adding a tool or a toolset, or a safety rule, update `SKILL.md` and the relevant `docs/` page alongside it.

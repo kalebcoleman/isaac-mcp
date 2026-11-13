@@ -8,8 +8,8 @@ import pytest
 
 pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/isaac.mcp.bridge"))
-from isaac_mcp.project_assets import AssetError
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/twinsmith.bridge"))
+from twinsmith.project_assets import AssetError
 from pxr import Usd
 from sim_tools.core import STAGE_TOOLS, TIMELINE_TOOLS, Scene, attribute_change
 
@@ -45,7 +45,7 @@ def test_attribution_only_credits_or_blames_when_it_can_tell():
     recent = attribute_change({"sim.stage.open": False, "run_python": True}, STAGE_TOOLS)
     assert recent["origin"] == "unattributed" and "run_python" in recent["source"]
     assert attribute_change({"sim.stage.open": False}, STAGE_TOOLS)["origin"] == "unattributed"
-    for tool in ("run_python", "ur5e_dt.new_stage", "sim.ui.act"):
+    for tool in ("run_python", "workcell.new_stage", "sim.ui.act"):
         assert attribute_change({tool: True}, STAGE_TOOLS)["origin"] == "unattributed"
     # Tools that cannot change a stage do not hide a person in the GUI.
     for tool in ("status", "sim.stage.info", "sim.logs.tail", "assets.search", "get_file"):
@@ -136,7 +136,7 @@ def test_timeline_already_active_says_how_to_continue_and_who_started_it(scene):
 
 
 def test_bridge_reports_running_and_just_finished_tools():
-    from isaac_mcp_bridge.bridge import McpBridge, ToolDefinition
+    from twinsmith_bridge.bridge import McpBridge, ToolDefinition
 
     bridge = McpBridge(schedule_coroutine=lambda coro: None)
     seen = []

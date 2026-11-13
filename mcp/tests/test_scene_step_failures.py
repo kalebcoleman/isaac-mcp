@@ -6,7 +6,7 @@ import json
 import pytest
 
 from test_scene_usd import scene
-from isaac_mcp.project_assets import AssetError, refuse
+from twinsmith.project_assets import AssetError, refuse
 from sim_tools import advanced as advanced_module, physics
 from sim_tools.advanced import Advanced
 

@@ -5,9 +5,9 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from isaac_mcp import xacro_lite as x
-from isaac_mcp.project_assets import AssetError
-from isaac_mcp.urdf_refs import Project
+from twinsmith import xacro_lite as x
+from twinsmith.project_assets import AssetError
+from twinsmith.urdf_refs import Project
 
 NS = 'xmlns:xacro="http://www.ros.org/wiki/xacro"'
 
@@ -146,7 +146,7 @@ def test_a_dtd_utf16_or_wrong_root_is_refused():
 
 
 def test_the_output_has_no_xacro_left_and_the_urdf_check_accepts_it():
-    from isaac_mcp import urdf_refs
+    from twinsmith import urdf_refs
 
     text = x.expand("r.urdf.xacro", project({"r.urdf.xacro": robot('<link name="a"><visual><geometry><mesh filename="m.stl"/></geometry></visual></link>')}))["urdf"]
     assert "xacro" not in text and urdf_refs.parse(text.encode()).tag == "robot"

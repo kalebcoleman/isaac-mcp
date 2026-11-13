@@ -55,10 +55,10 @@ def test_user_specific_paths_are_flagged(checker, tmp_path, line):
 @pytest.mark.parametrize(
     "line",
     [
-        'cache = Path.home() / ".cache" / "ur5e-dt"',
+        'cache = Path.home() / ".cache" / "workcell"',
         'ws = Path.home() / "isaac-workspace"',
-        'p = os.path.expanduser("~/.local/share/isaac-mcp/jobs")',
-        'out = "~/Pictures/screen-mcp"',
+        'p = os.path.expanduser("~/.local/share/twinsmith/jobs")',
+        'out = "~/Pictures/twinsmith"',
         'WS_SETUP="${WS_SETUP:-$HOME/ros2_ws/install/setup.bash}"',
         'ROOT = os.path.join("<workspace>", "envs")',
         'x = "$HOME/$DIR/file"',

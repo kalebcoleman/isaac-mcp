@@ -6,8 +6,8 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from isaac_mcp import asset_formats, asset_import
-from isaac_mcp.project_assets import AssetError, Broker
+from twinsmith import asset_formats, asset_import
+from twinsmith.project_assets import AssetError, Broker
 
 NS = 'xmlns:xacro="http://www.ros.org/wiki/xacro"'
 URDF = '<robot name="r"><link name="a"/><link name="b"/><joint name="j" type="revolute"><parent link="a"/><child link="b"/><limit lower="0" upper="1" effort="1" velocity="1"/></joint></robot>'

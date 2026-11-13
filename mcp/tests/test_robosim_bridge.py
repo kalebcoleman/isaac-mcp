@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-from isaac_mcp.robosim import PIN, RoboSimBridge, register_robosim_tools
+from twinsmith.robosim import PIN, RoboSimBridge, register_robosim_tools
 
 
 STUB = r'''
@@ -426,7 +426,7 @@ def test_registration_one_group(fake):
 import ast
 import socket
 
-from isaac_mcp.robosim import plan, template
+from twinsmith.robosim import plan, template
 
 
 def finish(bridge, run, result):
@@ -922,7 +922,7 @@ def test_reference_window(fake):
 
 
 def test_stop_waits_a_bounded_time_and_reports_the_final_state(fake, monkeypatch):
-    from isaac_mcp.robosim import bridge as bridge_module
+    from twinsmith.robosim import bridge as bridge_module
 
     bridge = fake[0]
     first = start(fake)

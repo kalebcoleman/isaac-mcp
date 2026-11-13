@@ -11,7 +11,7 @@ A file travels in one message, held in memory at both ends: fine for code and sm
 multi-gigabyte scenes another way, and still check them here with ``stat_file``.
 
 Copy this file and set the five names below. The bridge listens on localhost only unless it was
-started with ``ISAAC_MCP_BIND``; from another machine pass its token as ``ISAAC_MCP_TOKEN``.
+started with ``TWINSMITH_BIND``; from another machine pass its token as ``TWINSMITH_TOKEN``.
 """
 
 import base64
@@ -19,7 +19,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-from isaac_mcp.client import BridgeClient
+from twinsmith.client import BridgeClient
 
 HOST = None                          # None: the bridge advertised on this machine
 PORT = 8766

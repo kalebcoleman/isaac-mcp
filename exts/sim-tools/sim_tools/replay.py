@@ -13,8 +13,8 @@ import re
 import time
 from pathlib import Path
 
-from isaac_mcp.project_assets import AssetError, refuse
-from isaac_mcp_bridge.jobs import JobError
+from twinsmith.project_assets import AssetError, refuse
+from twinsmith_bridge.jobs import JobError
 
 MAX_FILE_BYTES = 64 * 1024**2
 MAX_SAMPLES = 500_000
@@ -304,7 +304,7 @@ async def run(ext, args):
     settings = validate(args)
     store = getattr(ext.bridge, "jobs", None)
     if store is None:
-        refuse("JOBS_UNAVAILABLE", "This Kit runs an isaac.mcp.bridge without background jobs; update the "
+        refuse("JOBS_UNAVAILABLE", "This Kit runs a twinsmith.bridge without background jobs; update the "
                "extension (it ships in the same checkout as sim-tools) and restart Kit.")
     file, tracks = read_file(s, args.get("trajectory"))
     if "" in tracks:

@@ -10,7 +10,7 @@ import math
 from pathlib import PurePosixPath
 
 from pxr import Gf, Usd, UsdGeom
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 from .runtime import require_sensor_api
 
 

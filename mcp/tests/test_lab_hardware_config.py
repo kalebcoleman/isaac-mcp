@@ -7,7 +7,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
-    "lab_hardware_config", ROOT / "exts/ur5e-dt/ur5e_dt/hardware_config.py")
+    "lab_hardware_config", ROOT / "exts/workcell/workcell/hardware_config.py")
 hardware = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(hardware)
 
@@ -61,7 +61,7 @@ def test_variation_defaults_are_explicitly_unconfirmed_and_realizable():
     assert "layers" not in cfg["jenga"]
     assert "base_plate_thickness_m" not in cfg["robot"]
     spec = importlib.util.spec_from_file_location(
-        "config_jenga", ROOT / "exts/ur5e-dt/ur5e_dt/jenga.py")
+        "config_jenga", ROOT / "exts/workcell/workcell/jenga.py")
     jenga = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(jenga)
     report = jenga.realize(cfg)
@@ -81,8 +81,8 @@ def test_variation_defaults_are_explicitly_unconfirmed_and_realizable():
 def test_bom_path_is_relative_to_configuration_directory():
     cfg, raw = hardware.load_config()
     assert cfg["documentation"]["bom_csv"] == "../workcell/bom.csv"
-    config_dir = ROOT / "exts/ur5e-dt/config"
+    config_dir = ROOT / "exts/workcell/config"
     assert (config_dir / cfg["documentation"]["bom_csv"]).resolve() == (
-        ROOT / "exts/ur5e-dt/workcell/bom.csv")
+        ROOT / "exts/workcell/workcell/bom.csv")
     assert (config_dir / cfg["documentation"]["bom_csv"]).is_file()
     assert raw["documentation"]["bom_csv"]["source"]

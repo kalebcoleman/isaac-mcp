@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from isaac_mcp import config, server
+from twinsmith import config, server
 
 REPO = Path(__file__).resolve().parents[2]
 OTHER = {name: next(o for o in config.PHYSICS_BACKENDS if o != name) for name in config.PHYSICS_BACKENDS}
@@ -19,13 +19,13 @@ PORT = "18997"
 @pytest.fixture
 def world(tmp_path, monkeypatch):
     home, project = tmp_path / "home", tmp_path / "project" / "nested"
-    (home / ".config/isaac-mcp").mkdir(parents=True)
+    (home / ".config/twinsmith").mkdir(parents=True)
     project.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.delenv("ISAAC_MCP_PHYSICS_BACKEND", raising=False)
+    monkeypatch.delenv("TWINSMITH_PHYSICS_BACKEND", raising=False)
     monkeypatch.chdir(project)
-    return {"home": home, "project": project, "user": home / ".config/isaac-mcp/config.toml",
-            "project_file": tmp_path / "project" / "isaac-mcp.toml"}
+    return {"home": home, "project": project, "user": home / ".config/twinsmith/config.toml",
+            "project_file": tmp_path / "project" / "twinsmith.toml"}
 
 
 def write(path, backend):
@@ -38,14 +38,14 @@ def test_the_default_is_written_in_one_place_and_this_pins_its_current_value():
 
 
 def test_no_launch_path_has_a_default_of_its_own():
-    sources = {name: (REPO / name).read_text() for name in ("run.sh", "scripts/run_ur5e_dt.py", "mcp/isaac_mcp/sim_sessions.py",
-                                                            "mcp/isaac_mcp/server.py")}
-    assert not re.search(r":-\s*physx|PHYSICS_BACKEND=\"physx\"|getenv\([^)]*['\"]physx['\"]\)", sources["run.sh"] + sources["scripts/run_ur5e_dt.py"])
-    assert "'physx'" not in sources["scripts/run_ur5e_dt.py"].replace("'physx' ", "").split("isaac_mcp import config")[1].split("if backend == 'newton'")[0]
-    assert not re.search(r"physics_backend[^\n]*=\s*[\"']physx[\"']\s*\)", sources["mcp/isaac_mcp/sim_sessions.py"])
+    sources = {name: (REPO / name).read_text() for name in ("run.sh", "scripts/run_kit.py", "mcp/twinsmith/sim_sessions.py",
+                                                            "mcp/twinsmith/server.py")}
+    assert not re.search(r":-\s*physx|PHYSICS_BACKEND=\"physx\"|getenv\([^)]*['\"]physx['\"]\)", sources["run.sh"] + sources["scripts/run_kit.py"])
+    assert "'physx'" not in sources["scripts/run_kit.py"].replace("'physx' ", "").split("twinsmith import config")[1].split("if backend == 'newton'")[0]
+    assert not re.search(r"physics_backend[^\n]*=\s*[\"']physx[\"']\s*\)", sources["mcp/twinsmith/sim_sessions.py"])
     for text in sources.values():
         assert not re.search(r"DEFAULT_PHYSICS_BACKEND\s*=", text)
-    assert len(re.findall(r"DEFAULT_PHYSICS_BACKEND\s*=", (REPO / "mcp/isaac_mcp/config.py").read_text())) == 1
+    assert len(re.findall(r"DEFAULT_PHYSICS_BACKEND\s*=", (REPO / "mcp/twinsmith/config.py").read_text())) == 1
 
 
 def test_precedence_and_where_the_value_came_from(world):
@@ -55,8 +55,8 @@ def test_precedence_and_where_the_value_came_from(world):
     assert config.resolve_physics_backend({}) == (OTHER[default], "user file")
     write(world["project_file"], default)                                   # found by walking up from the working directory
     assert config.resolve_physics_backend({}) == (default, "project file")
-    assert config.resolve_physics_backend({"ISAAC_MCP_PHYSICS_BACKEND": OTHER[default]}) == (OTHER[default], "environment")
-    assert config.resolve_physics_backend({"ISAAC_MCP_PHYSICS_BACKEND": ""}) == (default, "project file")   # empty is unset
+    assert config.resolve_physics_backend({"TWINSMITH_PHYSICS_BACKEND": OTHER[default]}) == (OTHER[default], "environment")
+    assert config.resolve_physics_backend({"TWINSMITH_PHYSICS_BACKEND": ""}) == (default, "project file")   # empty is unset
     resolved = config.resolve({}, cwd=world["project"], home=world["home"])
     assert (resolved.physics_backend, resolved.physics_backend_source) == (default, "project file")
 
@@ -66,12 +66,12 @@ def test_a_bad_value_names_its_source(world):
     with pytest.raises(ValueError, match=r"physx or newton, not 'bullet' \(from the user file\)"):
         config.resolve_physics_backend({})
     with pytest.raises(ValueError, match=r"not 'bullet' \(from the environment\)"):
-        config.resolve_physics_backend({"ISAAC_MCP_PHYSICS_BACKEND": "bullet"})
+        config.resolve_physics_backend({"TWINSMITH_PHYSICS_BACKEND": "bullet"})
 
 
 def run_helper(args, env_extra=None, cwd=None):
     env = {"PATH": "/usr/bin:/bin", "PYTHONPATH": str(REPO / "mcp"), **(env_extra or {})}
-    return subprocess.run([sys.executable, "-m", "isaac_mcp.config", *args], capture_output=True, text=True, env=env, cwd=cwd, timeout=30)
+    return subprocess.run([sys.executable, "-m", "twinsmith.config", *args], capture_output=True, text=True, env=env, cwd=cwd, timeout=30)
 
 
 def test_the_helper_prints_the_setting_from_the_same_files_and_needs_no_sdk(world):
@@ -81,11 +81,11 @@ def test_the_helper_prints_the_setting_from_the_same_files_and_needs_no_sdk(worl
     write(world["user"], OTHER[default])
     out = run_helper(["--print", "physics_backend_source"], env, world["project"])
     assert out.stdout == "user file\n"
-    assert run_helper(["--print", "physics_backend"], {**env, "ISAAC_MCP_PHYSICS_BACKEND": default}, world["project"]).stdout == default + "\n"
-    bad = run_helper(["--print", "physics_backend"], {**env, "ISAAC_MCP_PHYSICS_BACKEND": "bullet"}, world["project"])
+    assert run_helper(["--print", "physics_backend"], {**env, "TWINSMITH_PHYSICS_BACKEND": default}, world["project"]).stdout == default + "\n"
+    bad = run_helper(["--print", "physics_backend"], {**env, "TWINSMITH_PHYSICS_BACKEND": "bullet"}, world["project"])
     assert bad.returncode == 2 and bad.stdout == "" and "not 'bullet'" in bad.stderr
     # imported with the MCP SDK made unimportable, as on a host that has only the standard library
-    code = ("import sys; sys.modules['mcp'] = None; sys.path.insert(0, %r); from isaac_mcp import config; "
+    code = ("import sys; sys.modules['mcp'] = None; sys.path.insert(0, %r); from twinsmith import config; "
             "print(config.resolve_physics_backend()[0])" % str(REPO / "mcp"))
     check = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env={"HOME": str(world["home"])}, cwd=world["project"])
     assert check.returncode == 0 and check.stdout.strip() == OTHER[default], check.stderr
@@ -99,13 +99,13 @@ def launcher(tmp_path, with_newton):
         (site / "exts" / "isaacsim.physics.newton").mkdir(parents=True, exist_ok=True)
     python = tmp_path / "python"
     python.write_text(f'#!/bin/sh\ncase "$2" in *dirname*) echo "{site}";; esac\n[ "$1" = "-c" ] && exit 0\n'
-                      'echo "started backend=$ISAAC_MCP_PHYSICS_BACKEND"; exit 0\n')
+                      'echo "started backend=$TWINSMITH_PHYSICS_BACKEND"; exit 0\n')
     python.chmod(0o755)
     return python
 
 
 def run_sh(tmp_path, world, *args, with_newton=True, env=None):
-    environ = {"ISAAC_MCP_PYTHON": str(launcher(tmp_path, with_newton)), "PATH": "/usr/bin:/bin", "HOME": str(world["home"]), **(env or {})}
+    environ = {"TWINSMITH_SIM_PYTHON": str(launcher(tmp_path, with_newton)), "PATH": "/usr/bin:/bin", "HOME": str(world["home"]), **(env or {})}
     return subprocess.run(["bash", str(REPO / "run.sh"), "--headless", "--port", PORT, *args], env=environ, cwd=world["project"],
                           capture_output=True, text=True, timeout=60)
 
@@ -118,8 +118,8 @@ def test_run_sh_takes_the_flag_then_the_environment_then_the_files_then_the_buil
     assert f"started backend={other}" in run_sh(tmp_path, world).stdout
     write(world["project_file"], default)
     assert f"started backend={default}" in run_sh(tmp_path, world).stdout
-    assert f"started backend={other}" in run_sh(tmp_path, world, env={"ISAAC_MCP_PHYSICS_BACKEND": other}).stdout
-    assert f"started backend={default}" in run_sh(tmp_path, world, "--physics-backend", default, env={"ISAAC_MCP_PHYSICS_BACKEND": other}).stdout
+    assert f"started backend={other}" in run_sh(tmp_path, world, env={"TWINSMITH_PHYSICS_BACKEND": other}).stdout
+    assert f"started backend={default}" in run_sh(tmp_path, world, "--physics-backend", default, env={"TWINSMITH_PHYSICS_BACKEND": other}).stdout
 
 
 def test_run_sh_with_a_configured_newton_and_no_newton_in_the_build_starts_nothing(tmp_path, world):
@@ -188,7 +188,7 @@ def test_status_with_no_bridge_still_gives_the_default_and_where_it_came_from(wo
 def test_status_comes_from_the_environment_when_that_wins(world):
     default = config.DEFAULT_PHYSICS_BACKEND
     write(world["user"], default)
-    instance = server.build_server({"ISAAC_MCP_PHYSICS_BACKEND": OTHER[default]})
+    instance = server.build_server({"TWINSMITH_PHYSICS_BACKEND": OTHER[default]})
     state = server._state_for(instance)
     assert (state.config.physics_backend, state.config.physics_backend_source) == (OTHER[default], "environment")
     assert server._physics_status(state)["default_from"] == "environment"
@@ -205,7 +205,7 @@ def test_without_a_toml_reader_the_physics_setting_is_still_read_and_anything_od
     world["project_file"].write_text('sim = { physics_backend = "%s" }\n' % OTHER[default])
     with pytest.raises(ValueError, match="Cannot read physics_backend .* without a TOML reader"):
         config.resolve_physics_backend({})
-    assert config.resolve_physics_backend({"ISAAC_MCP_PHYSICS_BACKEND": default}) == (default, "environment")   # the way out
+    assert config.resolve_physics_backend({"TWINSMITH_PHYSICS_BACKEND": default}) == (default, "environment")   # the way out
     world["project_file"].write_text('[tools]\ntoolsets = ["minimal"]\n')           # no physics setting: not an error
     assert config.resolve_physics_backend({}) == (OTHER[default], "user file")
     with pytest.raises(ValueError, match="needs Python 3.11 or the tomli package"):

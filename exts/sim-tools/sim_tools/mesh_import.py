@@ -16,7 +16,7 @@ import shutil
 import uuid
 from pathlib import Path, PurePosixPath
 
-from isaac_mcp.project_assets import AssetError, refuse
+from twinsmith.project_assets import AssetError, refuse
 
 CONVERSION_VERSION = 1
 COLLIDERS = ("none", "convex_hull", "convex_decomposition")
@@ -92,8 +92,8 @@ def _number(value, name, low, high):
 
 
 async def run(ext, args: dict) -> dict:
-    from isaac_mcp import mesh_refs, urdf_refs
-    from isaac_mcp.project_assets import Broker, open_dir, signature
+    from twinsmith import mesh_refs, urdf_refs
+    from twinsmith.project_assets import Broker, open_dir, signature
     from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
     s = ext.scene

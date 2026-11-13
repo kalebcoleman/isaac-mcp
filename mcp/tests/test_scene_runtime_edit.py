@@ -25,7 +25,7 @@ def restorer(scene):
 
 
 def test_stop_guard_allows_own_restoration_once_and_preserves_external_target(scene):
-    from isaac_mcp.project_assets import AssetError
+    from twinsmith.project_assets import AssetError
 
     stage = scene.stage()
     initial = stage.GetEditTarget()
@@ -43,7 +43,7 @@ def test_stop_guard_allows_own_restoration_once_and_preserves_external_target(sc
 
 
 def test_stop_guard_rejects_target_chosen_while_lease_is_being_restored(scene):
-    from isaac_mcp.project_assets import AssetError
+    from twinsmith.project_assets import AssetError
 
     stage = scene.stage()
     scene.begin_runtime_edit(stage)
@@ -151,7 +151,7 @@ async def test_stop_without_lease_is_noop(scene):
 
 
 def test_step_after_outside_play_gives_the_exact_next_calls(scene):
-    from isaac_mcp.project_assets import AssetError
+    from twinsmith.project_assets import AssetError
 
     stage = scene.stage()
     scene.record_event("timeline", "timeline playing", dict(origin="outside_tools", source="outside the MCP tools"))
@@ -173,7 +173,7 @@ def test_step_after_outside_play_gives_the_exact_next_calls(scene):
 
 
 def test_step_after_an_editor_changed_the_layer_keeps_the_stop_advice(scene):
-    from isaac_mcp.project_assets import AssetError
+    from twinsmith.project_assets import AssetError
 
     stage = scene.stage()
     scene.begin_runtime_edit(stage)
@@ -185,14 +185,14 @@ def test_step_after_an_editor_changed_the_layer_keeps_the_stop_advice(scene):
 
 
 def test_stale_target_after_a_hot_reload_says_what_happened(scene):
-    from isaac_mcp.project_assets import AssetError
+    from twinsmith.project_assets import AssetError
 
     info = scene.stage_info()
     scene.previous_sessions = ["old-session"]
     with pytest.raises(AssetError) as error:
         scene.target("old-session", info["stage_id"])
     assert error.value.code == "STALE_TARGET" and "hot-reloaded" in str(error.value)
-    assert "ISAAC_MCP_NO_HOT_RELOAD" in str(error.value)
+    assert "TWINSMITH_NO_HOT_RELOAD" in str(error.value)
     with pytest.raises(AssetError) as other:
         scene.target("some-other-process", info["stage_id"])
     assert "hot-reloaded" not in str(other.value) and "Kit restarted" in str(other.value)

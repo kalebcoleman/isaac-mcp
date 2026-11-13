@@ -251,7 +251,7 @@ def capture(seconds, topics=()):
     from tf2_msgs.msg import TFMessage
 
     rclpy.init()
-    node = rclpy.create_node("isaac_mcp_tf_doctor")
+    node = rclpy.create_node("twinsmith_tf_doctor")
     edges, clock = [], []
 
     def on_tf(static):
@@ -299,7 +299,7 @@ def capture(seconds, topics=()):
     for topic in ("/tf", "/tf_static"):
         for info in node.get_publishers_info_by_topic(topic):
             publishers.add(f"{info.node_namespace.rstrip('/')}/{info.node_name}")
-    publishers.discard("/isaac_mcp_tf_doctor")
+    publishers.discard("/twinsmith_tf_doctor")
     clock_publishers = {f"{i.node_namespace.rstrip('/')}/{i.node_name}"
                         for i in node.get_publishers_info_by_topic("/clock")}
     node.destroy_node()
@@ -323,16 +323,16 @@ def dds_env(env):
 def isaac_ros_env(env=None):
     """``(python, env)`` to run this script on the ROS 2 libraries bundled with Isaac Sim.
 
-    Same choices as run.sh: the interpreter from scripts/isaac_env.py, the bundled distro
+    Same choices as run.sh: the interpreter from scripts/env.py, the bundled distro
     (humble on Ubuntu 22.04, jazzy otherwise, or $ROS_DISTRO) and config/ros_dds.env's DDS
     settings, so the doctor discovers exactly what the simulator publishes.
     """
     env = dict(os.environ if env is None else env)
     run = dict(capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL, timeout=60)
-    python = subprocess.run([sys.executable, str(ROOT / "scripts" / "isaac_env.py"), "resolve-python",
+    python = subprocess.run([sys.executable, str(ROOT / "scripts" / "env.py"), "resolve-python",
                              "--require-version", "6"], **run).stdout.strip()
     if not python:
-        raise RuntimeError("no Isaac Sim 6.x found (python3 scripts/isaac_env.py find)")
+        raise RuntimeError("no Isaac Sim 6.x found (python3 scripts/env.py find)")
     # Locate the install from its file layout. Never `import isaacsim` here: that can stop and
     # wait for the EULA prompt.
     interp = Path(python)
@@ -355,7 +355,7 @@ def isaac_ros_env(env=None):
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(base / "rclpy"), env.get("PYTHONPATH")]))
     env["LD_LIBRARY_PATH"] = os.pathsep.join(filter(None, [str(base / "lib"), env.get("LD_LIBRARY_PATH")]))
     env.update(dds_env(env))
-    env["ISAAC_MCP_TF_DOCTOR_REEXEC"] = "1"
+    env["TWINSMITH_TF_DOCTOR_REEXEC"] = "1"
     return python, env
 
 
@@ -369,7 +369,7 @@ def main(argv=None) -> int:
     p.add_argument("--isaac-ros", action="store_true",
                    help="use the ROS 2 libraries bundled with Isaac Sim (no system ROS 2 needed)")
     args = p.parse_args(argv)
-    if args.isaac_ros and os.environ.get("ISAAC_MCP_TF_DOCTOR_REEXEC") != "1":
+    if args.isaac_ros and os.environ.get("TWINSMITH_TF_DOCTOR_REEXEC") != "1":
         try:
             python, env = isaac_ros_env()
         except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:

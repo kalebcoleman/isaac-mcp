@@ -15,7 +15,7 @@ def checkout(tmp_path):
     scripts = root / "scripts"
     scripts.mkdir(parents=True)
     shutil.copy(repo / "run.sh", root / "run.sh")
-    shutil.copy(repo / "scripts" / "isaac_ros_libs.sh", scripts / "isaac_ros_libs.sh")
+    shutil.copy(repo / "scripts" / "ros_libs.sh", scripts / "ros_libs.sh")
     # An old workspace interpreter must not be selected implicitly.
     legacy = root / "learning6" / ".venv" / "bin" / "python"
     legacy.parent.mkdir(parents=True)
@@ -27,7 +27,7 @@ def checkout(tmp_path):
 @pytest.fixture
 def clean_env():
     env = os.environ.copy()
-    env.pop("UR5E_DT_PYTHON", None)
+    env.pop("TWINSMITH_SIM_PYTHON", None)
     return env
 
 
@@ -37,7 +37,7 @@ def test_launcher_help_selects_checkout_or_explicit_interpreter(checkout, clean_
                               text=True, capture_output=True, check=True).stdout
 
     assert f"Interpreter: {checkout}/.venv/bin/python" in help_text(clean_env)
-    assert "Interpreter: /custom/python" in help_text(clean_env | {"UR5E_DT_PYTHON": "/custom/python"})
+    assert "Interpreter: /custom/python" in help_text(clean_env | {"TWINSMITH_SIM_PYTHON": "/custom/python"})
     assert not (checkout / "legacy-ran").exists()
 
 

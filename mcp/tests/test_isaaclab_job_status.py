@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture
 def job_starts(monkeypatch, tmp_path):
-    from isaac_mcp.isaaclab import jobs
+    from twinsmith.isaaclab import jobs
 
     checkpoint = tmp_path / "IsaacLab" / "logs" / "rl_games" / "reach" / "run" / "nn" / "model.pth"
     checkpoint.parent.mkdir(parents=True)
@@ -47,7 +47,7 @@ def test_an_explicit_library_is_never_overridden(job_starts, launch):
 
 
 def test_an_unrecognized_checkpoint_path_leaves_the_choice_to_lab(tmp_path):
-    from isaac_mcp.isaaclab.jobs import _library_from_checkpoint
+    from twinsmith.isaaclab.jobs import _library_from_checkpoint
 
     assert _library_from_checkpoint("/a/weights/model.pth", []) is None
     assert _library_from_checkpoint("/a/logs/custom/model.pth", []) is None
@@ -57,9 +57,9 @@ JOB_ID = "20261103-193322-Isaac-Reach-Franka"
 
 
 def _job_with_logs(monkeypatch, tmp_path, status, stdout="", stderr="boom\n"):
-    from isaac_mcp.isaaclab import jobs
+    from twinsmith.isaaclab import jobs
 
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path))
     folder = tmp_path / JOB_ID
     folder.mkdir()
     (folder / "stdout.log").write_text(stdout)

@@ -7,7 +7,7 @@ import pytest
 from Xlib import X, XK
 from mcp.server.fastmcp import FastMCP
 
-from isaac_mcp import desktop_input as desktop
+from twinsmith import desktop_input as desktop
 
 
 class Window:

@@ -17,7 +17,7 @@ from sim_tools.camera_capture import (
     invalidate,
     wait_for_frames,
 )
-from isaac_mcp.project_assets import AssetError
+from twinsmith.project_assets import AssetError
 
 
 @pytest.fixture

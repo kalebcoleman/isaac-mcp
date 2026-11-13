@@ -13,7 +13,7 @@ pytest.importorskip("pxr.Usd")
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 
 
-ROOT = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt"
+ROOT = Path(__file__).resolve().parents[2] / "exts/workcell/workcell"
 
 
 def load_module(name):

@@ -65,7 +65,7 @@ def test_backend_mismatch_refuses_before_checks(tmp_path, monkeypatch, capsys, a
         pytest.fail("A validator ran despite backend mismatch")
 
     monkeypatch.setattr(module, "execute", forbidden)
-    monkeypatch.setenv("ISAAC_MCP_HOST", "original")
+    monkeypatch.setenv("TWINSMITH_HOST", "original")
     assert module.main(["scene", "--host", "test-host", "--backend", requested,
                         "--output-dir", str(tmp_path)], client_factory=Client) == 2
     assert calls == ["status", "sim.stage.info"]
@@ -75,7 +75,7 @@ def test_backend_mismatch_refuses_before_checks(tmp_path, monkeypatch, capsys, a
     assert first["status"] == "fail" and first["backend"] == actual
     assert first["simulator_build"] == "test-build" and first["seconds"] >= 0
     assert all(row["status"] == "not_run" for row in result["checks"][1:])
-    assert module.os.environ["ISAAC_MCP_HOST"] == "original"
+    assert module.os.environ["TWINSMITH_HOST"] == "original"
 
 
 def test_success_records_actual_backend(tmp_path, monkeypatch):
@@ -191,15 +191,15 @@ class _Bridge(_Engine):
 
 def test_each_independent_check_starts_stopped_but_a_prerequisite_pair_is_not_reset_between(tmp_path, monkeypatch):
     module = runner()
-    monkeypatch.delenv("ISAAC_MCP_TOOLSETS", raising=False)
+    monkeypatch.delenv("TWINSMITH_TOOLSETS", raising=False)
     bridge, ran, toolsets = _Bridge(), [], {}
-    monkeypatch.setattr(module, "execute", lambda name, *a: (ran.append(name), toolsets.update({name: module.os.environ["ISAAC_MCP_TOOLSETS"]})))
+    monkeypatch.setattr(module, "execute", lambda name, *a: (ran.append(name), toolsets.update({name: module.os.environ["TWINSMITH_TOOLSETS"]})))
     assert module.main(["all", "--discard-changes", "--second-port", "1", "--directory", "d", "--output-dir", str(tmp_path),
                         "--check", "validate_scene_clear", "--check", "validate_scene_prim_edit"], lambda **k: bridge) == 0
     assert ran == ["validate_scene_prim_edit", "validate_scene_tools", "validate_scene_equivalents", "validate_scene_clear"]
     assert bridge.stops == 4 and bridge.new_stages == 2  # each stopped; new stage for prim_edit and for the head of the suite
     assert toolsets["validate_scene_tools"] == "all" and toolsets["validate_scene_equivalents"] == "default,+kit_debug"
-    assert "ISAAC_MCP_TOOLSETS" not in module.os.environ
+    assert "TWINSMITH_TOOLSETS" not in module.os.environ
 
 
 def test_a_failure_is_reported_with_its_leaf_exception_and_the_run_continues(tmp_path, monkeypatch, capsys):
@@ -241,7 +241,7 @@ def test_every_tool_a_check_calls_is_listed_by_the_toolsets_the_runner_starts_it
     """The runner never relies on the default selection: each check's table entry lists what its source calls."""
     import re
     sys.path.insert(0, str(SCRIPT.parents[1] / "mcp"))
-    from isaac_mcp import config, tool_groups, toolsets
+    from twinsmith import config, tool_groups, toolsets
     module = runner()
     for name in {n for names in module.TOOLSETS.values() for n in names} - {"smoke_test", "workcell_smoke", "validate_generic_scene"}:
         source = (SCRIPT.parent / "smoke" / f"{name}.py").read_text()

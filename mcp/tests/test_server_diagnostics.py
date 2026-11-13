@@ -1,4 +1,4 @@
-"""Durable server log, signal/crash hooks and code-drift detection (isaac_mcp.diagnostics)."""
+"""Durable server log, signal/crash hooks and code-drift detection (twinsmith.diagnostics)."""
 import logging
 import logging.handlers
 import os
@@ -9,8 +9,8 @@ import threading
 
 import pytest
 
-from isaac_mcp import diagnostics as dx
-from isaac_mcp import server as gw
+from twinsmith import diagnostics as dx
+from twinsmith import server as gw
 
 A, B = "a" * 40, "b" * 40
 
@@ -28,7 +28,7 @@ def _read(path):
 
 
 def test_log_file_created_private_with_pid_lines_and_rotation_config(tmp_path):
-    path = dx.setup_server_log({"ISAAC_MCP_LOG_DIR": str(tmp_path / "logs")})
+    path = dx.setup_server_log({"TWINSMITH_LOG_DIR": str(tmp_path / "logs")})
     assert path == tmp_path / "logs" / f"server-{os.getpid()}.log"
     assert stat.S_IMODE((tmp_path / "logs").stat().st_mode) == 0o700
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
@@ -40,34 +40,34 @@ def test_log_file_created_private_with_pid_lines_and_rotation_config(tmp_path):
 
 
 def test_log_can_be_disabled_and_never_defaults_into_the_real_state_dir(tmp_path, monkeypatch):
-    assert dx.setup_server_log({"ISAAC_MCP_LOG": "0", "ISAAC_MCP_LOG_DIR": str(tmp_path)}) is None
+    assert dx.setup_server_log({"TWINSMITH_LOG": "0", "TWINSMITH_LOG_DIR": str(tmp_path)}) is None
     assert not list(tmp_path.iterdir())
-    assert dx.log_dir({"XDG_STATE_HOME": str(tmp_path)}) == tmp_path / "isaac-mcp"
+    assert dx.log_dir({"XDG_STATE_HOME": str(tmp_path)}) == tmp_path / "twinsmith"
     monkeypatch.setenv("HOME", str(tmp_path))
-    assert dx.log_dir({}) == tmp_path / ".local" / "state" / "isaac-mcp"
+    assert dx.log_dir({}) == tmp_path / ".local" / "state" / "twinsmith"
 
 
 def test_unusable_log_dir_falls_back_to_stderr_only(tmp_path):
     blocker = tmp_path / "file"
     blocker.write_text("x")
-    assert dx.setup_server_log({"ISAAC_MCP_LOG_DIR": str(blocker / "sub")}) is None
+    assert dx.setup_server_log({"TWINSMITH_LOG_DIR": str(blocker / "sub")}) is None
 
 
 def test_startup_line_records_identity_and_filters_but_no_other_env(tmp_path):
-    path = dx.setup_server_log({"ISAAC_MCP_LOG_DIR": str(tmp_path)})
-    dx.log_startup("1.2.3", A, 127, {"ISAAC_MCP_TOOLSETS": "all", "SECRET_TOKEN": "hunter2"})
+    path = dx.setup_server_log({"TWINSMITH_LOG_DIR": str(tmp_path)})
+    dx.log_startup("1.2.3", A, 127, {"TWINSMITH_TOOLSETS": "all", "SECRET_TOKEN": "hunter2"})
     text = _read(path)
     assert "process start" in text and f"ppid={os.getppid()}" in text and "version=1.2.3" in text
-    assert A[:12] in text and "tools=127" in text and "ISAAC_MCP_TOOLSETS" in text
+    assert A[:12] in text and "tools=127" in text and "TWINSMITH_TOOLSETS" in text
     assert "hunter2" not in text and "SECRET_TOKEN" not in text
 
 
 def test_run_logged_records_eof_exit_and_crashes_with_traceback(tmp_path):
-    path = dx.setup_server_log({"ISAAC_MCP_LOG_DIR": str(tmp_path)})
+    path = dx.setup_server_log({"TWINSMITH_LOG_DIR": str(tmp_path)})
     dx.run_logged(lambda: None)
     assert "clean shutdown: stdio transport closed" in _read(path)
     dx.teardown_server_log()
-    path = dx.setup_server_log({"ISAAC_MCP_LOG_DIR": str(tmp_path)})
+    path = dx.setup_server_log({"TWINSMITH_LOG_DIR": str(tmp_path)})
 
     def boom():
         raise RuntimeError("kaput")
@@ -82,7 +82,7 @@ def test_run_logged_records_eof_exit_and_crashes_with_traceback(tmp_path):
 def test_signal_handlers_register_log_and_chain_without_killing_the_test(tmp_path):
     if threading.current_thread() is not threading.main_thread():
         pytest.skip("signals need the main thread")
-    path = dx.setup_server_log({"ISAAC_MCP_LOG_DIR": str(tmp_path)})
+    path = dx.setup_server_log({"TWINSMITH_LOG_DIR": str(tmp_path)})
     saved = {n: signal.getsignal(getattr(signal, n)) for n in ("SIGTERM", "SIGINT", "SIGHUP", "SIGPIPE")}
     seen = []
     signal.signal(signal.SIGTERM, lambda s, f: seen.append(s))   # stand-in for the prior disposition
@@ -103,7 +103,7 @@ def test_signal_handlers_register_log_and_chain_without_killing_the_test(tmp_pat
 
 
 def test_crash_hooks_log_unhandled_exceptions_in_threads(tmp_path, monkeypatch):
-    path = dx.setup_server_log({"ISAAC_MCP_LOG_DIR": str(tmp_path)})
+    path = dx.setup_server_log({"TWINSMITH_LOG_DIR": str(tmp_path)})
     monkeypatch.setattr(sys, "excepthook", sys.excepthook)
     monkeypatch.setattr(threading, "excepthook", lambda args: None)
     import faulthandler
@@ -184,7 +184,7 @@ def test_status_host_object_reports_code_drift_from_a_tmp_git_repo(tmp_path, mon
     assert A[:12] in identity["code_drift_message"] and B[:12] in identity["code_drift_message"]
     assert "reconnect to load it" in identity["code_drift_message"]
     assert "code_drift: true" in gw._host_identity_text()
-    assert "code_drift: true" in gw._isaac_help(None)
+    assert "code_drift: true" in gw._help(None)
     assert str(tmp_path) not in identity["code_drift_message"]
 
 

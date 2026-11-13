@@ -51,7 +51,7 @@ def _lab_3(tmp_path):
 
 
 def test_layout_is_read_from_the_files(tmp_path):
-    from isaac_mcp.isaaclab.install import lab_profile
+    from twinsmith.isaaclab.install import lab_profile
 
     lab3 = lab_profile(_lab_3(tmp_path))
     assert lab3["layout"] == "unified" and lab3["libraries"] == [] and lab3["scripts"][""]["train"]["flags"] is None
@@ -63,7 +63,7 @@ def test_layout_is_read_from_the_files(tmp_path):
 
 
 def test_flags_include_helpers_and_app_launcher_and_are_unknown_when_a_source_is_missing(tmp_path):
-    from isaac_mcp.isaaclab.install import lab_profile
+    from twinsmith.isaaclab.install import lab_profile
 
     root = tmp_path / "lab"
     folder = root / "scripts/reinforcement_learning/rsl_rl"
@@ -83,7 +83,7 @@ def test_flags_include_helpers_and_app_launcher_and_are_unknown_when_a_source_is
 
 
 def test_a_changed_checkout_is_read_again(tmp_path):
-    from isaac_mcp.isaaclab.install import lab_profile
+    from twinsmith.isaaclab.install import lab_profile
 
     root = tmp_path / "lab"
     (root / "scripts/reinforcement_learning/rsl_rl").mkdir(parents=True)
@@ -98,7 +98,7 @@ def test_a_changed_checkout_is_read_again(tmp_path):
 
 @pytest.fixture
 def captured_jobs(monkeypatch):
-    from isaac_mcp.isaaclab import jobs
+    from twinsmith.isaaclab import jobs
 
     calls = []
 
@@ -173,9 +173,9 @@ def test_lab_2_3_checkpoint_path_selects_a_folder_that_exists(captured_jobs, tmp
 
 
 def _run_job(monkeypatch, tmp_path, launch):
-    from isaac_mcp.isaaclab import jobs
+    from twinsmith.isaaclab import jobs
 
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     result = launch(jobs)
     assert "error" not in result, result
     process = jobs._active[result["job_id"]]
@@ -189,7 +189,7 @@ def _run_job(monkeypatch, tmp_path, launch):
     (True, ["--video"], False, "1"),
 ])
 def test_a_real_process_accepts_the_lab_2_3_argv(monkeypatch, tmp_path, headless, extra, flag, env):
-    from isaac_mcp.isaaclab import jobs as jobs_module
+    from twinsmith.isaaclab import jobs as jobs_module
 
     # This stand-in interpreter is not a Lab venv: its argv is what is under test, so let the
     # launch-time library and video probes answer as an installed Lab environment would.
@@ -208,9 +208,9 @@ def test_a_real_process_accepts_the_lab_2_3_argv(monkeypatch, tmp_path, headless
 
 
 def test_a_missing_script_is_refused_before_popen(monkeypatch, tmp_path):
-    from isaac_mcp.isaaclab import jobs
+    from twinsmith.isaaclab import jobs
 
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     monkeypatch.setattr(jobs.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
     root = tmp_path / "empty"
     root.mkdir()
@@ -220,7 +220,7 @@ def test_a_missing_script_is_refused_before_popen(monkeypatch, tmp_path):
 
 
 def test_lab_2_3_log_lines_still_find_the_run_directory(tmp_path):
-    from isaac_mcp.isaaclab.jobs import _run_dir_from_log
+    from twinsmith.isaaclab.jobs import _run_dir_from_log
 
     log = tmp_path / "stdout.log"
     log.write_text("[INFO] Logging experiment in directory: /x/logs/rsl_rl/reach\n"
@@ -229,7 +229,7 @@ def test_lab_2_3_log_lines_still_find_the_run_directory(tmp_path):
 
 
 def _install_probe(monkeypatch, tmp_path, root, output):
-    from isaac_mcp.isaaclab import install
+    from twinsmith.isaaclab import install
 
     python = tmp_path / "python"
     python.write_text("")

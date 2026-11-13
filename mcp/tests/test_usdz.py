@@ -7,8 +7,8 @@ import zipfile
 
 import pytest
 
-from isaac_mcp.project_assets import AssetError
-from isaac_mcp.usdz import validate
+from twinsmith.project_assets import AssetError
+from twinsmith.usdz import validate
 
 
 def package(entries, *, compression=zipfile.ZIP_STORED, mode=stat.S_IFREG, align=True):

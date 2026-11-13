@@ -8,11 +8,11 @@ This document records the provenance, upstream source repositories, fork locatio
 
 | Component | Origin | License status | State here |
 |---|---|---|---|
-| **`exts/ur5e-dt`** | Fork of `https://github.com/inbarajaldrin/isaac-sim-mcp` at `27f6100` (`https://github.com/kalebcoleman/isaac-sim-mcp`) | MIT (`docs/provenance/isaac-sim-mcp-LICENSE`) | Developed further here; the extension is now one module per area under `exts/ur5e-dt/ur5e_dt/`. |
-| **`exts/isaac.mcp.bridge`**, the bridge client and server core in **`mcp/`** | First built on `https://github.com/inbarajaldrin/omni-kit-mcp` at `9d0366b`, used with its author's permission | Upstream has no LICENSE file | **Rewritten in this repository.** The bridge, its protocol, client, the Kit registration script, the templates and their documentation and tests are this project's own implementation under the repository's MIT license. |
+| **`exts/workcell`** | Fork of `https://github.com/inbarajaldrin/isaac-sim-mcp` at `27f6100` (`https://github.com/kalebcoleman/isaac-sim-mcp`) | MIT (`docs/provenance/isaac-sim-mcp-LICENSE`) | Developed further here; the extension is now one module per area under `exts/workcell/workcell/`. |
+| **`exts/twinsmith.bridge`**, the bridge client and server core in **`mcp/`** | First built on `https://github.com/inbarajaldrin/omni-kit-mcp` at `9d0366b`, used with its author's permission | Upstream has no LICENSE file | **Rewritten in this repository.** The bridge, its protocol, client, the Kit registration script, the templates and their documentation and tests are this project's own implementation under the repository's MIT license. |
 
 > [!NOTE]
-> Aldrin Inbaraj, a lab mate at the RISE lab, wrote both upstream projects. The UR5e workstation digital twin, its
+> Aldrin Inbaraj, a lab mate, wrote both upstream projects. The UR5e workstation digital twin, its
 > scene definitions, controllers, checkpoints and checks are this project's own work, developed in a fork of his
 > repository.
 
@@ -24,12 +24,12 @@ This document records the provenance, upstream source repositories, fork locatio
 different design (request ids, a token, read-only mode, three scheduling rules, one job record format; see
 [the protocol](../mcp/docs/protocol.md)), not a paraphrase. What deliberately stayed the same is the interface other
 code depends on: the tool names (`run_python`, `list_tools`, `put_file`, ...), the tool-package contract
-(`MCP_NAMESPACE`, `register(registrar)`), the settings names (`ISAAC_MCP_PORT`, `ISAAC_MCP_TOOL_MODULES`, ...), the
+(`MCP_NAMESPACE`, `register(registrar)`), the settings names (`TWINSMITH_PORT`, `TWINSMITH_TOOL_MODULES`, ...), the
 JSON-lines message shape and the portfile location, so existing tool packages and clients keep working.
 
-`isaac-sim-mcp` (the twin's origin):
-- **Pinned Commit:** `27f6100` (*"ur5e-dt: add valid convexHull collider to the Quick-Changer"*)
-- **Vendored Path:** `exts/ur5e-dt/` (extension code only; the robot, gripper, and scene assets are not in this tree).
+`isaac-sim-mcp` (the work cell's origin):
+- **Pinned Commit:** `27f6100` (*"workcell: add valid convexHull collider to the Quick-Changer"*)
+- **Vendored Path:** `exts/workcell/` (extension code only; the robot, gripper, and scene assets are not in this tree).
 
 ---
 
@@ -38,7 +38,7 @@ JSON-lines message shape and the portfile location, so existing tool packages an
 - **`isaac-sim-mcp`:** MIT License. A copy of the upstream license is archived at `docs/provenance/isaac-sim-mcp-LICENSE`.
 - **`omni-kit-mcp`:** no upstream license file. No file in this repository is a copy of it any longer.
 - **Assets:** the repository ships none (it is code-only; see `docs/ASSET-PACKS.md`). Earlier revisions
-  carried `exts/ur5e-dt/assets/`, and not all of it could be redistributed. The NVIDIA robot,
+  carried `exts/workcell/assets/`, and not all of it could be redistributed. The NVIDIA robot,
   sensor and material files, the Vention bench and the Poliigon oak textures must stay out of a
   public repository; the Husarion gripper files (Apache-2.0) and the FMB objects (CC BY 4.0) may
   ship with notices (`THIRD-PARTY-NOTICES.md`). Each pack records the source, licence and

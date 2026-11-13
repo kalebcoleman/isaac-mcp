@@ -2,7 +2,7 @@
 
 A ground plane, physics scene, lights and an aimed camera, optionally with a robot. It wires nothing
 to a real robot: no mirror graph, no /joint_states subscriber, no gripper, force publisher or panel.
-That is the UR5e twin's job (ur5e_dt__quick_start). Like every generic tool it authors in the session
+That is the UR5e work cell's job (workcell__quick_start). Like every generic tool it authors in the session
 layer; sim.stage.save flattens that layer into the saved file, so a save keeps the result.
 
 ``resolve_robot`` and ``author_scene`` are pure USD and resolver code, tested without Kit.
@@ -14,7 +14,7 @@ import math
 import os
 import re
 
-from isaac_mcp.project_assets import AssetError, refuse
+from twinsmith.project_assets import AssetError, refuse
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics
 
 from .public_robots import NVIDIA_ROBOTS
@@ -37,7 +37,7 @@ ROOM_TO_MOVE = 1.5  # an arm's first pose can be its flattest: leave room for it
 def _resolved(ref, name):
     """A file of a pack under the asset root, named ``<pack id>/<version>/<file>``: the manifest must list it and its
     bytes must match. A plain path is returned, which USD resolves the same with or without Kit's URI resolver."""
-    from isaac_mcp import pack_manifest
+    from twinsmith import pack_manifest
 
     try:
         path = pack_manifest.resolve_pack_file(pack_manifest.resolve_asset_root().path, ref)
@@ -64,14 +64,14 @@ def resolve_robot(robot, snapshot_id=None):
     if snapshot_id and is_urdf:
         return dict(name=_prim_name(robot), snapshot=True, urdf=True, assets=[dict(asset=robot, source="snapshot", location=robot)])
     if is_urdf:
-        from isaac_mcp.project_assets import approval_help
+        from twinsmith.project_assets import approval_help
 
         refuse("ROOT_NOT_APPROVED", "A URDF goes through the MCP host, which checks it against your approved roots and "
                "asset root, and this call did not come through it. Name it as <pack id>/<version>/<file.urdf> from your asset root, or "
                "as an absolute path under an approved root. Nothing was changed." + approval_help(None))
     if os.path.isabs(os.path.expanduser(robot)):
         if not snapshot_id:
-            from isaac_mcp.project_assets import approval_help
+            from twinsmith.project_assets import approval_help
 
             refuse("ROOT_NOT_APPROVED", "An absolute robot path goes through the MCP host, which checks it against your "
                    "approved roots (the same rule as assets__import_path). Nothing was changed." + approval_help(os.path.dirname(os.path.expanduser(robot))))
@@ -399,7 +399,7 @@ async def run(ext, args):
         discarded_changes=discarded, **({"kept_scene": "The robot was added to the scene you had; nothing else changed."}
                                         if add_to_scene else {}),
         layer="session; sim__stage__save flattens it into the saved file",
-        wiring="none: no mirror graph, gripper or /joint_states subscriber. For the RISE lab UR5e twin see ur5e_dt__quick_start.",
+        wiring="none: no mirror graph, gripper or /joint_states subscriber. For the UR5e work cell, use workcell__cell..",
     )
     owned = [WORLD]
     root = robot_path = wheels = None

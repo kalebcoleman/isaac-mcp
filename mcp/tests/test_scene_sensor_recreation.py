@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from test_scene_usd import scene
 from pxr import Usd
-from isaac_mcp.project_assets import AssetError
+from twinsmith.project_assets import AssetError
 from sim_tools.advanced import Advanced
 
 

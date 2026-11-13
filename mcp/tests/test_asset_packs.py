@@ -11,12 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from isaac_mcp import asset_packs as packs
-from isaac_mcp import pack_manifest as pm
-from isaac_mcp.project_assets import Broker
+from twinsmith import asset_packs as packs
+from twinsmith import pack_manifest as pm
+from twinsmith.project_assets import Broker
 
 REPO = Path(__file__).resolve().parents[2]
-ENV = ("ISAAC_MCP_ASSET_ROOT", "ISAAC_MCP_WORKSPACE", "ISAAC_MCP_PROJECT", "ISAAC_MCP_USD_PYTHON", *pm.REMOVED_ENVIRONMENT)
+ENV = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_WORKSPACE", "TWINSMITH_PROJECT", "TWINSMITH_USD_PYTHON", *pm.REMOVED_ENVIRONMENT)
 PROVENANCE = dict(source="unit test", license="test fixture")
 
 
@@ -50,10 +50,10 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(pm, "_announced", set())
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "home" / ".cache"))
-    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(tmp_path / "no-project"))
+    monkeypatch.setenv("TWINSMITH_PROJECT", str(tmp_path / "no-project"))
     root = tmp_path / "assets"
     root.mkdir()
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(root))
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(root))
     return root
 
 
@@ -508,7 +508,7 @@ def test_the_built_pack_composes(lab, env):
 
 def test_a_file_kit_finds_in_its_own_install_is_runtime_not_outside(lab, env, tmp_path):
     """Seen live: Kit resolves OmniPBR.mdl to its library, standalone USD reports it unresolved."""
-    from isaac_mcp.usd_closure import split_runtime
+    from twinsmith.usd_closure import split_runtime
 
     install = tmp_path / "isaacsim"
 
@@ -570,20 +570,20 @@ def test_adopt_is_immutable_and_dry_run_refuses_too(env, tmp_path):
 
 
 def test_convert_old_takes_hashes_from_the_files_not_from_sha256sums(env):
-    old = env / "ur5e-dt"
+    old = env / "workcell"
     put(old, "robot/ur5e.usd", b"robot")
     put(old, "objects/fmb1.json", b"{}")
     put(old, "Isaac/Materials/m.mdl", b"mdl")
     (old / "SHA256SUMS").write_text(f"{'0' * 64}  robot/ur5e.usd\n")  # a wrong pin: ignored
-    (old / "isaac-mcp-pack.json").write_text('{"version": 1, "entries": []}')
+    (old / __import__("twinsmith.legacy", fromlist=["OLD_PACK_FILE"]).OLD_PACK_FILE).write_text('{"version": 1, "entries": []}')
     report = packs.convert_old(old, source_note="lab files", license_="private")
-    assert report["pack"] == "ur5e-dt/v1" and report["files"] == 3 and report["converted_from"] == str(old)
-    manifest = verifies(env, "ur5e-dt").manifest
+    assert report["pack"] == "workcell/v1" and report["files"] == 3 and report["converted_from"] == str(old)
+    manifest = verifies(env, "workcell").manifest
     assert {r["path"]: r["sha256"] for r in manifest["files"]}["robot/ur5e.usd"] == sha(b"robot")
     assert sorted(r["path"] for r in manifest["files"]) == ["Isaac/Materials/m.mdl", "objects/fmb1.json", "robot/ur5e.usd"]
     assert (old / "SHA256SUMS").exists() and (old / "robot/ur5e.usd").exists()  # the old files are left in place
     assert any("old files are still in" in n for n in report["notes"])
-    assert [p["id"] for p in pm.list_packs(env)["packs"]] == ["ur5e-dt"] and pm.list_packs(env)["old_format"] == []
+    assert [p["id"] for p in pm.list_packs(env)["packs"]] == ["workcell"] and pm.list_packs(env)["old_format"] == []
 
 
 def test_convert_old_refuses_a_second_time_a_symlink_and_a_wrong_id(env, tmp_path):
@@ -625,17 +625,18 @@ def test_packs_tool_reports_what_it_resolved(env, broker, capsys):
 
 
 def test_packs_tool_without_an_asset_root_says_which_setting_to_make(broker, monkeypatch, tmp_path):
-    monkeypatch.delenv("ISAAC_MCP_ASSET_ROOT")
-    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(tmp_path / "empty-ws"))
+    monkeypatch.delenv("TWINSMITH_ASSET_ROOT")
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(tmp_path / "empty-ws"))
     result = tool("assets.packs", broker)
-    assert result["asset_root"] is None and "ISAAC_MCP_ASSET_ROOT" in result["asset_root_error"] and result["listing"]["packs"] == []
+    assert result["asset_root"] is None and "TWINSMITH_ASSET_ROOT" in result["asset_root_error"] and result["listing"]["packs"] == []
     refused("NO_ASSET_ROOT", "assets.pack_doctor", broker, pack="p/v1")
 
 
 def test_packs_tool_says_once_what_replaces_a_removed_variable(env, broker, monkeypatch):
-    monkeypatch.setenv("UR5E_DT_OFFLINE", "1")
+    removed = next(iter(pm.REMOVED_ENVIRONMENT))
+    monkeypatch.setenv(removed, "1")
     result = tool("assets.packs", broker)
-    assert any("UR5E_DT_OFFLINE" in w and "ISAAC_MCP_ASSET_ROOT" in w for w in result["warnings"])
+    assert any(removed in w and "TWINSMITH_ASSET_ROOT" in w for w in result["warnings"])
 
 
 def adopt(broker, **params):
@@ -713,21 +714,21 @@ def test_adopt_requires_source_and_license(env, broker):
 
 
 def test_adopt_from_old_converts_a_pack_in_the_asset_root(env, broker):
-    old = env / "ur5e-dt"
+    old = env / "workcell"
     put(old, "robot/ur5e.usd", b"r")
     (old / "SHA256SUMS").write_text("")
     listing = tool("assets.packs", broker)["listing"]
-    assert [o["id"] for o in listing["old_format"]] == ["ur5e-dt"] and listing["packs"] == []
-    result = adopt(broker, pack="ur5e-dt/v1", from_old="ur5e-dt")
+    assert [o["id"] for o in listing["old_format"]] == ["workcell"] and listing["packs"] == []
+    result = adopt(broker, pack="workcell/v1", from_old="workcell")
     assert result["files"] == 1 and result["converted_from"] == str(old.resolve())
-    verifies(env, "ur5e-dt")
-    refused("INVALID_PACK", "assets.pack_adopt", broker, pack="other/v1", from_old="ur5e-dt", **PROVENANCE)  # the id is the folder
-    refused("INVALID_VALUE", "assets.pack_adopt", broker, pack="ur5e-dt/v2", from_old="../x", **PROVENANCE)
+    verifies(env, "workcell")
+    refused("INVALID_PACK", "assets.pack_adopt", broker, pack="other/v1", from_old="workcell", **PROVENANCE)  # the id is the folder
+    refused("INVALID_VALUE", "assets.pack_adopt", broker, pack="workcell/v2", from_old="../x", **PROVENANCE)
 
 
 def test_adopt_refuses_a_source_overlapping_the_pack(env, tmp_path, monkeypatch, broker):
     root = broker.roots["demo"][0]
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(root))
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(root))
     put(root, "p/a.usd")
     refused("OVERLAP", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root / "p"), **PROVENANCE)
     refused("OVERLAP", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root), **PROVENANCE)
@@ -742,7 +743,7 @@ def test_write_tools_refuse_invalid_pack_names(env, broker, name):
 def test_write_tools_refuse_an_asset_root_inside_the_repository(env, broker, monkeypatch):
     root = broker.roots["demo"][0]
     put(root, "a.usd")
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(REPO / "tmp-never-created"))
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(REPO / "tmp-never-created"))
     refused("INSIDE_REPOSITORY", "assets.pack_adopt", broker, pack="p/v1", source_path=str(root), **PROVENANCE)
     assert not (REPO / "tmp-never-created").exists()
 
@@ -750,7 +751,7 @@ def test_write_tools_refuse_an_asset_root_inside_the_repository(env, broker, mon
 def test_write_tools_refuse_a_pack_that_lands_inside_the_repository(env, broker, monkeypatch):
     root = broker.roots["demo"][0]
     put(root, "a.usd")
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(REPO.parent))
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(REPO.parent))
     refused("INSIDE_REPOSITORY", "assets.pack_adopt", broker, pack=f"{REPO.name}/v1", source_path=str(root), **PROVENANCE)
 
 
@@ -765,7 +766,7 @@ def test_write_tools_refuse_a_symlinked_pack_folder(env, broker, tmp_path):
 
 
 def test_no_write_tool_accepts_a_destination_path():
-    from isaac_mcp.scene_contracts import REGISTRY
+    from twinsmith.scene_contracts import REGISTRY
 
     for name in ("assets.pack_adopt", "assets.pack_pin", "assets.pack_build"):
         assert not {"store", "root", "asset_root", "destination", "dest", "target"} & set(REGISTRY[name]["parameters"])
@@ -773,7 +774,7 @@ def test_no_write_tool_accepts_a_destination_path():
 
 
 def test_no_tool_can_approve_a_folder():
-    from isaac_mcp.scene_contracts import REGISTRY
+    from twinsmith.scene_contracts import REGISTRY
 
     assert not [name for name in REGISTRY if "approve" in name or "grant" in name]
     for name in REGISTRY:
@@ -802,8 +803,8 @@ def test_pin_and_doctor_default_to_the_project_files_pack(env, broker, monkeypat
     (directory / "a.usd").write_bytes(b"b")
     project = tmp_path / "proj"
     project.mkdir()
-    (project / "isaac-mcp.json").write_text(json.dumps({"pack": "chosen/v1"}))
-    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(project))
+    (project / "twinsmith.json").write_text(json.dumps({"pack": "chosen/v1"}))
+    monkeypatch.setenv("TWINSMITH_PROJECT", str(project))
     assert tool("assets.packs", broker)["selected_pack"] == "chosen/v1"
     assert tool("assets.pack_pin", broker, force=True)["pack_dir"].endswith("/chosen/v1")
     refused("INVALID_PACK", "assets.pack_doctor", broker, pack="no-version")
@@ -811,7 +812,7 @@ def test_pin_and_doctor_default_to_the_project_files_pack(env, broker, monkeypat
 
 def test_dependencies_tool_checks_trust_before_parsing(env, broker, tmp_path, monkeypatch):
     calls = []
-    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", "/nonexistent/python")
+    monkeypatch.setenv("TWINSMITH_USD_PYTHON", "/nonexistent/python")
     outside = put(tmp_path, "outside.usda")
 
     def kit(name, args):
@@ -825,7 +826,7 @@ def test_dependencies_tool_checks_trust_before_parsing(env, broker, tmp_path, mo
 
 
 def test_dependencies_tool_on_the_asset_root_and_a_root(env, broker, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
+    monkeypatch.setenv("TWINSMITH_USD_PYTHON", sys.executable)
     root = broker.roots["demo"][0]
     a = put(env / "p" / "v1", "a.usda", usda("./missing.usda"))
     b = put(root, "b.usda", usda())
@@ -836,7 +837,7 @@ def test_dependencies_tool_on_the_asset_root_and_a_root(env, broker, monkeypatch
 
 
 def test_build_tool_refuses_sources_outside_trust(env, broker, tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
+    monkeypatch.setenv("TWINSMITH_USD_PYTHON", sys.executable)
     outside = put(tmp_path, "outside.usda", usda())
     refused("ROOT_NOT_APPROVED", "assets.pack_build", broker, pack="p/v1", sources=[str(outside)], **PROVENANCE)
     refused("ROOT_NOT_APPROVED", "assets.pack_build", broker, pack="p/v1", sources=[str(outside)], layout_root=str(tmp_path), **PROVENANCE)
@@ -845,7 +846,7 @@ def test_build_tool_refuses_sources_outside_trust(env, broker, tmp_path, monkeyp
 
 def test_build_tool_does_not_copy_a_dependency_outside_trust(env, broker, tmp_path, monkeypatch):
     """A USD in an approved root must not be able to pull arbitrary files into a pack."""
-    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
+    monkeypatch.setenv("TWINSMITH_USD_PYTHON", sys.executable)
     root = broker.roots["demo"][0]
     secret = put(tmp_path, "private/secret.usda", usda())
     scene = put(root, "scene.usda", usda(str(secret.resolve())))
@@ -858,7 +859,7 @@ def test_build_tool_does_not_copy_a_dependency_outside_trust(env, broker, tmp_pa
 
 
 def test_build_tool_from_a_scene_in_a_root_and_a_pack_in_the_asset_root(env, broker, lab, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
+    monkeypatch.setenv("TWINSMITH_USD_PYTHON", sys.executable)
     root = broker.roots["demo"][0]
     scene = put(root, "scene.usda", usda("robot/ur5e.usda"))
     result = tool("assets.pack_build", broker, pack="bricksim/v1", sources=[str(scene)], from_pack="lab/v1")
@@ -870,7 +871,7 @@ def test_build_tool_from_a_scene_in_a_root_and_a_pack_in_the_asset_root(env, bro
 
 
 def test_build_tool_refuses_to_copy_out_of_a_pack_that_does_not_verify(env, broker, lab, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
+    monkeypatch.setenv("TWINSMITH_USD_PYTHON", sys.executable)
     (lab / "robot/ur5e.usda").write_text("#usda 1.0\n# edited by hand\n")
     refused("PACK_NOT_VERIFIED", "assets.pack_build", broker, pack="b/v1", sources=["robot/ur5e.usda"], from_pack="lab/v1")
     assert not (env / "b").exists()
@@ -881,15 +882,15 @@ def test_a_project_file_with_an_asset_path_is_an_error_not_an_approval(env, brok
     put(claimed, "scene.usda", usda())
     repo = tmp_path / "cloned-repo"
     repo.mkdir()
-    (repo / "isaac-mcp.json").write_text(json.dumps(dict(asset_path=[str(claimed)])))
-    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(repo))
+    (repo / "twinsmith.json").write_text(json.dumps(dict(asset_path=[str(claimed)])))
+    monkeypatch.setenv("TWINSMITH_PROJECT", str(repo))
     with pytest.raises(packs.PackError, match="not supported any more") as caught:
         tool("assets.pack_build", broker, pack="p/v1", sources=[str(claimed / "scene.usda")])
     assert caught.value.code == "INVALID_PACK" and not (env / "p").exists()
 
 
 def test_an_approved_folder_works(env, tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
+    monkeypatch.setenv("TWINSMITH_USD_PYTHON", sys.executable)
     claimed = tmp_path / "claimed"
     scene = put(claimed, "scene.usda", usda())
     config = config_for(tmp_path, {"c": str(claimed)}, "approval2.json")
@@ -898,7 +899,7 @@ def test_an_approved_folder_works(env, tmp_path, monkeypatch):
 
 
 def test_build_tool_refuses_an_absent_or_overlapping_source_pack(env, broker, lab, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
+    monkeypatch.setenv("TWINSMITH_USD_PYTHON", sys.executable)
     refused("PACK_NOT_VERIFIED", "assets.pack_build", broker, pack="p/v1", sources=["a.usda"], from_pack="absent/v1")
     refused("VERSION_EXISTS", "assets.pack_build", broker, pack="lab/v1", sources=["robot/ur5e.usda"], from_pack="lab/v1")
 
@@ -906,7 +907,7 @@ def test_build_tool_refuses_an_absent_or_overlapping_source_pack(env, broker, la
 def test_build_without_any_parser_says_how_to_get_one(env, broker, lab, monkeypatch):
     monkeypatch.setattr(packs, "usd_python", lambda: None)
     error = refused("USD_UNAVAILABLE", "assets.pack_build", broker, pack="p/v1", sources=["robot/ur5e.usda"], from_pack="lab/v1")
-    assert "ISAAC_MCP_USD_PYTHON" in str(error)
+    assert "TWINSMITH_USD_PYTHON" in str(error)
 
 
 def test_without_a_host_parser_the_kit_computes_the_closure(env, broker, lab, monkeypatch):
@@ -934,18 +935,18 @@ def test_doctor_tool_with_no_parser_and_a_dead_bridge_says_it_did_not_check(env,
 
 
 def test_invalid_project_pack_reaches_the_caller_as_an_error(env, tmp_path, monkeypatch):
-    from isaac_mcp import server as gw
+    from twinsmith import server as gw
 
     folder = tmp_path / "proj"
     folder.mkdir()
-    (folder / "isaac-mcp.json").write_text('{"pack": "../x"}')
-    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(folder))
+    (folder / "twinsmith.json").write_text('{"pack": "../x"}')
+    monkeypatch.setenv("TWINSMITH_PROJECT", str(folder))
     result = json.loads(gw._dispatch("assets.packs", {}))
     assert result["status"] == "error" and result["code"] == "INVALID_PACK"
 
 
 def test_host_tools_run_through_the_gateway_without_kit(env, monkeypatch):
-    from isaac_mcp import server as gw
+    from twinsmith import server as gw
 
     directory = make_pack(env, "p", "v1", {"a.usd": b"a"})
     (directory / "a.usd").write_bytes(b"b")
@@ -962,9 +963,8 @@ def test_host_tools_run_through_the_gateway_without_kit(env, monkeypatch):
 
 
 def test_tool_annotations_match_what_each_tool_does(monkeypatch):
-    from isaac_mcp import server as gw
+    from twinsmith import server as gw
 
-    monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     tools = gw.build_server({})._tool_manager._tools
     for name in ("assets__packs", "assets__pack_doctor", "assets__dependencies"):
         assert tools[name].annotations.readOnlyHint is True and tools[name].annotations.destructiveHint is False
@@ -973,8 +973,8 @@ def test_tool_annotations_match_what_each_tool_does(monkeypatch):
 
 
 def test_only_the_dependency_tool_is_served_by_kit():
-    from isaac_mcp import server as gw
-    from isaac_mcp.scene_contracts import HOST_ONLY, REGISTRY
+    from twinsmith import server as gw
+    from twinsmith.scene_contracts import HOST_ONLY, REGISTRY
 
     source = (REPO / "exts/sim-tools/sim_tools/extension.py").read_text()
     assert "pack_manifest.resolve_asset_root()" in source and "assets.user_stores()" not in source
@@ -1002,10 +1002,9 @@ def mcp_call(server, name, args):
 
 def test_every_pack_tool_publishes_string_arrays(monkeypatch):
     """A gateway default types arrays as numbers, which refused every path before any code ran."""
-    from isaac_mcp import server as gw
-    from isaac_mcp.scene_contracts import REGISTRY
+    from twinsmith import server as gw
+    from twinsmith.scene_contracts import REGISTRY
 
-    monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     tools = gw.build_server({})._tool_manager._tools
     checked = []
     for canonical in gw._PACK_TOOLS:
@@ -1020,10 +1019,9 @@ def test_every_pack_tool_publishes_string_arrays(monkeypatch):
 
 
 def test_pack_tools_take_their_arguments_through_a_real_mcp_session(env, tmp_path, monkeypatch):
-    from isaac_mcp import server as gw
+    from twinsmith import server as gw
 
-    monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
-    monkeypatch.setenv("ISAAC_MCP_USD_PYTHON", sys.executable)
+    monkeypatch.setenv("TWINSMITH_USD_PYTHON", sys.executable)
     root = tmp_path / "project"
     put(root, "robot/a.usda", usda("./b.usda"))
     put(root, "robot/b.usda", usda())
@@ -1033,7 +1031,7 @@ def test_pack_tools_take_their_arguments_through_a_real_mcp_session(env, tmp_pat
     staging.mkdir(mode=0o700)
     config = tmp_path / "approval.json"
     config.write_text(json.dumps(dict(version=1, profile="trusted_project", roots={"demo": str(root)}, staging=str(staging))))
-    server = gw.build_server({"ISAAC_MCP_ASSET_CONFIG": str(config)})
+    server = gw.build_server({"TWINSMITH_ASSET_CONFIG": str(config)})
 
     def call(name, **args):
         failed, text = mcp_call(server, name, args)
@@ -1242,7 +1240,7 @@ def test_overlapping_roots_still_refuse_even_when_one_is_missing(tmp_path):
 
 
 def test_the_helper_adds_a_root_to_an_existing_file(tmp_path, monkeypatch, capsys):
-    from isaac_mcp import project_assets as pa
+    from twinsmith import project_assets as pa
 
     one, two = tmp_path / "one", tmp_path / "two"
     one.mkdir()
@@ -1265,7 +1263,7 @@ def test_the_helper_adds_a_root_to_an_existing_file(tmp_path, monkeypatch, capsy
 
 
 def test_the_helper_can_set_up_staging_alone(tmp_path):
-    from isaac_mcp import project_assets as pa
+    from twinsmith import project_assets as pa
 
     config = tmp_path / "s.json"
     pa.main(["--config", str(config), "--trust-project", "--staging", str(tmp_path / "st")])
@@ -1316,7 +1314,7 @@ def test_a_symlink_in_a_pack_is_refused(env, tmp_path):
 
 
 def test_a_units_mismatch_says_what_to_change():
-    from isaac_mcp import project_assets as pa
+    from twinsmith import project_assets as pa
 
     message = pa.units_mismatch_message("Y", 0.01, "Z", 1.0)
     assert "upAxis=Y" in message and "upAxis=Z" in message and "metersPerUnit=0.01" in message
@@ -1325,7 +1323,7 @@ def test_a_units_mismatch_says_what_to_change():
 
 
 def test_approval_helper_refuses_a_second_root_rather_than_dropping_the_first(tmp_path, capsys):
-    from isaac_mcp import project_assets as _assets
+    from twinsmith import project_assets as _assets
 
     with pytest.raises(SystemExit):
         _assets.main(["--config", str(tmp_path / "c.json"), "--trust-project", "--root-id", "a", "--root", str(tmp_path),

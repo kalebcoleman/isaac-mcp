@@ -17,8 +17,8 @@ from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 
 from .compat import composition_errors
 
-from isaac_mcp.project_assets import refuse
-from isaac_mcp.urdf_physics import usd_gains, usd_name
+from twinsmith.project_assets import refuse
+from twinsmith.urdf_physics import usd_gains, usd_name
 
 GROUND_CLEARANCE_M = 0.005
 LOWEST_TOLERANCE_M = 0.001
@@ -45,8 +45,8 @@ def convert(urdf, output, fixed_base):
 
 def _no_python_log_listener():
     """The 5.x importer holds the GIL while it waits for worker threads. If a Python log listener is
-    installed, a worker that logs waits for the GIL and Kit hangs forever. The twin's panel has one."""
-    extension = getattr(sys.modules.get("ur5e_dt.extension"), "_EXT_INSTANCE", None)
+    installed, a worker that logs waits for the GIL and Kit hangs forever. The work cell's panel has one."""
+    extension = getattr(sys.modules.get("workcell.extension"), "_EXT_INSTANCE", None)
     pause = getattr(extension, "without_carb_log_capture", None)
     return pause() if pause else contextlib.nullcontext()
 
@@ -128,7 +128,7 @@ def repair_meshes_for_legacy_importer(mapped, project, folder):
     """The 5.x converter crashes Kit on a COLLADA file with no unit element, and the format says that
     means metres. Point such meshes at a private copy that says so, with what they name beside it.
     Returns the new mapping and the list of files repaired."""
-    from isaac_mcp import urdf_refs
+    from twinsmith import urdf_refs
 
     result, repaired = {}, []
     for reference, rel in mapped.items():

@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip("pxr")
 from pxr import Usd, UsdGeom
 from test_scene_usd import scene
-from isaac_mcp.project_assets import AssetError
+from twinsmith.project_assets import AssetError
 from sim_tools import sensors
 
 

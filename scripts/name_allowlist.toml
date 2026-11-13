@@ -1,190 +1,118 @@
+# Old names that may stay in tracked files, each with the reason. scripts/check_names.py --enforce fails on every
+# other hit, on an entry that matches nothing, and on an entry whose "remove_by" version has been reached.
+# "pattern" is a name from check_names.py's PATTERNS, or "*" for all of them; "literal" limits an entry to one spelling.
+
+# --- The table of old names, and the tests of it
+
+[[allow]]
+pattern = "*"
+path = "mcp/twinsmith/legacy.py"
+reason = "The alias table: the one place in the code where the old names are written."
+
+[[allow]]
+pattern = "*"
+path = "mcp/tests/test_legacy_names.py"
+reason = "Tests of the alias table; they must spell the old names they exercise."
+
+[[allow]]
+pattern = "*"
+path = "docs/MIGRATING.md"
+reason = "The migration page lists every old name next to its new one."
+
+# --- ISAAC_MCP_ASSET_ROOT is a permanent alias of TWINSMITH_ASSET_ROOT: no warning, no removal date
+
+[[allow]]
+pattern = "ISAAC_MCP"
+path = "exts/workcell/workcell/asset_pack.py"
+literal = "ISAAC_MCP_ASSET_ROOT"
+reason = "Permanent alias, read here because this loader runs in Kit and must work without the host's table."
+
 [[allow]]
 pattern = "ISAAC_MCP"
 path = "docs/ASSET-PACKS.md"
 literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Permanent asset-root compatibility alias, not the product name."
+reason = "Documents the permanent alias."
 
 [[allow]]
 pattern = "ISAAC_MCP"
-path = "exts/ur5e-dt/ur5e_dt/asset_pack.py"
+path = "docs/ENVIRONMENT.md"
 literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Permanent asset-root compatibility alias, not the product name."
+reason = "Documents the permanent alias."
 
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "exts/ur5e-dt/workcell/README.md"
-literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Permanent asset-root compatibility alias, not the product name."
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "exts/ur5e-dt/docs/README.md"
-literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Permanent asset-root compatibility alias, not the product name."
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "mcp/tests/test_workcell_pack.py"
-literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Permanent asset-root compatibility alias, not the product name."
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "mcp/tests/test_workcell_bom.py"
-literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Permanent asset-root compatibility alias, not the product name."
-
-[[allow]]
-pattern = "isaac-sim-mcp"
-path = "docs/VENDORING.md"
-reason = "Upstream project attribution and licence text must retain its original name."
-
-[[allow]]
-pattern = "omni-kit-mcp"
-path = "docs/VENDORING.md"
-reason = "Upstream project attribution and licence text must retain its original name."
-
-[[allow]]
-pattern = "isaac-sim-mcp"
-path = "docs/provenance/isaac-sim-mcp-LICENSE"
-reason = "Upstream project attribution and licence text must retain its original name."
+# --- Folder names that exist on users' disks
 
 [[allow]]
 pattern = "isaac-mcp"
-path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
+path = "*"
+literal = "isaac-mcp-assets"
+reason = "The transitional asset-root folder name is still recognised (with a warning); it is a folder on users' disks."
 
 [[allow]]
-pattern = "isaac_mcp"
-path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
+pattern = "isaac-mcp"
+path = "exts/workcell/workcell/cameras.py"
+literal = "isaac-mcp-salvage"
+reason = "A folder on a lab machine that a pack must never be loaded from; the check keeps refusing its name."
+
+# --- Upstream project names, licences and provenance
 
 [[allow]]
-pattern = "isaac_help"
-path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
+pattern = "isaac-sim-mcp"
+path = "*"
+reason = "Name of the upstream project this one grew from: attribution, vendoring record and licence text must keep it."
 
 [[allow]]
-pattern = "mcp__isaac__"
-path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
-
-[[allow]]
-pattern = "ur5e-dt"
-path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
-
-[[allow]]
-pattern = "ur5e_dt"
-path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
+pattern = "omni-kit-mcp"
+path = "*"
+reason = "Name of the upstream project this one grew from: attribution, vendoring record and licence text must keep it."
 
 [[allow]]
 pattern = "husarion"
-path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
+path = "THIRD-PARTY-NOTICES.md"
+reason = "Third-party notice and licence record for the Husarion RG2 description."
 
 [[allow]]
-pattern = "screen-mcp"
+pattern = "husarion"
+path = "docs/provenance/*"
+reason = "Licence file of the Husarion RG2 description."
+
+[[allow]]
+pattern = "husarion"
+path = "docs/VENDORING.md"
+reason = "Provenance record: which third-party files the lab assets contain."
+
+[[allow]]
+pattern = "husarion"
+path = "exts/workcell/workcell/*"
+reason = "The work cell's provenance notes: it uses the standard OnRobot RG2, not the Husarion model, and refuses that model."
+
+[[allow]]
+pattern = "husarion"
+path = "mcp/tests/test_workcell_*.py"
+reason = "Tests that the work cell refuses the Husarion RG2 model."
+
+# --- The checks themselves must spell the names they look for
+
+[[allow]]
+pattern = "*"
 path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
+reason = "The naming guard spells the names it detects."
+
+[[allow]]
+pattern = "*"
+path = "mcp/tests/test_check_names.py"
+reason = "The guard's test fixture spells the names it detects."
+
+[[allow]]
+pattern = "*"
+path = "scripts/name_allowlist.toml"
+reason = "The exceptions spell the names they permit."
 
 [[allow]]
 pattern = "physx-release"
-path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
+path = "scripts/check_docs.py"
+reason = "The documentation check lists the retired sentences it reports."
 
 [[allow]]
 pattern = "newton-experimental"
-path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
-
-[[allow]]
-pattern = "isaac-sim-mcp"
-path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
-
-[[allow]]
-pattern = "omni-kit-mcp"
-path = "scripts/check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
-
-[[allow]]
-pattern = "isaac-mcp"
-path = "mcp/tests/test_check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
-
-[[allow]]
-pattern = "isaac_mcp"
-path = "mcp/tests/test_check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "mcp/tests/test_check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
-
-[[allow]]
-pattern = "husarion"
-path = "mcp/tests/test_check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
-
-[[allow]]
-pattern = "newton-experimental"
-path = "mcp/tests/test_check_names.py"
-reason = "The naming guard and its fixture must spell the names they detect."
-
-[[allow]]
-pattern = "isaac-mcp"
-path = "scripts/name_allowlist.toml"
-reason = "Explicit exceptions must spell the legacy names they permit."
-
-[[allow]]
-pattern = "isaac_mcp"
-path = "scripts/name_allowlist.toml"
-reason = "Explicit exceptions must spell the legacy names they permit."
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "scripts/name_allowlist.toml"
-reason = "Explicit exceptions must spell the legacy names they permit."
-
-[[allow]]
-pattern = "isaac_help"
-path = "scripts/name_allowlist.toml"
-reason = "Explicit exceptions must spell the legacy names they permit."
-
-[[allow]]
-pattern = "mcp__isaac__"
-path = "scripts/name_allowlist.toml"
-reason = "Explicit exceptions must spell the legacy names they permit."
-
-[[allow]]
-pattern = "ur5e-dt"
-path = "scripts/name_allowlist.toml"
-reason = "Explicit exceptions must spell the legacy names they permit."
-
-[[allow]]
-pattern = "ur5e_dt"
-path = "scripts/name_allowlist.toml"
-reason = "Explicit exceptions must spell the legacy names they permit."
-
-[[allow]]
-pattern = "husarion"
-path = "scripts/name_allowlist.toml"
-reason = "Explicit exceptions must spell the legacy names they permit."
-
-[[allow]]
-pattern = "screen-mcp"
-path = "scripts/name_allowlist.toml"
-reason = "Explicit exceptions must spell the legacy names they permit."
-
-[[allow]]
-pattern = "isaac-sim-mcp"
-path = "scripts/name_allowlist.toml"
-reason = "Explicit exceptions must spell the legacy names they permit."
-
-[[allow]]
-pattern = "omni-kit-mcp"
-path = "scripts/name_allowlist.toml"
-reason = "Explicit exceptions must spell the legacy names they permit."
+path = "scripts/check_docs.py"
+reason = "The documentation check lists the retired sentences it reports."

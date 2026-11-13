@@ -6,9 +6,9 @@ import types
 
 import pytest
 
-from isaac_mcp_bridge import builtins as bi
-from isaac_mcp_bridge.protocol import ToolError
-from isaac_mcp_bridge.sessions import SessionStore
+from twinsmith_bridge import builtins as bi
+from twinsmith_bridge.protocol import ToolError
+from twinsmith_bridge.sessions import SessionStore
 
 
 @pytest.fixture(autouse=True)
@@ -163,9 +163,9 @@ def test_tasks_started_by_the_code_print_to_the_console_after_the_call(kit_stubs
 def test_proxy_handles_writelines_and_is_removed_on_shutdown(kit_stubs, capsys):
     out = run(kit_stubs, "import sys, asyncio\nsys.stdout.writelines(['a\\n', 'b\\n'])\nawait asyncio.sleep(0)")
     assert out["output"] == "a\nb\n"
-    assert getattr(sys.stdout, "_isaac_mcp_proxy", False)
+    assert getattr(sys.stdout, "_twinsmith_proxy", False)
     bi.remove_stdout_proxy()
-    assert not getattr(sys.stdout, "_isaac_mcp_proxy", False)
+    assert not getattr(sys.stdout, "_twinsmith_proxy", False)
 
 
 

@@ -6,8 +6,8 @@ import inspect
 import os
 from pathlib import Path
 
-from isaac_mcp.project_assets import refuse
-from isaac_mcp.sim_versions import reconcile_identity, sensor_stack_issues
+from twinsmith.project_assets import refuse
+from twinsmith.sim_versions import reconcile_identity, sensor_stack_issues
 
 
 @functools.lru_cache(maxsize=None)

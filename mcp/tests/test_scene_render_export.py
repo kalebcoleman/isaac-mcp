@@ -8,7 +8,7 @@ pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdRender
 from sim_tools.core import Scene
-from isaac_mcp.project_assets import AssetError
+from twinsmith.project_assets import AssetError
 
 
 class Timeline:

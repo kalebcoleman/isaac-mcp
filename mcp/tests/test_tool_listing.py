@@ -10,10 +10,10 @@ from pathlib import Path
 import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
 
-from isaac_mcp import grouped_tools, host_catalog, tool_groups
-from isaac_mcp import server as gw
-from isaac_mcp.scene_contracts import REGISTRY
-from isaac_mcp.tool_hints import CATALOG_HINTS
+from twinsmith import grouped_tools, host_catalog, tool_groups
+from twinsmith import server as gw
+from twinsmith.scene_contracts import REGISTRY
+from twinsmith.tool_hints import CATALOG_HINTS
 
 REPO = Path(__file__).resolve().parents[2]
 MAX_TOOL_DESCRIPTION = 600
@@ -27,10 +27,9 @@ ALL_GROUPS = "all,+input,+launch"
 
 
 def _listing(monkeypatch, tmp_path, single_purpose):
-    for name in ("ISAAC_MCP_NAMESPACE", "ISAAC_MCP_BUILTINS", "ISAAC_MCP_SCENE_TOOLS", "ISAAC_MCP_LOCAL_TOOLS",
-                 "ISAAC_MCP_GROUP_TOOLS"):
+    for name in gw.config.LEGACY:
         monkeypatch.delenv(name, raising=False)
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": ALL_GROUPS, "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path)})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": ALL_GROUPS, "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path)})
 
     if single_purpose:
         from mcp.types import Tool
@@ -107,7 +106,7 @@ def test_schema_titles_are_not_listed(either):
 @pytest.mark.parametrize(
     "name",
     ["screenshot", "start_screen_recording", "stop_screen_recording", "join_videos", "run_python", "put_file",
-     "ur5e_dt__jenga_build", "ur5e_dt__workcell_quick_start", "assets__pack_build", "isaaclab__runs_tail", "sim__camera__capture"],
+     "workcell__jenga_build", "workcell__workcell_quick_start", "assets__pack_build", "isaaclab__runs_tail", "sim__camera__capture"],
 )
 def test_nothing_that_writes_claims_to_be_read_only(single, name):
     listed = single
@@ -117,10 +116,10 @@ def test_nothing_that_writes_claims_to_be_read_only(single, name):
 def test_destructive_tools_say_so(single):
     listed = single
     hints = {t.name: t.annotations for t in listed}
-    for name in ("run_python", "put_file", "ur5e_dt__workcell_quick_start", "ur5e_dt__jenga_build", "job_cancel",
+    for name in ("run_python", "put_file", "workcell__workcell_quick_start", "workcell__jenga_build", "job_cancel",
                  "window_click", "sim__stop"):
         assert hints[name].destructiveHint is True, name
-    for name in ("status", "get_file", "stat_file", "ur5e_dt__workcell_status", "screen_info"):
+    for name in ("status", "get_file", "stat_file", "workcell__workcell_status", "screen_info"):
         assert hints[name].readOnlyHint is True and hints[name].destructiveHint is False, name
 
 
@@ -140,7 +139,7 @@ def test_catalogued_tools_meet_the_limits_offline():
 
 def test_every_catalogued_tool_has_hints():
     missing = sorted(set(host_catalog.load_catalog()) - set(REGISTRY) - set(CATALOG_HINTS))
-    assert not missing, f"Add these to isaac_mcp/tool_hints.py: {missing}"
+    assert not missing, f"Add these to twinsmith/tool_hints.py: {missing}"
     stale = sorted(set(CATALOG_HINTS) - set(host_catalog.load_catalog()))
     assert not stale, stale
 
@@ -158,9 +157,9 @@ def test_instructions_name_the_starting_points_and_what_is_universal():
 
 
 def test_the_skill_has_a_decision_path():
-    text = (REPO / ".agents/skills/isaac-mcp/SKILL.md").read_text()
+    text = (REPO / ".agents/skills/twinsmith/SKILL.md").read_text()
     head = text[text.index("## Which tool do I start with?"):text.index("## Ground rules")]
-    assert "sim__quick_start" in head and "sim__stage__info" in head and "ur5e_dt__workcell_quick_start" in head
+    assert "sim__quick_start" in head and "sim__stage__info" in head and "workcell__cell" in head
 
 
 def test_the_argument_reference_shows_clean_types():
@@ -228,7 +227,7 @@ def test_what_the_server_says_names_tools_as_the_client_is_shown_them(listed, mo
     pattern = __import__("re").compile(r"(?<![A-Za-z0-9_])(" + "|".join(sorted(hidden, key=len, reverse=True)) + r")(?![A-Za-z0-9_*])")
     named = {t.name: sorted(set(pattern.findall(t.description + json.dumps(t.inputSchema)))) for t in listed}
     assert not {name: found for name, found in named.items() if found}, "a listed tool names a tool the client cannot see"
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
     assert "status" in server.instructions and "toolsets" in server.instructions
 
 
@@ -248,7 +247,7 @@ def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
         def close(self):
             pass
 
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
     gw._state_for(server).client = Endpoint()
 
     async def run():
@@ -277,7 +276,7 @@ def test_a_grouped_argument_takes_every_kind_its_actions_take_and_text_stays_tex
     joints = next(t for t in listed if t.name == "sim__joints").inputSchema["properties"]
     kinds = {kind.get("type") for kind in joints["positions"]["anyOf"]}
     assert kinds == {"array", "object"}, "command takes a list, teleport a mapping"
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": ALL_GROUPS})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": ALL_GROUPS})
     seen = []
     server._tool_manager._tools["window_type"].fn = lambda **given: seen.append(given) or "typed"
 
@@ -305,7 +304,7 @@ def test_advice_beside_the_caller_s_data_names_listed_tools(monkeypatch):
             pass
 
     monkeypatch.setattr(gw, "_job_record", lambda job_id: None)
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "minimal"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "minimal"})
     gw._state_for(server).client = Endpoint()
 
     async def run():

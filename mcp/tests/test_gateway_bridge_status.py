@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_use_bridge_refuses_a_bad_port_without_dialling(port):
     import asyncio
 
-    from isaac_mcp import server as server_module
+    from twinsmith import server as server_module
 
     result = asyncio.run(server_module._use_bridge(server_module.FastMCP("t"), port))
     assert result.startswith("Error: port must be a number")
@@ -20,7 +20,7 @@ def test_use_bridge_refuses_a_bad_port_without_dialling(port):
 
 
 def test_sim_status_tells_a_busy_bridge_from_a_dead_one(monkeypatch):
-    from isaac_mcp import client, sim_sessions
+    from twinsmith import client, sim_sessions
 
     def busy(*args, **kwargs):
         raise client.BridgeError("AUTH_REQUIRED")
@@ -37,7 +37,7 @@ def test_sim_status_tells_a_busy_bridge_from_a_dead_one(monkeypatch):
 
 
 def test_a_garbled_bridge_reply_disconnects_instead_of_desynchronising():
-    from isaac_mcp import client
+    from twinsmith import client
 
     class Sock:
         def __init__(self):

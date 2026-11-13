@@ -433,54 +433,6 @@ wheels = [
 ]
 
 [[package]]
-name = "isaac-mcp"
-version = "0.2.0"
-source = { editable = "." }
-dependencies = [
-    { name = "httpx" },
-    { name = "imageio-ffmpeg" },
-    { name = "mcp", extra = ["cli"] },
-    { name = "mss" },
-    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "python-xlib" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-]
-
-[package.optional-dependencies]
-isaaclab = [
-    { name = "tensorboard" },
-]
-scene-test = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "usd-core", version = "26.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "usd-core", version = "26.11", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-]
-test = [
-    { name = "pytest" },
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27.1,<1" },
-    { name = "imageio-ffmpeg", specifier = ">=0.5" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.22,<2" },
-    { name = "mss", specifier = ">=10.0" },
-    { name = "numpy", marker = "extra == 'scene-test'" },
-    { name = "pillow", specifier = ">=10.1" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "python-xlib", specifier = ">=0.33" },
-    { name = "pyyaml", marker = "extra == 'test'" },
-    { name = "tensorboard", marker = "extra == 'isaaclab'", specifier = ">=2.14" },
-    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2" },
-    { name = "usd-core", marker = "extra == 'scene-test'", specifier = ">=25.11,<27" },
-]
-provides-extras = ["test", "scene-test", "isaaclab"]
-
-[[package]]
 name = "jsonschema"
 version = "4.26.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2128,6 +2080,54 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/72/01/e8c1debb2173973372934c68fc8e46170ab60ef23ed4592dff4dec6e8993/tomli-2.5.0-cp315-cp315t-win_arm64.whl", hash = "sha256:d2ba24db8a9376921b5e87b4762b9adb0f3f1deaea68f2b8b0bb2c11efb9c3e7", size = 115069, upload-time = "2026-10-07T12:23:35.77Z" },
     { url = "https://files.pythonhosted.org/packages/60/3f/3e3f8fd0919249b0200c80fbc4f9a1e70be19f9883da71dfb7f8b9ab8aca/tomli-2.5.0-py3-none-any.whl", hash = "sha256:32a7b79ac57a2e83670ce329ccf675798bc5a2094783a63676866b70503f2e2b", size = 14765, upload-time = "2026-10-07T12:23:36.875Z" },
 ]
+
+[[package]]
+name = "twinsmith"
+version = "0.3.0"
+source = { editable = "." }
+dependencies = [
+    { name = "httpx" },
+    { name = "imageio-ffmpeg" },
+    { name = "mcp", extra = ["cli"] },
+    { name = "mss" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "python-xlib" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
+]
+
+[package.optional-dependencies]
+isaaclab = [
+    { name = "tensorboard" },
+]
+scene-test = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "usd-core", version = "26.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "usd-core", version = "26.11", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27.1,<1" },
+    { name = "imageio-ffmpeg", specifier = ">=0.5" },
+    { name = "mcp", extras = ["cli"], specifier = ">=1.22,<2" },
+    { name = "mss", specifier = ">=10.0" },
+    { name = "numpy", marker = "extra == 'scene-test'" },
+    { name = "pillow", specifier = ">=10.1" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "python-xlib", specifier = ">=0.33" },
+    { name = "pyyaml", marker = "extra == 'test'" },
+    { name = "tensorboard", marker = "extra == 'isaaclab'", specifier = ">=2.14" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2" },
+    { name = "usd-core", marker = "extra == 'scene-test'", specifier = ">=25.11,<27" },
+]
+provides-extras = ["test", "scene-test", "isaaclab"]
 
 [[package]]
 name = "typer"

@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "mcp"))
-from isaac_mcp.client import BridgeClient  # noqa: E402
+from twinsmith.client import BridgeClient  # noqa: E402
 
 
 def main():
@@ -25,7 +25,7 @@ def main():
         identity = bridge.call("status", {})
         print("Bridge:", json.dumps(identity, default=str), flush=True)
         code = f'''import omni.usd
-from ur5e_dt.scene import Workcell
+from workcell.scene import Workcell
 from pxr import UsdPhysics, UsdGeom, PhysxSchema
 workcell = Workcell()
 report = await workcell.quick_start(config_path={args.config!r}, mode={args.mode!r}, discard_changes={args.discard_changes!r})

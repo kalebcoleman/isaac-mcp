@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from isaac_mcp import config, sim_sessions as sim
+from twinsmith import config, sim_sessions as sim
 
 _REAL_CHECK_PORT = sim._check_port   # the setup fixture replaces it
 
@@ -23,7 +23,7 @@ _REAL_CHECK_PORT = sim._check_port   # the setup fixture replaces it
 @pytest.fixture(autouse=True)
 def runtime(tmp_path, monkeypatch):
     """The trusted runtime folder claims live in; XDG_RUNTIME_DIR names its parent for children."""
-    folder = tmp_path / "isaac-mcp"
+    folder = tmp_path / "twinsmith"
     folder.mkdir(mode=0o700)
     monkeypatch.setattr(sim.client, "_runtime_dir", lambda: str(folder))
     return folder
@@ -36,9 +36,9 @@ def setup(monkeypatch, tmp_path):
     run = root / "run.sh"
     run.write_text("#!/bin/sh\nexit 0\n")
     run.chmod(0o755)
-    env = {"ISAAC_MCP_SIM_ROOT": str(root), "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "sessions"),
-           "UR5E_DT_PYTHON": "/configured/sim-python", "ISAAC_MCP_PYTHON": "/configured/new-python",
-           "ISAAC_MCP_WORKSPACE": "/configured/workspace"}
+    env = {"TWINSMITH_SIM_ROOT": str(root), "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path / "sessions"),
+           "TWINSMITH_SIM_PYTHON": "/configured/sim-python",
+           "TWINSMITH_WORKSPACE": "/configured/workspace"}
     monkeypatch.setenv("HOME", str(tmp_path / "home"))       # no configuration file of the machine's own
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sim.client, "discover_bridges", lambda: [])
@@ -61,10 +61,10 @@ def test_launch_checks_port_domain_limit_and_resources(setup, monkeypatch):
         sim._launch(setup, 18766, 233, False, False)
     with pytest.raises(ValueError, match="Cyclone DDS"):
         sim._launch(setup, 18766, 232, False, False)
-    setup["ISAAC_MCP_SIM_MAX_INSTANCES"] = "1"
+    setup["TWINSMITH_SIM_MAX_INSTANCES"] = "1"
     with pytest.raises(RuntimeError, match="already active"):
         sim._launch(setup, 18766, 9, False, False)
-    setup["ISAAC_MCP_SIM_MAX_INSTANCES"] = "2"
+    setup["TWINSMITH_SIM_MAX_INSTANCES"] = "2"
     monkeypatch.setattr(sim, "_resources", lambda: {"gpu_total_mib": 16000, "gpu_free_mib": 100,
                                                      "ram_available_mib": 24000})
     with pytest.raises(RuntimeError, match="headroom"):
@@ -89,27 +89,24 @@ def test_launch_records_identity_and_isolates_environment(setup, monkeypatch):
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
     monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
     monkeypatch.setenv("PYTHONPATH", "/unrelated/project")
-    monkeypatch.setenv("ISAAC_MCP_BIND", "0.0.0.0")
-    monkeypatch.setenv("UR5E_DT_SHOW_PANEL", "1")
-    monkeypatch.setenv("ISAAC_MCP_SIM_SESSION_ID", "foreign")
-    monkeypatch.setenv("ISAAC_MCP_SIM_SESSION_DIR", "/foreign/session")
+    monkeypatch.setenv("TWINSMITH_BIND", "0.0.0.0")
+    monkeypatch.setenv("TWINSMITH_SIM_SESSION_ID", "foreign")
+    monkeypatch.setenv("TWINSMITH_SIM_SESSION_DIR", "/foreign/session")
     result = sim._launch(setup, 18766, 197, True, False)
     assert result["state"] == "starting" and result["pid"] == 510
     saved = json.loads((Path(result["log"]).parent / "session.json").read_text())
     assert saved["id"] == result["id"] and saved["start_ticks"] == 12345
     assert "boot_id" not in result and "start_ticks" not in result
     child = captured["env"]
-    assert child["ROS_DOMAIN_ID"] == "197" and child["ISAAC_MCP_PORT"] == "18766"
-    assert child["ISAAC_MCP_BIND"] == "127.0.0.1" and child["MCP_CLIENT_OUTPUT_DIR"] == result["output_dir"]
-    assert child["ISAAC_MCP_SIM_SESSION_ID"] == result["id"]
-    assert child["ISAAC_MCP_SIM_SESSION_DIR"] == str(Path(result["log"]).parent)
-    assert child["UR5E_DT_PYTHON"] == "/configured/sim-python"
-    assert child["ISAAC_MCP_PYTHON"] == "/configured/new-python"
-    assert child["ISAAC_MCP_WORKSPACE"] == "/configured/workspace"
-    assert child["ISAAC_MCP_PHYSICS_BACKEND"] == config.DEFAULT_PHYSICS_BACKEND     # no argument: the configured default
+    assert child["ROS_DOMAIN_ID"] == "197" and child["TWINSMITH_PORT"] == "18766"
+    assert child["TWINSMITH_BIND"] == "127.0.0.1" and child["MCP_CLIENT_OUTPUT_DIR"] == result["output_dir"]
+    assert child["TWINSMITH_SIM_SESSION_ID"] == result["id"]
+    assert child["TWINSMITH_SIM_SESSION_DIR"] == str(Path(result["log"]).parent)
+    assert child["TWINSMITH_SIM_PYTHON"] == "/configured/sim-python"
+    assert child["TWINSMITH_WORKSPACE"] == "/configured/workspace"
+    assert child["TWINSMITH_PHYSICS_BACKEND"] == config.DEFAULT_PHYSICS_BACKEND     # no argument: the configured default
     assert result["physics_backend"] == config.DEFAULT_PHYSICS_BACKEND and result["physics_backend_source"] == "built-in"
     assert "PYTHONPATH" not in child
-    assert "UR5E_DT_SHOW_PANEL" not in child
     assert "--headless" in captured["args"] and captured["start_new_session"] is True
     assert "--ur5e-panel" not in captured["args"]
     assert captured["args"][-1] == f"--/app/userConfigPath={result['user_config']}"
@@ -132,18 +129,18 @@ def test_launch_selects_sensor_renderer(setup, monkeypatch, motion_bvh, backend)
     assert ("--motion-bvh" in captured["args"]) is motion_bvh
     assert result["enable_motion_bvh"] is motion_bvh
     assert result["physics_backend"] == backend
-    assert captured["env"]["ISAAC_MCP_PHYSICS_BACKEND"] == backend
+    assert captured["env"]["TWINSMITH_PHYSICS_BACKEND"] == backend
 
 
 def test_unknown_backend_refuses_before_process_or_session_creation(setup):
     with pytest.raises(ValueError, match="physics_backend"):
         sim._launch(setup, 18766, 197, False, False, physics_backend="automatic")
-    assert not Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"]).exists()
+    assert not Path(setup["TWINSMITH_SIM_SESSIONS_DIR"]).exists()
 
 
 def test_relative_sessions_directory_is_shared_with_simulator(setup, monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    setup["ISAAC_MCP_SIM_SESSIONS_DIR"] = "relative/sessions"
+    setup["TWINSMITH_SIM_SESSIONS_DIR"] = "relative/sessions"
     captured = {}
 
     def popen(args, **kwargs):
@@ -165,12 +162,10 @@ def test_relative_sessions_directory_is_shared_with_simulator(setup, monkeypatch
 
 
 def test_explicit_server_settings_do_not_inherit_an_unselected_sim_interpreter(setup, monkeypatch):
-    setup.pop("UR5E_DT_PYTHON")
-    setup.pop("ISAAC_MCP_PYTHON")
-    setup.pop("ISAAC_MCP_WORKSPACE")
-    monkeypatch.setenv("UR5E_DT_PYTHON", "/other/server/python")
-    monkeypatch.setenv("ISAAC_MCP_PYTHON", "/other/server/python2")
-    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", "/other/ws")
+    setup.pop("TWINSMITH_SIM_PYTHON")
+    setup.pop("TWINSMITH_WORKSPACE")
+    monkeypatch.setenv("TWINSMITH_SIM_PYTHON", "/other/server/python")
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", "/other/ws")
     captured = {}
 
     def popen(args, **kwargs):
@@ -181,8 +176,7 @@ def test_explicit_server_settings_do_not_inherit_an_unselected_sim_interpreter(s
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 12345))
     monkeypatch.setattr(sim.threading, "Thread", lambda **kwargs: SimpleNamespace(start=lambda: None))
     sim._launch(setup, 18766, 197, False, False)
-    assert "UR5E_DT_PYTHON" not in captured["env"]
-    assert "ISAAC_MCP_PYTHON" not in captured["env"] and "ISAAC_MCP_WORKSPACE" not in captured["env"]
+    assert "TWINSMITH_SIM_PYTHON" not in captured["env"] and "TWINSMITH_WORKSPACE" not in captured["env"]
 
 
 def test_failed_identity_check_stops_child_instead_of_waiting_indefinitely(setup, monkeypatch):
@@ -199,7 +193,7 @@ def test_failed_identity_check_stops_child_instead_of_waiting_indefinitely(setup
 
 
 def _record(env, session_id="a" * 32, **extra):
-    path = Path(env["ISAAC_MCP_SIM_SESSIONS_DIR"]) / session_id
+    path = Path(env["TWINSMITH_SIM_SESSIONS_DIR"]) / session_id
     path.mkdir(parents=True)
     data = {"id": session_id, "pid": 510, "start_ticks": 12345, "boot_id": "test-boot",
             "port": 18766, "ros_domain": 197, **extra}
@@ -403,7 +397,7 @@ def test_the_real_bridge_can_bind_a_port_in_time_wait():
     import asyncio
     import threading
 
-    from isaac_mcp.client import call
+    from twinsmith.client import call
     from bridge_testing import make_bridge
 
     port = _time_wait_port()
@@ -465,7 +459,7 @@ def test_ros_domain_refusal_says_how_to_proceed(setup, monkeypatch, holder):
         named = "bridge PID 48526"
     elif holder == "session":
         data = _record(setup)
-        (Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"]) / data["id"] / "session.json").write_text(
+        (Path(setup["TWINSMITH_SIM_SESSIONS_DIR"]) / data["id"] / "session.json").write_text(
             json.dumps({**data, "ros_domain": 0}))
         monkeypatch.setattr(sim, "_alive", lambda data: True)
         named = "a managed session"
@@ -584,7 +578,7 @@ def launcher(tmp_path, mode=0o755):
 
 def test_configured_launcher_runs_with_run_sh_arguments_and_is_recorded(setup, tmp_path, monkeypatch):
     path = launcher(tmp_path)
-    setup["ISAAC_MCP_SIM_LAUNCHER"] = str(path)
+    setup["TWINSMITH_SIM_LAUNCHER"] = str(path)
     seen = {}
     real = sim.subprocess.Popen
 
@@ -601,19 +595,19 @@ def test_configured_launcher_runs_with_run_sh_arguments_and_is_recorded(setup, t
 
 @pytest.mark.parametrize("value,error", [("relative/launch.sh", "absolute"), ("/no/such/launcher", "cannot be read")])
 def test_configured_launcher_bad_paths(setup, value, error):
-    setup["ISAAC_MCP_SIM_LAUNCHER"] = value
+    setup["TWINSMITH_SIM_LAUNCHER"] = value
     with pytest.raises(RuntimeError, match=error):
         sim._launch(setup, 18766, 9, True, False)
 
 
 def test_configured_launcher_must_not_be_writable_by_others(setup, tmp_path):
-    setup["ISAAC_MCP_SIM_LAUNCHER"] = str(launcher(tmp_path, 0o775))
+    setup["TWINSMITH_SIM_LAUNCHER"] = str(launcher(tmp_path, 0o775))
     with pytest.raises(RuntimeError, match="writable"):
         sim._launch(setup, 18766, 9, True, False)
 
 
 def test_configured_launcher_must_be_executable(setup, tmp_path):
-    setup["ISAAC_MCP_SIM_LAUNCHER"] = str(launcher(tmp_path, 0o644))
+    setup["TWINSMITH_SIM_LAUNCHER"] = str(launcher(tmp_path, 0o644))
     with pytest.raises(RuntimeError, match="not an executable"):
         sim._launch(setup, 18766, 9, True, False)
 
@@ -628,8 +622,8 @@ def test_no_tool_argument_can_name_a_command(setup):
 
 def test_launcher_setting_is_read_when_the_server_starts_not_at_each_call(setup, tmp_path, monkeypatch):
     server = _tool_server(setup)
-    monkeypatch.setenv("ISAAC_MCP_SIM_LAUNCHER", "/no/such/launcher")
-    assert "ISAAC_MCP_SIM_LAUNCHER" not in setup
+    monkeypatch.setenv("TWINSMITH_SIM_LAUNCHER", "/no/such/launcher")
+    assert "TWINSMITH_SIM_LAUNCHER" not in setup
     assert server["sim__launch"](port=18766, ros_domain=9)["managed"] is True
 
 
@@ -645,7 +639,7 @@ def fake_interpreter(prefix, release):
 
 
 def test_newton_on_51_refuses_before_starting_anything(setup, tmp_path, monkeypatch):
-    setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
+    setup["TWINSMITH_SIM_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
     monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
     with pytest.raises(ValueError, match="5.1.0.0 has no Newton") as error:
         sim._launch(setup, 18766, 9, True, False, physics_backend="newton")
@@ -653,9 +647,9 @@ def test_newton_on_51_refuses_before_starting_anything(setup, tmp_path, monkeypa
 
 
 def test_physx_on_51_and_newton_on_62_are_not_refused(setup, tmp_path):
-    setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
+    setup["TWINSMITH_SIM_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
     assert sim._launch(setup, 18766, 9, True, False, physics_backend="physx")["physics_backend"] == "physx"
-    setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py62", "6.2.0.0"))
+    setup["TWINSMITH_SIM_PYTHON"] = str(fake_interpreter(tmp_path / "py62", "6.2.0.0"))
     assert sim._launch(setup, 18767, 10, True, False, physics_backend="newton")["physics_backend"] == "newton"
 
 
@@ -673,7 +667,7 @@ def _exited_record(base, session_id, started, pid=1):
 
 
 def test_listing_bounds_old_exited_sessions_without_deleting_them(setup, tmp_path):
-    base = Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"])
+    base = Path(setup["TWINSMITH_SIM_SESSIONS_DIR"])
     folders = [_exited_record(base, f"{i:032x}", float(i)) for i in range(7)]
     server = _tool_server(setup)
     listed = server["sim__list"]()
@@ -685,7 +679,7 @@ def test_listing_bounds_old_exited_sessions_without_deleting_them(setup, tmp_pat
 
 
 def test_listing_never_omits_a_live_session(setup, monkeypatch):
-    base = Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"])
+    base = Path(setup["TWINSMITH_SIM_SESSIONS_DIR"])
     for i in range(6):
         _exited_record(base, f"{i:032x}", float(i))
     monkeypatch.setattr(sim, "_alive", lambda session: session["id"] == f"{0:032x}")
@@ -694,7 +688,7 @@ def test_listing_never_omits_a_live_session(setup, monkeypatch):
 
 
 def test_a_launch_inherits_the_servers_environment_and_scrubs_the_documented_keys(setup, monkeypatch):
-    """docs/TOOLS-HOST.md says ISAAC_MCP_ASSET_ROOT and DISPLAY come from the server's environment."""
+    """docs/TOOLS-HOST.md says TWINSMITH_ASSET_ROOT and DISPLAY come from the server's environment."""
     seen = {}
     real = sim.subprocess.Popen
 
@@ -704,63 +698,62 @@ def test_a_launch_inherits_the_servers_environment_and_scrubs_the_documented_key
 
     monkeypatch.setattr(sim.subprocess, "Popen", popen)
     monkeypatch.setattr(sim, "_process_identity", lambda pid: ("S", 1))
-    for key, value in {"ISAAC_MCP_ASSET_ROOT": "/assets", "DISPLAY": ":7", "PYTHONPATH": "/x", "UR5E_DT_HEADLESS": "1",
-                       "UR5E_DT_SHOW_PANEL": "1"}.items():
+    for key, value in {"TWINSMITH_ASSET_ROOT": "/assets", "DISPLAY": ":7", "PYTHONPATH": "/x", "TWINSMITH_HEADLESS": "1"}.items():
         monkeypatch.setenv(key, value)
     sim._launch(setup, 18766, 9, True, False)
-    assert seen["ISAAC_MCP_ASSET_ROOT"] == "/assets" and seen["DISPLAY"] == ":7"
-    for key in ("PYTHONPATH", "UR5E_DT_HEADLESS", "UR5E_DT_SHOW_PANEL"):
+    assert seen["TWINSMITH_ASSET_ROOT"] == "/assets" and seen["DISPLAY"] == ":7"
+    for key in ("PYTHONPATH", "TWINSMITH_HEADLESS"):
         assert key not in seen
-    assert seen["ISAAC_MCP_PYTHON"] == setup["ISAAC_MCP_PYTHON"]  # scrubbed, then set from the server's settings
+    assert seen["TWINSMITH_SIM_PYTHON"] == setup["TWINSMITH_SIM_PYTHON"]  # scrubbed, then set from the server's settings
 
 
 # ---- allowed ranges: which ports and ROS domains a launch may use ---------------------------------
 
 def test_a_configured_range_is_parsed_and_a_blank_one_is_unset():
-    env = {"ISAAC_MCP_PORT_RANGE": "18800-18899", "ISAAC_MCP_ROS_DOMAIN_RANGE": " 40-49 "}
-    assert sim._launch_range(env, "ISAAC_MCP_PORT_RANGE", 1024, 65535) == (18800, 18899)
-    assert sim._launch_range(env, "ISAAC_MCP_ROS_DOMAIN_RANGE", 0, 231) == (40, 49)
-    assert sim._launch_range({}, "ISAAC_MCP_PORT_RANGE", 1024, 65535) is None
-    assert sim._launch_range({"ISAAC_MCP_PORT_RANGE": "  "}, "ISAAC_MCP_PORT_RANGE", 1024, 65535) is None
+    env = {"TWINSMITH_PORT_RANGE": "18800-18899", "TWINSMITH_ROS_DOMAIN_RANGE": " 40-49 "}
+    assert sim._launch_range(env, "TWINSMITH_PORT_RANGE", 1024, 65535) == (18800, 18899)
+    assert sim._launch_range(env, "TWINSMITH_ROS_DOMAIN_RANGE", 0, 231) == (40, 49)
+    assert sim._launch_range({}, "TWINSMITH_PORT_RANGE", 1024, 65535) is None
+    assert sim._launch_range({"TWINSMITH_PORT_RANGE": "  "}, "TWINSMITH_PORT_RANGE", 1024, 65535) is None
 
 
 @pytest.mark.parametrize("value", ["18800", "18800-", "-18899", "eighteen", "18899-18800", "80-90", "1-70000"])
 def test_a_malformed_port_range_is_an_error_not_ignored(value):
-    with pytest.raises(ValueError, match="ISAAC_MCP_PORT_RANGE"):
-        sim._launch_range({"ISAAC_MCP_PORT_RANGE": value}, "ISAAC_MCP_PORT_RANGE", 1024, 65535)
+    with pytest.raises(ValueError, match="TWINSMITH_PORT_RANGE"):
+        sim._launch_range({"TWINSMITH_PORT_RANGE": value}, "TWINSMITH_PORT_RANGE", 1024, 65535)
 
 
 @pytest.mark.parametrize("value", ["40", "49-40", "0-232", "abc"])
 def test_a_malformed_domain_range_is_an_error_not_ignored(value):
-    with pytest.raises(ValueError, match="ISAAC_MCP_ROS_DOMAIN_RANGE"):
-        sim._launch_range({"ISAAC_MCP_ROS_DOMAIN_RANGE": value}, "ISAAC_MCP_ROS_DOMAIN_RANGE", 0, 231)
+    with pytest.raises(ValueError, match="TWINSMITH_ROS_DOMAIN_RANGE"):
+        sim._launch_range({"TWINSMITH_ROS_DOMAIN_RANGE": value}, "TWINSMITH_ROS_DOMAIN_RANGE", 0, 231)
 
 
 def test_a_malformed_range_refuses_before_starting_anything(setup, monkeypatch):
-    setup["ISAAC_MCP_PORT_RANGE"] = "eighteen-thousand"
+    setup["TWINSMITH_PORT_RANGE"] = "eighteen-thousand"
     monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
     with pytest.raises(ValueError, match="must be a range like 1024-65535"):
         sim._launch(setup, 18766, 9, True, False)
-    assert not Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"]).exists()
+    assert not Path(setup["TWINSMITH_SIM_SESSIONS_DIR"]).exists()
 
 
 def test_a_port_outside_the_range_is_refused_with_a_code_and_the_range(setup, monkeypatch):
-    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18899"
+    setup["TWINSMITH_PORT_RANGE"] = "18800-18899"
     monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
     with pytest.raises(ValueError) as caught:
         sim._launch(setup, 19000, 9, True, False)
     assert caught.value.code == "PORT_OUT_OF_RANGE"
-    assert "19000" in str(caught.value) and "ISAAC_MCP_PORT_RANGE 18800-18899" in str(caught.value)
-    assert not Path(setup["ISAAC_MCP_SIM_SESSIONS_DIR"]).exists()
+    assert "19000" in str(caught.value) and "TWINSMITH_PORT_RANGE 18800-18899" in str(caught.value)
+    assert not Path(setup["TWINSMITH_SIM_SESSIONS_DIR"]).exists()
 
 
 def test_a_ros_domain_outside_the_range_is_refused_with_a_code_and_the_range(setup, monkeypatch):
-    setup["ISAAC_MCP_ROS_DOMAIN_RANGE"] = "40-49"
+    setup["TWINSMITH_ROS_DOMAIN_RANGE"] = "40-49"
     monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
     with pytest.raises(ValueError) as caught:
         sim._launch(setup, 18766, 50, True, False)
     assert caught.value.code == "ROS_DOMAIN_OUT_OF_RANGE"
-    assert "ISAAC_MCP_ROS_DOMAIN_RANGE 40-49" in str(caught.value)
+    assert "TWINSMITH_ROS_DOMAIN_RANGE 40-49" in str(caught.value)
 
 
 # ---- claims: one exclusive file per port and per ROS domain --------------------------------------
@@ -793,7 +786,7 @@ def test_two_host_processes_cannot_claim_the_same_port(runtime, tmp_path):
     go = tmp_path / "go"
     script = textwrap.dedent("""
         import os, sys, time
-        from isaac_mcp import sim_sessions as sim
+        from twinsmith import sim_sessions as sim
         deadline = time.monotonic() + 20
         while not os.path.exists(sys.argv[1]):
             if time.monotonic() > deadline:
@@ -862,7 +855,7 @@ def test_an_untrusted_runtime_folder_is_refused(runtime):
 
 
 def test_a_stated_port_claimed_by_another_launch_is_refused(setup, runtime):
-    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18899"
+    setup["TWINSMITH_PORT_RANGE"] = "18800-18899"
     sim._claim("port", 18800, sim._claim_owner())
     with pytest.raises(ValueError) as caught:
         sim._launch(setup, 18800, 40, True, False)
@@ -870,7 +863,7 @@ def test_a_stated_port_claimed_by_another_launch_is_refused(setup, runtime):
 
 
 def test_a_stated_domain_claimed_by_another_launch_is_refused(setup, runtime):
-    setup["ISAAC_MCP_ROS_DOMAIN_RANGE"] = "40-49"
+    setup["TWINSMITH_ROS_DOMAIN_RANGE"] = "40-49"
     sim._claim("ros_domain", 41, sim._claim_owner())
     with pytest.raises(ValueError) as caught:
         sim._launch(setup, 18766, 41, True, False)
@@ -884,8 +877,8 @@ def test_allow_shared_domain_skips_the_domain_claim(setup, runtime, monkeypatch)
 
 
 def test_a_failed_launch_releases_its_claims(setup, runtime, monkeypatch):
-    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18899"
-    setup["ISAAC_MCP_ROS_DOMAIN_RANGE"] = "40-49"
+    setup["TWINSMITH_PORT_RANGE"] = "18800-18899"
+    setup["TWINSMITH_ROS_DOMAIN_RANGE"] = "40-49"
     monkeypatch.setattr(sim, "_resources", lambda: {"gpu_total_mib": 16000, "gpu_free_mib": 100,
                                                      "ram_available_mib": 24000})
     with pytest.raises(RuntimeError, match="headroom"):
@@ -906,7 +899,7 @@ def test_a_domain_refusal_releases_the_port_claim(setup, runtime, monkeypatch):
 def test_the_hint_only_suggests_ports_inside_the_range(runtime, monkeypatch):
     monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
     message = sim._next_free_port_hint(18999, (), (18800, 18899))
-    assert "port=18800" in message and "ISAAC_MCP_PORT_RANGE 18800-18899" in message
+    assert "port=18800" in message and "TWINSMITH_PORT_RANGE 18800-18899" in message
     monkeypatch.setattr(sim, "_port_bind_error", lambda port: OSError(errno.EADDRINUSE, "in use"))
     assert "No free, unclaimed port found in 18800-18899" in sim._next_free_port_hint(18999, (), (18800, 18899))
 
@@ -922,7 +915,7 @@ def test_without_a_range_the_hint_says_a_port_may_be_someone_elses(runtime, monk
     monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
     message = sim._next_free_port_hint(18766, {18767})
     assert "port=18768" in message
-    assert "another agent" in message and "ISAAC_MCP_PORT_RANGE" in message
+    assert "another agent" in message and "TWINSMITH_PORT_RANGE" in message
 
 
 # ---- choosing an omitted port and ROS domain -----------------------------------------------------
@@ -943,8 +936,8 @@ def _fake_spawn(monkeypatch, captured=None):
 
 
 def test_an_omitted_port_and_domain_take_the_first_free_unclaimed_values(setup, monkeypatch):
-    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18810"
-    setup["ISAAC_MCP_ROS_DOMAIN_RANGE"] = "40-49"
+    setup["TWINSMITH_PORT_RANGE"] = "18800-18810"
+    setup["TWINSMITH_ROS_DOMAIN_RANGE"] = "40-49"
     monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
     owner = sim._claim_owner()
     sim._claim("port", 18800, owner)      # another launch already holds these two
@@ -953,15 +946,15 @@ def test_an_omitted_port_and_domain_take_the_first_free_unclaimed_values(setup, 
     result = sim._launch(setup, headless=True)
     assert (result["port"], result["ros_domain"]) == (18801, 41)
     assert result["auto_selected"] == ["port", "ros_domain"]
-    assert captured["env"]["ISAAC_MCP_PORT"] == "18801" and captured["env"]["ROS_DOMAIN_ID"] == "41"
+    assert captured["env"]["TWINSMITH_PORT"] == "18801" and captured["env"]["ROS_DOMAIN_ID"] == "41"
     assert captured["args"][captured["args"].index("--port") + 1] == "18801"
     held = json.loads((Path(sim.client._runtime_dir()) / "port-18801.claim").read_text())
     assert held["pid"] != os.getpid()  # handed to the simulator, so it outlives the launching call
 
 
 def test_an_omitted_port_skips_a_live_session_and_an_advertised_bridge(setup, monkeypatch):
-    setup["ISAAC_MCP_PORT"] = "18766"
-    setup["ISAAC_MCP_SIM_MAX_INSTANCES"] = "3"
+    setup["TWINSMITH_PORT"] = "18766"
+    setup["TWINSMITH_SIM_MAX_INSTANCES"] = "3"
     _record(setup)
     monkeypatch.setattr(sim, "_alive", lambda data: True)
     monkeypatch.setattr(sim.client, "discover_bridges", lambda: [{"pid": 10, "port": 18767}])
@@ -973,7 +966,7 @@ def test_an_omitted_port_skips_a_live_session_and_an_advertised_bridge(setup, mo
 
 
 def test_without_a_range_an_omitted_port_starts_at_the_configured_one(setup, monkeypatch):
-    setup["ISAAC_MCP_PORT"] = "18800"
+    setup["TWINSMITH_PORT"] = "18800"
     setup["ROS_DOMAIN_ID"] = "40"
     monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
     _fake_spawn(monkeypatch)
@@ -992,8 +985,8 @@ def test_without_a_range_a_stated_port_and_domain_still_work(setup, runtime, mon
 
 
 def test_a_stated_port_and_domain_inside_the_range_are_claimed_and_used(setup, monkeypatch):
-    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18899"
-    setup["ISAAC_MCP_ROS_DOMAIN_RANGE"] = "40-49"
+    setup["TWINSMITH_PORT_RANGE"] = "18800-18899"
+    setup["TWINSMITH_ROS_DOMAIN_RANGE"] = "40-49"
     monkeypatch.setattr(sim, "_port_bind_error", lambda port: None)
     captured = _fake_spawn(monkeypatch)
     result = sim._launch(setup, 18850, 45, True, False)
@@ -1002,12 +995,12 @@ def test_a_stated_port_and_domain_inside_the_range_are_claimed_and_used(setup, m
 
 
 def test_an_exhausted_range_says_so(setup, monkeypatch):
-    setup["ISAAC_MCP_PORT_RANGE"] = "18800-18800"
+    setup["TWINSMITH_PORT_RANGE"] = "18800-18800"
     monkeypatch.setattr(sim, "_port_bind_error", lambda port: OSError(errno.EADDRINUSE, "in use"))
     with pytest.raises(ValueError) as caught:
         sim._launch(setup, headless=True)
     assert caught.value.code == "PORT_RANGE_EXHAUSTED" and "18800-18800" in str(caught.value)
-    assert "ISAAC_MCP_PORT_RANGE" in str(caught.value)
+    assert "TWINSMITH_PORT_RANGE" in str(caught.value)
 
 
 def test_claims_handed_to_the_simulator_outlive_the_launching_host(runtime):
@@ -1077,19 +1070,19 @@ def _launch_env(setup, monkeypatch):
 
 def test_a_launched_kit_gets_the_project_this_host_resolves(setup, monkeypatch, tmp_path):
     """Kit starts in another folder; without this it would never read the project's pack or asset_path."""
-    project = tmp_path / "proj" / "isaac-mcp.json"
-    monkeypatch.delenv("ISAAC_MCP_PROJECT", raising=False)
+    project = tmp_path / "proj" / "twinsmith.json"
+    monkeypatch.delenv("TWINSMITH_PROJECT", raising=False)
     monkeypatch.setattr(sim, "_host_project_file", lambda: project)
-    assert _launch_env(setup, monkeypatch)["ISAAC_MCP_PROJECT"] == str(project)
+    assert _launch_env(setup, monkeypatch)["TWINSMITH_PROJECT"] == str(project)
 
 
 def test_an_explicit_project_setting_is_kept_and_no_project_adds_nothing(setup, monkeypatch, tmp_path):
-    monkeypatch.setenv("ISAAC_MCP_PROJECT", "/chosen/project")
-    monkeypatch.setattr(sim, "_host_project_file", lambda: tmp_path / "other" / "isaac-mcp.json")
-    assert _launch_env(setup, monkeypatch)["ISAAC_MCP_PROJECT"] == "/chosen/project"
-    monkeypatch.delenv("ISAAC_MCP_PROJECT")
+    monkeypatch.setenv("TWINSMITH_PROJECT", "/chosen/project")
+    monkeypatch.setattr(sim, "_host_project_file", lambda: tmp_path / "other" / "twinsmith.json")
+    assert _launch_env(setup, monkeypatch)["TWINSMITH_PROJECT"] == "/chosen/project"
+    monkeypatch.delenv("TWINSMITH_PROJECT")
     monkeypatch.setattr(sim, "_host_project_file", lambda: None)
-    assert "ISAAC_MCP_PROJECT" not in _launch_env(setup, monkeypatch)
+    assert "TWINSMITH_PROJECT" not in _launch_env(setup, monkeypatch)
 
 
 def test_session_records_carry_the_argument_name_the_other_tools_take():
@@ -1158,13 +1151,13 @@ def test_the_launch_argument_defaults_to_the_configured_backend_not_a_literal():
 
 
 def test_the_current_default_is_physx():
-    """The one test that pins the value: flipping the default in isaac_mcp.config changes this line only."""
+    """The one test that pins the value: flipping the default in twinsmith.config changes this line only."""
     assert config.DEFAULT_PHYSICS_BACKEND == "physx"
 
 
 @pytest.mark.parametrize("configured,other", [("physx", "newton"), ("newton", "physx")])
 def test_the_configured_default_applies_when_no_argument_is_given_and_an_argument_wins(setup, configured, other):
-    setup["ISAAC_MCP_PHYSICS_BACKEND"] = configured
+    setup["TWINSMITH_PHYSICS_BACKEND"] = configured
     started = sim._launch(setup, 18766, 9, True, False)
     assert started["physics_backend"] == configured and started["physics_backend_source"] == "environment"
     chosen = sim._launch(setup, 18767, 10, True, False, physics_backend=other)
@@ -1176,15 +1169,15 @@ def test_the_engine_is_always_named_to_the_new_process(setup, monkeypatch):
     seen = []
     monkeypatch.setattr(sim.subprocess, "Popen", lambda args, **k: seen.append(k["env"]) or SimpleNamespace(pid=510, wait=lambda: 0))
     monkeypatch.setattr(sim, "_process_identity", lambda pid: (pid, 12345))
-    setup["ISAAC_MCP_PHYSICS_BACKEND"] = "newton"
+    setup["TWINSMITH_PHYSICS_BACKEND"] = "newton"
     sim._launch(setup, 18766, 9, True, False, physics_backend="physx")
     sim._launch(setup, 18767, 10, True, False)
-    assert [env["ISAAC_MCP_PHYSICS_BACKEND"] for env in seen] == ["physx", "newton"]
+    assert [env["TWINSMITH_PHYSICS_BACKEND"] for env in seen] == ["physx", "newton"]
 
 
 def test_a_configured_newton_on_a_build_without_it_starts_nothing_instead_of_falling_back_to_physx(setup, tmp_path, monkeypatch):
-    setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
-    setup["ISAAC_MCP_PHYSICS_BACKEND"] = "newton"
+    setup["TWINSMITH_SIM_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
+    setup["TWINSMITH_PHYSICS_BACKEND"] = "newton"
     monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
     with pytest.raises(ValueError, match="5.1.0.0 has no Newton") as error:
         sim._launch(setup, 18766, 9, True, False)
@@ -1192,13 +1185,13 @@ def test_a_configured_newton_on_a_build_without_it_starts_nothing_instead_of_fal
 
 
 def test_an_explicit_physx_on_that_build_still_starts_and_is_not_changed_by_the_configured_default(setup, tmp_path):
-    setup["ISAAC_MCP_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
-    setup["ISAAC_MCP_PHYSICS_BACKEND"] = "newton"
+    setup["TWINSMITH_SIM_PYTHON"] = str(fake_interpreter(tmp_path / "py51", "5.1.0.0"))
+    setup["TWINSMITH_PHYSICS_BACKEND"] = "newton"
     assert sim._launch(setup, 18766, 9, True, False, physics_backend="physx")["physics_backend"] == "physx"
 
 
 def test_a_bad_configured_backend_starts_nothing_and_says_where_it_came_from(setup, monkeypatch):
-    setup["ISAAC_MCP_PHYSICS_BACKEND"] = "bullet"
+    setup["TWINSMITH_PHYSICS_BACKEND"] = "bullet"
     monkeypatch.setattr(sim.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
     with pytest.raises(ValueError, match="physics_backend must be physx or newton, not 'bullet' \\(from the environment\\)"):
         sim._launch(setup, 18766, 9, True, False)

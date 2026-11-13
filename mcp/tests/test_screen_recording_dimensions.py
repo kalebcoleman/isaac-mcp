@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from isaac_mcp import screen
+from twinsmith import screen
 
 
 @pytest.mark.parametrize("width,height,limit,expected", [

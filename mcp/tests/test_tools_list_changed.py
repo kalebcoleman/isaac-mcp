@@ -3,7 +3,7 @@
 Clients such as Claude Code only refresh their tool list mid-session when the
 server advertised ``tools.listChanged`` at initialize AND sends
 ``notifications/tools/list_changed``. These tests drive the real host server
-(``isaac_mcp.server.mcp``) through an in-memory MCP session against a fake bridge.
+(``twinsmith.server.mcp``) through an in-memory MCP session against a fake bridge.
 """
 
 import asyncio
@@ -16,8 +16,8 @@ import mcp.types as types
 from mcp.server.session import ServerSession
 from mcp.shared.memory import create_connected_server_and_client_session
 
-import isaac_mcp.server as gw
-from isaac_mcp_bridge.schema import field_specs
+import twinsmith.server as gw
+from twinsmith_bridge.schema import field_specs
 
 
 def _meta(description, parameters=None):

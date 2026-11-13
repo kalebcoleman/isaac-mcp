@@ -1,4 +1,4 @@
-"""The one check-in call (status), waiting on simulator jobs, and isaac_help admitting what it cannot answer."""
+"""The one check-in call (status), waiting on simulator jobs, and help admitting what it cannot answer."""
 
 import json
 import socket
@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-import isaac_mcp.server as gw
-from isaac_mcp import screen
-from isaac_mcp.client import BridgeError
+import twinsmith.server as gw
+from twinsmith import screen
+from twinsmith.client import BridgeError
 
 IDENTITY = {
     "pid": 4242, "port": 8766, "app": "Isaac Sim", "app_version": "6.2.0", "headless": True, "app_ready": True,
@@ -37,7 +37,7 @@ class Bridge:
 def state(monkeypatch, tmp_path):
     monkeypatch.setattr(gw, "_advertised", lambda: [])
     monkeypatch.setattr(gw, "live_sessions", lambda env=None: [])
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     return gw._BridgeState()
 
 
@@ -81,8 +81,7 @@ def test_nothing_running_is_an_answer_that_names_the_next_call(state, monkeypatc
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         free = probe.getsockname()[1]
-    monkeypatch.setenv("ISAAC_MCP_PORT", str(free))
-    monkeypatch.delenv("UR5E_DT_PORT", raising=False)
+    monkeypatch.setenv("TWINSMITH_PORT", str(free))
     text = gw._dispatch("status", {}, state)
     out = json.loads(text)
     assert out["running"] is False and "configured simulator" in out["message"] and "refresh_tools(wait_s=120)" in out["message"]
@@ -90,7 +89,7 @@ def test_nothing_running_is_an_answer_that_names_the_next_call(state, monkeypatc
     monkeypatch.setattr(gw, "_advertised", lambda: [{"port": 8770, "pid": 5151, "app": "Isaac Sim"}])
     elsewhere = json.loads(gw._dispatch("status", {}, state))
     assert elsewhere["running"] is False and "use_bridge(port=8770)" in elsewhere["message"]
-    state.client = Bridge({"status": RuntimeError("multiple bridges running (ports 8766, 8770): set ISAAC_MCP_PORT")})
+    state.client = Bridge({"status": RuntimeError("multiple bridges running (ports 8766, 8770): set TWINSMITH_PORT")})
     several = json.loads(gw._dispatch("status", {}, state))
     assert several["running"] is False and "use_bridge(port)" in several["message"] and "Do not start another" in several["message"]
 
@@ -150,7 +149,7 @@ def test_frames_this_server_cannot_read_are_kept_and_the_reply_says_how_to_encod
     assert "video_path" not in result and "0 of 4 frames" in result["video_error"] and 'join_videos(mode="frames"' in result["video_error"]
 
 
-# ---- isaac_help ----
+# ---- help ----
 
 def gaps(tmp_path):
     file = tmp_path / "state" / "help-gaps.jsonl"
@@ -158,43 +157,43 @@ def gaps(tmp_path):
 
 
 def test_a_drone_controller_question_gets_the_controller_runner_not_the_arm_tools(tmp_path):
-    answer = gw._isaac_help("run my own controller on a drone")
+    answer = gw._help("run my own controller on a drone")
     assert "sim__simulation__run" in answer and "tcp://127.0.0.1" in answer and "job_status" in answer
     assert "sim__arm__ik" not in answer and "sim__joints__move" not in answer
-    assert "isaac_help(task=..., no_fit=true)" in answer and gaps(tmp_path) == [], "an answered question is not a gap"
+    assert "help(task=..., no_fit=true)" in answer and gaps(tmp_path) == [], "an answered question is not a gap"
 
 
 def test_replay_and_job_questions_name_their_tools():
-    replay = gw._isaac_help("replay saved flights into a labelled video")
+    replay = gw._help("replay saved flights into a labelled video")
     assert "sim__trajectory__replay" in replay and "video_path" in replay
-    waiting = gw._isaac_help("is it done yet, how do I wait for a long loop")
+    waiting = gw._help("is it done yet, how do I wait for a long loop")
     assert "job_status(job_id, wait_s=30)" in waiting and "background=true" in waiting
-    assert "run_script" in gw._isaac_help("run a script as a managed job outside isaac")
-    assert "action=reset" in gw._isaac_help("the timeline was left playing, reset to a clean state")
-    assert "Available: status" in gw._isaac_help("where am i, what is running")
+    assert "run_script" in gw._help("run a script as a managed job outside isaac")
+    assert "action=reset" in gw._help("the timeline was left playing, reset to a clean state")
+    assert "Available: status" in gw._help("where am i, what is running")
 
 
 def test_an_unanswered_question_says_so_gives_the_pattern_and_is_recorded_locally(tmp_path):
-    answer = gw._isaac_help("simulate cloth tearing")
-    assert answer.startswith("No isaac tool is known to fit 'simulate cloth tearing'.")
+    answer = gw._help("simulate cloth tearing")
+    assert answer.startswith("No twinsmith tool is known to fit 'simulate cloth tearing'.")
     assert "background=true" in answer and "next_update_async" in answer and str(tmp_path / "state" / "help-gaps.jsonl") in answer
     (record,) = gaps(tmp_path)
     assert record["task"] == "simulate cloth tearing" and record["reason"] == "no_match" and "time" in record
 
 
 def test_no_fit_records_a_task_whose_named_tools_did_not_fit(tmp_path):
-    answer = gw._isaac_help("move a joint along a spline with jerk limits", no_fit=True)
-    assert answer.startswith("No isaac tool is known to fit") and "The closest topics" in answer and "sim__joints__move" in answer
+    answer = gw._help("move a joint along a spline with jerk limits", no_fit=True)
+    assert answer.startswith("No twinsmith tool is known to fit") and "The closest topics" in answer and "sim__joints__move" in answer
     assert [g["reason"] for g in gaps(tmp_path)] == ["no_fit"]
-    assert "full map" not in gw._isaac_help(None, no_fit=True) and len(gaps(tmp_path)) == 1, "no task, nothing to record"
+    assert "full map" not in gw._help(None, no_fit=True) and len(gaps(tmp_path)) == 1, "no task, nothing to record"
 
 
 def test_recording_can_be_turned_off_and_never_breaks_the_answer(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_LOG", "0")
-    assert "recorded for the maintainer" not in gw._isaac_help("simulate cloth tearing") and gaps(tmp_path) == []
-    monkeypatch.setenv("ISAAC_MCP_LOG", "1")
+    monkeypatch.setenv("TWINSMITH_LOG", "0")
+    assert "recorded for the maintainer" not in gw._help("simulate cloth tearing") and gaps(tmp_path) == []
+    monkeypatch.setenv("TWINSMITH_LOG", "1")
     (tmp_path / "state").write_text("a file where the folder should be")
-    assert gw._isaac_help("simulate cloth tearing").startswith("No isaac tool is known to fit")
+    assert gw._help("simulate cloth tearing").startswith("No twinsmith tool is known to fit")
 
 
 # ---- one pair of tools follows every job: simulator jobs and process jobs ----
@@ -203,11 +202,11 @@ def test_job_status_and_cancel_also_take_a_process_job_and_need_no_bridge(state,
     import sys
     import time
 
-    from isaac_mcp.isaaclab import jobs
+    from twinsmith.isaaclab import jobs
 
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])
     script = tmp_path / "wait.py"
-    script.write_text("import time\nprint('ISAAC_MCP_PROGRESS: 1/4 started', flush=True)\ntime.sleep(60)\n")
+    script.write_text("import time\nprint('TWINSMITH_PROGRESS: 1/4 started', flush=True)\ntime.sleep(60)\n")
     started = jobs.run_script(sys.executable, script, uses_gpu=False, timeout_s=120)
     state.client = Bridge({})   # any bridge call would raise KeyError: none is made
     deadline = time.time() + 20
@@ -229,7 +228,7 @@ def test_job_status_and_cancel_also_take_a_process_job_and_need_no_bridge(state,
 def kit_record(tmp_path, job_id, **fields):
     import os
 
-    from isaac_mcp.isaaclab import jobs
+    from twinsmith.isaaclab import jobs
 
     folder = tmp_path / "jobs" / job_id
     folder.mkdir(parents=True)
@@ -241,7 +240,7 @@ def kit_record(tmp_path, job_id, **fields):
 
 
 def test_a_running_simulator_job_is_asked_of_its_simulator_and_a_finished_one_is_read_from_its_record(state, tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_PORT", "8766")
+    monkeypatch.setenv("TWINSMITH_PORT", "8766")
     kit_record(tmp_path, "20261111-120000-sim.simulation.run-1", progress={"fraction": 0.1})
     state.client = Bridge({"job_status": lambda params: {"job_id": params["job_id"], "state": "running", "output_tail": "live"},
                            "job_cancel": lambda params: {"job_id": params["job_id"], "cancel_requested": True}})
@@ -261,7 +260,7 @@ def test_a_simulator_job_whose_simulator_is_gone_reads_failed_and_cannot_signal_
     gone = json.loads(gw._dispatch("job_status", {"job_id": "20261111-130000-run_python-3"}, state))
     assert gone["state"] == "failed" and "simulator exited" in gone["note"] and gone["pid_alive"] is False
     kit_record(tmp_path, "20261111-130100-run_python-4")     # this test process stands in for a live simulator
-    from isaac_mcp.isaaclab import jobs
+    from twinsmith.isaaclab import jobs
 
     with pytest.raises(ValueError, match="runs inside Isaac Sim"):
         jobs.runs_cancel("20261111-130100-run_python-4")
@@ -270,7 +269,7 @@ def test_a_simulator_job_whose_simulator_is_gone_reads_failed_and_cannot_signal_
 def test_the_job_list_holds_both_kinds_newest_first(state, tmp_path, monkeypatch):
     import sys
 
-    from isaac_mcp.isaaclab import jobs
+    from twinsmith.isaaclab import jobs
 
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])
     kit_record(tmp_path, "20200101-000000-sim.simulation.run-1", status="succeeded", finished_at=1001.0)
@@ -288,9 +287,9 @@ def test_the_job_list_holds_both_kinds_newest_first(state, tmp_path, monkeypatch
 
 
 def test_the_check_in_does_not_reread_jobs_and_sessions_that_have_ended(tmp_path, monkeypatch):
-    from isaac_mcp.isaaclab import jobs as lab_jobs
+    from twinsmith.isaaclab import jobs as lab_jobs
 
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path))
     for name, status in (("a-done", "finished"), ("b-failed", "failed")):
         (tmp_path / name).mkdir()
         (tmp_path / name / "job.json").write_text(json.dumps({"id": name, "status": status, "pid": 1}))

@@ -88,7 +88,7 @@ version.
 - [ ] Improve queued-call and process-death errors so they identify the operation and unknown effects; avoid retrying an
   in-flight mutation after a timeout.
 - [ ] Review refusal ordering and diagnostics: invalid types and ranges, missing shared staging, unexpected parameters, and
-  `ISAAC_MCP_SIM_MAX_INSTANCES=0`.
+  `TWINSMITH_SIM_MAX_INSTANCES=0`.
 - [ ] Review independent light intensity and colour edits, bounded log filtering, stopped-body reads, LiDAR sample and
   `NOT_READY` descriptions, clock source selection, and flat-floor warnings.
 - [ ] Review screenshot output-location guidance and object-pose descriptions.
@@ -109,7 +109,7 @@ version.
 These were open on the old checklist but name things the code no longer has. Close them, or restate them, when the issues are
 made.
 
-- Scope strict mode and required assets to the lab twin without blocking public robots. The strict and offline asset settings
+- Scope strict mode and required assets to the lab work cell without blocking public robots. The strict and offline asset settings
   were removed with the old asset model; packs are the only model now, and nothing is downloaded.
-- Review twin quick-start variants. The twin's quick-start tools were replaced by the work cell's `ur5e_dt__workcell`
+- Review work cell quick-start variants. The work cell's quick-start tools were replaced by the work cell's `workcell__cell`
   grouped tool.

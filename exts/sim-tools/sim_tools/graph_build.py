@@ -210,7 +210,7 @@ def scripts_disabled():
     """A node that runs Python from its inputs is code execution, like sim__controller__create: same consent."""
     import os
 
-    return os.getenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS") != "1"
+    return os.getenv("TWINSMITH_ENABLE_SCENE_SCRIPTS") != "1"
 
 
 def type_shape(og_type):
@@ -344,7 +344,7 @@ def build(stage, a, stopped):
             created = og.Controller.node(f"{path}/{name}")
             if scripts_disabled() and any(created.get_attribute_exists(p) for p in SCRIPT_PORTS):
                 raise SpecError("SCRIPT_DISABLED", f"{name} ({kind}) runs Python, which is off unless the user starts Kit "
-                                "with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1. Nothing was built.")
+                                "with TWINSMITH_ENABLE_SCENE_SCRIPTS=1. Nothing was built.")
 
         def attr(node, port, create_dynamic):
             n = og.Controller.node(f"{path}/{node}")
@@ -464,6 +464,6 @@ def _roll_back(stage, path, backup):
 
 
 def _refuse(exc):
-    from isaac_mcp.project_assets import refuse
+    from twinsmith.project_assets import refuse
 
     refuse(exc.code, str(exc), **exc.details)

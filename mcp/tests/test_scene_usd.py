@@ -9,7 +9,7 @@ pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
 from pxr import Usd, UsdGeom, Gf
 from sim_tools.core import Scene, bounded
-from isaac_mcp.project_assets import AssetError, Broker
+from twinsmith.project_assets import AssetError, Broker
 
 
 class Timeline:

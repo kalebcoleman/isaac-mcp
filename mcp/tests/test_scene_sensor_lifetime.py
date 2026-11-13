@@ -59,7 +59,7 @@ def test_product_cleanup_is_bound_to_its_stage_path_and_creation_layers(
 
 def test_creation_cannot_destroy_on_a_new_stage(scene, monkeypatch):
     from sim_tools import sensors
-    from isaac_mcp.project_assets import AssetError
+    from twinsmith.project_assets import AssetError
 
     stage = scene.stage()
     other = Usd.Stage.CreateInMemory()
@@ -139,7 +139,7 @@ def test_camera_creation_needs_no_annotator_and_disposal_clears_early_return(
 
 def test_camera_api_does_not_require_unused_lidar_annotator_module(monkeypatch):
     from sim_tools import runtime
-    from isaac_mcp.project_assets import AssetError
+    from twinsmith.project_assets import AssetError
 
     rep = SimpleNamespace(create=SimpleNamespace(render_product=lambda: None))
     monkeypatch.setitem(

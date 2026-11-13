@@ -2,7 +2,7 @@
 
 import math
 from pxr import Usd, UsdPhysics
-from isaac_mcp.project_assets import AssetError, refuse
+from twinsmith.project_assets import AssetError, refuse
 from .core import bounded, vector
 from .values import finite_clock, scalar
 

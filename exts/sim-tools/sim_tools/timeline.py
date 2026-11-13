@@ -4,7 +4,7 @@ import asyncio
 import sys
 import time
 
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 
 
 class _GuardedAwait:

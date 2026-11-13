@@ -7,8 +7,8 @@ import sys
 import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
 
-from isaac_mcp import local_tools, server
-from isaac_mcp.isaaclab import jobs
+from twinsmith import local_tools, server
+from twinsmith.isaaclab import jobs
 
 
 class EmptyBridge:
@@ -26,7 +26,7 @@ class EmptyBridge:
 @pytest.fixture
 def host(monkeypatch):
     monkeypatch.setattr(server, "BridgeClient", EmptyBridge)
-    return server.build_server({"ISAAC_MCP_TOOLSETS": "minimal,+lab,+code"})
+    return server.build_server({"TWINSMITH_TOOLSETS": "minimal,+lab,+code"})
 
 
 def call(host, name, arguments=None):
@@ -41,7 +41,7 @@ def call(host, name, arguments=None):
 
 @pytest.mark.parametrize("name", ["isaaclab__runs_list", "isaaclab__runs_status"])
 def test_job_queries_reconcile_and_persist_orphans(host, tmp_path, monkeypatch, name):
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     monkeypatch.setattr(jobs, "_job_alive", lambda data: False)
     job_id = "20200101-000000-old"
     job_dir = tmp_path / "jobs" / job_id
@@ -62,7 +62,7 @@ def test_job_queries_reconcile_and_persist_orphans(host, tmp_path, monkeypatch, 
 
 def test_job_tail_can_create_the_jobs_directory(host, tmp_path, monkeypatch):
     directory = tmp_path / "missing-jobs"
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(directory))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(directory))
     assert not directory.exists()
     assert "error" in call(host, "isaaclab__runs_tail", {"job_id": "20200101-000000-missing"})
     assert directory.is_dir()

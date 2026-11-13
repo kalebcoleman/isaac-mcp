@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import time
 
-from isaac_mcp.project_assets import AssetError, refuse
+from twinsmith.project_assets import AssetError, refuse
 
 RATE_HZ = 30.0
 MAX_STEPS = 3600

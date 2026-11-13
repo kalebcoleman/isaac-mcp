@@ -16,15 +16,15 @@ import time
 from scene_mcp_client import parameters, call
 from mcp import ClientSession
 from mcp.client.stdio import stdio_client
-from isaac_mcp import config, toolsets, tool_groups
+from twinsmith import config, toolsets, tool_groups
 
 
 async def promised_tools(enabled):
     """What the toolset registry promises a client is shown for ``enabled``: every tool a full server
-    registers whose owner (mcp/isaac_mcp/toolsets.py) is an enabled toolset."""
-    from isaac_mcp import server
+    registers whose owner (mcp/twinsmith/toolsets.py) is an enabled toolset."""
+    from twinsmith import server
 
-    universe = server.build_server(env={**os.environ, "ISAAC_MCP_TOOLSETS": "all,+input,+launch"})
+    universe = server.build_server(env={**os.environ, "TWINSMITH_TOOLSETS": "all,+input,+launch"})
     return {tool.name for tool in await universe.list_tools() if toolsets.owner(tool.name) in enabled}
 
 
@@ -49,7 +49,7 @@ async def validate(port, output, backend=None):
         async with ClientSession(r, w) as c:
             await c.initialize()
             listed = await c.list_tools()
-            enabled = config.select(parameters(port).env["ISAAC_MCP_TOOLSETS"])
+            enabled = config.select(parameters(port).env["TWINSMITH_TOOLSETS"])
             registry = await check_registry([t.name for t in listed.tools], enabled)
             on = (await call(c, "status", {}))["result"].get("toolsets", {}).get("on")
             assert on is None or set(on) == enabled, {"status_toolsets_on": on, "expected": sorted(enabled)}

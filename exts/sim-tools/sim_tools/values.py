@@ -3,7 +3,7 @@
 import math
 import re
 from pxr import Gf, Sdf
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 from .core import vector
 
 

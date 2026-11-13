@@ -7,8 +7,8 @@ import json
 import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
 
-from isaac_mcp import server as gw
-from isaac_mcp.client import BridgeError
+from twinsmith import server as gw
+from twinsmith.client import BridgeError
 
 
 @pytest.fixture(autouse=True)
@@ -19,8 +19,7 @@ def single_purpose_tool_list(member_listing):
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch):
-    for name in ("ISAAC_MCP_NAMESPACE", "ISAAC_MCP_BUILTINS", "ISAAC_MCP_PORT",
-                 "UR5E_DT_PORT", "ISAAC_MCP_HOST"):
+    for name in ("TWINSMITH_PORT", "TWINSMITH_HOST"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -38,7 +37,7 @@ def invoke(*, value=None, error=None):
         def close(self):
             pass
 
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
     state = gw._state_for(server)
     state.client = Endpoint()
 
@@ -46,10 +45,10 @@ def invoke(*, value=None, error=None):
         async with create_connected_server_and_client_session(server._mcp_server) as client:
             await client.initialize()
             before = next(t for t in (await client.list_tools()).tools
-                          if t.name == "ur5e_dt__workcell_status")
-            result = await client.call_tool("ur5e_dt__workcell_status", {})
+                          if t.name == "workcell__workcell_status")
+            result = await client.call_tool("workcell__workcell_status", {})
             after = next(t for t in (await client.list_tools()).tools
-                         if t.name == "ur5e_dt__workcell_status")
+                         if t.name == "workcell__workcell_status")
             assert before == after
             return result, before
 
@@ -103,8 +102,8 @@ def test_real_tcp_bridge_application_and_builtin_error_envelopes(monkeypatch, tm
     with LiveBridge() as live:
         live.bridge.register_owner("error_fixture", "error_fixture").add(
             td("refuse", lambda: {"status": "error", "message": "fixture refusal"}))
-        monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
-        server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+        monkeypatch.setenv("TWINSMITH_PORT", str(live.port))
+        server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
 
         async def run():
             async with create_connected_server_and_client_session(server._mcp_server) as client:

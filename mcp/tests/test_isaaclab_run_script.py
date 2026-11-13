@@ -10,12 +10,12 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import jobs, preflight, tools
+from twinsmith.isaaclab import jobs, preflight, tools
 
 
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])
     jobs._active.clear()
     yield
@@ -52,7 +52,7 @@ def start(tmp_path, body, **kw):
 
 def test_success_collects_artifacts_exit_and_log(tmp_path):
     out = start(tmp_path, "import os,sys\nprint('hello', sys.argv[1:], os.environ['FOO'])\n"
-                          "print('ISAAC_MCP_ARTIFACT: /tmp/a.mp4')\nprint('ISAAC_MCP_ARTIFACT: /tmp/b.json')\n",
+                          "print('TWINSMITH_ARTIFACT: /tmp/a.mp4')\nprint('TWINSMITH_ARTIFACT: /tmp/b.json')\n",
                 args=["x", "y"], env={"FOO": "bar"}, label="my sweep")
     st = wait_done(out["job_id"])
     assert st["state"] == "succeeded" and st["exit_code"] == 0

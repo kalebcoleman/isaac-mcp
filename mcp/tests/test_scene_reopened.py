@@ -10,9 +10,9 @@ import pytest
 
 pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/isaac.mcp.bridge"))
-from isaac_mcp.project_assets import AssetError
-from isaac_mcp.scene_contracts import REGISTRY
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/twinsmith.bridge"))
+from twinsmith.project_assets import AssetError
+from twinsmith.scene_contracts import REGISTRY
 from pxr import Sdf, Usd, UsdGeom, UsdPhysics
 from sim_tools.advanced import Advanced
 from sim_tools.core import STAGE_TOOLS, Scene, attribute_change
@@ -120,7 +120,7 @@ def test_missing_ids_name_the_call_to_make_and_do_nothing(reopened):
 
 
 def test_mcp_layer_explains_missing_ids_without_changing_the_published_schema():
-    from isaac_mcp import server
+    from twinsmith import server
     from pydantic import create_model
 
     required = create_model("A", session_id=(str, ...), stage_id=(str, ...))
@@ -350,9 +350,9 @@ def test_a_lidar_read_refused_for_being_stopped_adopts_nothing(reopened, monkeyp
         setattr(omni, name, module)
         monkeypatch.setitem(sys.modules, "omni." + name, module)
     omni.ext.IExt = object
-    bridge_module = types.ModuleType("isaac_mcp_bridge")
+    bridge_module = types.ModuleType("twinsmith_bridge")
     bridge_module.get_mcp_bridge = bridge_module.ToolDefinition = None
-    monkeypatch.setitem(sys.modules, "isaac_mcp_bridge", bridge_module)
+    monkeypatch.setitem(sys.modules, "twinsmith_bridge", bridge_module)
     monkeypatch.delitem(sys.modules, "sim_tools.extension", raising=False)
     from sim_tools.extension import Extension
 

@@ -25,7 +25,7 @@ import math
 import os
 import re
 
-GRAPH_PATH = "/Graph/isaac_mcp_ros2"
+GRAPH_PATH = "/Graph/twinsmith_ros2"
 FRAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 SEGMENT_RE = re.compile(r"^[A-Za-z](?:[A-Za-z0-9_]*[A-Za-z0-9])?$")
 TOPIC_RE = re.compile(r"^/?[A-Za-z_][A-Za-z0-9_/]*$")
@@ -45,7 +45,7 @@ def _namespace(namespace):
     # so '__' in a flattened name can only come from '/': the '/' -> '__' mapping is one-to-one.
     if ns and not all(SEGMENT_RE.match(part) and "__" not in part for part in ns.split("/")):
         raise ValueError(f"namespace {namespace!r}: each segment must start with a letter, end with a letter or "
-                         "digit and not contain '__' (isaac-mcp rule; keeps <ns>_odom and graph names one-to-one)")
+                         "digit and not contain '__' (twinsmith rule; keeps <ns>_odom and graph names one-to-one)")
     return ns
 
 
@@ -703,7 +703,7 @@ def _relative_pose(stage, base, path, mpu):
 
 def setup(scene, stage, a):
     """Build (or rebuild) the graph. The timeline is stopped (checked by Scene.target)."""
-    from isaac_mcp.project_assets import refuse
+    from twinsmith.project_assets import refuse
     from pxr import Usd, UsdGeom
 
     robot_path = a["robot"]
@@ -958,7 +958,7 @@ def setup(scene, stage, a):
         clock=dict(source=clock["source"] or "none", shared_tool_clock=clock["publish"],
                    tool_clock_present=bool(stage.GetPrimAtPath(CLOCK_GRAPH)),
                    stamps_reset_on_stop=reset_on_stop, robot_graphs_updated=updated,
-                   **({"note": "Every robot set up by this tool shares this clock. Running the twin's own setup "
+                   **({"note": "Every robot set up by this tool shares this clock. Running the work cell's own setup "
                                "(quick_start) afterwards adds a second /clock: call this tool again "
                                "(clock=auto); it drops its clock and updates every robot it set up."}
                       if CLOCK_GRAPH in scene.owned else {})),

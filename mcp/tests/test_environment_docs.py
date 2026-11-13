@@ -1,7 +1,7 @@
 """docs/ENVIRONMENT.md lists every environment variable the code reads, once, and nothing else.
 
 "Read by the code" means: an `os.environ`/`os.getenv`-style read of any name in Python, a project variable
-(`ISAAC_*`, `ISAACLAB_*`, `UR5E_DT_*`) named as a string constant in Python, or a shell expansion in `run.sh`,
+(`TWINSMITH_*`, `ISAAC_*`, `ISAACLAB_*`) named as a string constant in Python, or a shell expansion in `run.sh`,
 `install.sh` or `scripts/*.sh`. Ordinary system variables (`PATH`, `HOME`, ...) are not listed; the few the tools document
 are in `SYSTEM_VARIABLES`.
 """
@@ -15,25 +15,24 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 PAGE = ROOT / "docs" / "ENVIRONMENT.md"
 
-PROJECT_PREFIXES = ("ISAAC_", "ISAACLAB_", "ISAACSIM_", "UR5E_DT_")
+PROJECT_PREFIXES = ("TWINSMITH_", "ISAAC_", "ISAACLAB_", "ISAACSIM_")
 # System variables the tools read on purpose and the page documents. Every other system variable is read as usual.
 SYSTEM_VARIABLES = frozenset({"DISPLAY", "ROS_DOMAIN_ID", "ROS_DISTRO", "OMNI_KIT_ACCEPT_EULA", "XDG_RUNTIME_DIR",
                               "XDG_STATE_HOME", "CUDA_VISIBLE_DEVICES"})
 # Project-looking names that are not settings, with the reason.
 NOT_SETTINGS = {
-    "UR5E_DT_SHOW_PANEL": "the panel was removed; the host only strips it from a managed session's environment",
-    "ISAAC_MCP_SIM_SESSION_ID": "exported to a managed session's Kit, read by no code",
-    "ISAAC_MCP_SIM_SESSION_DIR": "exported to a managed session's Kit, read by no code",
+    "TWINSMITH_SIM_SESSION_ID": "exported to a managed session's Kit, read by no code",
+    "TWINSMITH_SIM_SESSION_DIR": "exported to a managed session's Kit, read by no code",
 }
-SOURCE_DIRS = ("mcp/isaac_mcp", "mcp/templates", "exts", "scripts")
+SOURCE_DIRS = ("mcp/twinsmith", "mcp/templates", "exts", "scripts")
 SKIP_FILES = {"scripts/check_names.py", "scripts/check_private_paths.py", "scripts/check_portable_paths.py"}
 NAME = re.compile(r"[A-Z][A-Z0-9_]+")
 SHELL_VARIABLE = re.compile(r"\$\{?([A-Z][A-Z0-9_]+)")
 
 
 def retired():
-    from isaac_mcp import config, pack_manifest
-    return set(config.LEGACY) | set(pack_manifest.REMOVED_ENVIRONMENT)
+    from twinsmith import config, legacy, pack_manifest
+    return set(config.LEGACY) | set(pack_manifest.REMOVED_ENVIRONMENT) | set(legacy.OLD_NAMES)
 
 
 def is_project(name):
@@ -135,31 +134,31 @@ def test_every_row_names_a_default_a_reader_and_a_meaning():
 
 
 def test_the_scanner_finds_reads_and_skips_the_rest(tmp_path):
-    (tmp_path / "mcp/isaac_mcp").mkdir(parents=True)
-    (tmp_path / "mcp/isaac_mcp/a.py").write_text(
-        '"""ISAAC_MCP_IN_A_DOCSTRING mention."""\n'
+    (tmp_path / "mcp/twinsmith").mkdir(parents=True)
+    (tmp_path / "mcp/twinsmith/a.py").write_text(
+        '"""TWINSMITH_IN_A_DOCSTRING mention."""\n'
         "import os\n"
-        'x = os.environ.get("ISAAC_MCP_ONE") or os.getenv("SOME_OTHER")\n'
+        'x = os.environ.get("TWINSMITH_ONE") or os.getenv("SOME_OTHER")\n'
         'y = os.environ["ROS_DOMAIN_ID"]\n'
         'KNOWN = "ISAACLAB_TWO"\n'
-        'PREFIX = "ISAAC_MCP_"\n'
-        'if "ISAAC_MCP_THREE" in os.environ:\n    pass\n'
+        'PREFIX = "TWINSMITH_"\n'
+        'if "TWINSMITH_THREE" in os.environ:\n    pass\n'
         'z = "PATH"\n')
-    (tmp_path / "run.sh").write_text('PORT="${UR5E_DT_PORT:-8766}"\necho "$HOME $ISAAC_MCP_FOUR"\n')
-    (tmp_path / "mcp/isaac_mcp/tests").mkdir()
-    (tmp_path / "mcp/isaac_mcp/tests/skipped.py").write_text('import os\nos.environ.get("ISAAC_MCP_TEST_ONLY")\n')
+    (tmp_path / "run.sh").write_text('PORT="${TWINSMITH_PORT:-8766}"\necho "$HOME $TWINSMITH_FOUR"\n')
+    (tmp_path / "mcp/twinsmith/tests").mkdir()
+    (tmp_path / "mcp/twinsmith/tests/skipped.py").write_text('import os\nos.environ.get("TWINSMITH_TEST_ONLY")\n')
     names = read_variables(tmp_path)
-    assert {"ISAAC_MCP_ONE", "SOME_OTHER", "ROS_DOMAIN_ID", "ISAACLAB_TWO", "ISAAC_MCP_THREE",
-            "UR5E_DT_PORT", "ISAAC_MCP_FOUR", "HOME"} <= names
-    assert not {"ISAAC_MCP_IN_A_DOCSTRING", "ISAAC_MCP_", "PATH", "ISAAC_MCP_TEST_ONLY"} & names
-    assert required(names) == {"ISAAC_MCP_ONE", "ROS_DOMAIN_ID", "ISAACLAB_TWO", "ISAAC_MCP_THREE", "UR5E_DT_PORT",
-                               "ISAAC_MCP_FOUR"}
+    assert {"TWINSMITH_ONE", "SOME_OTHER", "ROS_DOMAIN_ID", "ISAACLAB_TWO", "TWINSMITH_THREE",
+            "TWINSMITH_PORT", "TWINSMITH_FOUR", "HOME"} <= names
+    assert not {"TWINSMITH_IN_A_DOCSTRING", "TWINSMITH_", "PATH", "TWINSMITH_TEST_ONLY"} & names
+    assert required(names) == {"TWINSMITH_ONE", "ROS_DOMAIN_ID", "ISAACLAB_TWO", "TWINSMITH_THREE", "TWINSMITH_PORT",
+                               "TWINSMITH_FOUR"}
 
 
 def test_a_missing_or_unread_variable_fails():
     text = PAGE.read_text(encoding="utf-8")
-    without = "\n".join(line for line in text.splitlines() if not line.startswith("| `ISAAC_MCP_TOKEN`"))
-    assert "ISAAC_MCP_TOKEN" in required(read_variables()) - set(documented(without))
-    invented = text + "\n| `ISAAC_MCP_NO_SUCH_SETTING` | unset | host | invented |\n"
-    assert "ISAAC_MCP_NO_SUCH_SETTING" not in read_variables()
-    assert "ISAAC_MCP_NO_SUCH_SETTING" in documented(invented)
+    without = "\n".join(line for line in text.splitlines() if not line.startswith("| `TWINSMITH_TOKEN`"))
+    assert "TWINSMITH_TOKEN" in required(read_variables()) - set(documented(without))
+    invented = text + "\n| `TWINSMITH_NO_SUCH_SETTING` | unset | host | invented |\n"
+    assert "TWINSMITH_NO_SUCH_SETTING" not in read_variables()
+    assert "TWINSMITH_NO_SUCH_SETTING" in documented(invented)

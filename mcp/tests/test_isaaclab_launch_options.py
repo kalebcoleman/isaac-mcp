@@ -12,12 +12,12 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import install, jobs, tools
+from twinsmith.isaaclab import install, jobs, tools
 
 
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     for name in ("ISAACLAB_TASK_MODULES", "ISAACLAB_TASK_PATH", "ISAACLAB_EXTERNAL_CALLBACK", "ISAACLAB_CHECKPOINT_ROOTS"):
         monkeypatch.delenv(name, raising=False)
     jobs._active.clear()
@@ -37,9 +37,9 @@ def make_root(tmp_path: Path) -> Path:
 def fake_python(tmp_path: Path) -> Path:
     p = tmp_path / "fake_python.py"
     p.write_text("#!/usr/bin/env python3\nimport json, os, sys\n"
-                 "print(json.dumps({'argv': sys.argv[1:], 'cwd': os.getcwd(), 'cb': os.environ.get('ISAAC_MCP_EXTERNAL_CALLBACK'),"
+                 "print(json.dumps({'argv': sys.argv[1:], 'cwd': os.getcwd(), 'cb': os.environ.get('TWINSMITH_EXTERNAL_CALLBACK'),"
                  " 'mods': os.environ.get('ISAACLAB_TASK_MODULES')}))\n"
-                 "print('ISAAC_MCP_PROGRESS: 3/4 tasks 1-3 done')\n")
+                 "print('TWINSMITH_PROGRESS: 3/4 tasks 1-3 done')\n")
     p.chmod(0o755)
     return p
 
@@ -112,7 +112,7 @@ def test_launcher_calls_the_callback_before_the_script(tmp_path):
     script.write_text("print('SCRIPT')\n")
     launcher = Path(jobs.__file__).parent / "launcher.py"
     out = subprocess.run([sys.executable, str(launcher), str(script)], capture_output=True, text=True,
-                         env={**os.environ, "PYTHONPATH": str(pkg), "ISAAC_MCP_EXTERNAL_CALLBACK": "myreg.register"})
+                         env={**os.environ, "PYTHONPATH": str(pkg), "TWINSMITH_EXTERNAL_CALLBACK": "myreg.register"})
     assert out.stdout.split() == ["REGISTERED", "SCRIPT"], out.stderr
 
 
@@ -153,7 +153,7 @@ def test_shared_env_policy_allows(key):
 
 @pytest.mark.parametrize("key,advice", [("PYTHONHOME", "install="), ("ISAACLAB_ROOT", "install="), ("ISAACLAB_PYTHON", "install="),
                                         ("LD_PRELOAD", "run_script"), ("LD_AUDIT", "run_script"), ("BASH_ENV", "shell"),
-                                        ("ISAAC_MCP_X", "MCP client config"), ("ISAACLAB_JOBS_DIR", "server setting")])
+                                        ("TWINSMITH_X", "MCP client config"), ("TWINSMITH_JOBS_DIR", "server setting")])
 def test_shared_env_policy_refuses_only_hijacks_and_says_what_to_use(key, advice):
     with pytest.raises(ValueError, match="not accepted") as err:
         install.validate_env({key: "x"})
@@ -264,8 +264,8 @@ def test_progress_marker_is_reported(tmp_path):
 
 
 @pytest.mark.parametrize("line,expected", [
-    ("ISAAC_MCP_PROGRESS: 0.5", 0.5), ("ISAAC_MCP_PROGRESS: 40% half", 0.4), ("ISAAC_MCP_PROGRESS: 2/8", 0.25),
-    ("ISAAC_MCP_PROGRESS: nope", None), ("ISAAC_MCP_PROGRESS: 1.5", None), ("ISAAC_MCP_PROGRESS: 1/0", None), ("plain", None)])
+    ("TWINSMITH_PROGRESS: 0.5", 0.5), ("TWINSMITH_PROGRESS: 40% half", 0.4), ("TWINSMITH_PROGRESS: 2/8", 0.25),
+    ("TWINSMITH_PROGRESS: nope", None), ("TWINSMITH_PROGRESS: 1.5", None), ("TWINSMITH_PROGRESS: 1/0", None), ("plain", None)])
 def test_progress_parsing(tmp_path, line, expected):
     log = tmp_path / "l.log"
     log.write_text("x\n" + line + "\n")
@@ -275,7 +275,7 @@ def test_progress_parsing(tmp_path, line, expected):
 
 def test_progress_uses_the_newest_line(tmp_path):
     log = tmp_path / "l.log"
-    log.write_text("ISAAC_MCP_PROGRESS: 0.1\nnoise\nISAAC_MCP_PROGRESS: 0.9\n")
+    log.write_text("TWINSMITH_PROGRESS: 0.1\nnoise\nTWINSMITH_PROGRESS: 0.9\n")
     assert jobs._progress(log)["fraction"] == 0.9
 
 
@@ -300,7 +300,7 @@ def two_installs(tmp_path, monkeypatch):
     new, old = make_env(envs, "lab-3.0.0", "3.0.0"), make_env(envs, "lab-2.3.2", "0.54.2")
     monkeypatch.setenv("ISAACLAB_PYTHON", str(new / "bin" / "python"))
     monkeypatch.setenv("ISAACLAB_ROOT", str(envs / "lab-3.0.0-src"))
-    monkeypatch.delenv("ISAAC_MCP_PROJECT", raising=False)
+    monkeypatch.delenv("TWINSMITH_PROJECT", raising=False)
     return new, old, envs
 
 
@@ -338,8 +338,8 @@ def test_project_file_install_wins_over_the_harness_default(two_installs, tmp_pa
     _, old, _ = two_installs
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / "isaac-mcp.json").write_text(json.dumps({"isaaclab_install": "lab-2.3.2"}))
-    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(proj))
+    (proj / "twinsmith.json").write_text(json.dumps({"isaaclab_install": "lab-2.3.2"}))
+    monkeypatch.setenv("TWINSMITH_PROJECT", str(proj))
     assert install.resolve_install(None)[0]["python"] == str(old / "bin" / "python")
     assert install.resolve_install("default")[0]["python"] == str(two_installs[0] / "bin" / "python")  # an explicit "default" opts out
 
@@ -377,7 +377,7 @@ def test_run_script_python_path_follows_the_shared_rule(tmp_path):
 
 
 def test_metrics_roots_include_checkpoint_roots_and_known_install_logs(two_installs, tmp_path, monkeypatch):
-    from isaac_mcp.isaaclab import metrics
+    from twinsmith.isaaclab import metrics
 
     scratch = tmp_path / "scratch"
     scratch.mkdir()
@@ -390,4 +390,4 @@ def test_metrics_roots_include_checkpoint_roots_and_known_install_logs(two_insta
 
 def test_server_owned_env_error_says_where_to_set_it():
     with pytest.raises(ValueError, match="MCP client config"):
-        install.validate_env({"ISAAC_MCP_PORT": "1"})
+        install.validate_env({"TWINSMITH_PORT": "1"})

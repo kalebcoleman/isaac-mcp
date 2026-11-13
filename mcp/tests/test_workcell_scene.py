@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKAGE = ROOT / "exts/ur5e-dt/ur5e_dt"
+PACKAGE = ROOT / "exts/workcell/workcell"
 
 
 @pytest.fixture()

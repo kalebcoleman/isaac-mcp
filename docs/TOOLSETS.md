@@ -10,13 +10,13 @@ example `sim__prim(action="create")`. The counts below are listed tools. Every t
 
 ## The toolsets
 
-The table is generated from the code (`scripts/gen_tool_reference.py --write`); `isaac-mcp toolsets` prints the same
+The table is generated from the code (`scripts/gen_tool_reference.py --write`); `twinsmith toolsets` prints the same
 rows for the server you have installed, with the current state of each.
 
 <!-- generated:toolsets-full -->
 | Toolset | Default | Listed tools |
 |---|---|---|
-| `core`: Connection, discovery, help and job tracking | on | `isaac_help`, `jobs`, `refresh_tools`, `status`, `toolsets`, `use_bridge` |
+| `core`: Connection, discovery, help and job tracking | on | `help`, `jobs`, `refresh_tools`, `status`, `toolsets`, `use_bridge` |
 | `scene`: Create and edit scenes and primitives | on | `sim__light`, `sim__material`, `sim__prim`, `sim__quick_start`, `sim__stage`, `sim__timeline__control` |
 | `physics`: Physics, joints, arms and simulation | on | `sim__arm`, `sim__joints`, `sim__physics`, `sim__simulation` |
 | `sensors`: Cameras, LiDAR and viewport framing | on | `sim__camera`, `sim__lidar`, `sim__viewport__frame` |
@@ -26,7 +26,7 @@ rows for the server you have installed, with the current state of each.
 | `lab`: Isaac Lab training and evaluation | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics` |
 | `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
 | `kit_debug`: Inspect Kit logs and operate its UI | off | `sim__logs`, `sim__ui` |
-| `workcell`: UR5e workcell tools | off | `ur5e_dt__eval`, `ur5e_dt__jenga`, `ur5e_dt__perception`, `ur5e_dt__planning`, `ur5e_dt__real2sim`, `ur5e_dt__robot`, `ur5e_dt__workcell` |
+| `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__eval`, `workcell__jenga`, `workcell__perception`, `workcell__planning`, `workcell__real2sim`, `workcell__robot` |
 | `robosim`: RoboSimStudio real-to-sim runs in its own private environment | off | `robosim` |
 | `input`: Desktop mouse and keyboard input | explicit only | `window_input` |
 | `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
@@ -37,7 +37,7 @@ rows for the server you have installed, with the current state of each.
 - `input` and `launch` are never part of a profile, not even `all`. Name them to get them (`+input`, `+launch`).
 - `extensions` carries the tools that a project's own Kit extension registers under a namespace this repository does not
   catalogue. It lists nothing until such an extension connects.
-- `workcell` is the lab's UR5e work cell; see its [README](../exts/ur5e-dt/workcell/README.md). Its tools for real-to-sim,
+- `workcell` is the lab's UR5e work cell; see its [README](../exts/workcell/workcell/README.md). Its tools for real-to-sim,
   planning and evaluation answer that they are not implemented.
 - `robosim` is one grouped tool that runs RoboSimStudio in its own Python environment; it needs no Kit bridge. See
   [ROBOSIM.md](ROBOSIM.md).
@@ -50,10 +50,10 @@ Five sources set the toolsets. Each later source overrides the earlier ones:
 | Order | Source | Where |
 |---|---|---|
 | 1 | Built-in default | The `default` profile |
-| 2 | User file | `~/.config/isaac-mcp/config.toml` |
-| 3 | Project file | `isaac-mcp.toml`, found by walking up from the server's working directory |
-| 4 | Environment | `ISAAC_MCP_TOOLSETS` |
-| 5 | Command line | `isaac-mcp --toolsets ...` |
+| 2 | User file | `~/.config/twinsmith/config.toml` |
+| 3 | Project file | `twinsmith.toml`, found by walking up from the server's working directory |
+| 4 | Environment | `TWINSMITH_TOOLSETS` |
+| 5 | Command line | `twinsmith --toolsets ...` |
 
 A source that does not mention toolsets leaves the choice from the sources before it. In the files the list is
 `toolsets` under `[tools]`:
@@ -89,18 +89,18 @@ Three worked examples:
 2. **A work-cell PC that does not need desktop capture.** The default minus `screen`, plus the work cell.
 
    ```bash
-   ISAAC_MCP_TOOLSETS=default,-screen,+workcell isaac-mcp toolsets
+   TWINSMITH_TOOLSETS=default,-screen,+workcell twinsmith toolsets
    ```
 
-   `isaac-mcp toolsets` prints the result. In an MCP client's configuration the same value goes in the server's `env`.
+   `twinsmith toolsets` prints the result. In an MCP client's configuration the same value goes in the server's `env`.
 
 3. **Lab training only, with the smallest tool list.** Connection tools, Lab, and `run_python` with the file tools.
 
    ```bash
-   isaac-mcp --toolsets core,lab,code
+   twinsmith --toolsets core,lab,code
    ```
 
-`isaac-mcp --toolsets core,lab,code toolsets` prints the table for that choice without starting the server.
+`twinsmith --toolsets core,lab,code toolsets` prints the table for that choice without starting the server.
 
 ### Profiles
 
@@ -136,13 +136,13 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 | `core,workcell` | 13 | 10,542 | 2,635 |
 
 Before toolsets existed the server always listed 48 tools, about 28,450 estimated tokens. The listed text is a summary:
-`action="help"` on a grouped tool and `isaac_help(tool="<name>")` return the full description. A test
+`action="help"` on a grouped tool and `help(tool="<name>")` return the full description. A test
 (`mcp/tests/test_toolsets.py`) fails when a profile grows past its budget. Measure your own selection; the argument is the
 same text the server reads:
 
 ```bash
 cd mcp
-uv run --locked --isolated --python 3.12 --extra test python ../scripts/measure_tool_list.py ISAAC_MCP_TOOLSETS=default
+uv run --locked --isolated --python 3.12 --extra test python ../scripts/measure_tool_list.py TWINSMITH_TOOLSETS=default
 ```
 
 ## What is on, and what is off
@@ -150,9 +150,9 @@ uv run --locked --isolated --python 3.12 --extra test python ../scripts/measure_
 - **`status`**, the tool an agent calls first, answers with or without a simulator, and carries a `toolsets` field:
   `on` (the enabled toolsets), `off` (each disabled toolset with a one-line summary), `planned` and `enable` (how to turn
   one on). It also reports the stage's physics engine once a simulator answers.
-- **`isaac-mcp://toolsets`** is an MCP resource with the same JSON, for clients and people that read resources.
-- **`isaac_help`** names the toolset when the tool for a task is off.
-- **`isaac-mcp toolsets`** prints the table from a terminal.
+- **`twinsmith://toolsets`** is an MCP resource with the same JSON, for clients and people that read resources.
+- **`help`** names the toolset when the tool for a task is off.
+- **`twinsmith toolsets`** prints the table from a terminal.
 
 ## Enabling a toolset while the server runs
 
@@ -171,7 +171,7 @@ Rules the server enforces:
   only a person can turn them on, in the configuration, before the server starts. A call that names one of them is refused
   and changes nothing.
 - A change made with this tool lasts until the server stops. It is not written to any file.
-- `[tools] runtime_enable = false` in a configuration file, or `ISAAC_MCP_RUNTIME_ENABLE=0`, turns `enable` and `disable`
+- `[tools] runtime_enable = false` in a configuration file, or `TWINSMITH_RUNTIME_ENABLE=0`, turns `enable` and `disable`
   off; `list` still answers.
 
 What the tool changes is the listed tools; it does not change any permission.
@@ -182,13 +182,11 @@ Toolsets are a visibility preference. They are **not a security boundary**. Two 
 whatever a client is shown:
 
 - the bridge **token**, which every connection must present;
-- **read-only mode** (`ISAAC_MCP_READ_ONLY=1` where Kit starts), which refuses every tool that changes state.
+- **read-only mode** (`TWINSMITH_READ_ONLY=1` where Kit starts), which refuses every tool that changes state.
 
 A client that can reach the bridge with the token can still send any registered call to it. To limit what an agent can
 change, start the simulator read-only; see [limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach).
 
 ## Old settings
 
-`ISAAC_MCP_LOCAL_TOOLS`, `ISAAC_MCP_NAMESPACE`, `ISAAC_MCP_BUILTINS`, `ISAAC_MCP_SCENE_TOOLS` and
-`ISAAC_MCP_GROUP_TOOLS` are gone. A server that finds one set stops at startup and prints the `ISAAC_MCP_TOOLSETS` line
-that replaces it. Remove the old variable and use that line.
+The selection variables of 0.2 (named in [MIGRATING.md](MIGRATING.md#settings-that-were-already-removed)) are gone. A server that finds one set stops at startup and prints the `TWINSMITH_TOOLSETS` line that replaces it. Remove the old variable and use that line.

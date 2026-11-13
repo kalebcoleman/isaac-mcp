@@ -8,7 +8,7 @@ import pytest
 def _allow_tmp(monkeypatch):
     monkeypatch.setenv("ISAACLAB_ALLOW_TMP", "1")
 
-from isaac_mcp.isaaclab import metrics
+from twinsmith.isaaclab import metrics
 
 
 def _make_event_file(d, tag="loss", values=None):
@@ -87,7 +87,7 @@ def test_checkpoints_default_searches_install_logs_and_jobs(tmp_path, monkeypatc
     monkeypatch.delenv("ISAACLAB_LOGS_DIR", raising=False)
     monkeypatch.delenv("ISAACLAB_PYTHON", raising=False)
     monkeypatch.setenv("ISAACLAB_ROOT", str(root))
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(jobs_dir))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(jobs_dir))
     assert {os.path.basename(c["path"]) for c in metrics.checkpoints_list()["checkpoints"]} == {
         "model_1.pt", "model_2.pt"
     }
@@ -98,7 +98,7 @@ def test_checkpoints_default_without_install_uses_jobs(tmp_path, monkeypatch):
     monkeypatch.delenv("ISAACLAB_PYTHON", raising=False)
     monkeypatch.delenv("ISAACLAB_ROOT", raising=False)
     monkeypatch.delenv("ISAACLAB_LOGS_DIR", raising=False)
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path))
     (tmp_path / "model.pt").touch()
     assert len(metrics.checkpoints_list()["checkpoints"]) == 1
 

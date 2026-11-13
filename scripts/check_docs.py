@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 SKILLS_DIR = ROOT / ".agents" / "skills"
 
-# Tools that no longer exist, by bare name. A namespaced name (sim__, assets__, isaaclab__, ur5e_dt__)
+# Tools that no longer exist, by bare name. A namespaced name (sim__, assets__, isaaclab__, workcell__)
 # needs no entry here: it must be registered, or it is reported.
 RETIRED_TOOLS = frozenset({"list_bridges", "screen_info", "assets__prepare_workstation",
                            "isaaclab__run_script", "isaaclab__runs_cancel"})
@@ -27,7 +27,7 @@ RETIRED_PHRASES = ("PhysX is the release target", "Newton is experimental")
 # Generated from the tool descriptions in the code: a stale name there is fixed in the description, not in the page.
 GENERATED_PAGES = frozenset({"docs/TOOLS-ARGUMENTS.md"})
 
-NAMESPACED = re.compile(r"(?<![A-Za-z0-9_])((?:sim|assets|isaaclab|ur5e_dt)__[a-z][a-z0-9_]*)(\*?)")
+NAMESPACED = re.compile(r"(?<![A-Za-z0-9_])((?:sim|assets|isaaclab|workcell)__[a-z][a-z0-9_]*)(\*?)")
 # `windows(action="info")`, `windows action=info`, `jobs` with action `tail`, in code or prose.
 GROUP_CALL = re.compile(r"(?<![A-Za-z0-9_])(?P<group>[a-z][a-z0-9_]*)(?:\(|\s+)action=[\"']?(?P<action>[a-z_0-9]+)")
 
@@ -49,7 +49,7 @@ def registered():
 def check_tool_names(errors, files=None, names=None, groups=None, retired=None):
     """A page may name only tools that exist: namespaced names must be registered, a retired bare
     name is refused, and the action in `group(action="x")` must belong to that group."""
-    from isaac_mcp import tool_groups
+    from twinsmith import tool_groups
 
     names = registered() if names is None else names
     groups = {group: set(actions) for group, (_, actions) in tool_groups.GROUPS.items()} if groups is None else groups
@@ -66,7 +66,7 @@ def check_tool_names(errors, files=None, names=None, groups=None, retired=None):
         for name, star in NAMESPACED.findall(text):
             if name in names and not star:
                 continue
-            # A trailing `*` marks a family (`ur5e_dt__quick_start*`): it must prefix a real tool.
+            # A trailing `*` marks a family (`workcell__quick_start*`): it must prefix a real tool.
             if star and any(known.startswith(name) for known in names):
                 continue
             seen.add(name + star)
@@ -102,7 +102,7 @@ def check_generated(errors, output=None, files=None):
 
 
 # The work cell documents itself: its own README names every listed work-cell tool.
-WORKCELL_README = "exts/ur5e-dt/workcell/README.md"
+WORKCELL_README = "exts/workcell/workcell/README.md"
 
 
 def check_workcell_documented(errors, readme=None, listed=None):

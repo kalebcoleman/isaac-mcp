@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 import pytest
-from isaac_mcp import project_assets as a
+from twinsmith import project_assets as a
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ def test_paths(path):
 
 
 def test_default_and_untrusted_fail_closed(tmp_path, monkeypatch):
-    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    monkeypatch.delenv("TWINSMITH_ASSET_CONFIG", raising=False)
     b = a.Broker()
     assert b.listing()["roots"] == []
     with pytest.raises(a.AssetError, match="not approved"):
@@ -251,30 +251,30 @@ def test_scan_and_search_skip_a_too_deep_folder_and_name_it(broker):
 
 
 def test_with_no_approval_file_both_sides_share_one_private_staging_folder(tmp_path, monkeypatch):
-    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
-    monkeypatch.delenv("ISAAC_MCP_STAGING", raising=False)
+    monkeypatch.delenv("TWINSMITH_ASSET_CONFIG", raising=False)
+    monkeypatch.delenv("TWINSMITH_STAGING", raising=False)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     host, kit = a.Broker(), a.Broker()
-    expected = tmp_path / ".cache" / "isaac-mcp" / "staging"
+    expected = tmp_path / ".cache" / "twinsmith" / "staging"
     assert host.staging == kit.staging == expected and host.default_staging
     assert (expected.stat().st_mode & 0o777) == 0o700 and not host.roots  # it approves nothing
 
 
 def test_default_staging_can_be_moved_tightened_and_refused(tmp_path, monkeypatch):
-    monkeypatch.delenv("ISAAC_MCP_ASSET_CONFIG", raising=False)
+    monkeypatch.delenv("TWINSMITH_ASSET_CONFIG", raising=False)
     where = tmp_path / "elsewhere"
-    monkeypatch.setenv("ISAAC_MCP_STAGING", str(where))
+    monkeypatch.setenv("TWINSMITH_STAGING", str(where))
     assert a.Broker().staging == where
     where.chmod(0o755)
     assert a.Broker().staging == where and (where.stat().st_mode & 0o077) == 0  # loose mode is tightened, not trusted
     blocker = tmp_path / "file"
     blocker.write_text("x")
-    monkeypatch.setenv("ISAAC_MCP_STAGING", str(blocker / "inside"))
+    monkeypatch.setenv("TWINSMITH_STAGING", str(blocker / "inside"))
     assert a.Broker().staging is None  # can't be made: off, as before
 
 
 def test_an_explicit_approval_file_still_decides_staging(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_STAGING", str(tmp_path / "default"))
+    monkeypatch.setenv("TWINSMITH_STAGING", str(tmp_path / "default"))
     broker = a.Broker(str(tmp_path / "missing.json"))
     assert broker.staging is None and broker.config_error and not broker.default_staging
 
@@ -290,7 +290,7 @@ def test_many_imports_fit_and_a_nearly_full_disk_refuses(broker, monkeypatch):
 
 def test_a_folder_that_is_the_approved_root_picks_the_usd_named_after_it():
     """The recommended smallest folder is the root itself, whose relative name was empty, so Teapot/Teapot.usd was not picked."""
-    from isaac_mcp import asset_formats
+    from twinsmith import asset_formats
 
     files = ["Teapot.usd", "DrawModes.usd", "geo/Fancy.usd"]
     found = asset_formats.candidates(files, lambda rel: b"", "", "Teapot")

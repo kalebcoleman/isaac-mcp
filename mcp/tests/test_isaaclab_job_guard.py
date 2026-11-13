@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import jobs
+from twinsmith.isaaclab import jobs
 
 LIVE_CMD = [sys.executable, "-c", "import time; time.sleep(60)"]
 
@@ -40,7 +40,7 @@ def make_fake_python(tmp_path: Path) -> Path:
 @pytest.fixture(autouse=True)
 def isolated_jobs(tmp_path, monkeypatch):
     jd = tmp_path / "jobs"
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(jd))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(jd))
     # reset module jobs_dir cache (none) and active map
     jobs._active.clear()
     yield

@@ -1,0 +1,534 @@
+"""Register the Isaac Lab tool pack on the host FastMCP server.
+
+These are host-side tools (like the screen tools): they never need a Kit process. Each returns a JSON
+string; failures come back as ``{"error": ...}`` rather than exceptions so a client can read and retry.
+Reference: docs/TOOLS-ISAACLAB.md.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import threading
+from typing import Annotated, Any, Callable, Iterable
+
+from pydantic import BeforeValidator, Field
+
+from ..local_tools import ADDITIVE, DESTRUCTIVE, IDEMPOTENT_WRITE, PYTHON_EXECUTION, READ_ONLY, ScopedTools
+from . import install as _install
+from . import jobs as _jobs
+from . import metrics as _metrics
+from . import preflight as _preflight
+from . import registry as _registry
+from . import evalsummary as _evalsummary
+from . import rundir as _rundir
+
+_NO_INSTALL = {
+    "error": "no Isaac Lab install found",
+    "hint": "set ISAACLAB_PYTHON (and optionally ISAACLAB_ROOT) to the interpreter of an Isaac Lab env (3.0, or 2.3.x with Isaac Sim 5.1), or pass install='<abs path to a venv>' (or set ISAACLAB_INSTALLS) to choose one per call",
+}
+
+
+def _not_a_bool(value: Any) -> Any:
+    """Pydantic would turn ``true`` into 1 before the check in metrics.tensorboard_tail could see it."""
+    if isinstance(value, bool):
+        raise ValueError("last_n must be an integer (not a boolean) or null")
+    return value
+
+
+_LastN = Annotated[int | None, BeforeValidator(_not_a_bool), Field(description="How many of the newest points to return.")]
+_Task = Annotated[str, Field(description="Task id from isaaclab__envs_list, e.g. Isaac-Cartpole on Lab 3, Isaac-Cartpole-v0 on Lab 2.3.")]
+_Checkpoint = Annotated[str, Field(description="Checkpoint file from isaaclab__checkpoints_list. Must lie under the Isaac Lab checkout, the jobs folder, a python_paths or cwd folder you pass, or a folder in ISAACLAB_CHECKPOINT_ROOTS; the error names the allowed roots.")]
+_JobId = Annotated[str, Field(description="job_id from isaaclab__train, eval or play, or isaaclab__runs_list.")]
+_RunDir = Annotated[str, Field(description="Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status.")]
+_Headless = Annotated[bool, Field(description="false opens a window. true with extra_args=['--video'] keeps a renderer with no window.")]
+_RlLibrary = Annotated[str | None, Field(description="RL library, e.g. rsl_rl. Required on Lab 2.x, which has one script folder per library; install_info's rl_libraries lists them. Lab 3 uses the task's registered default and needs this only for a task with none.")]
+_ExtraArgs = Annotated[list[str] | None, Field(description="More command-line arguments and Hydra overrides for the Isaac Lab script, e.g. ['--video', '--video_length', '400'] or ['env.commands.base_velocity.ranges.lin_vel_x=[0.5,0.5]'].")]
+_Physics = Annotated[str | None, Field(description="physx or newton. Default: the task's own (on Lab 3 often Newton). Lab 2.x is PhysX only. A task with no engine presets fails with it: leave it out.")]
+_Timeout = Annotated[float | None, Field(description="Stop the job after this many seconds. Default: no limit.")]
+_AllowConcurrent = Annotated[bool, Field(description="Start even if another job is running; a 16 GB GPU normally fits one.")]
+_PythonPaths = Annotated[list[str] | None, Field(description="Absolute folders put first on PYTHONPATH: the import roots of an uninstalled project, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way; the install's own path stays.")]
+_PythonPath = Annotated[list[str] | None, Field(description="Older name of python_paths; both may be given and are merged.")]
+_TaskEnv = Annotated[dict[str, str] | None, Field(description="Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, TWINSMITH_*.")]
+_ExternalCallback = Annotated[str | None, Field(description="Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).")]
+_TaskModules = Annotated[list[str] | None, Field(description="Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.")]
+_Cwd = Annotated[str | None, Field(description="Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.")]
+_Install = Annotated[str | None, Field(description="Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.")]
+_Label = Annotated[str | None, Field(description="Short name for the job, shown in runs_list and runs_status, e.g. 'candidate run'.")]
+_AllowGpu = Annotated[bool, Field(description="Start even if an Isaac Sim (Kit bridge) app is using the GPU.")]
+_ScriptEnv = Annotated[dict[str, str] | None, Field(description="Extra environment variables; the same rules as the env argument of isaaclab__train (PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value).")]
+_Script = Annotated[str, Field(description="Path to an existing .py file. It runs as `<python> <script> <args...>` with no shell.")]
+_ScriptArgs = Annotated[list[str] | None, Field(description="Command-line arguments for the script.")]
+_ScriptCwd = Annotated[str | None, Field(description="Working directory. Default: the script's folder.")]
+_ScriptLabel = Annotated[str | None, Field(description="Short name, used in the job_id and runs_list.")]
+_ScriptTimeout = Annotated[float, Field(description="Hard wall limit in seconds; the whole process group is killed at expiry.")]
+_MinVram = Annotated[int | None, Field(description="Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.")]
+_VramWait = Annotated[float, Field(description="With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).")]
+_SingleKey = Annotated[str | None, Field(description="Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.")]
+
+
+_MAX_WAIT_S = 3600.0
+_WAIT_POLL_S = 2.0  # patched by tests
+
+
+def _dump(obj: Any) -> str:
+    return json.dumps(obj, default=str)      # one line: indentation is characters the client pays for
+
+
+def _guard(fn: Callable[[], Any]) -> str:
+    try:
+        return _dump(fn())
+    except (ValueError, OSError) as exc:
+        return _dump({"error": str(exc)})
+
+
+_WINDOW_HINT = (
+    "A window opens within ~30 s but the scene is empty/black until loading finishes. Poll "
+    "isaaclab__runs_status(job_id) until it reports `window`, and isaaclab__runs_tail(job_id, lines=200) until it contains "
+    "'Completed setting up the environment' (later lines can push it out of last_log_lines), wait ~5 s, then screenshot(window_id=...) or a short "
+    "start_screen_recording(window_id=...) to inspect the result, and job_cancel when done."
+)
+
+
+def _task_kw(python_path: Any, env: Any, external_callback: Any, task_modules: Any = None, cwd: Any = None,
+             python_paths: Any = None) -> dict[str, Any]:
+    return _jobs._launch_kw(_install.merge_python_paths(python_path, python_paths), env, external_callback, task_modules, cwd)
+
+
+def _launch(fn: Callable[..., Any], install: Any = None, **kwargs: Any) -> str:
+    inst, why = _install.resolve_install(install)
+    if why and install is not None:
+        return _dump({"error": why})
+    if not inst:
+        return _dump(_NO_INSTALL)
+    if not inst.get("isaaclab_root"):
+        return _dump({"error": "Isaac Lab checkout not found",
+                      "hint": "set ISAACLAB_ROOT to the Isaac Lab checkout containing scripts/reinforcement_learning"})
+
+    def run() -> dict:
+        out = fn(python=inst["python"], root=inst["isaaclab_root"], **kwargs)
+        if out.get("error") or not out.get("job_id"):
+            return out  # a refusal keeps its own hint, e.g. allow_concurrent=true
+        overrides = [arg for arg in kwargs.get("extra_args") or []
+                     if isinstance(arg, str) and arg.split('=', 1)[0] in ('--viz', '--visualizer')]
+        if overrides:
+            out["hint"] = (
+                "The explicit visualizer override is forwarded once. headless controls Kit's HEADLESS "
+                "setting; non-Kit visualizers use their own Lab configuration. Inspect runs_status/window "
+                "and runs_tail for the actual display and startup result."
+            )
+        elif kwargs.get("headless") is False:
+            out["hint"] = _WINDOW_HINT
+        out["install"] = {k: inst.get(k) for k in ("name", "python", "isaaclab_root", "source") if inst.get(k)}  # what ran, so a wrong pick is visible
+        return out
+
+    return _guard(run)
+
+
+def register_isaaclab_tools(server: Any, groups: Iterable[str] | None = None) -> None:
+    """Register the Isaac Lab tools whose group is in ``groups`` (default: all of them)."""
+    mcp = ScopedTools(server, groups)
+
+    @mcp.tool(name="isaaclab__install_info", annotations=PYTHON_EXECUTION)
+    def isaaclab_install_info(install: _Install = None) -> str:
+        """Report the Isaac Lab install. Interpreter, versions, root and venv.
+
+        Runs the configured Python interpreter, whose startup code may have side effects."""
+        return _guard(lambda: _install.install_info(install=install))
+
+    @mcp.tool(name="isaaclab__envs_list", annotations=PYTHON_EXECUTION)
+    def isaaclab_envs_list(filter: Annotated[str | None, Field(description="Keep task ids containing this text.")] = None,
+                           python_paths: _PythonPaths = None, python_path: _PythonPath = None, env: _TaskEnv = None,
+                           external_callback: _ExternalCallback = None, task_modules: _TaskModules = None,
+                           install: _Install = None) -> str:
+        """List registered Isaac Lab task ids. Optionally filtered by substring.
+
+        Tasks of an external project appear only when its package is importable and its registration ran:
+        pass python_paths and external_callback (called here with no arguments), or set ISAACLAB_TASK_PATH with
+        ISAACLAB_TASK_MODULES. An empty result carries a `hint` saying so.
+
+        Runs Python and imports task modules, which may have side effects."""
+        return _guard(lambda: _install.envs_list(filter=filter, python_path=_install.merge_python_paths(python_path, python_paths), task_env=env,
+                                                 external_callback=external_callback, task_modules=task_modules, install=install))
+
+    @mcp.tool(name="isaaclab__train", annotations=PYTHON_EXECUTION)
+    def isaaclab_train(
+        task: _Task,
+        num_envs: Annotated[int, Field(description="Parallel environments.")] = 64,
+        max_iterations: Annotated[int | None, Field(description="Training iterations. Default: the task's own.")] = None,
+        seed: Annotated[int | None, Field(description="Random seed.")] = None,
+        device: Annotated[str | None, Field(description="e.g. cuda:0 or cpu. Default: Isaac Lab's choice.")] = None,
+        headless: _Headless = True,
+        checkpoint: Annotated[str | None, Field(description="Checkpoint file to resume from, from isaaclab__checkpoints_list.")] = None,
+        rl_library: _RlLibrary = None,
+        physics: _Physics = None,
+        extra_args: _ExtraArgs = None,
+        timeout_s: _Timeout = None,
+        allow_concurrent: _AllowConcurrent = False,
+        allow_concurrent_gpu: _AllowGpu = False,
+        python_paths: _PythonPaths = None,
+        python_path: _PythonPath = None,
+        env: _TaskEnv = None,
+        external_callback: _ExternalCallback = None,
+        task_modules: _TaskModules = None,
+        cwd: _Cwd = None,
+        install: _Install = None,
+        label: _Label = None,
+    ) -> str:
+        """Start a training job; returns its job_id at once. Follow it with isaaclab__runs_status/tail.
+
+        Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true. Video needs optional
+        MoviePy/imageio-ffmpeg in the Lab interpreter.
+        """
+        return _launch(
+            _jobs.train,
+            task=task, num_envs=num_envs, max_iterations=max_iterations, seed=seed, device=device,
+            headless=headless, checkpoint=checkpoint, rl_library=rl_library, physics=physics, extra_args=extra_args,
+            timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+            label=label, install=install, **_task_kw(python_path, env, external_callback, task_modules, cwd, python_paths),
+        )
+
+    @mcp.tool(name="isaaclab__eval", annotations=PYTHON_EXECUTION)
+    def isaaclab_eval(
+        task: _Task,
+        checkpoint: _Checkpoint,
+        num_envs: Annotated[int | None, Field(description="Parallel environments. Default: the task's own.")] = None,
+        headless: _Headless = True,
+        rl_library: _RlLibrary = None,
+        physics: _Physics = None,
+        extra_args: _ExtraArgs = None,
+        num_episodes: Annotated[int, Field(description="Finished episodes to collect before the run stops itself.")] = 20,
+        max_steps: Annotated[int | None, Field(description="Environment-step bound that also ends the run; null removes it.")] = 20000,
+        timeout_s: _Timeout = None,
+        allow_concurrent: _AllowConcurrent = False,
+        allow_concurrent_gpu: _AllowGpu = False,
+        python_paths: _PythonPaths = None,
+        python_path: _PythonPath = None,
+        env: _TaskEnv = None,
+        external_callback: _ExternalCallback = None,
+        task_modules: _TaskModules = None,
+        cwd: _Cwd = None,
+        install: _Install = None,
+        label: _Label = None,
+    ) -> str:
+        """Run a checkpoint as a job and score it. Returns its job_id; when the job ends, isaaclab__runs_status
+        reports `eval_result`: episodes, mean/std/min/max return, mean length, steps, and success_rate if the
+        task reports one. It counts complete episodes, stops after num_episodes (waiting for each environment's
+        first finished episode where possible) or max_steps, then exits by itself. Without a finished episode it
+        reports no return, never a made-up score.
+
+        Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true. Video needs optional
+        MoviePy/imageio-ffmpeg in the Lab interpreter.
+        """
+        return _launch(
+            _jobs.eval_,
+            task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
+            rl_library=rl_library, physics=physics, extra_args=extra_args, num_episodes=num_episodes, max_steps=max_steps,
+            timeout_s=timeout_s, allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+            label=label, install=install, **_task_kw(python_path, env, external_callback, task_modules, cwd, python_paths),
+        )
+
+    @mcp.tool(name="isaaclab__play", annotations=PYTHON_EXECUTION)
+    def isaaclab_play(
+        task: _Task,
+        checkpoint: _Checkpoint,
+        num_envs: Annotated[int, Field(description="Parallel environments.")] = 1,
+        headless: _Headless = False,
+        rl_library: _RlLibrary = None,
+        physics: _Physics = None,
+        extra_args: _ExtraArgs = None,
+        timeout_s: _Timeout = None,
+        allow_concurrent: _AllowConcurrent = False,
+        allow_concurrent_gpu: _AllowGpu = False,
+        python_paths: _PythonPaths = None,
+        python_path: _PythonPath = None,
+        env: _TaskEnv = None,
+        external_callback: _ExternalCallback = None,
+        task_modules: _TaskModules = None,
+        cwd: _Cwd = None,
+        install: _Install = None,
+        label: _Label = None,
+    ) -> str:
+        """Play a checkpoint in a window (interactive). Stop it with job_cancel. For a video instead, headless=true with extra_args=['--video', '--video_length', '400'], and isaaclab__runs_status lists video_paths.
+
+        Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true. Video needs optional
+        MoviePy/imageio-ffmpeg in the Lab interpreter.
+        """
+        return _launch(
+            _jobs.play,
+            task=task, checkpoint=checkpoint, num_envs=num_envs, headless=headless,
+            rl_library=rl_library, physics=physics, extra_args=extra_args, timeout_s=timeout_s,
+            allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+            label=label, install=install, **_task_kw(python_path, env, external_callback, task_modules, cwd, python_paths),
+        )
+
+    @mcp.tool(name="isaaclab__env_check", annotations=PYTHON_EXECUTION)
+    def isaaclab_env_check(
+        task: _Task,
+        num_envs: Annotated[int, Field(description="Parallel environments; keep it small (default 4).")] = 4,
+        steps: Annotated[int, Field(description="Environment steps to run before stopping.")] = 60,
+        agent: Annotated[str, Field(description="zero (all-zero actions) or random.")] = "zero",
+        headless: _Headless = True,
+        physics: _Physics = None,
+        extra_args: _ExtraArgs = None,
+        timeout_s: _Timeout = 900,
+        allow_concurrent: _AllowConcurrent = False,
+        allow_concurrent_gpu: _AllowGpu = False,
+        python_paths: _PythonPaths = None,
+        python_path: _PythonPath = None,
+        env: _TaskEnv = None,
+        external_callback: _ExternalCallback = None,
+        task_modules: _TaskModules = None,
+        cwd: _Cwd = None,
+        install: _Install = None,
+    ) -> str:
+        """Check that a task builds and steps, as a job. Builds it, steps it with zero or random actions and reports what is wrong. Returns job_id;
+        isaaclab__runs_status then gives `env_check_result`: observation and action shapes, reward statistics,
+        non-finite values, episode ends in the first steps, step time, GPU memory, and a `problems` list. Run it
+        before a long train, and after changing a scene or asset. Task-specific checks (a tip height, a tower
+        standing) still need the task's own script.
+
+        Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true."""
+        return _launch(_jobs.env_check, task=task, num_envs=num_envs, steps=steps, agent=agent, headless=headless,
+                       physics=physics, extra_args=extra_args, timeout_s=timeout_s,
+                       allow_concurrent=allow_concurrent, allow_concurrent_gpu=allow_concurrent_gpu,
+                       install=install, **_task_kw(python_path, env, external_callback, task_modules, cwd, python_paths))
+
+    @mcp.tool(name="isaaclab__record", annotations=PYTHON_EXECUTION)
+    def isaaclab_record(
+        task: _Task,
+        checkpoint: Annotated[str | None, Field(description="Checkpoint to play. Omit to record zero or random actions.")] = None,
+        video_length: Annotated[int, Field(description="Steps to record.")] = 200,
+        num_envs: Annotated[int, Field(description="Parallel environments.")] = 1,
+        agent: Annotated[str, Field(description="Without a checkpoint: zero or random.")] = "zero",
+        headless: _Headless = True,
+        rl_library: _RlLibrary = None,
+        physics: _Physics = None,
+        extra_args: _ExtraArgs = None,
+        timeout_s: _Timeout = 1800,
+        allow_concurrent: _AllowConcurrent = False,
+        allow_concurrent_gpu: _AllowGpu = False,
+        python_paths: _PythonPaths = None,
+        python_path: _PythonPath = None,
+        env: _TaskEnv = None,
+        external_callback: _ExternalCallback = None,
+        task_modules: _TaskModules = None,
+        cwd: _Cwd = None,
+        install: _Install = None,
+    ) -> str:
+        """Record an MP4 of a task with no window, as a job. With a checkpoint it plays the policy; without one it
+        runs zero or random actions, which is enough to see a scene. Returns job_id; isaaclab__runs_status lists
+        `video_paths` when it ends. Needs MoviePy or imageio-ffmpeg in the Lab interpreter when a checkpoint is given.
+
+        Refuses while a Kit bridge app is running unless allow_concurrent_gpu=true."""
+        return _launch(_jobs.record, task=task, checkpoint=checkpoint, video_length=video_length, num_envs=num_envs,
+                       agent=agent, headless=headless, rl_library=rl_library, physics=physics, extra_args=extra_args,
+                       timeout_s=timeout_s, allow_concurrent=allow_concurrent,
+                       allow_concurrent_gpu=allow_concurrent_gpu, install=install, **_task_kw(python_path, env, external_callback, task_modules, cwd, python_paths))
+
+    async def start_script(default_python: Callable[[], Any], **kwargs: Any) -> str:
+        """Both script tools: resolve the interpreter, then start the job off the event loop."""
+        cancel = threading.Event()
+        python, install = kwargs.pop("python"), kwargs.pop("install")
+        paths = _install.merge_python_paths(kwargs.pop("python_path"), kwargs.pop("python_paths"))
+
+        def start() -> dict:
+            py = python
+            if not py and install is None:
+                py = default_python()
+            if not py:
+                inst, why = _install.resolve_install(install)
+                if why and install is not None:
+                    return {"error": why}
+                if not inst:
+                    return dict(_NO_INSTALL)
+                py = inst["python"]
+            return _jobs.run_script(py, kwargs.pop("script"), python_path=paths, cancel=cancel, **kwargs)
+
+        # wait_for_vram_s can sleep for minutes: keep it off the event loop so the server keeps answering.
+        try:
+            return await asyncio.to_thread(_guard, start)
+        except asyncio.CancelledError:
+            cancel.set()  # the client gave up: stop waiting for GPU memory instead of launching later
+            raise
+
+    @mcp.tool(name="run_script", annotations=PYTHON_EXECUTION)
+    async def run_script(
+        script: _Script,
+        args: _ScriptArgs = None,
+        env: _ScriptEnv = None,
+        python_paths: _PythonPaths = None,
+        python: Annotated[str | None, Field(description="Interpreter. Default: python3 on PATH. Or pass install to use an Isaac Lab environment.")] = None,
+        install: _Install = None,
+        cwd: _ScriptCwd = None,
+        label: _ScriptLabel = None,
+        timeout_s: _ScriptTimeout = 600,
+        single_instance_key: _SingleKey = None,
+        uses_gpu: Annotated[bool, Field(description="true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget). Default false: it starts at once and does not block GPU jobs.")] = False,
+        min_free_vram_mb: _MinVram = None,
+        wait_for_vram_s: _VramWait = 0,
+    ) -> str:
+        """Run any Python script as a managed job: a job_id at once, a log, a hard timeout, progress and cancel.
+        Needs no simulator and no Isaac Lab: a controller server, a data conversion, a plot, a sweep step.
+
+        WARNING: executes arbitrary code with your rights; not sandboxed, not idempotent. Follow it with jobs action=status(job_id, wait_s=45),
+        jobs action=tail and jobs action=cancel. Print `TWINSMITH_ARTIFACT: <path>` to list outputs and
+        `TWINSMITH_PROGRESS: <0-1|N%|a/b> [text]` for progress."""
+        import shutil
+        import sys
+
+        return await start_script(
+            lambda: shutil.which("python3") or sys.executable, script=script, args=args, env=env,
+            python_paths=python_paths, python_path=None, python=python, install=install, cwd=cwd, label=label,
+            timeout_s=timeout_s, min_free_vram_mb=min_free_vram_mb, wait_for_vram_s=wait_for_vram_s,
+            single_instance_key=single_instance_key, uses_gpu=uses_gpu)
+
+    @mcp.tool(name="isaaclab__preflight", annotations=READ_ONLY)
+    def isaaclab_preflight(
+        task: Annotated[str | None, Field(description="Task id, to suggest a num_envs from its last isaaclab__env_check.")] = None,
+        ledger: Annotated[bool, Field(description="Also report GPU-hours used by your jobs (`gpu_hours`).")] = False,
+        label: Annotated[str | None, Field(description="With ledger: also list the jobs whose label or id contains this text.")] = None,
+        since: Annotated[str | None, Field(description="With ledger: count jobs from this time (ISO, or an age such as 12h, 3d).")] = None,
+    ) -> str:
+        """Check GPU room and running jobs before launching. Reports free GPU memory and its holders, running Lab
+        jobs, any Kit bridge, `can_start` with reasons, and, for an env_checked task, a conservative suggested
+        num_envs. `ledger=true` adds an optional `gpu_hours` report (jobs sharing a GPU are counted once).
+        Details: docs/TOOLS-ISAACLAB.md."""
+        return _guard(lambda: _preflight.preflight(task, ledger=ledger, label=label, since=since))
+
+    @mcp.tool(name="isaaclab__runs_list", annotations=DESTRUCTIVE)
+    def isaaclab_runs_list(
+        state: Annotated[str | None, Field(description="running or finished. Default: all.")] = None,
+        task: Annotated[str | None, Field(description="Keep jobs whose task id contains this text (case-insensitive).")] = None,
+        kind: Annotated[str | None, Field(description="Keep one kind of job: train, eval, play, env_check or record.")] = None,
+        since: Annotated[str | None, Field(description="Keep jobs started after this: an ISO time (2026-05-01T12:00, local time if no zone) or an age such as 90m, 2h, 1d, 1w.")] = None,
+        limit: Annotated[int, Field(description="Most jobs to return, newest first (1 to 500).")] = 25,
+    ) -> str:
+        """List Isaac Lab jobs, newest first, to find a job_id. Returns at most `limit` (default 25) matches,
+        with `total` (all matches) and `truncated`; narrow with task, kind, state or since, or raise limit.
+        Older versions returned every job oldest first.
+
+        Reconciles orphaned jobs by updating their stored metadata."""
+        return _guard(lambda: _jobs.runs_list(state=state, task=task, kind=kind, since=since, limit=limit))
+
+    @mcp.tool(name="isaaclab__runs_status", annotations=DESTRUCTIVE)
+    async def isaaclab_runs_status(
+        job_id: Annotated[str | None, Field(description="job_id from isaaclab__train, eval or play, or isaaclab__runs_list. Give this, or log_root with run_name.")] = None,
+        require_run_dir: Annotated[bool, Field(description="With job_id: return an `error` instead of a status when no Lab run folder is found for the job (else run_dir may be the job's own folder; see run_dir_source).")] = False,
+        log_root: Annotated[str | None, Field(description="Instead of a job: resolve a run folder by name under this logs folder. Needs run_name.")] = None,
+        run_name: Annotated[str | None, Field(description="With log_root: the --run_name the run used; matches folders named <timestamp>_<run_name> exactly.")] = None,
+        experiment: Annotated[str | None, Field(description="With log_root: experiment folder name, to narrow several matches.")] = None,
+        latest: Annotated[bool, Field(description="With log_root: when several folders match run_name, take the newest instead of an error listing them.")] = False,
+        wait_s: Annotated[float, Field(description="With job_id: block up to this many seconds (0 to 3600) until the job is no longer running, then return the final status. Many clients cut a tool call off after a minute or so: wait in slices of 30 to 60 s.")] = 0,
+    ) -> str:
+        """Check an Isaac Lab or script job's state and progress. Reports exit code, elapsed time, last log
+        lines, newest checkpoint, `run_dir` with `run_dir_source` (lab_log, checkpoint or job_dir) and
+        `run_dir_warning`, `physics`, `environment_ready`, an eval job's `eval_result`, a windowed job's
+        `window`, and for a running job `health` and `progress`.
+
+        wait_s blocks until the job ends (or returns `running` with `wait_timed_out`) and holds no lock.
+        log_root + run_name instead of job_id finds a run folder by name; none or several is an `error`.
+
+        Reconciles orphaned jobs (updates their stored metadata)."""
+        def status() -> dict:
+            if job_id is None:
+                return _rundir.from_log_root(log_root, run_name, experiment, latest)
+            if log_root is not None or run_name is not None:
+                raise ValueError("Give job_id, or log_root with run_name, not both.")
+            st = _jobs.runs_status(job_id)
+            if require_run_dir and st.get("run_dir_source") == "job_dir":
+                raise ValueError(
+                    f"job {job_id} ({st.get('state')}) has not written a Lab run folder: its log names none and no checkpoint exists. "
+                    f"Its own job folder is {st.get('log_dir')}; read isaaclab__runs_tail for the reason.")
+            if st.get("pid_alive"):
+                from ..screen import window_for_pid
+
+                w = window_for_pid(st.get("pid"))
+                if w:
+                    st["window"] = {k: w[k] for k in ("id", "title", "width", "height")}
+            return st
+
+        if not wait_s:
+            return _guard(status)
+        if job_id is None:
+            return _dump({"error": "wait_s needs a job_id"})
+        if isinstance(wait_s, bool) or not 0 < wait_s <= _MAX_WAIT_S:
+            return _dump({"error": f"wait_s must be between 0 and {int(_MAX_WAIT_S)} seconds"})
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        while True:
+            out = await asyncio.to_thread(_guard, status)
+            parsed = json.loads(out)
+            waited = loop.time() - started
+            if "error" in parsed or parsed.get("state") != "running":
+                parsed["waited_s"] = round(waited, 1)
+                return _dump(parsed)
+            if waited >= wait_s:
+                parsed.update(wait_timed_out=True, waited_s=round(waited, 1))
+                return _dump(parsed)
+            await asyncio.sleep(min(_WAIT_POLL_S, max(0.01, wait_s - waited)))
+
+    @mcp.tool(name="isaaclab__runs_tail", annotations=IDEMPOTENT_WRITE)
+    def isaaclab_runs_tail(job_id: _JobId, stream: Annotated[str, Field(description="stdout or stderr.")] = "stdout",
+                           lines: Annotated[int, Field(description="How many of the last lines to return.")] = 100) -> str:
+        """Last lines of a job's stdout or stderr log. Creates the jobs directory if missing."""
+        return _guard(lambda: _jobs.runs_tail(job_id, stream=stream, lines=lines))
+
+    @mcp.tool(name="isaaclab__checkpoints_list", annotations=READ_ONLY)
+    def isaaclab_checkpoints_list(run_dir: Annotated[str | None, Field(description="Run folder. Default: search the configured logs.")] = None,
+                                  task: Annotated[str | None, Field(description="Keep checkpoints whose path contains this text. Paths use the experiment name, such as cartpole, not the task id.")] = None) -> str:
+        """List policy checkpoints, newest first. Finds *.pt / *.pth, and stable-baselines3's .zip, under a run dir or the configured logs."""
+        return _guard(lambda: _metrics.checkpoints_list(run_dir=run_dir, task=task))
+
+    @mcp.tool(name="isaaclab__metrics_summary", annotations=READ_ONLY)
+    def isaaclab_metrics_summary(
+        run_dir: Annotated[str | None, Field(description="Run folder, as shown by isaaclab__checkpoints_list or isaaclab__runs_status. Or give job_id.")] = None,
+        tags: Annotated[list[str] | None, Field(description="Scalar tags to include. Default: all.")] = None,
+        job_id: Annotated[str | None, Field(description="A job from isaaclab__train, instead of run_dir.")] = None,
+        compare_jobs: Annotated[list[str] | None, Field(description="Several job_ids: returns their final scalars side by side, to compare seeds or settings.")] = None,
+        eval_json: Annotated[list[str] | None, Field(description="ABSOLUTE paths or glob patterns (e.g. '/runs/eval_*.json') of evaluation-result JSON files, such as repeat runs of one checkpoint: reports each file's metrics against `criteria` instead of TensorBoard scalars. Relative paths resolve from the server's folder, not yours.")] = None,
+        criteria: Annotated[list[dict[str, Any]] | str | None, Field(description="With eval_json: what counts as a pass, as a list of {key, op, value, label?} (key = dotted path into the file such as 'stats.success_rate', op one of >= > <= < == !=, default >=) or an absolute path to a .json/.yaml file holding that list. Default: none, so the numeric metrics are just reported.")] = None,
+        label: Annotated[str | None, Field(description="With eval_json: your name for this result, e.g. 'candidate run'; echoed back.")] = None,
+        baseline_json: Annotated[list[str] | None, Field(description="With eval_json: a baseline's result files (absolute paths or globs), scored with the same criteria.")] = None,
+        baseline_label: Annotated[str | None, Field(description="With baseline_json: the baseline's name, e.g. 'baseline'.")] = None,
+    ) -> str:
+        """Summarise a run's TensorBoard scalars. Last, min, max, step, count per tag, or compare jobs' final values.
+
+        With eval_json it reads your evaluation-result JSON files: each file's value and pass/fail for every criterion,
+        mean/min/max over the files, and the change against baseline_json; with no criteria, just the numeric metrics.
+        A missing key is an `error` naming the file. Details: docs/TOOLS-ISAACLAB.md."""
+        def summarise() -> dict:
+            if eval_json is not None:
+                if run_dir or job_id or compare_jobs or tags:
+                    raise ValueError("eval_json summarises evaluation files; do not combine it with run_dir, job_id, compare_jobs or tags.")
+                return _evalsummary.summarize(eval_json, criteria, label, baseline_json, baseline_label)
+            if any(x is not None for x in (criteria, label, baseline_json, baseline_label)):
+                raise ValueError("criteria, label, baseline_json and baseline_label apply only with eval_json.")
+            if compare_jobs:
+                return _metrics.compare_runs({job: _jobs.runs_status(job).get("run_dir") for job in compare_jobs}, tags=tags)
+            folder = run_dir or (_jobs.runs_status(job_id).get("run_dir") if job_id else None)
+            if not folder:
+                raise ValueError("Give run_dir, job_id, compare_jobs or eval_json. A job that has not written a run folder yet has no metrics.")
+            return _metrics.metrics_summary(folder, tags=tags)
+
+        return _guard(summarise)
+
+    @mcp.tool(name="isaaclab__checkpoint_register", annotations=ADDITIVE)
+    def isaaclab_checkpoint_register(
+        path: Annotated[str, Field(description="Absolute path of the checkpoint file (.pt, .pth, .zip, .ckpt, .onnx) to register, e.g. from isaaclab__checkpoints_list.")],
+        role: Annotated[str, Field(description="What it is for, one short line: baseline, candidate, init or final.")],
+        provenance: Annotated[str, Field(description="Where it came from, one line: run name, commit, settings, evaluation result.")],
+        registry: Annotated[str | None, Field(description="Markdown file to add the row to. Default: README.md in the checkpoint's folder. It must be in that folder or one above it.")] = None,
+        read_only: Annotated[bool, Field(description="Also remove write permission from the checkpoint file, so a later run cannot overwrite it.")] = False,
+    ) -> str:
+        """Record a checkpoint in a README table (path, role, sha256, size, time, provenance) so a baseline cannot be
+        replaced unnoticed. Append-only: one atomic write adds a row; a path that already has a row is refused with the
+        existing row and whether the file still matches its hash. Returns the sha256 and the row, `same_content_as`
+        if another registered path has identical bytes, and, in a git work tree, a `git` hint: `.pt` files are usually
+        ignored, so commit them with `git add -f` (this tool never runs git). Reads the checkpoint, writes only the registry."""
+        return _guard(lambda: _registry.register(path, role, provenance, registry, read_only))
+
+    @mcp.tool(name="isaaclab__tensorboard_tail", annotations=READ_ONLY)
+    def isaaclab_tensorboard_tail(run_dir: _RunDir, tag: Annotated[str, Field(description="Scalar tag, from isaaclab__metrics_summary.")], last_n: _LastN = 50) -> str:
+        """Last points of one TensorBoard scalar (a training curve). Find tags with isaaclab__metrics_summary."""
+        return _guard(lambda: _metrics.tensorboard_tail(run_dir, tag, last_n=last_n))

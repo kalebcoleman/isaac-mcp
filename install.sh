@@ -1,8 +1,8 @@
 #!/bin/bash
-# Layout: mcp/ is the host MCP package, exts/ holds the Kit extensions (isaac.mcp.bridge, ur5e-dt),
+# Layout: mcp/ is the host MCP package, exts/ holds the Kit extensions (twinsmith.bridge, workcell),
 # config/ and scripts/ hold the launch/check helpers (see docs/ARCHITECTURE.md).
 #
-# install.sh — idempotent one-time setup for isaac-mcp.
+# install.sh — idempotent one-time setup for twinsmith.
 #
 # Usage:
 #   ./install.sh [options]
@@ -23,6 +23,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$ROOT/scripts/legacy_env.sh" ] && . "$ROOT/scripts/legacy_env.sh"   # old variable names, for one release
 PORT=8766
 DISPLAY_NAME="${DISPLAY:-:0}"
 NO_SIM=0
@@ -38,7 +39,7 @@ usage() {
   cat <<'EOF'
 Usage: ./install.sh [options]
 
-Idempotent setup for isaac-mcp: the host MCP server and, only when needed, Isaac Sim.
+Idempotent setup for twinsmith: the host MCP server and, only when needed, Isaac Sim.
 An installed Isaac Sim 6.x is used and recorded in the client configurations this writes.
 
 Options:
@@ -46,7 +47,7 @@ Options:
                     Isaac Sim 6.x is still found and recorded in client configurations
   --download-sim    Download the locked Isaac Sim 6.2 environment into .venv even when an
                     Isaac Sim 6.x is already installed (by default an existing install is used)
-  (5.1 is used only when named: ISAAC_MCP_PYTHON=/path/to/5.1/python ./install.sh --no-sim)
+  (5.1 is used only when named: TWINSMITH_SIM_PYTHON=/path/to/5.1/python ./install.sh --no-sim)
   --claude          Configure both Claude Code and Claude Desktop
   --claude-code     Configure Claude Code only
   --claude-desktop  Configure Claude Desktop only
@@ -131,7 +132,7 @@ fi
 # Use an Isaac Sim that is already installed (a lab PC's, another environment's) instead of
 # downloading ~20 GB. Only the checkout's own .venv is re-synced without asking, because that is
 # this installer's environment. The interpreter found here is written into the client
-# configuration (ISAAC_MCP_PYTHON), so sim__launch/run.sh use it even from a shell where the
+# configuration (TWINSMITH_SIM_PYTHON), so sim__launch/run.sh use it even from a shell where the
 # variables that found it (VIRTUAL_ENV, CONDA_PREFIX, ISAACSIM_PATH, ...) are not set.
 # --no-sim never downloads, so a failed look there is only a warning; it still records what it finds.
 SIM_PYTHON=""
@@ -143,18 +144,18 @@ if [ "$DOWNLOAD_SIM" = 0 ] && { [ "$NO_SIM" = 1 ] || [ ! -x "$ROOT/.venv/bin/pyt
     exit 1
   fi
   set +e
-  FOUND="$(python3 - "$ROOT/scripts/isaac_env.py" <<'PY'
+  FOUND="$(python3 - "$ROOT/scripts/env.py" <<'PY'
 import json, os, subprocess, sys
 tool = sys.argv[1]
-INTERP_VARS = ("ISAAC_MCP_PYTHON", "UR5E_DT_PYTHON", "ISAAC_SIM_PYTHON")   # isaac_env.py EXPLICIT_VARS
-ROOT_VARS = ("ISAACSIM_PATH", "ISAAC_SIM_PATH", "ISAAC_PATH")                # isaac_env.py STANDALONE_ENV_VARS
+INTERP_VARS = ("TWINSMITH_SIM_PYTHON",)   # env.py EXPLICIT_VARS
+ROOT_VARS = ("ISAACSIM_PATH", "ISAAC_PATH")                # env.py STANDALONE_ENV_VARS
 listed = subprocess.run([sys.executable, tool, "find", "--json"], capture_output=True, text=True)
 if listed.returncode:
-    print(listed.stderr.strip() or "isaac_env.py find failed", file=sys.stderr)
+    print(listed.stderr.strip() or "env.py find failed", file=sys.stderr)
     sys.exit(3)
 found = json.loads(listed.stdout or "[]")
 cands = [c for c in found if str(c.get("isaacsim") or "").split(".")[0] == "6"]
-# Same precedence as isaac_env.py: an interpreter variable wins over an install-root variable.
+# Same precedence as env.py: an interpreter variable wins over an install-root variable.
 # Only the variables the user named count (not an activated VIRTUAL_ENV/CONDA_PREFIX), so a typo
 # is reported instead of being replaced by whatever environment happens to be active.
 named = [v for v in INTERP_VARS if os.environ.get(v, "").strip()]
@@ -169,7 +170,7 @@ if named:
         c in cands or str(c.get("isaacsim") or "").split(".")[:2] == ["5", "1"])]
     if not chosen:
         print(f"{', '.join(named)} is set but does not point at an Isaac Sim 6.x or 5.1 install "
-              "(check it with: python3 scripts/isaac_env.py find). Fix or unset it; "
+              "(check it with: python3 scripts/env.py find). Fix or unset it; "
               "pass --download-sim only if you want the locked 6.2 download.", file=sys.stderr)
         sys.exit(3)
     cands = chosen
@@ -187,8 +188,8 @@ PY
   elif [ "$rc" = 0 ] && [ -n "$FOUND" ]; then
     IFS=$'\t' read -r SIM_PYTHON SIM_VERSION SIM_SOURCE <<<"$FOUND"
     echo "== using the Isaac Sim already installed: $SIM_PYTHON (Isaac Sim $SIM_VERSION, found via $SIM_SOURCE)"
-    echo "   no download. Client configurations written by this installer get ISAAC_MCP_PYTHON=$SIM_PYTHON;"
-    echo "   for other clients, set it in their isaac entry so sim__launch uses this install."
+    echo "   no download. Client configurations written by this installer get TWINSMITH_SIM_PYTHON=$SIM_PYTHON;"
+    echo "   for other clients, set it in their twinsmith entry so sim__launch uses this install."
     echo "   Pass --download-sim to install the locked 6.2 environment instead."
     case "$SIM_VERSION" in
       6.2*) ;;
@@ -199,7 +200,7 @@ PY
     esac
     case "$SIM_SOURCE" in
       project-venv|sibling-venv)
-        echo "NOTE: this is another checkout's environment ($SIM_PYTHON); keep it in place, or set ISAAC_MCP_PYTHON to choose another" >&2 ;;
+        echo "NOTE: this is another checkout's environment ($SIM_PYTHON); keep it in place, or set TWINSMITH_SIM_PYTHON to choose another" >&2 ;;
     esac
     NO_SIM=1
   elif [ "$rc" != 4 ]; then
@@ -210,7 +211,7 @@ fi
 
 if [ "$NO_SIM" = 1 ] && [ -z "$SIM_PYTHON" ]; then
   echo "== --no-sim: no Isaac Sim 6.x found to record. sim__launch/run.sh look again when they start. If yours is only reachable"
-  echo "   through shell variables (an activated venv/conda env, ISAACSIM_PATH), put ISAAC_MCP_PYTHON in the client's isaac entry."
+  echo "   through shell variables (an activated venv/conda env, ISAACSIM_PATH), put TWINSMITH_SIM_PYTHON in the client's twinsmith entry."
 fi
 
 echo "== checking preconditions"
@@ -283,27 +284,27 @@ fi
 # verifies those hashes. UV_PROJECT_ENVIRONMENT keeps the host env out of an
 # activated simulator .venv. The isaaclab extra adds tensorboard for the metrics tools.
 echo "== syncing locked host environment from mcp/uv.lock (extra: isaaclab)"
-uv tool uninstall isaac-mcp >/dev/null 2>&1 || true
+uv tool uninstall twinsmith >/dev/null 2>&1 || true
 UV_PROJECT_ENVIRONMENT="$MCP_DIR/.venv" \
   uv sync --project "$MCP_DIR" --locked --extra isaaclab --no-dev
-if [ ! -x "$MCP_DIR/.venv/bin/isaac-mcp" ]; then
-  echo "FAIL: mcp/.venv has no isaac-mcp. The locked host sync did not install the project." >&2
+if [ ! -x "$MCP_DIR/.venv/bin/twinsmith" ]; then
+  echo "FAIL: mcp/.venv has no twinsmith. The locked host sync did not install the project." >&2
   exit 1
 fi
 
 # Step 3: Put the locked executable on PATH, then the ffmpeg shim.
 BIN_DIR="${HOME}/.local/bin"
 mkdir -p "$BIN_DIR"
-ln -sfn "$MCP_DIR/.venv/bin/isaac-mcp" "$BIN_DIR/isaac-mcp"
+ln -sfn "$MCP_DIR/.venv/bin/twinsmith" "$BIN_DIR/twinsmith"
 FFMPEG_SHIM="$BIN_DIR/ffmpeg"
 if [ -L "$FFMPEG_SHIM" ] || { [ -e "$FFMPEG_SHIM" ] && ! grep -Fq '# ffmpeg shim: prefer the static build shipped with imageio-ffmpeg.' "$FFMPEG_SHIM" 2>/dev/null; }; then
-  echo "== preserving existing $FFMPEG_SHIM (not an isaac-mcp shim)" >&2
+  echo "== preserving existing $FFMPEG_SHIM (not a twinsmith shim)" >&2
 else
   echo "== installing ffmpeg shim at $FFMPEG_SHIM"
   cat > "$FFMPEG_SHIM" <<'SH'
 #!/bin/bash
 # ffmpeg shim: prefer the static build shipped with imageio-ffmpeg.
-# The Isaac Sim ur5e-dt extension shells out to a bare `ffmpeg`; this keeps it
+# The Isaac Sim workcell extension shells out to a bare `ffmpeg`; this keeps it
 # working on machines with no system package. Re-resolved on every call so a
 # version bump in any uv tool env cannot leave a dangling path.
 set -euo pipefail
@@ -331,12 +332,12 @@ fi
 
 # Step 4: Verify CLI help runs
 echo "== verifying CLI"
-if [ -x "$BIN_DIR/isaac-mcp" ]; then
-  CLI_BIN="$BIN_DIR/isaac-mcp"
-elif command -v isaac-mcp >/dev/null 2>&1; then
-  CLI_BIN="$(command -v isaac-mcp)"
+if [ -x "$BIN_DIR/twinsmith" ]; then
+  CLI_BIN="$BIN_DIR/twinsmith"
+elif command -v twinsmith >/dev/null 2>&1; then
+  CLI_BIN="$(command -v twinsmith)"
 else
-  echo "FAIL: isaac-mcp not found in $BIN_DIR or PATH" >&2
+  echo "FAIL: twinsmith not found in $BIN_DIR or PATH" >&2
   exit 1
 fi
 
@@ -346,15 +347,15 @@ echo "  verified $CLI_BIN --help runs"
 # Optional client configurations
 if [ "$DO_CLAUDE_CODE" = 1 ]; then
   if command -v claude >/dev/null 2>&1; then
-    echo "== configuring Claude Code (isaac on port $PORT)"
-    claude mcp remove --scope user isaac >/dev/null 2>&1 || true
+    echo "== configuring Claude Code (twinsmith on port $PORT)"
+    claude mcp remove --scope user twinsmith >/dev/null 2>&1 || true
     claude mcp remove --scope user twin >/dev/null 2>&1 || true
     lab_env=()
     [ -n "$LAB_PYTHON" ] && lab_env+=(-e "ISAACLAB_PYTHON=$LAB_PYTHON")
     [ -n "$LAB_ROOT" ] && lab_env+=(-e "ISAACLAB_ROOT=$LAB_ROOT")
-    [ -n "$SIM_PYTHON" ] && lab_env+=(-e "ISAAC_MCP_PYTHON=$SIM_PYTHON")
-    claude mcp add --scope user isaac \
-      -e "DISPLAY=$DISPLAY_NAME" -e "ISAAC_MCP_PORT=$PORT" "${lab_env[@]}" \
+    [ -n "$SIM_PYTHON" ] && lab_env+=(-e "TWINSMITH_SIM_PYTHON=$SIM_PYTHON")
+    claude mcp add --scope user twinsmith \
+      -e "DISPLAY=$DISPLAY_NAME" -e "TWINSMITH_PORT=$PORT" "${lab_env[@]}" \
       -- "$CLI_BIN"
   else
     echo "== claude CLI not found; skipped Claude Code configuration" >&2
@@ -362,7 +363,7 @@ if [ "$DO_CLAUDE_CODE" = 1 ]; then
 fi
 
 if [ "$DO_CLAUDE_DESKTOP" = 1 ]; then
-  echo "== configuring Claude Desktop (isaac on port $PORT)"
+  echo "== configuring Claude Desktop (twinsmith on port $PORT)"
   PORT="$PORT" DISPLAY_NAME="$DISPLAY_NAME" CLI_PATH="$CLI_BIN" LAB_PYTHON="$LAB_PYTHON" LAB_ROOT="$LAB_ROOT" SIM_PYTHON="$SIM_PYTHON" python3 - <<'PY'
 import json
 import os
@@ -378,18 +379,18 @@ if not os.path.exists(path):
     print(f"Claude Desktop config not found at {path}; skipped")
     sys.exit(0)
 
-env = {"ISAAC_MCP_PORT": port, "DISPLAY": display}
+env = {"TWINSMITH_PORT": port, "DISPLAY": display}
 if os.environ.get("LAB_PYTHON"):
     env["ISAACLAB_PYTHON"] = os.environ["LAB_PYTHON"]
 if os.environ.get("LAB_ROOT"):
     env["ISAACLAB_ROOT"] = os.environ["LAB_ROOT"]
 if os.environ.get("SIM_PYTHON"):
-    env["ISAAC_MCP_PYTHON"] = os.environ["SIM_PYTHON"]
+    env["TWINSMITH_SIM_PYTHON"] = os.environ["SIM_PYTHON"]
 entry = {"command": cli_path, "args": [], "env": env}
 try:
     with open(path, encoding="utf-8") as f:
         config = json.load(f)
-    config.setdefault("mcpServers", {})["isaac"] = entry
+    config.setdefault("mcpServers", {})["twinsmith"] = entry
     backup = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
     shutil.copy2(path, backup)
     tmp = f"{path}.tmp"
@@ -401,7 +402,7 @@ except (OSError, ValueError, AttributeError) as exc:
     # The rest of the install succeeded, and this file is the user's: leave it alone and say what to add.
     print(f"Claude Desktop config not changed: {path}: {exc}", file=sys.stderr)
     print('Add this under "mcpServers" yourself, then restart Claude Desktop:', file=sys.stderr)
-    print(json.dumps({"isaac": entry}, indent=2), file=sys.stderr)
+    print(json.dumps({"twinsmith": entry}, indent=2), file=sys.stderr)
     sys.exit(0)
 print(f"updated {path}")
 print(f"backup  {backup}")
@@ -414,15 +415,15 @@ if [ "$DO_PRINT_OPENCODE" = 1 ]; then
   lab_json=""
   [ -n "$LAB_PYTHON" ] && lab_json+=", \"ISAACLAB_PYTHON\": $(jstr "$LAB_PYTHON")"
   [ -n "$LAB_ROOT" ] && lab_json+=", \"ISAACLAB_ROOT\": $(jstr "$LAB_ROOT")"
-  [ -n "$SIM_PYTHON" ] && lab_json+=", \"ISAAC_MCP_PYTHON\": $(jstr "$SIM_PYTHON")"
+  [ -n "$SIM_PYTHON" ] && lab_json+=", \"TWINSMITH_SIM_PYTHON\": $(jstr "$SIM_PYTHON")"
   cat <<EOF
 
 OpenCode entry (~/.config/opencode/opencode.jsonc):
 
-  "isaac": {
+  "twinsmith": {
     "type": "local",
     "command": ["$CLI_BIN"],
-    "environment": { "ISAAC_MCP_PORT": "$PORT", "DISPLAY": "$DISPLAY_NAME"$lab_json }
+    "environment": { "TWINSMITH_PORT": "$PORT", "DISPLAY": "$DISPLAY_NAME"$lab_json }
   }
 EOF
 fi

@@ -11,8 +11,8 @@ import pytest
 
 pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
-from isaac_mcp.project_assets import AssetError
-from isaac_mcp_bridge import jobs
+from twinsmith.project_assets import AssetError
+from twinsmith_bridge import jobs
 from sim_tools import advanced, physics, viewport
 from test_scene_usd import scene  # noqa: F401 - fixture
 

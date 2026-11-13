@@ -15,10 +15,10 @@ pytest.importorskip("mcp")
 import mcp.types as types
 from mcp.shared.memory import create_connected_server_and_client_session
 
-import isaac_mcp.screen as screen
-import isaac_mcp.server as gw
-from isaac_mcp import host_catalog, local_tools as lt
-from isaac_mcp_bridge.schema import field_specs
+import twinsmith.screen as screen
+import twinsmith.server as gw
+from twinsmith import host_catalog, local_tools as lt
+from twinsmith_bridge.schema import field_specs
 
 
 @pytest.fixture(autouse=True)
@@ -81,11 +81,11 @@ OFFLINE = {gw._mcp_name(canonical) for canonical in host_catalog.catalog_tool_na
 
 
 def build(groups="default"):
-    return gw.build_server({"ISAAC_MCP_TOOLSETS": groups})
+    return gw.build_server({"TWINSMITH_TOOLSETS": groups})
 
 
 def bridge_names(server):
-    return {t.name for t in asyncio.run(server.list_tools())} - set(gw.build_server({"ISAAC_MCP_TOOLSETS": "all,+input,+launch"})._tool_manager._tools) - OFFLINE
+    return {t.name for t in asyncio.run(server.list_tools())} - set(gw.build_server({"TWINSMITH_TOOLSETS": "all,+input,+launch"})._tool_manager._tools) - OFFLINE
 
 
 def session(server, notifications=None):
@@ -97,7 +97,7 @@ def session(server, notifications=None):
 
 
 async def listed(client):
-    return {t.name for t in (await client.list_tools()).tools} - set(gw.build_server({"ISAAC_MCP_TOOLSETS": "all,+input,+launch"})._tool_manager._tools) - OFFLINE
+    return {t.name for t in (await client.list_tools()).tools} - set(gw.build_server({"TWINSMITH_TOOLSETS": "all,+input,+launch"})._tool_manager._tools) - OFFLINE
 
 
 def test_each_server_has_its_own_state_and_the_default_uses_the_module_state():
@@ -218,8 +218,8 @@ def test_list_changed_is_advertised_and_notified_per_server(world):
 
 
 def test_the_screen_port_follows_the_servers_own_client(world, monkeypatch):
-    monkeypatch.delenv("UR5E_DT_PORT", raising=False)
-    monkeypatch.delenv("ISAAC_MCP_PORT", raising=False)
+    monkeypatch.delenv("TWINSMITH_PORT", raising=False)
+    monkeypatch.delenv("TWINSMITH_PORT", raising=False)
     a, b = build(), build()
     sa, sb = gw._state_for(a), gw._state_for(b)
     assert gw._screen_port(sa) is None and gw._screen_port(sb) is None

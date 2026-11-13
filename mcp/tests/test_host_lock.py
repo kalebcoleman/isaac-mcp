@@ -98,8 +98,8 @@ def test_documented_checkout_install_uses_the_locked_host_sync():
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert HOST_INSTALL_COMMAND in text, rel
         assert "uv tool install --force --editable" not in text, rel
-    skill_paths = [ROOT / ".agents/skills/isaac-mcp/SKILL.md"]
-    claude_skill = ROOT / ".claude/skills/isaac-mcp/SKILL.md"
+    skill_paths = [ROOT / ".agents/skills/twinsmith/SKILL.md"]
+    claude_skill = ROOT / ".claude/skills/twinsmith/SKILL.md"
     # Some checkouts hardlink the Claude skill at the agents path. Require the
     # tracked agents skill, and the Claude path only when it is a separate file.
     if claude_skill.exists() and claude_skill.resolve() != skill_paths[0].resolve():

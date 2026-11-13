@@ -25,7 +25,7 @@ try:
 except ImportError:
     pxr.PhysxSchema = mock.MagicMock()
     sys.modules["pxr.PhysxSchema"] = pxr.PhysxSchema
-from isaac_mcp.project_assets import AssetError
+from twinsmith.project_assets import AssetError
 from sim_tools import advanced as advanced_module, control_run, jenga, newton_support as ns, physics, queries
 from sim_tools.advanced import Advanced
 from test_scene_usd import scene  # noqa: F401 - the fixture

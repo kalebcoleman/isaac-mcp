@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from isaac_mcp import screen
+from twinsmith import screen
 
 
 # ------------------------------------------------------------------ layout math
@@ -432,7 +432,7 @@ def test_join_timeout_is_bounded():
 
 def test_input_and_output_paths_stay_under_home_and_never_overwrite(monkeypatch, tmp_path):
     home = tmp_path / "home"
-    videos = home / "Videos" / "screen-mcp"
+    videos = home / "Videos" / "twinsmith"
     videos.mkdir(parents=True)
     (videos / "a.mp4").write_bytes(b"x")
     outside = tmp_path / "elsewhere.mp4"
@@ -454,7 +454,7 @@ def test_input_and_output_paths_stay_under_home_and_never_overwrite(monkeypatch,
 
 
 def test_new_tools_are_grouped_and_annotated():
-    from isaac_mcp import toolsets
+    from twinsmith import toolsets
 
     assert toolsets.owner("join_videos") == "screen"
     assert toolsets.owner("tile_windows") == "screen"
@@ -494,7 +494,7 @@ def test_close_needs_a_window_title_and_is_a_known_action():
 
 
 def test_ui_act_contract_matches_the_kit_actions():
-    from isaac_mcp.scene_contracts import REGISTRY
+    from twinsmith.scene_contracts import REGISTRY
 
     params = REGISTRY["sim.ui.act"]["parameters"]
     assert params["action"]["enum"] == list(_kit_ui().ACTIONS)
@@ -626,11 +626,11 @@ def test_marker_watcher_ends_with_the_recording_and_waits_for_a_log(tmp_path):
 
 def test_only_project_logs_can_be_watched(tmp_path, monkeypatch):
     monkeypatch.setattr(screen.Path, "home", lambda: tmp_path)
-    assert screen._log_marker_file_allowed(tmp_path / ".local/share/isaac-mcp/sim-sessions/abc/sim.log")
+    assert screen._log_marker_file_allowed(tmp_path / ".local/share/twinsmith/sim-sessions/abc/sim.log")
     assert screen._log_marker_file_allowed(Path("/opt/x/kit/logs/Kit/Isaac-Sim Python/6.2/kit_1.log"))
     assert not screen._log_marker_file_allowed(tmp_path / ".ssh/id_rsa.log")
     assert not screen._log_marker_file_allowed(Path("/opt/x/kit/logs/Kit/secret.txt"))
-    assert not screen._log_marker_file_allowed(tmp_path / ".local/share/isaac-mcp/../../../notes.log")
+    assert not screen._log_marker_file_allowed(tmp_path / ".local/share/twinsmith/../../../notes.log")
 
 
 def test_finish_reports_why_it_stopped(tmp_path):

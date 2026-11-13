@@ -1,16 +1,16 @@
 # RoboSimStudio host bridge
 
-`isaac_mcp.robosim.register_robosim_tools(server)` registers one grouped `robosim`
+`twinsmith.robosim.register_robosim_tools(server)` registers one grouped `robosim`
 tool independently of Kit. **It needs no Isaac Sim or Kit bridge.** The server calls it only when the `robosim` toolset is
-selected (off by default, for example `ISAAC_MCP_TOOLSETS=default,+robosim`, or
+selected (off by default, for example `TWINSMITH_TOOLSETS=default,+robosim`, or
 `toolsets(action="enable", names=["robosim"])`). RSS is never imported
 into the MCP host: `examples/live/ctl` uses RSS's own `.venv/bin/python`.
 Tested pin: **87b5e32** of <https://github.com/robosimstudio/robosimstudio>.
 Every response identifies the checkout commit and warns about a different pin.
 Missing installations give setup guidance; the bridge never installs anything.
 
-Set `ISAAC_MCP_ROBOSIM_ROOT` to the RSS checkout. Default:
-`<workspace>/tools/robosimstudio`, with `ISAAC_MCP_WORKSPACE` selecting the workspace
+Set `TWINSMITH_ROBOSIM_ROOT` to the RSS checkout. Default:
+`<workspace>/tools/robosimstudio`, with `TWINSMITH_WORKSPACE` selecting the workspace
 (otherwise `<home>/isaac-workspace`). No changes to RSS tracked source are needed.
 
 **Which physics ran.** `device="cpu"` runs plain MuJoCo (MuJoCo's C library); `device="cuda:0"` runs

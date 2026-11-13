@@ -4,7 +4,7 @@ import hashlib
 import os
 import re
 from pxr import Gf, Usd, UsdGeom
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 from .core import vector
 
 
@@ -287,7 +287,7 @@ class SensorTools:
             if not re.fullmatch(CAPTURE_NAME, filename):
                 refuse("INVALID_OUTPUT", CAPTURE_NAME_RULE)
             s.output.mkdir(mode=0o700, parents=True, exist_ok=True)
-            from isaac_mcp.project_assets import open_dir
+            from twinsmith.project_assets import open_dir
 
             fd = open_dir(s.output)
             try:
