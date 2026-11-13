@@ -38,9 +38,25 @@ def badge_args(params: Dict[str, Any], state: Any) -> Dict[str, Any]:
 
 
 def attach_capture(text: str, failed: bool, state: Any, region: Optional[list] = None) -> Any:
-    """Item 1 / item 6: the bridge's answer plus a capture of the Kit window (a crop with ``region``),
-    as a CallToolResult so a failed act still carries the picture."""
-    raise NotImplementedError
+    """The bridge's answer plus a capture of the Kit window (a crop with ``region``), as a CallToolResult
+    so a failed act still carries the picture. The act has already happened: a capture that cannot be
+    taken adds a note, and never turns the answer into an error."""
+    from mcp.server.fastmcp import Image
+    from mcp.types import CallToolResult, TextContent
+
+    from . import screen
+
+    try:
+        window = kit_window(state)
+        if window is None:
+            raise LookupError("no visible Isaac Sim window for the selected bridge")
+        shot = screen.capture(window_id=window["id"], region=region)
+    except Exception as error:  # noqa: BLE001 - the act's answer comes first
+        shot = [f"screenshot: not taken ({error or type(error).__name__})"]
+    content = [TextContent(type="text", text=text)]
+    content += [block.to_image_content() if isinstance(block, Image) else TextContent(type="text", text=block)
+                for block in shot]
+    return CallToolResult(content=content, structuredContent={"result": text}, isError=failed)
 
 
 def kit_ui(canonical: str, params: Dict[str, Any], state: Any,
