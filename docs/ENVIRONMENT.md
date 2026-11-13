@@ -113,11 +113,11 @@ These must be the same for the host and for Kit: each reads its own environment.
 
 | Variable | Default | Read by | Meaning |
 |---|---|---|---|
-| `TWINSMITH_ASSET_ROOT` | `<workspace>/assets`, else `<workspace>/isaac-mcp-assets` (transitional, with a warning) | host, Kit | The one [asset root](ASSET-PACKS.md#the-asset-root-and-how-it-is-found): packs are `<pack id>/<version>/pack.yaml` under it. No default inside your home folder, except that the work cell's loader in Kit falls back to `<home>/isaac-workspace/isaac-mcp-assets` when this is unset; otherwise, with nothing found, the error names this setting. `ISAAC_MCP_ASSET_ROOT` is a permanent alias of it: it needs no change and prints no warning. |
+| `TWINSMITH_ASSET_ROOT` | `<workspace>/assets`, else `<workspace>/isaac-mcp-assets` (transitional, with a warning) | host, Kit | The one [asset root](ASSET-PACKS.md#the-asset-root-and-how-it-is-found): packs are `<pack id>/<version>/pack.yaml` under it. With nothing found, the error names this setting. `ISAAC_MCP_ASSET_ROOT` is a permanent alias of it: it needs no change and prints no warning. |
 | `TWINSMITH_ASSET_CONFIG` | unset | host, Kit | The [trusted-project approval file](TOOLS-SCENE.md#one-time-approval). No file means no approved roots. |
 | `TWINSMITH_STAGING` | `~/.cache/twinsmith/staging` | host, Kit | With no approval file: the private folder the host copies import snapshots into and Kit reads them from. |
 | `TWINSMITH_USD_PYTHON` | unset | host | A Python with `usd-core` for USD dependency checks on the host; without it they use the selected Kit. |
-| `TWINSMITH_WORKSPACE` | the folder that holds the checkout; `~/isaac-workspace` for `scripts/env.py` and RoboSimStudio | host, Kit, installer | The [workspace folder](LINUX-SETUP.md#one-workspace-folder); `<workspace>/assets` is where the asset root is looked for. |
+| `TWINSMITH_WORKSPACE` | the folder that holds the checkout, else `<home>/robotics-workspace` (the old `<home>/isaac-workspace` only while the new folder is absent); `scripts/env.py init` uses `<home>/robotics-workspace` | host, Kit, installer | The [workspace folder](LINUX-SETUP.md#one-workspace-folder); `<workspace>/assets` is where the asset root is looked for. |
 | `TWINSMITH_PROJECT` | walk up from the working directory | host, Kit | A project directory or its `twinsmith.json`; its `"pack"` key (`"<id>/<version>"`) is the default pack for `doctor` and `pin`. Only a project named here can set `isaaclab_python` and `isaaclab_root`. |
 
 ## Set by the code, read by the code

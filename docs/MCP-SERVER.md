@@ -176,7 +176,7 @@ Replace `<repo>` with your checkout (suggested: `<workspace>/twinsmith`; see
 [One workspace folder](LINUX-SETUP.md#one-workspace-folder)) and `<home>` with your home directory. Optional environment
 variables for any client below:
 
-- `TWINSMITH_WORKSPACE=<workspace>` makes `<workspace>/assets` (else `<workspace>/isaac-mcp-assets`) the asset root; without it the workspace is the folder that holds the checkout.
+- `TWINSMITH_WORKSPACE=<workspace>` makes `<workspace>/assets` (else `<workspace>/isaac-mcp-assets`) the asset root; without it the workspace is the folder that holds the checkout, else `<home>/robotics-workspace`.
 - `TWINSMITH_SIM_ROOT=<repo>` tells managed `sim__session` launches which checkout holds `run.sh`;
   set it when the host is installed outside the checkout.
 - `TWINSMITH_SIM_PYTHON=<env>/bin/python` pins the Sim interpreter that `run.sh` uses.

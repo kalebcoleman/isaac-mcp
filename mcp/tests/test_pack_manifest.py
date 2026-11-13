@@ -84,16 +84,67 @@ def test_the_workspace_defaults_to_the_folder_holding_the_checkout(clean, monkey
     assert pm.resolve_asset_root().path == (clean / "ws" / "assets").resolve()
 
 
-def test_nothing_found_names_the_setting_and_never_defaults_into_a_home_folder(clean, monkeypatch):
+def test_nothing_found_names_the_setting(clean, monkeypatch):
     (clean / "home" / "isaac-workspace" / "isaac-mcp-assets").mkdir(parents=True)
-    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(clean / "empty-ws"))
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(clean / "empty-ws"))   # the variable wins: the home folders are not tried
     with pytest.raises(pm.RootError, match="TWINSMITH_ASSET_ROOT") as caught:
         pm.resolve_asset_root()
     assert caught.value.code == "NO_ASSET_ROOT"
     monkeypatch.delenv("TWINSMITH_WORKSPACE")
     monkeypatch.setattr(pm, "checkout_root", lambda: None)
+    monkeypatch.setenv("HOME", str(clean / "bare-home"))
     with pytest.raises(pm.RootError, match="TWINSMITH_ASSET_ROOT"):
         pm.resolve_asset_root()
+
+
+# ---------------------------------------------------------------- the workspace folder
+
+
+def test_the_workspace_variable_wins_over_the_checkout_and_both_home_folders(clean, monkeypatch):
+    (clean / "home" / "robotics-workspace").mkdir(parents=True)
+    (clean / "home" / "isaac-workspace").mkdir()
+    monkeypatch.setattr(pm, "checkout_root", lambda: clean / "ws" / "twinsmith")
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(clean / "chosen"))
+    assert pm.workspace_dir() == (clean / "chosen").resolve()
+
+
+def test_the_checkout_parent_wins_over_the_home_folders(clean, monkeypatch):
+    (clean / "home" / "robotics-workspace").mkdir(parents=True)
+    monkeypatch.setattr(pm, "checkout_root", lambda: clean / "ws" / "twinsmith")
+    assert pm.workspace_dir() == clean / "ws"
+
+
+def test_without_a_checkout_the_new_home_folder_wins(clean, monkeypatch):
+    monkeypatch.setattr(pm, "checkout_root", lambda: None)
+    assert pm.workspace_dir() == clean / "home" / "robotics-workspace"      # nothing exists: the new name
+    (clean / "home" / "isaac-workspace").mkdir(parents=True)
+    (clean / "home" / "robotics-workspace").mkdir()
+    assert pm.workspace_dir() == clean / "home" / "robotics-workspace"      # both exist: the new one
+
+
+def test_the_old_home_folder_is_used_only_when_the_new_one_is_absent(clean, monkeypatch):
+    monkeypatch.setattr(pm, "checkout_root", lambda: None)
+    (clean / "home" / "isaac-workspace" / "isaac-mcp-assets").mkdir(parents=True)
+    assert pm.workspace_dir() == clean / "home" / "isaac-workspace"
+    root = pm.resolve_asset_root()
+    assert root.path == clean / "home" / "isaac-workspace" / "isaac-mcp-assets" and root.source == "transitional"
+
+
+def test_the_new_home_folder_and_assets_are_found_without_any_setting(clean, monkeypatch):
+    monkeypatch.setattr(pm, "checkout_root", lambda: None)
+    (clean / "home" / "robotics-workspace" / "assets").mkdir(parents=True)
+    (clean / "home" / "isaac-workspace" / "assets").mkdir(parents=True)
+    root = pm.resolve_asset_root()
+    assert root.path == clean / "home" / "robotics-workspace" / "assets" and root.source == "workspace"
+
+
+def test_a_symlinked_old_name_counts_as_existing_and_does_not_shadow_the_new_folder(clean, monkeypatch):
+    """After the move the old path is a symlink to the new folder; both names reach the same place."""
+    monkeypatch.setattr(pm, "checkout_root", lambda: None)
+    (clean / "home" / "robotics-workspace" / "assets").mkdir(parents=True)
+    (clean / "home" / "isaac-workspace").symlink_to(clean / "home" / "robotics-workspace")
+    assert pm.workspace_dir() == clean / "home" / "robotics-workspace"
+    assert pm.resolve_asset_root().path == clean / "home" / "robotics-workspace" / "assets"
 
 
 def test_a_relative_setting_is_refused(clean, monkeypatch):
@@ -102,9 +153,9 @@ def test_a_relative_setting_is_refused(clean, monkeypatch):
         pm.resolve_asset_root()
 
 
-def test_the_module_has_no_literal_home_default():
+def test_the_module_has_no_literal_home_path():
     source = (REPO / "mcp/twinsmith/pack_manifest.py").read_text()
-    assert "isaac-workspace" not in source and "expanduser(\"~" not in source
+    assert "~/" not in source and "expanduser(\"~" not in source
 
 
 # ---------------------------------------------------------------- removed settings
@@ -420,3 +471,57 @@ def test_importing_the_reader_pulls_in_no_server_or_sdk():
     env = {**os.environ, "PYTHONPATH": str(REPO / "mcp")}
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env)
     assert done.returncode == 0, done.stderr
+
+
+# ---------------------------------------------------------------- the work cell's copy of the rule (it runs in Kit)
+
+
+def load_workcell_copy(where: Path):
+    """The loader as it would sit outside a checkout, so its own checkout test finds none."""
+    target = where / "a" / "b" / "c" / "asset_pack.py"
+    target.parent.mkdir(parents=True)
+    target.write_text((REPO / "exts/workcell/workcell/asset_pack.py").read_text())
+    spec = importlib.util.spec_from_file_location("workcell_copy_" + where.name, target)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_work_cell_default_root_follows_the_host_order(clean):
+    copy = load_workcell_copy(clean / "copy")
+    home = clean / "home"
+    environ = {}
+    assert copy.default_root(environ, home) == home / "robotics-workspace" / "assets"          # nothing exists
+    (home / "isaac-workspace" / "isaac-mcp-assets").mkdir(parents=True)
+    assert copy.default_root(environ, home) == home / "isaac-workspace" / "isaac-mcp-assets"   # old folder, old name
+    (home / "isaac-workspace" / "assets").mkdir()
+    assert copy.default_root(environ, home) == home / "isaac-workspace" / "assets"
+    (home / "robotics-workspace").mkdir()
+    assert copy.default_root(environ, home) == home / "robotics-workspace" / "assets"          # the new folder wins
+    (home / "robotics-workspace" / "isaac-mcp-assets").mkdir()
+    assert copy.default_root(environ, home) == home / "robotics-workspace" / "isaac-mcp-assets"
+    (home / "robotics-workspace" / "assets").mkdir()
+    assert copy.default_root(environ, home) == home / "robotics-workspace" / "assets"
+
+
+def test_the_work_cell_environment_wins_over_everything(clean):
+    copy = load_workcell_copy(clean / "copy")
+    home = clean / "home"
+    (home / "robotics-workspace" / "assets").mkdir(parents=True)
+    (clean / "ws" / "assets").mkdir(parents=True)
+    assert copy.default_root({"TWINSMITH_WORKSPACE": str(clean / "ws")}, home) == (clean / "ws").resolve() / "assets"
+    both = {"TWINSMITH_WORKSPACE": str(clean / "ws"), "TWINSMITH_ASSET_ROOT": str(clean / "x")}
+    assert copy.default_root(both, home) == clean / "x"
+
+
+def test_the_work_cell_and_the_host_agree_on_the_default_root(clean, monkeypatch):
+    copy = load_workcell_copy(clean / "copy")
+    monkeypatch.setattr(pm, "checkout_root", lambda: None)
+    home = clean / "home"
+    for layout in (["robotics-workspace/assets"], ["isaac-workspace/isaac-mcp-assets"],
+                   ["robotics-workspace/isaac-mcp-assets", "isaac-workspace/assets"]):
+        for folder in layout:
+            (home / folder).mkdir(parents=True)
+        assert copy.default_root({}, home) == pm.resolve_asset_root().path
+        import shutil
+        shutil.rmtree(home)

@@ -19,7 +19,7 @@ import threading
 import time
 import uuid
 
-from twinsmith import legacy
+from twinsmith import legacy, pack_manifest
 
 from . import plan
 from . import template as scene_template_module
@@ -65,7 +65,7 @@ class RoboSimBridge:
     """
 
     def __init__(self, workspace=None, root=None):
-        self.workspace = Path(workspace or os.environ.get("TWINSMITH_WORKSPACE", "~/isaac-workspace")).expanduser().resolve()
+        self.workspace = Path(workspace or pack_manifest.workspace_dir()).expanduser().resolve()
         self.root = Path(root or os.environ.get("TWINSMITH_ROBOSIM_ROOT", self.workspace / "tools/robosimstudio")).expanduser().resolve()
         self.runs = self.workspace / "runs/robosim"
         self._jobs = {}

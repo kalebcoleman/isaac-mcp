@@ -33,6 +33,8 @@ MANIFEST_NAME = "pack.yaml"
 OLD_PINS_FILE = "SHA256SUMS"
 STANDARD_DIR = "assets"
 TRANSITIONAL_DIR = "isaac-mcp-assets"
+HOME_WORKSPACE_NAME = "robotics-workspace"
+TRANSITIONAL_WORKSPACE_NAME = "isaac-workspace"
 MAX_REPORTED = 200
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
@@ -97,14 +99,24 @@ def checkout_root() -> Path | None:
     return root if (root / "exts" / "workcell").is_dir() else None
 
 
-def workspace_dir(environ=None) -> Path | None:
-    """``$TWINSMITH_WORKSPACE``, else the folder that contains the checkout, else None."""
+def home_workspace(home=None) -> Path:
+    """The workspace folder in a home folder: ``<home>/robotics-workspace``, or, only while that folder does
+    not exist and ``<home>/isaac-workspace`` does, the old folder (the transition from the old name)."""
+    home = Path(home).expanduser() if home is not None else Path.home()
+    standard = home / HOME_WORKSPACE_NAME
+    old = home / TRANSITIONAL_WORKSPACE_NAME
+    return old if not standard.exists() and old.exists() else standard
+
+
+def workspace_dir(environ=None) -> Path:
+    """The workspace: ``$TWINSMITH_WORKSPACE``, else the folder that contains the checkout (when this code runs
+    from one), else :func:`home_workspace`. The folder itself may not exist yet."""
     environ = os.environ if environ is None else environ
     configured = str(environ.get(WORKSPACE_ENV, "")).strip()
     if configured:
         return Path(configured).expanduser().resolve()
     checkout = checkout_root()
-    return checkout.parent if checkout else None
+    return checkout.parent if checkout else home_workspace()
 
 
 def resolve_asset_root(environ=None, workspace=None) -> AssetRoot:
@@ -114,8 +126,8 @@ def resolve_asset_root(environ=None, workspace=None) -> AssetRoot:
     2. ``<workspace>/assets`` if that folder exists.
     3. ``<workspace>/isaac-mcp-assets`` if it exists (the name is transitional: the result says so).
 
-    ``<workspace>`` is ``$TWINSMITH_WORKSPACE`` or the folder that contains the checkout. Without any
-    of them this raises :class:`RootError` naming the setting. There is no default inside a home folder.
+    ``<workspace>`` is :func:`workspace_dir`. If none of these exists this raises :class:`RootError`
+    naming the setting.
     """
     environ = os.environ if environ is None else environ
     warnings = list(announce_removed_environment(environ))
@@ -126,21 +138,18 @@ def resolve_asset_root(environ=None, workspace=None) -> AssetRoot:
             raise RootError(f"{ROOT_ENV} must be an absolute path, not {configured!r}.")
         return AssetRoot(path.resolve(), "environment", tuple(warnings))
     base = Path(workspace).expanduser().resolve() if workspace is not None else workspace_dir(environ)
-    if base is not None:
-        standard = base / STANDARD_DIR
-        if standard.is_dir():
-            return AssetRoot(standard, "workspace", tuple(warnings))
-        transitional = base / TRANSITIONAL_DIR
-        if transitional.is_dir():
-            warnings.append(f"Using {transitional}: the name isaac-mcp-assets is transitional. Rename it to "
-                            f"{STANDARD_DIR}/ or set {ROOT_ENV} to it.")
-            return AssetRoot(transitional, "transitional", tuple(warnings))
-        where = f"neither {standard} nor {transitional} exists"
-    else:
-        where = "this package is installed without a checkout and no workspace is set"
-    raise RootError(f"No asset root: {where}. Set {ROOT_ENV} to the folder that holds your packs "
-                    f"(<pack id>/<version>/pack.yaml), or create <workspace>/{STANDARD_DIR} "
-                    f"(the workspace is {WORKSPACE_ENV} or the folder holding the checkout).")
+    standard = base / STANDARD_DIR
+    if standard.is_dir():
+        return AssetRoot(standard, "workspace", tuple(warnings))
+    transitional = base / TRANSITIONAL_DIR
+    if transitional.is_dir():
+        warnings.append(f"Using {transitional}: the name isaac-mcp-assets is transitional. Rename it to "
+                        f"{STANDARD_DIR}/ or set {ROOT_ENV} to it.")
+        return AssetRoot(transitional, "transitional", tuple(warnings))
+    raise RootError(f"No asset root: neither {standard} nor {transitional} exists. Set {ROOT_ENV} to the folder "
+                    f"that holds your packs (<pack id>/<version>/pack.yaml), or create {standard} "
+                    f"(the workspace is {WORKSPACE_ENV}, else the folder holding the checkout, else "
+                    f"<home>/{HOME_WORKSPACE_NAME}).")
 
 
 # ---------------------------------------------------------------------------

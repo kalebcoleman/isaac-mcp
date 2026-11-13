@@ -104,9 +104,37 @@ class AssetPack:
             raise PackError(f"Pack has no asset id {logical_id!r}") from error
 
 
+def default_root(environ=None, home=None):
+    """The asset root, in the host's order (``mcp/twinsmith/pack_manifest.py`` is the reference; Kit cannot import it).
+
+    ``$TWINSMITH_ASSET_ROOT`` (alias ``ISAAC_MCP_ASSET_ROOT``), else ``<workspace>/assets``, else the transitional
+    ``<workspace>/isaac-mcp-assets``. The workspace is ``$TWINSMITH_WORKSPACE``, else the folder that contains the
+    checkout, else ``<home>/robotics-workspace`` (the old ``<home>/isaac-workspace`` only while the new folder is absent).
+    With nothing there it returns ``<workspace>/assets``, which the pack check then reports as missing.
+    """
+    environ = os.environ if environ is None else environ
+    configured = str(environ.get("TWINSMITH_ASSET_ROOT") or environ.get("ISAAC_MCP_ASSET_ROOT") or "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    workspace = str(environ.get("TWINSMITH_WORKSPACE", "")).strip()
+    if workspace:
+        base = Path(workspace).expanduser().resolve()
+    else:
+        checkout = Path(__file__).resolve().parents[3]
+        if (checkout / "exts" / "workcell").is_dir():
+            base = checkout.parent
+        else:
+            home = Path(home).expanduser() if home is not None else Path.home()
+            base = home / "robotics-workspace"
+            if not base.exists() and (home / "isaac-workspace").exists():
+                base = home / "isaac-workspace"
+    if not (base / "assets").is_dir() and (base / "isaac-mcp-assets").is_dir():
+        return base / "isaac-mcp-assets"
+    return base / "assets"
+
+
 def resolve_pack(config, root=None):
-    root = root or os.environ.get("TWINSMITH_ASSET_ROOT") or os.environ.get("ISAAC_MCP_ASSET_ROOT") \
-        or "~/isaac-workspace/isaac-mcp-assets"
+    root = root or default_root()
     pack = AssetPack(root, config["pack"]["id"], config["pack"]["version"])
     for asset_id in config["assets"].values():
         pack.asset(asset_id)

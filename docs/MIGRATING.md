@@ -113,6 +113,22 @@ upgrade advertises its bridge in the old place, so restart it.
 The asset-root folder name `isaac-mcp-assets` is still found, with a warning that the name is transitional. Rename it to
 `assets/` inside your workspace, or set `TWINSMITH_ASSET_ROOT` to it. Nothing under it needs to change.
 
+## Workspace folder
+
+The default workspace is now `<home>/robotics-workspace` (a general robotics workspace: `twinsmith/`, `assets/`, `envs/`,
+`projects/`, `tools/`, `runs/`), no longer `<home>/isaac-workspace`. Nothing is moved for you. An existing
+`<home>/isaac-workspace` is still used, as the transitional fallback, while `<home>/robotics-workspace` does not exist; if
+both exist the new one wins. `TWINSMITH_WORKSPACE` always wins over both. To move, only when no simulator or job is running
+from the workspace:
+
+```bash
+mv ~/isaac-workspace ~/robotics-workspace && ln -s ~/robotics-workspace ~/isaac-workspace
+mv ~/robotics-workspace/isaac-mcp-assets ~/robotics-workspace/assets
+```
+
+The symlink keeps old paths (shell profiles, saved scenes, running jobs) working; remove it when nothing uses it. Then
+check with `python3 scripts/env.py where` and `assets__pack action=list`.
+
 ## Output markers
 
 A script run with `run_script` can print a line to list an output or report progress. The markers are now
