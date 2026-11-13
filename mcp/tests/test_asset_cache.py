@@ -1,4 +1,4 @@
-"""Tests for the UR5e twin asset resolver and manifest."""
+"""Tests for the generic asset resolver and default manifest."""
 
 from __future__ import annotations
 
@@ -12,15 +12,27 @@ from urllib.parse import unquote, urlparse
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-MODULE_PATH = REPO / "exts" / "ur5e-dt" / "ur5e_dt" / "asset_cache.py"
+from isaac_mcp import assets
 
 
 def load_module():
-    spec = importlib.util.spec_from_file_location("ur5e_asset_cache_test", MODULE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
+    class TestResolver(assets.Resolver):
+        REPO_ROOT = REPO
+        MANIFEST_PATH = REPO / "exts/ur5e-dt/assets-manifest.json"
+        _TWIN = property(lambda self: self)
+
+        @property
+        def repo_root(self):
+            return self.REPO_ROOT
+
+        @property
+        def manifest_path(self):
+            return self.MANIFEST_PATH
+
+        def __getattr__(self, name):
+            return getattr(assets, name)
+
+    return TestResolver()
 
 
 def fake_manifest(module, tmp_path, content: bytes = b"cached", target: str = "robot/test.usd"):
@@ -186,7 +198,7 @@ def test_manifest_is_complete_and_fetch_targets_are_absent():
     module = load_module()
     manifest = module.manifest()
     assert manifest["version"] == 1
-    assert manifest["asset_root"].endswith("/Assets/Isaac/5.1")
+    assert manifest["asset_root"].endswith("/Assets/Isaac/6.2")
     sources = {}
     for group in manifest["fetch"]:
         for entry in group["files"]:

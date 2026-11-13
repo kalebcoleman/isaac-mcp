@@ -23,8 +23,7 @@ The pack comes from, in order: an explicit argument, ``$ISAAC_MCP_ASSET_PACK``, 
 ``isaac-mcp.json``, then ``ur5e-dt``. An invalid name is an error, never a silent skip.
 
 A named pack holds only its own files. It has no flat-layout fallback and no NVIDIA fallback, and
-it does not borrow from ``ur5e-dt``. The UR5e twin (``ur5e_dt.asset_cache``) searches a selected
-pack first and then always its own ``ur5e-dt``, so it keeps finding its files in any project.
+it does not borrow from ``ur5e-dt``. The workcell uses its own asset pack configuration.
 
 A file in a store is verified before use. If the folder holding it has a ``SHA256SUMS`` listing
 the file, that pin decides (a lab-modified robot differs from NVIDIA's). Otherwise, in the twin's
@@ -324,7 +323,7 @@ class Resolver:
         self._pack = validate_pack_name(pack) if pack is not None else None
         self._warned: set[str] = set()
 
-    # Where the checkout and manifest are; the twin overrides these with its own location.
+    # Where the checkout and manifest are.
     @property
     def repo_root(self) -> Path | None:
         return checkout_root()

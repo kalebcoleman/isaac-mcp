@@ -1,4 +1,4 @@
-"""The shared resolver: named packs, selection, the twin's fallback and the supported import."""
+"""The shared resolver: named packs, selection, and the supported import."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ import pytest
 from isaac_mcp import assets
 
 REPO = Path(__file__).resolve().parents[2]
-TWIN = REPO / "exts" / "ur5e-dt" / "ur5e_dt" / "asset_cache.py"
 ENV = ("ISAAC_MCP_ASSET_PATH", "ISAAC_MCP_ASSET_PACK", "ISAAC_MCP_ASSET_STRICT", "ISAAC_MCP_ASSET_REMOTE_ROOT",
        "ISAAC_MCP_PROJECT", "ISAAC_MCP_WORKSPACE", "UR5E_DT_ASSET_CACHE", "UR5E_DT_ASSET_ROOT", "UR5E_DT_OFFLINE")
 
@@ -38,15 +37,6 @@ def put(root: Path, rel: str, data: bytes = b"x") -> Path:
     path.write_bytes(data)
     return path
 
-
-def twin():
-    """The twin's module exactly as an existing caller loads it."""
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("twin_asset_cache_test", TWIN)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def project(tmp_path, monkeypatch, **doc) -> Path:
@@ -94,8 +84,6 @@ def test_invalid_pack_names_are_errors_from_every_source(store, tmp_path, monkey
         assets.selected_pack()
     with pytest.raises(assets.InvalidPackName):
         assets.resolve_uri("a.usd")
-    with pytest.raises(assets.InvalidPackName):
-        twin().resolve_uri("a.usd")
 
 
 def test_a_non_string_project_pack_is_an_error(store, tmp_path, monkeypatch):
@@ -145,46 +133,6 @@ def test_an_unpinned_file_in_a_named_pack_is_reported_as_unpinned(store):
     assert info["status"] == "unpinned" and info["pack"] == "bricksim"
 
 
-def test_the_twin_finds_its_files_when_a_project_selects_another_pack(store, tmp_path, monkeypatch):
-    project(tmp_path, monkeypatch, pack="bricksim")
-    own = put(store / "ur5e-dt", "gripper/QuickChanger.usd")
-    module = twin()
-    assert module.resolve_path("gripper/QuickChanger.usd") == own.resolve()
-    assert module.asset_source("gripper/QuickChanger.usd") == {
-        "asset": "gripper/QuickChanger.usd", "source": "store", "location": str(own.resolve())}
-    assert module.resolve_uri("sensors/rsd455.usd").startswith("https://")
-    assert module.PACK == "ur5e-dt"
-
-
-def test_a_selected_pack_overrides_the_twin_by_name_and_says_so(store, tmp_path, monkeypatch):
-    project(tmp_path, monkeypatch, pack="bricksim")
-    put(store / "ur5e-dt", "workstation/x.usd", b"twin")
-    lab = put(store / "bricksim", "workstation/x.usd", b"lab")
-    source = twin().asset_source("workstation/x.usd")
-    assert source == {"asset": "workstation/x.usd", "source": "store", "location": str(lab.resolve()), "pack": "bricksim"}
-
-
-def test_the_twin_refuses_an_unpinned_changed_robot_in_a_selected_pack(store, tmp_path, monkeypatch):
-    """A selected pack does not weaken the rule that a changed tracked file needs a pin."""
-    project(tmp_path, monkeypatch, pack="bricksim")
-    put(store / "bricksim", "robot/ur5e.usd", b"edited")
-    module = twin()
-    with pytest.raises((module.AssetCorrupt, module.AssetMissing)):
-        module.resolve_uri("robot/ur5e.usd")
-
-
-def test_both_entry_points_share_one_implementation(store):
-    module = twin()
-    assert module.AssetMissing is assets.AssetMissing and module.AssetCorrupt is assets.AssetCorrupt
-    assert issubclass(type(module._TWIN), assets.Resolver)
-
-
-def test_both_entry_points_agree_on_the_default_store(store, monkeypatch):
-    monkeypatch.delenv("ISAAC_MCP_ASSET_PATH")
-    assert twin().default_store() == assets.default_store() == (REPO.parent / "isaac-mcp-assets").resolve()
-    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(store.parent))
-    assert twin().default_store() == assets.default_store() == store.resolve()
-
 
 def test_installed_without_a_checkout(store, monkeypatch):
     monkeypatch.delenv("ISAAC_MCP_ASSET_PATH")
@@ -193,19 +141,6 @@ def test_installed_without_a_checkout(store, monkeypatch):
     resolver = assets.Resolver()
     assert resolver.manifest() == {} and resolver.remote_uri("robot/ur5e.usd") is None
 
-
-def test_run_path_keeps_working_without_isaac_mcp_on_the_path(store):
-    """BrickSim loads the twin's file this way."""
-    code = (
-        "import runpy, sys\n"
-        f"resolve = runpy.run_path({str(TWIN)!r})['resolve_uri']\n"
-        "print(resolve('workstation/a.usd'))\n"
-    )
-    put(store / "ur5e-dt", "workstation/a.usd")
-    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=store)
-    assert done.returncode == 0, done.stderr
-    assert done.stdout.strip() == (store / "ur5e-dt" / "workstation" / "a.usd").resolve().as_uri()
 
 
 def test_the_module_is_standard_library_only():

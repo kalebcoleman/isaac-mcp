@@ -107,18 +107,11 @@ What a pack means depends on who is asking:
 
 | Who | Searches, in each store | NVIDIA fallback |
 |---|---|---|
-| The UR5e twin, in any project | the selected pack, then `ur5e-dt`, then the flat layout | Yes, for the manifest's `remote` entries, unless strict |
-| `isaac_mcp.assets` with `ur5e-dt` selected | `ur5e-dt`, then the flat layout | The same as the twin |
+| `isaac_mcp.assets` with `ur5e-dt` selected | `ur5e-dt`, then the flat layout | Yes, for manifest `remote` entries, unless strict |
 | `isaac_mcp.assets` with another pack | only that pack | Never |
 
-So a project that selects `bricksim` overrides twin files by name where its pack has them, and
-the twin still finds everything else in `ur5e-dt`. Quick Start's `assets` list shows the path, and
-adds `pack` when a file came from a pack other than `ur5e-dt`. A pack other than `ur5e-dt` never
-borrows from another pack, so a missing file is an error you can see.
-
-The hash rules still apply to the twin in a selected pack: a tracked file such as
-`robot/ur5e.usd` must be pinned there, or it is refused as changed. Files built by `pack-build`
-are pinned. `isaac_mcp.assets` with a named pack has no manifest, so an unpinned file there loads
+The workcell uses its own asset-pack configuration, not the generic resolver's legacy fallback.
+Files built by `pack-build` are pinned. `isaac_mcp.assets` with a named pack has no manifest, so an unpinned file there loads
 and reports `status: unpinned`.
 
 ## Use the resolver from your project
@@ -131,13 +124,10 @@ path = assets.resolve_path("scene.usd", pack="bricksim")   # a named pack
 info = assets.resolve_info("robot/ur5e.usd")               # never raises
 ```
 
-Put `<checkout>/mcp` on `sys.path` or install the package. It is also what the twin uses. The
+Put `<checkout>/mcp` on `sys.path` or install the package. The
 errors are `assets.AssetMissing`, `assets.AssetCorrupt` and `assets.InvalidPackName`. Python 3.10
 or later. Installed without a checkout, the default store is `~/isaac-mcp-assets`, there is no
 manifest and so no NVIDIA fallback.
-
-`runpy.run_path("<checkout>/exts/ur5e-dt/ur5e_dt/asset_cache.py")` keeps working and returns the
-twin's view, but it ties a project to the twin's folder. Prefer the import.
 
 ## Build a pack from a USD
 
