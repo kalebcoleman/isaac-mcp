@@ -1,8 +1,8 @@
 import asyncio
 import json
 
-from isaac_mcp import server
-from isaac_mcp.isaaclab import tools
+from twinsmith import server
+from twinsmith.isaaclab import tools
 
 
 EXPECTED = {
@@ -13,7 +13,7 @@ EXPECTED = {
 
 
 def test_all_tools_registered_on_the_server():
-    assert EXPECTED <= set(server.build_server(env={"ISAAC_MCP_TOOLSETS": "all"})._tool_manager._tools), "registered and callable, whether or not listed"
+    assert EXPECTED <= set(server.build_server(env={"TWINSMITH_TOOLSETS": "all"})._tool_manager._tools), "registered and callable, whether or not listed"
 
 
 def test_launch_without_install_returns_a_hint(monkeypatch):

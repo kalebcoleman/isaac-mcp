@@ -6,8 +6,8 @@ import time
 
 import pytest
 
-from isaac_mcp import asset_formats, mesh_refs, sdf_urdf, urdf_refs, xacro_lite
-from isaac_mcp.project_assets import AssetError
+from twinsmith import asset_formats, mesh_refs, sdf_urdf, urdf_refs, xacro_lite
+from twinsmith.project_assets import AssetError
 
 
 def _project(tree, tmp_path=None):
@@ -183,7 +183,7 @@ def test_looking_through_a_folder_stops_reading_at_a_limit(monkeypatch):
 
 
 def test_a_folder_at_the_file_limit_is_refused_before_the_converted_file_is_added(tmp_path, monkeypatch):
-    from isaac_mcp import project_assets
+    from twinsmith import project_assets
 
     source = tmp_path / "root"
     source.mkdir()

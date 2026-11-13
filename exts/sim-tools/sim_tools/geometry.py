@@ -7,7 +7,7 @@ UsdGeom.BBoxCache.ComputeWorldBound or the camera's own authored attributes.
 import math
 
 from pxr import Gf, Usd, UsdGeom
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 
 PURPOSES = {
     "default": UsdGeom.Tokens.default_,

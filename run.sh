@@ -4,20 +4,19 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PORT="${UR5E_DT_PORT:-${ISAAC_SIM_PORT:-8766}}"
+[ -f "$ROOT/scripts/legacy_env.sh" ] && . "$ROOT/scripts/legacy_env.sh"   # old variable names, for one release
+PORT="${TWINSMITH_PORT:-8766}"
 HEADLESS=0
 PHYSICS_BACKEND=""     # --physics-backend; else the configured one (see below)
 SHOW_HELP=0
 EXTRA_ARGS=()
 
-# Interpreter: ISAAC_MCP_PYTHON (preferred) or UR5E_DT_PYTHON (alias), else the checkout's
-# .venv, else auto-detection by scripts/isaac_env.py (resolved after argument parsing).
+# Interpreter: TWINSMITH_SIM_PYTHON, else the checkout's
+# .venv, else auto-detection by scripts/env.py (resolved after argument parsing).
 PY=""
 PY_AUTODETECT=0
-if [ -n "${ISAAC_MCP_PYTHON:-}" ]; then
-  PY="$ISAAC_MCP_PYTHON"
-elif [ -n "${UR5E_DT_PYTHON:-}" ]; then
-  PY="$UR5E_DT_PYTHON"
+if [ -n "${TWINSMITH_SIM_PYTHON:-}" ]; then
+  PY="$TWINSMITH_SIM_PYTHON"
 elif [ -e "$ROOT/.venv/bin/python" ]; then
   PY="$ROOT/.venv/bin/python"
 else
@@ -48,7 +47,7 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     --no-hot-reload)
-      ISAAC_MCP_NO_HOT_RELOAD=1
+      TWINSMITH_NO_HOT_RELOAD=1
       shift
       ;;
     --port)
@@ -78,49 +77,49 @@ esac
 if [ "$PORT" -gt 65535 ]; then echo "port must be a number from 0 to 65535, not '$PORT'" >&2; exit 2; fi
 
 if [ "$PY_AUTODETECT" = 1 ]; then
-  if command -v python3 >/dev/null 2>&1 && [ -f "$ROOT/scripts/isaac_env.py" ]; then
+  if command -v python3 >/dev/null 2>&1 && [ -f "$ROOT/scripts/env.py" ]; then
     # Any Isaac Sim 6.x; the first match in the documented search order wins.
     # Inherit stderr rather than opening /dev/stderr, which fails when fd 2 is a socket (journald, some CI).
     if [ "$SHOW_HELP" = 1 ]; then
-      DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6 2>/dev/null)" || DETECTED=""
+      DETECTED="$(python3 "$ROOT/scripts/env.py" resolve-python --require-version 6 2>/dev/null)" || DETECTED=""
     else
-      DETECTED="$(python3 "$ROOT/scripts/isaac_env.py" resolve-python --require-version 6)" || DETECTED=""
+      DETECTED="$(python3 "$ROOT/scripts/env.py" resolve-python --require-version 6)" || DETECTED=""
     fi
     if [ -n "$DETECTED" ]; then
       PY="$DETECTED"
       if [ "$SHOW_HELP" != 1 ]; then
-        echo "run.sh: auto-detected interpreter $PY (pin one with ISAAC_MCP_PYTHON=/path/to/python; list all with scripts/isaac_env.py find)" >&2
+        echo "run.sh: auto-detected interpreter $PY (pin one with TWINSMITH_SIM_PYTHON=/path/to/python; list all with scripts/env.py find)" >&2
       fi
     fi
   fi
   [ -n "$PY" ] || PY="$ROOT/.venv/bin/python"
 fi
 
-if [ "${ISAAC_MCP_PRINT_PYTHON:-0}" = 1 ]; then
+if [ "${TWINSMITH_PRINT_PYTHON:-0}" = 1 ]; then
   echo "$PY"
   exit 0
 fi
 
 if [ "$SHOW_HELP" = 1 ]; then
-  if [ -x "$PY" ]; then HELP_PY="$PY"; else HELP_PY="$PY (not found; list candidates with: python3 scripts/isaac_env.py find)"; fi
+  if [ -x "$PY" ]; then HELP_PY="$PY"; else HELP_PY="$PY (not found; list candidates with: python3 scripts/env.py find)"; fi
   cat <<EOF
 Usage: ./run.sh [options] [-- <extra kit args>]
 
-Launch Isaac Sim with the Kit MCP bridge and UR5e tools (6.2 by default; other builds by ISAAC_MCP_PYTHON).
+Launch Isaac Sim with the Kit MCP bridge and UR5e tools (6.2 by default; other builds by TWINSMITH_SIM_PYTHON).
 
 Configuration:
-  Port:        $PORT (override with UR5E_DT_PORT or --port)
+  Port:        $PORT (override with TWINSMITH_PORT or --port)
   Interpreter: $HELP_PY
-               (override with ISAAC_MCP_PYTHON; UR5E_DT_PYTHON is an alias; without either, the
-               checkout .venv is used, else scripts/isaac_env.py auto-detects an existing install)
+               (override with TWINSMITH_SIM_PYTHON; without it, the
+               checkout .venv is used, else scripts/env.py auto-detects an existing install)
 
 Options:
-  --headless     Run without visible window (sets UR5E_DT_HEADLESS=1)
+  --headless     Run without visible window (sets TWINSMITH_HEADLESS=1)
   --motion-bvh   Enable RTX sensor motion compensation (increases GPU memory use)
   --realtime     Cap the app at 60 frames per second, so sim time keeps to wall-clock time (for Nav2 with a headless app)
   --physics-backend physx|newton  Select this new session's engine (default: the configured physics_backend:
-                 ISAAC_MCP_PHYSICS_BACKEND, else [sim] physics_backend in the config files, else the built-in)
-  --no-hot-reload  Do not reload extensions when their files change (or set ISAAC_MCP_NO_HOT_RELOAD=1)
+                 TWINSMITH_PHYSICS_BACKEND, else [sim] physics_backend in the config files, else the built-in)
+  --no-hot-reload  Do not reload extensions when their files change (or set TWINSMITH_NO_HOT_RELOAD=1)
   --port N       Bridge port (default: 8766)
   -h, --help     Show this help message and exit
 EOF
@@ -129,25 +128,24 @@ fi
 
 # Refuse to start on a busy bridge port
 if (exec 3<>/dev/tcp/127.0.0.1/"$PORT") 2>/dev/null; then
-  echo "bridge port $PORT is already in use; choose a free port with --port or UR5E_DT_PORT" >&2
+  echo "bridge port $PORT is already in use; choose a free port with --port or TWINSMITH_PORT" >&2
   exit 1
 fi
 
-export UR5E_DT_PORT="$PORT"
 case "$PHYSICS_BACKEND" in
   ""|physx|newton) ;;
   *) echo "--physics-backend must be physx or newton" >&2; exit 2 ;;
 esac
 
 # Defer binding until the workcell tools register.
-export ISAAC_MCP_PORT="$PORT"
-export ISAAC_MCP_DEFER_START=1
+export TWINSMITH_PORT="$PORT"
+export TWINSMITH_DEFER_START=1
 export OMNI_KIT_ACCEPT_EULA=YES
 export PYTHONDONTWRITEBYTECODE=1
 export PATH="$HOME/.local/bin:$PATH"
 
 if [ "$HEADLESS" = 1 ]; then
-  export UR5E_DT_HEADLESS=1
+  export TWINSMITH_HEADLESS=1
 fi
 
 # Isaac Sim bundled ROS 2 bridge: humble on Ubuntu 22.04 (jammy), jazzy on 24.04 (noble).
@@ -170,8 +168,8 @@ fi
 # Verify interpreter
 if [ ! -x "$PY" ]; then
   echo "FAIL: interpreter $PY not found or not executable." >&2
-  echo "      Run ./install.sh first or set ISAAC_MCP_PYTHON (UR5E_DT_PYTHON also works)." >&2
-  echo "      To see what was searched: python3 scripts/isaac_env.py find (see docs/LINUX-SETUP.md)." >&2
+  echo "      Run ./install.sh first or set TWINSMITH_SIM_PYTHON." >&2
+  echo "      To see what was searched: python3 scripts/env.py find (see docs/LINUX-SETUP.md)." >&2
   exit 1
 fi
 
@@ -184,10 +182,10 @@ SITE="$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))' 
 # The flag wins; otherwise the one configuration module says (environment variable, then the project and
 # user config files, then its built-in default). It needs only the standard library, so no SDK is required.
 if [ -z "$PHYSICS_BACKEND" ]; then
-  PHYSICS_BACKEND="$(PYTHONPATH="$ROOT/mcp${PYTHONPATH:+:$PYTHONPATH}" python3 -m isaac_mcp.config --print physics_backend)" \
+  PHYSICS_BACKEND="$(PYTHONPATH="$ROOT/mcp${PYTHONPATH:+:$PYTHONPATH}" python3 -m twinsmith.config --print physics_backend)" \
     || { echo "run.sh: could not read the configured physics_backend (see the message above); nothing was started" >&2; exit 2; }
 fi
-export ISAAC_MCP_PHYSICS_BACKEND="$PHYSICS_BACKEND"
+export TWINSMITH_PHYSICS_BACKEND="$PHYSICS_BACKEND"
 # Refuse here rather than after Kit has started: 5.1 has no Newton extension, and never fall back to PhysX.
 # Extensions sit in <site>/exts in a pip install and two levels above the package in a standalone app.
 if [ "$PHYSICS_BACKEND" = newton ] \
@@ -196,7 +194,7 @@ if [ "$PHYSICS_BACKEND" = newton ] \
   echo "      Use --physics-backend physx, or an interpreter with Newton (see docs/COMPATIBILITY.md)." >&2
   exit 2
 fi
-. "$ROOT/scripts/isaac_ros_libs.sh"
+. "$ROOT/scripts/ros_libs.sh"
 if ROS_LIB="$(isaac_ros_lib_dir "$SITE" "$ROS_DISTRO")"; then
   export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$ROS_LIB"
 else
@@ -208,17 +206,17 @@ EXT_ARGS=(--ext-folder "$ROOT/exts")
 
 # Kit watches extension folders and reloads an extension when a file in it changes, inside the running
 # process. Turn that off for a recorded run, or when another process edits this checkout.
-case "${ISAAC_MCP_NO_HOT_RELOAD:-0}" in
+case "${TWINSMITH_NO_HOT_RELOAD:-0}" in
   1|true|yes) EXT_ARGS+=("--/app/extensions/fsWatcherEnabled=0") ;;
 esac
 
 # Kit uploads a crash's minidump to NVIDIA by default, and a minidump can contain process memory. Keep it on this
 # machine for debugging instead, unless the user opts in.
-case "${ISAAC_MCP_CRASH_UPLOAD:-0}" in
+case "${TWINSMITH_CRASH_UPLOAD:-0}" in
   1|true|yes) ;;
   *) EXT_ARGS+=("--/crashreporter/url=" "--/crashreporter/skipOldDumpUpload=true" "--/crashreporter/preserveDump=true") ;;
 esac
 
-exec "$PY" "$ROOT/scripts/run_ur5e_dt.py" \
-  "${EXT_ARGS[@]}" --enable isaac.mcp.bridge --enable ur5e-dt --enable sim-tools \
+exec "$PY" "$ROOT/scripts/run_kit.py" \
+  "${EXT_ARGS[@]}" --enable twinsmith.bridge --enable workcell --enable sim-tools \
   --enable isaacsim.ros2.bridge "${EXTRA_ARGS[@]}"

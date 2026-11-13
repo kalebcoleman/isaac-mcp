@@ -1,0 +1,280 @@
+{
+  "version": 1,
+  "namespace": null,
+  "tools": {
+    "run_python": {
+      "description": "Execute Python code on the Kit main thread with full access to the Omniverse APIs (omni, carb, pxr preloaded; assign to `result` to return a value). Top-level `await` works (e.g. `await omni.kit.app.get_app().next_update_async()` to let frames run between steps). Set persistent=True with a session_id to keep variables between calls. Opening a stage (including save-as) resets every session; the next call says so. For work longer than a few seconds pass background=true: it returns a job_id at once for job_status / job_cancel, instead of polling with more calls.",
+      "parameters": {
+        "code": {
+          "type": "string",
+          "required": true,
+          "description": "Python code to execute on Kit's main thread"
+        },
+        "session_id": {
+          "type": "string",
+          "description": "Session identifier for persistent execution. Use the same ID across calls to share state. Defaults to 'default'."
+        },
+        "persistent": {
+          "type": "boolean",
+          "description": "If true, variables persist across calls with the same session_id. The reply lists only the names this call added or rebound (session_vars) and the total (session_var_count)."
+        },
+        "background": {
+          "type": "boolean",
+          "description": "Run as a job and return its job_id at once. The code must await (e.g. `await omni.kit.app.get_app().next_update_async()` in its loop) and must not pump the app itself. A `job` object is preloaded: job.report(fraction, text) sets progress, job.checkpoint() raises once job_cancel was called. Follow with job_status(job_id, wait_s=30); `result` and prints come back there."
+        },
+        "label": {
+          "type": "string",
+          "description": "With background: a short name shown by job_status."
+        }
+      },
+      "fields": [
+        {
+          "name": "code",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Python code to execute on Kit's main thread"
+        },
+        {
+          "name": "session_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Session identifier for persistent execution. Use the same ID across calls to share state. Defaults to 'default'."
+        },
+        {
+          "name": "persistent",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "If true, variables persist across calls with the same session_id. The reply lists only the names this call added or rebound (session_vars) and the total (session_var_count)."
+        },
+        {
+          "name": "background",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Run as a job and return its job_id at once. The code must await (e.g. `await omni.kit.app.get_app().next_update_async()` in its loop) and must not pump the app itself. A `job` object is preloaded: job.report(fraction, text) sets progress, job.checkpoint() raises once job_cancel was called. Follow with job_status(job_id, wait_s=30); `result` and prints come back there."
+        },
+        {
+          "name": "label",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "With background: a short name shown by job_status."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "twinsmith.bridge"
+    },
+    "reload_tools": {
+      "description": "Hot-reload one of a project's own tool packages: unregister it, import it again and register its tools. Follow with refresh_tools so the new schemas are seen.",
+      "parameters": {
+        "module": {
+          "type": "string",
+          "required": true,
+          "description": "The package's module name, as given in TWINSMITH_TOOL_MODULES."
+        }
+      },
+      "fields": [
+        {
+          "name": "module",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "The package's module name, as given in TWINSMITH_TOOL_MODULES."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "twinsmith.bridge"
+    },
+    "put_file": {
+      "description": "Write a file on the simulator's machine (base64 content). Ships code and assets without scp. Writing a .py clears the folder's bytecode cache. The content travels in one message: for code and tool-sized assets, not gigabytes.",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "description": "Destination path on the bridge's box (~ expands)."
+        },
+        "content_b64": {
+          "type": "string",
+          "required": true,
+          "description": "File content, base64-encoded."
+        },
+        "mkdirs": {
+          "type": "boolean",
+          "description": "Create missing parent directories (default true)."
+        }
+      },
+      "fields": [
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Destination path on the bridge's box (~ expands)."
+        },
+        {
+          "name": "content_b64",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "File content, base64-encoded."
+        },
+        {
+          "name": "mkdirs",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Create missing parent directories (default true)."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "twinsmith.bridge"
+    },
+    "get_file": {
+      "description": "Read a file from the simulator's machine. Returned base64-encoded (content_b64); the pull half of put_file.",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "description": "Path on the bridge's box (~ expands)."
+        }
+      },
+      "fields": [
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Path on the bridge's box (~ expands)."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "twinsmith.bridge"
+    },
+    "status": {
+      "description": "Where am I, in one call: the bridge that answered (pid, port, app, readiness), every bridge advertised on this machine, the current stage's session_id and stage_id with the timeline state, and running jobs. With nothing running it says so and names the next call, instead of failing. Call it once before the first simulator action; there is no need to repeat it between calls.",
+      "parameters": {
+        "detail": {
+          "type": "boolean",
+          "description": "true: the full bridge identity as well (namespaces, what is running and waiting, extension source). Default false: the short reply."
+        }
+      },
+      "fields": [
+        {
+          "name": "detail",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "true: the full bridge identity as well (namespaces, what is running and waiting, extension source). Default false: the short reply."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "twinsmith.bridge"
+    },
+    "job_status": {
+      "description": "Check a background job in this Kit; with no job_id, list the jobs. run_python(background=true), sim__simulation__run and sim__trajectory__replay return a job_id. Gives state (running, succeeded, failed, cancelled), elapsed_s, progress, the last output and, when finished, the result or error. The list is newest first. Through the MCP server it also takes an Isaac Lab or script job_id (isaaclab__train, run_script, ...), with no bridge needed.",
+      "parameters": {
+        "job_id": {
+          "type": "string",
+          "description": "job_id from the call that started the work. Omit to list jobs."
+        },
+        "wait_s": {
+          "type": "number",
+          "description": "Wait up to this many seconds (0-60) for the job to end before answering, instead of polling."
+        }
+      },
+      "fields": [
+        {
+          "name": "job_id",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "job_id from the call that started the work. Omit to list jobs."
+        },
+        {
+          "name": "wait_s",
+          "kind": "number",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Wait up to this many seconds (0-60) for the job to end before answering, instead of polling."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "twinsmith.bridge"
+    },
+    "job_cancel": {
+      "description": "Stop a background job. job_id comes from the call that started it. It ends at its next step and cleans up after itself; confirm with job_status. Through the MCP server it also stops an Isaac Lab or script job.",
+      "parameters": {
+        "job_id": {
+          "type": "string",
+          "required": true,
+          "description": "job_id of a running job."
+        }
+      },
+      "fields": [
+        {
+          "name": "job_id",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "job_id of a running job."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "twinsmith.bridge"
+    },
+    "stat_file": {
+      "description": "Check a file's existence, size and sha256 on the bridge's box. Skips unchanged pushes and verifies assets.",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "description": "Path on the bridge's box (~ expands)."
+        }
+      },
+      "fields": [
+        {
+          "name": "path",
+          "kind": "string",
+          "enum": null,
+          "required": true,
+          "default": null,
+          "has_default": false,
+          "description": "Path on the bridge's box (~ expands)."
+        }
+      ],
+      "namespace": null,
+      "owner_id": "twinsmith.bridge"
+    }
+  }
+}

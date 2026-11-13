@@ -8,7 +8,7 @@ import math
 
 from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 from .core import CAP, matrix
 
 
@@ -373,7 +373,7 @@ class Follower:
                     updates=0, prim=stage.GetPrimAtPath(spec["path"]))
         self._spec = spec
         self._sub = omni.kit.app.get_app().get_update_event_stream().create_subscription_to_pop(
-            self._tick, name="isaac-mcp viewport follow"
+            self._tick, name="twinsmith viewport follow"
         )
 
     def _tick(self, _event):
@@ -408,7 +408,7 @@ CLEAN_LAYOUT = {  # carb setting -> its value in the clean layout
     "/app/viewport/grid/enabled": False,
     "/app/viewport/outline/enabled": False,  # the selection outline
 }
-CAPTION_FRAME = "isaac_mcp.caption"
+CAPTION_FRAME = "twinsmith.caption"
 MAX_CAPTION_CHARS = 120
 _previous_layout = {}
 

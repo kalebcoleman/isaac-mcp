@@ -1,6 +1,6 @@
 # Isaac Lab Host Tools (`isaaclab__*`)
 
-This document covers the host-side tools registered by `mcp/isaac_mcp/isaaclab/tools.py`
+This document covers the host-side tools registered by `mcp/twinsmith/isaaclab/tools.py`
 (`install.py`, `jobs.py`, `metrics.py`), which belong to the `lab` toolset (off by default: add `+lab`, see
 [toolsets](TOOLSETS.md)); `run_script` belongs to `code`. It holds the behaviour, contracts, guards and limits. Every tool and
 argument, with its default, is in the generated [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md#lab-isaac-lab-training-and-evaluation).
@@ -8,7 +8,7 @@ argument, with its default, is in the generated [TOOLS-ARGUMENTS.md](TOOLS-ARGUM
 ## Naming: host-side tools
 
 - These are **host-side** MCP tools, not bridge-discovered Kit tools. They are registered
-  directly on the FastMCP server in `mcp/isaac_mcp/server.py` and run in the `isaac-mcp`
+  directly on the FastMCP server in `mcp/twinsmith/server.py` and run in the `twinsmith`
   process. They spawn and manage Isaac Lab subprocesses; no Kit process is required for
   the host to expose them, and they do not call `run_python`.
 - MCP tool names cannot contain dots, so they appear as `isaaclab__<tool>`
@@ -22,7 +22,7 @@ argument, with its default, is in the generated [TOOLS-ARGUMENTS.md](TOOLS-ARGUM
 ### Locating an Isaac Lab install
 
 `isaaclab__install_info` and the job launchers resolve an install in this order
-(`mcp/isaac_mcp/isaaclab/install.py`):
+(`mcp/twinsmith/isaaclab/install.py`):
 
 1. `ISAACLAB_PYTHON` (interpreter path), with `ISAACLAB_ROOT` if provided; otherwise a
    sibling `IsaacLab` directory is tried. If the explicitly configured paths are invalid,
@@ -32,8 +32,8 @@ argument, with its default, is in the generated [TOOLS-ARGUMENTS.md](TOOLS-ARGUM
    `IsaacLab` checkout with the reinforcement-learning scripts.
 4. The current directory's `.venv` when the current directory is an Isaac Lab checkout.
 
-Between steps 2 and 3, a project named by `ISAAC_MCP_PROJECT` in the server's own environment (a directory or its
-`isaac-mcp.json`) can set `isaaclab_python` and optionally `isaaclab_root`, for a project with its own Lab. Set that variable
+Between steps 2 and 3, a project named by `TWINSMITH_PROJECT` in the server's own environment (a directory or its
+`twinsmith.json`) can set `isaaclab_python` and optionally `isaaclab_root`, for a project with its own Lab. Set that variable
 in the `env` of the client's server entry. Relative paths start at that file's folder:
 
 ```json
@@ -48,7 +48,7 @@ is not an approval: no tool trusts a path because a project file names it.
 The interpreter must be a virtual environment with Isaac Lab installed, which is checked from its files before anything
 runs it. An invalid setting is an error, not a fallback. That check catches mistakes; it does not stop a deliberately
 faked environment, so name only a project you trust. A model with `put_file` can write any file there. Hide `put_file`
-(`ISAAC_MCP_TOOLSETS=default,-code`) if that matters. Explicit `ISAACLAB_PYTHON` or `ISAACLAB_ROOT` win, and then
+(`TWINSMITH_TOOLSETS=default,-code`) if that matters. Explicit `ISAACLAB_PYTHON` or `ISAACLAB_ROOT` win, and then
 `isaaclab__install_info` reports `project_setting_ignored`; remove them from that server's configuration to use the
 project's. It reports `source`, and `tested: false` for a pair other than the two this project claims (Lab 3.0.0 with Sim 6.2, Lab 2.3.2 with Sim 5.1):
 the version read works, but jobs on it are untested. A pip-only Lab has no `scripts/reinforcement_learning`, so
@@ -62,8 +62,8 @@ Automatic environment discovery requires local Isaac Lab package metadata; it do
 interpreter to decide whether to select one. `isaaclab__install_info` then probes package metadata
 (`isaaclab`, `isaacsim`) in a short-lived subprocess. It does not search `PATH` or
 `ISAACLAB_PATH`, and does not validate every supported combination. Set explicit paths for
-other layouts. `ISAACLAB_JOBS_DIR` overrides the job state directory (default
-`~/.local/share/isaac-mcp/jobs`).
+other layouts. `TWINSMITH_JOBS_DIR` overrides the job state directory (default
+`~/.local/share/twinsmith/jobs`).
 
 For example, substitute the paths for your own installation before starting the host server:
 
@@ -93,13 +93,13 @@ the next, with no restart:
 
 | `install` value | Meaning |
 |---|---|
-| omitted or `default` | The configured default. If the server was started with `ISAAC_MCP_PROJECT` naming a project whose `isaac-mcp.json` has `"isaaclab_install": "<selector>"`, that selector is used instead (an explicit `default` opts out). A project file found only by walking up from the working directory is never honored. |
+| omitted or `default` | The configured default. If the server was started with `TWINSMITH_PROJECT` naming a project whose `twinsmith.json` has `"isaaclab_install": "<selector>"`, that selector is used instead (an explicit `default` opts out). A project file found only by walking up from the working directory is never honored. |
 | a name or version | A *known install*: `lab-2.3.2`, `2.3`, `2.3.2`, `3.0.0`. Names are virtual-environment folder names; versions are read from the folder name or the installed `isaaclab` distribution. Several matches is an error that lists them. |
 | an absolute path | A virtual environment folder, its `bin/python`, or a Lab checkout holding a `.venv`. It must be a virtual environment with Isaac Lab installed (checked from its files before anything runs). |
 
-Known installs are read from files, nothing is run: the configured default, its sibling environments, `<ISAAC_MCP_WORKSPACE>/envs/*`,
+Known installs are read from files, nothing is run: the configured default, its sibling environments, `<TWINSMITH_WORKSPACE>/envs/*`,
 `ISAACLAB_INSTALLS` (`os.pathsep` list of venvs, interpreters, checkouts or folders of venvs) and what
-`scripts/isaac_env.py find` reports when the script sits beside the package. `isaaclab__install_info` returns them as
+`scripts/env.py find` reports when the script sits beside the package. `isaaclab__install_info` returns them as
 `known_installs`. The checkout is the install's own (`<env>/IsaacLab`, a checkout holding the `.venv`, or `<env>-src` beside it),
 so Lab 2.3's per-library scripts and `rl_library` rules apply as for any 2.3 call. A successful launch returns `install`
 (`python`, `isaaclab_root`, `source`) so a wrong pick is visible. `metrics_summary`, `checkpoints_list` and `tensorboard_tail`
@@ -114,8 +114,8 @@ and its registration code runs. Every launching tool (`isaaclab__envs_list`, `tr
 | Argument | Effect |
 |---|---|
 | `python_paths` | List of existing absolute directories added to the front of the child's `PYTHONPATH`, before the install's own path and `ISAACLAB_TASK_PATH`, never replacing them. The documented way to add import roots. `python_path` is the older name; both may be given and are merged. Also on `run_script`. |
-| `env` | Extra environment variables for the child: identifier names, string values. **One policy for every Isaac Lab tool, `run_script` included** (`install.validate_env`). `PYTHONPATH`, `PATH` and `LD_LIBRARY_PATH` are *prepended* to the install's own value, not replacing it; `OMNI_KIT_ACCEPT_EULA`, `CUDA_VISIBLE_DEVICES`, `HEADLESS`, `HOME`, `TMPDIR` and other `PYTHON*` variables are accepted (a tool's own `device`/`headless` argument still wins for the middle two). Refused, because they would replace or hijack the install, the job's supervising shell or this server, each with the argument to use instead: `PYTHONHOME`, `ISAACLAB_PYTHON`, `ISAACLAB_ROOT`, `ISAACSIM_PATH`, `ISAAC_MCP_PYTHON` (use `install`), `LD_PRELOAD`, `LD_AUDIT`, `DYLD_INSERT_LIBRARIES` (use a wrapper script run by `run_script`), `BASH_ENV`, `ENV`, `IFS`, `CDPATH`, `BASH_FUNC_*`, `ISAAC_MCP_*` and `ISAACLAB_JOBS_DIR` (server settings). Values are not stored in the job record, only the names. |
-| `external_callback` | Dotted `module.function` (strict `^ident(\.ident)+$`). Works with every `rl_library`, `env_check` and `record`: with `rsl_rl` train/play (and eval) it is passed to the Isaac Lab script as `--external_callback=module.function`; everywhere else this server calls the function itself, with no arguments, after the task modules are imported and before the script runs (`launcher.py`, `eval_runner.py`, `check_runner.py`; the job gets `ISAAC_MCP_EXTERNAL_CALLBACK`). Giving it also in `extra_args` is refused. `envs_list` has no Lab script, so it imports the module and calls the function with no arguments. |
+| `env` | Extra environment variables for the child: identifier names, string values. **One policy for every Isaac Lab tool, `run_script` included** (`install.validate_env`). `PYTHONPATH`, `PATH` and `LD_LIBRARY_PATH` are *prepended* to the install's own value, not replacing it; `OMNI_KIT_ACCEPT_EULA`, `CUDA_VISIBLE_DEVICES`, `HEADLESS`, `HOME`, `TMPDIR` and other `PYTHON*` variables are accepted (a tool's own `device`/`headless` argument still wins for the middle two). Refused, because they would replace or hijack the install, the job's supervising shell or this server, each with the argument to use instead: `PYTHONHOME`, `ISAACLAB_PYTHON`, `ISAACLAB_ROOT`, `ISAACSIM_PATH`, `TWINSMITH_SIM_PYTHON` (use `install`), `LD_PRELOAD`, `LD_AUDIT`, `DYLD_INSERT_LIBRARIES` (use a wrapper script run by `run_script`), `BASH_ENV`, `ENV`, `IFS`, `CDPATH`, `BASH_FUNC_*`, `TWINSMITH_*` and `TWINSMITH_JOBS_DIR` (server settings). Values are not stored in the job record, only the names. |
+| `external_callback` | Dotted `module.function` (strict `^ident(\.ident)+$`). Works with every `rl_library`, `env_check` and `record`: with `rsl_rl` train/play (and eval) it is passed to the Isaac Lab script as `--external_callback=module.function`; everywhere else this server calls the function itself, with no arguments, after the task modules are imported and before the script runs (`launcher.py`, `eval_runner.py`, `check_runner.py`; the job gets `TWINSMITH_EXTERNAL_CALLBACK`). Giving it also in `extra_args` is refused. `envs_list` has no Lab script, so it imports the module and calls the function with no arguments. |
 | `task_modules` | List of dotted module names imported before the task is looked up, for a project whose tasks register on import, e.g. `["my_project.tasks"]`. Same effect as `ISAACLAB_TASK_MODULES` in `env`, which it is merged with. |
 | `cwd` | Working directory of the job (`train`, `eval`, `play`, `env_check`, `record`), for projects whose configs use relative data paths. Must be an existing folder, validated as for `run_script`. Default: the Isaac Lab checkout. |
 
@@ -137,11 +137,11 @@ When `isaaclab__envs_list` returns no tasks, or none match `filter`, the result 
 `isaaclab__metrics_summary` and `isaaclab__tensorboard_tail` read `events.out.tfevents.*`
 files and require the `tensorboard` Python package. Install the extra:
 from the repo root use `uv sync --project mcp --locked --extra isaaclab --no-dev`; `install.sh` includes this extra. Without it these tools
-return `{"error": "install the 'isaaclab' extra: pip install 'isaac-mcp[isaaclab]'"}`.
+return `{"error": "install the 'isaaclab' extra: pip install 'twinsmith[isaaclab]'"}`.
 
 ### Progress marker
 
-Any job (train, eval, script, ...) may print `ISAAC_MCP_PROGRESS: <value> [text]` on stdout, where `<value>` is a fraction
+Any job (train, eval, script, ...) may print `TWINSMITH_PROGRESS: <value> [text]` on stdout, where `<value>` is a fraction
 from 0 to 1 (`0.4`), a percentage (`40%`) or `done/total` (`3/10`). `isaaclab__runs_status` then returns
 `progress: {fraction, percent, done?, total?, text?}` from the newest such line in the last 256 KiB of the log; a
 malformed newest line is ignored. A job that prints no marker still gets `progress` when its training library prints
@@ -176,7 +176,7 @@ folders). A refusal names every allowed root.
 `isaaclab__tensorboard_tail` only operate under allowed roots:
 
 - `ISAACLAB_LOGS_DIR`, when set;
-- `ISAACLAB_JOBS_DIR` (or `~/.local/share/isaac-mcp/jobs`), and the default jobs directory;
+- `TWINSMITH_JOBS_DIR` (or `~/.local/share/twinsmith/jobs`), and the default jobs directory;
 - `<isaaclab_root>/logs` and `<parent_of_isaaclab_root>/logs` (from the resolved install);
 - the temp directory only when `ISAACLAB_ALLOW_TMP=1` (test fixtures).
 
@@ -207,7 +207,7 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 ### Environment variables
 
 Every `ISAACLAB_*` variable, with its default and the process that reads it, is in [ENVIRONMENT.md](ENVIRONMENT.md#isaac-lab).
-The Kit-bridge guard probes the fixed bridge port (`ISAAC_MCP_PORT` or `UR5E_DT_PORT`, default 8766), and a job's `device`
+The Kit-bridge guard probes the fixed bridge port (`TWINSMITH_PORT`, default 8766), and a job's `device`
 argument sets `CUDA_VISIBLE_DEVICES` for it.
 
 ## What a checkout offers: the profile
@@ -320,7 +320,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
 
 #### How eval produces a score
 
-The job runs `mcp/isaac_mcp/isaaclab/eval_runner.py` with the Isaac Lab interpreter instead of `play.py`
+The job runs `mcp/twinsmith/isaaclab/eval_runner.py` with the Isaac Lab interpreter instead of `play.py`
 directly. The runner imports the configured task modules, patches `gymnasium.make` so the environment it
 returns has its `step` wrapped, and then runs the real `play.py` unchanged through `runpy` with the same
 arguments. Isaac Lab itself is not modified, and `isaaclab__play` still runs the plain script.
@@ -416,9 +416,9 @@ never imported.
 The script leads its own session and process group, so `jobs(action="cancel")` and the timeout kill Kit, ffmpeg
 and any other child it started. Output goes to the job's `stdout.log` and `stderr.log`; follow it with
 `isaaclab__runs_tail`. This is the supported route for a project's own evaluator (`isaaclab__eval` only scores Isaac
-Lab's `play.py` loop). A line `ISAAC_MCP_PROGRESS: <fraction | percent% | done/total> [text]` makes `isaaclab__runs_status`
+Lab's `play.py` loop). A line `TWINSMITH_PROGRESS: <fraction | percent% | done/total> [text]` makes `isaaclab__runs_status`
 report `progress` (see [progress](#progress-marker)). A script job's `run_dir` is the job folder, so `metrics_summary` and
-`checkpoints_list` need the real run folder passed explicitly. A line `ISAAC_MCP_ARTIFACT: <path>` on stdout names an output file. When the job ends,
+`checkpoints_list` need the real run folder passed explicitly. A line `TWINSMITH_ARTIFACT: <path>` on stdout names an output file. When the job ends,
 `isaaclab__runs_status` returns `script_result`: `status`, `exit_code`, `wall_time_s`, `log_path`,
 `stderr_log_path` and `artifacts` (the printed paths, in order; they are not checked to exist).
 
@@ -428,7 +428,7 @@ The runner under a name that does not say Isaac Lab, for a script that needs nei
 simulator: a controller server for `sim__simulation__run`, a data conversion, a plot, one step of a sweep. It
 starts the same kind of job (`script`) in the same job folder, so `isaaclab__runs_status` (with `wait_s`),
 `isaaclab__runs_tail`, `isaaclab__runs_list` and `jobs(action="cancel")` follow and stop it, and the
-`ISAAC_MCP_PROGRESS` and `ISAAC_MCP_ARTIFACT` lines work the same way. Its interpreter and GPU defaults are:
+`TWINSMITH_PROGRESS` and `TWINSMITH_ARTIFACT` lines work the same way. Its interpreter and GPU defaults are:
 
 | Name | Default | Notes |
 |---|---|---|
@@ -743,8 +743,8 @@ before spawning. The job-vs-job guard runs first.
    Pass `allow_concurrent=true` to start anyway.
 2. **Kit-bridge (GPU) guard** (`allow_concurrent_gpu`, default `false`): refuses to start if
    a Kit bridge (a running Isaac Sim app) is reachable — either advertised via runtime
-   portfiles (`client.discover_bridges`) or listening on the configured port (`UR5E_DT_PORT`,
-   else `ISAAC_MCP_PORT`, else 8766; `0` or a non-integer disables the fixed-port probe).
+   portfiles (`client.discover_bridges`) or listening on the configured port (`TWINSMITH_PORT`,
+   else `TWINSMITH_PORT`, else 8766; `0` or a non-integer disables the fixed-port probe).
    The refusal includes `error`, `kit_bridges`, and `hint`.
    Pass `allow_concurrent_gpu=true` to start anyway.
 
@@ -776,7 +776,7 @@ the launch proceeds as before.
 
 ## Job model and state
 
-- State directory: `~/.local/share/isaac-mcp/jobs` (or `ISAACLAB_JOBS_DIR`).
+- State directory: `~/.local/share/twinsmith/jobs` (or `TWINSMITH_JOBS_DIR`).
 - Each job writes `job.json`, `stdout.log`, `stderr.log`; an `isaaclab__eval` job also writes
   `eval_result.json` (atomically) when its scoring runner finishes. Final status on exit is one of
   `succeeded`, `failed`, `cancelled`, `timeout`.
@@ -880,8 +880,8 @@ Start from [`mcp/templates/isaaclab_bridge_launch.py`](../mcp/templates/isaaclab
 
 - The script enables the bridge itself, through `--kit_args`. What `scripts/install.py` stores
   applies to the Isaac Sim app only.
-- Settings come from the environment, set before the app starts (`ISAAC_MCP_PORT`,
-  `ISAAC_MCP_TOOL_PATHS`, `ISAAC_MCP_TOOL_MODULES`).
+- Settings come from the environment, set before the app starts (`TWINSMITH_PORT`,
+  `TWINSMITH_TOOL_PATHS`, `TWINSMITH_TOOL_MODULES`).
 - The script owns the main loop, and the bridge answers only while Kit updates. In Isaac Lab
   3.0.0, `sim.step()` and `env.step()` update Kit only with a windowed Kit visualizer. Headless,
   the port accepts connections but calls that need the main loop never return (seen with

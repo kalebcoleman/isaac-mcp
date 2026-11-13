@@ -7,8 +7,8 @@ from xml.etree import ElementTree
 from types import SimpleNamespace
 from test_scene_usd import scene  # registers the extension package path
 from pxr import Gf, Usd, UsdGeom, UsdPhysics
-from isaac_mcp import urdf_physics, urdf_refs
-from isaac_mcp.project_assets import AssetError, Broker
+from twinsmith import urdf_physics, urdf_refs
+from twinsmith.project_assets import AssetError, Broker
 from sim_tools.advanced import Advanced
 from sim_tools.urdf import (
     _author_drives,
@@ -570,9 +570,9 @@ def legacy_importer(monkeypatch, execute, extension=None):
     monkeypatch.setitem(sys.modules, "omni.kit", SimpleNamespace(commands=commands))
     monkeypatch.setitem(sys.modules, "omni.kit.commands", commands)
     if extension is None:
-        monkeypatch.delitem(sys.modules, "ur5e_dt.extension", raising=False)
+        monkeypatch.delitem(sys.modules, "workcell.extension", raising=False)
     else:
-        monkeypatch.setitem(sys.modules, "ur5e_dt.extension", SimpleNamespace(_EXT_INSTANCE=extension))
+        monkeypatch.setitem(sys.modules, "workcell.extension", SimpleNamespace(_EXT_INSTANCE=extension))
     return module
 
 

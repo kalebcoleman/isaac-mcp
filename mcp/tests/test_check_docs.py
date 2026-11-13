@@ -42,15 +42,15 @@ def test_a_registered_name_and_a_family_pass(tmp_path):
     assert names_errors(tmp_path, "The `sim__camera__*` tools.") == []
 
 
-@pytest.mark.parametrize("prefix", ["sim__", "assets__", "isaaclab__", "ur5e_dt__"])
+@pytest.mark.parametrize("prefix", ["sim__", "assets__", "isaaclab__", "workcell__"])
 def test_an_unregistered_name_is_reported_for_every_namespace(tmp_path, prefix):
     errors = names_errors(tmp_path, f"Call `{prefix}no_such_tool` first.")
     assert errors == [f"page.md: names a tool that is not registered: {prefix}no_such_tool"]
 
 
 def test_a_family_must_prefix_a_real_tool(tmp_path):
-    errors = names_errors(tmp_path, "Use `ur5e_dt__quickstart*`.")
-    assert errors == ["page.md: names a tool that is not registered: ur5e_dt__quickstart*"]
+    errors = names_errors(tmp_path, "Use `workcell__quickstart*`.")
+    assert errors == ["page.md: names a tool that is not registered: workcell__quickstart*"]
 
 
 def test_a_retired_bare_name_is_reported(tmp_path):
@@ -118,7 +118,7 @@ def test_a_stale_tool_reference_is_reported(tmp_path):
 
 
 def test_the_reference_has_one_section_per_toolset_in_registry_order():
-    from isaac_mcp import toolsets
+    from twinsmith import toolsets
     text = (ROOT / "docs" / "TOOLS-ARGUMENTS.md").read_text()
     headings = [line.split("`")[1] for line in text.splitlines() if line.startswith("## `")]
     expected = [name for name in toolsets.TOOLSETS if gen_tool_reference.listed_by_toolset()[name]]
@@ -127,14 +127,14 @@ def test_the_reference_has_one_section_per_toolset_in_registry_order():
 
 def test_listed_counts_match_the_server():
     """The generator reads the registry without the MCP SDK; the server must list the same tools."""
-    from isaac_mcp import server, toolsets
-    from isaac_mcp.config import select
-    instance = server.build_server({"ISAAC_MCP_TOOLSETS": "all,+input,+launch"})
+    from twinsmith import server, toolsets
+    from twinsmith.config import select
+    instance = server.build_server({"TWINSMITH_TOOLSETS": "all,+input,+launch"})
     listed = {tool.name for tool in asyncio.run(instance.list_tools())}
     expected = {name for names in gen_tool_reference.listed_by_toolset().values() for name in names}
     assert listed == expected
     for profile, enabled in toolsets.PROFILES.items():
-        shown = server.build_server({"ISAAC_MCP_TOOLSETS": profile})
+        shown = server.build_server({"TWINSMITH_TOOLSETS": profile})
         count = len(asyncio.run(shown.list_tools()))
         assert count == sum(len(gen_tool_reference.listed_by_toolset()[name]) for name in enabled), profile
     assert select("default") == toolsets.DEFAULT
@@ -144,8 +144,8 @@ def test_every_listed_work_cell_tool_is_named_in_the_work_cell_readme():
     errors = []
     check_docs.check_workcell_documented(errors)
     assert errors == []
-    check_docs.check_workcell_documented(errors, readme="no tools here", listed=["ur5e_dt__jenga"])
-    assert errors == [f"{check_docs.WORKCELL_README}: does not name the listed work-cell tool ur5e_dt__jenga"]
+    check_docs.check_workcell_documented(errors, readme="no tools here", listed=["workcell__jenga"])
+    assert errors == [f"{check_docs.WORKCELL_README}: does not name the listed work-cell tool workcell__jenga"]
 
 
 def test_vendoring_rejects_a_bundled_asset_claim():
@@ -164,7 +164,7 @@ def test_vendoring_rejects_a_bundled_asset_claim():
 
 @pytest.mark.parametrize("name,block", [("README.md", "toolsets-compact"), ("AGENTS.md", "toolsets-compact"),
                                         ("docs/TOOLSETS.md", "toolsets-full"), ("docs/TOOLSETS.md", "profiles"),
-                                        (".agents/skills/isaac-mcp/SKILL.md", "profiles")])
+                                        (".agents/skills/twinsmith/SKILL.md", "profiles")])
 def test_the_pages_that_show_counts_carry_their_generated_block(name, block):
     """A page that lost its marker would stop being checked, so the markers themselves are checked."""
     text = (ROOT / name).read_text(encoding="utf-8")
@@ -173,7 +173,7 @@ def test_the_pages_that_show_counts_carry_their_generated_block(name, block):
 
 
 def test_every_toolset_row_in_the_generated_table_matches_the_registry():
-    from isaac_mcp import toolsets
+    from twinsmith import toolsets
     table = gen_tool_reference.render_toolsets_compact()
     listed = gen_tool_reference.listed_by_toolset()
     for name in toolsets.TOOLSETS:

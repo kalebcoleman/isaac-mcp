@@ -25,7 +25,7 @@ A package with no `register` function is read instead: every public function def
 those named in `__all__`) becomes a tool, described by its docstring, with arguments taken from
 its signature and type hints.
 
-Load a package with `ISAAC_MCP_TOOL_PATHS=<folder holding it>` and `ISAAC_MCP_TOOL_MODULES=my_tools`
+Load a package with `TWINSMITH_TOOL_PATHS=<folder holding it>` and `TWINSMITH_TOOL_MODULES=my_tools`
 at launch, or store that once with
 `python3 scripts/install.py add-project --path <folder> --module my_tools`. A package that fails
 to import stops the bridge from starting and says why, so a missing tool is never a silent one.
@@ -35,7 +35,7 @@ to import stops the bridge from starting and says why, so a missing tool is neve
 - Arguments arrive by name. Declare each one in the parameters: `type` (`string`, `integer`,
   `number`, `boolean`, `array`, `object`), `description`, and optionally `required`, `default`, `enum`.
 - Return anything JSON can hold. Do not build the reply message yourself.
-- To fail, raise. `isaac_mcp_bridge.ToolError(message, details={...})` sends the details to the
+- To fail, raise. `twinsmith_bridge.ToolError(message, details={...})` sends the details to the
   caller; any other exception is sent with its traceback.
 - A tool may be `async` and await Kit; the bridge awaits it.
 
@@ -59,7 +59,7 @@ MCP clients see the change after `refresh_tools`.
 
 Prefer a small tool over asking an agent to reach into your modules with `run_python`: the
 arguments are typed, the rules live in one place, and the tool still works when `run_python` is
-hidden (`ISAAC_MCP_TOOLSETS=default,-code`) or refused (read-only mode). The template's `project_state` and
+hidden (`TWINSMITH_TOOLSETS=default,-code`) or refused (read-only mode). The template's `project_state` and
 `set_threshold` show the shape.
 
 ## A narrower server for one project
@@ -67,8 +67,8 @@ hidden (`ISAAC_MCP_TOOLSETS=default,-code`) or refused (read-only mode). The tem
 One bridge can serve several MCP servers. To give an agent core and uncatalogued project-extension tools:
 
 ```json
-{ "mcpServers": { "robot_demo": { "command": "isaac-mcp",
-    "env": { "ISAAC_MCP_TOOLSETS": "minimal,+extensions" } } } }
+{ "mcpServers": { "robot_demo": { "command": "twinsmith",
+    "env": { "TWINSMITH_TOOLSETS": "minimal,+extensions" } } } }
 ```
 
 These settings choose what is listed. To stop changes for every client, start Kit read-only.

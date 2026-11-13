@@ -16,11 +16,11 @@ bridge's own metadata takes precedence over these snapshots once discovered.
 
 ## `core`: Connection, discovery, help and job tracking
 
-Toolset `core` is on by default. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 10 tools, listed as 6: `isaac_help`, `jobs` (status, cancel, list, tail, lab_status), `refresh_tools`, `status`, `toolsets`, `use_bridge`.
+Toolset `core` is on by default. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 10 tools, listed as 6: `help`, `jobs` (status, cancel, list, tail, lab_status), `refresh_tools`, `status`, `toolsets`, `use_bridge`.
 
-### `isaac_help`
+### `help`
 
-Start here. Say what you want to do and get the isaac tools to call, in order, instead of writing your own screenshot, recording, contact-logging or training code. With tool=name, the full text of one tool. Reads nothing from the simulator; works with no bridge.
+Start here. Say what you want to do and get the twinsmith tools to call, in order, instead of writing your own screenshot, recording, contact-logging or training code. With tool=name, the full text of one tool. Reads nothing from the simulator; works with no bridge.
 
 - `task` (str | None, default `None`): What you want to do, in a few words, e.g. 'record a video'. Omit for the full map.
 - `no_fit` (bool, default `False`): true: no tool named for this task fits; records the question locally and returns the run_python pattern.
@@ -305,7 +305,7 @@ Set a static pose on any Xformable prim. Local or world, in the session layer; r
 
 ### `sim__quick_start`
 
-One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer; sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns IDs, paths and next steps; on Newton a newton field (rate, buffers). For the RISE lab UR5e twin, use ur5e_dt__quick_start.
+One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer; sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns IDs, paths and next steps; on Newton a newton field (rate, buffers). For the UR5e work cell, use workcell__cell..
 
 - `robot` (string, optional): Optional robot: a public name, <pack id>/<version>/<file.usd> or <pack id>/<version>/<file.urdf> (a verified file of a pack in the asset root), or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Public names come from the simulator's own assets root: ur5e, franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3.
 - `fixed_base` (boolean, optional): Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.
@@ -598,7 +598,7 @@ Run your own controller in the physics loop as a job. Each step gets the body's 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `body` (string, required): Rigid body the controller acts on, e.g. a drone's base link.
-- `controller` (string, required): tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (isaac_mcp.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}; state has position, linear_velocity, mass, dt, time_s and params. Kit must have been launched with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs.
+- `controller` (string, required): tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (twinsmith.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}; state has position, linear_velocity, mass, dt, time_s and params. Kit must have been launched with TWINSMITH_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs.
 - `duration_s` (number, required): Simulated seconds to run, up to 3600. The controller can end sooner with done=true.
 - `params` (object, optional): Passed to the controller as state['params'] each step, e.g. gains or a target.
 - `frame` (world|body, default `"world"`): Frame of the returned force and torque, applied at the centre of mass: world (default) or body.
@@ -745,7 +745,7 @@ Toolset `assets` is on by default. Reference: [ASSET-IMPORT.md](ASSET-IMPORT.md)
 
 Listed as `assets__pack(action="dependencies")`.
 
-Compute dependency closures for files under an approved root or the asset root. USD uses UsdUtils.ComputeAllDependencies through a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.
+Compute dependency closures for files under an approved root or the asset root. USD uses UsdUtils.ComputeAllDependencies through a host helper (TWINSMITH_USD_PYTHON) or else the selected Kit; native USD parsing is NOT sandboxed. A .urdf is read on the host with the build's package rules and returns its meshes, textures and package.xml, so a missing package is reported instead of a parser error. Copies nothing.
 
 - `paths` (array, required): Absolute USD or URDF file paths, 1 to 64.
 
@@ -821,7 +821,7 @@ Copy asset files and their dependencies into a new pack version. USD, URDF, MuJo
 
 Listed as `assets__pack(action="doctor")`.
 
-Check a pack without changing it. Every file listed in pack.yaml exists and matches its sha256, nothing unlisted or symlinked is in the folder, then the dependencies of its USD, URDF, MJCF, SDF, mesh and map files must all be files of the same pack (unresolved, unreadable, remote and outside-pack references are problems). Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.
+Check a pack without changing it. Every file listed in pack.yaml exists and matches its sha256, nothing unlisted or symlinked is in the folder, then the dependencies of its USD, URDF, MJCF, SDF, mesh and map files must all be files of the same pack (unresolved, unreadable, remote and outside-pack references are problems). Parses USD in a host helper (TWINSMITH_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.
 
 - `pack` (string, optional): Pack as "<pack id>/<version>". Default: the project file's pack.
 
@@ -840,7 +840,7 @@ Rewrite the sha256 values of an existing pack.yaml to match its files, and show 
 
 Listed as `assets__pack(action="list")`.
 
-List the asset packs in the asset root. Every <id>/<version> pack in the asset root (ISAAC_MCP_ASSET_ROOT, else <workspace>/assets) with its file count, size and whether it verifies against its pack.yaml, and any old-format pack with a hint to convert it with adopt. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_ROOT. With a Kit connected it also lists kit_environment and warns when Kit and this host use a different asset root or project file.
+List the asset packs in the asset root. Every <id>/<version> pack in the asset root (TWINSMITH_ASSET_ROOT, else <workspace>/assets) with its file count, size and whether it verifies against its pack.yaml, and any old-format pack with a hint to convert it with adopt. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same TWINSMITH_ASSET_ROOT. With a Kit connected it also lists kit_environment and warns when Kit and this host use a different asset root or project file.
 
 No arguments.
 
@@ -897,7 +897,7 @@ Write a file on the simulator's machine (base64 content). Ships code and assets 
 
 Hot-reload one of a project's own tool packages: unregister it, import it again and register its tools. Follow with refresh_tools so the new schemas are seen.
 
-- `module` (string, required): The package's module name, as given in ISAAC_MCP_TOOL_MODULES.
+- `module` (string, required): The package's module name, as given in TWINSMITH_TOOL_MODULES.
 
 ### `run_python`
 
@@ -918,7 +918,7 @@ Run any Python script as a managed job: a job_id at once, a log, a hard timeout,
 - `env` (dict[str, str] | None, default `None`): Extra environment variables; the same rules as the env argument of isaaclab__train (PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value).
 - `python_paths` (list[str] | None, default `None`): Absolute folders put first on PYTHONPATH: the import roots of an uninstalled project, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way; the install's own path stays.
 - `python` (str | None, default `None`): Interpreter. Default: python3 on PATH. Or pass install to use an Isaac Lab environment.
-- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.
 - `cwd` (str | None, default `None`): Working directory. Default: the script's folder.
 - `label` (str | None, default `None`): Short name, used in the job_id and runs_list.
 - `timeout_s` (float, default `600`): Hard wall limit in seconds; the whole process group is killed at expiry.
@@ -931,7 +931,7 @@ Run any Python script as a managed job: a job_id at once, a log, a hard timeout,
 
 Listed as `sim__controller(action="create")`.
 
-OPT-IN CODE EXECUTION: create a script controller. Creates an OnPlaybackTick -> ScriptNode controller using inline Python. Requires ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox. Requires session_id and stage_id from sim__stage__info.
+OPT-IN CODE EXECUTION: create a script controller. Creates an OnPlaybackTick -> ScriptNode controller using inline Python. Requires TWINSMITH_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -965,9 +965,9 @@ Toolset `screen` is on by default. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 10
 
 Join 2-8 finished clips into one new MP4 with the bundled ffmpeg, or (mode=sheet) make a matched PNG contact sheet of the same moments of 1-8 clips plus an `attachment` descriptor for t3_attachment_prepare_upload, or (mode=frames) turn saved image frames into an MP4: video for a headless simulator. Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...). Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour. Sheets do not upload.
 
-- `inputs` (list[str] | None, default `None`): Concat/hstack/vstack: 2-8 clips. Sheet: 1-8. Absolute paths under home, or file names in ~/Videos/screen-mcp. Or give job_id. Frames: one folder, one glob pattern such as /out/replay-*.png, or the image files in order.
+- `inputs` (list[str] | None, default `None`): Concat/hstack/vstack: 2-8 clips. Sheet: 1-8. Absolute paths under home, or file names in ~/Videos/twinsmith. Or give job_id. Frames: one folder, one glob pattern such as /out/replay-*.png, or the image files in order.
 - `mode` (str, default `'concat'`): concat (one after another), hstack (side by side), vstack (top to bottom), sheet (a PNG contact sheet: one row per video, one column per time), or frames (image frames to one MP4).
-- `output` (str | None, default `None`): New file name in ~/Videos/screen-mcp (.mp4), or ~/Pictures/screen-mcp (.png, sheet), or an absolute path under home. Default joined-<time>.mp4 / sheet-<time>.png.
+- `output` (str | None, default `None`): New file name in ~/Videos/twinsmith (.mp4), or ~/Pictures/twinsmith (.png, sheet), or an absolute path under home. Default joined-<time>.mp4 / sheet-<time>.png.
 - `max_width` (int, default `1920`): Output width cap in pixels.
 - `fps` (int | None, default `None`): Output rate, at most 60. Default: the fastest input; 30 for frames.
 - `shortest` (bool, default `False`): hstack/vstack: end with the shortest clip instead of freezing it on its last frame.
@@ -1038,7 +1038,7 @@ Capture the screen, a monitor or a window to see the result of your work. Return
 
 Listed as `screen_recording(action="start")`.
 
-Start a desktop MP4 recording; one at a time, no audio. E.g. for a demo. Stop it with stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window if one is open; a window recording works when covered or on a locked screen. The recording ends if this MCP server process exits, so keep one client connected from start to stop. Details: docs/TOOLS-HOST.md. UR5e twin render: ur5e_dt__start_recording; to combine clips, join_videos.
+Start a desktop MP4 recording; one at a time, no audio. E.g. for a demo. Stop it with stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window if one is open; a window recording works when covered or on a locked screen. The recording ends if this MCP server process exits, so keep one client connected from start to stop. Details: docs/TOOLS-HOST.md. UR5e work cell render: workcell__start_recording; to combine clips, join_videos.
 
 - `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
 - `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
@@ -1051,7 +1051,7 @@ Start a desktop MP4 recording; one at a time, no audio. E.g. for a demo. Stop it
 - `layout` (str, default `'side_by_side'`): With window_ids: side_by_side, top_bottom or grid.
 - `wait_for_window` (float, default `0`): With window: seconds (max 600) to wait for a match. Returns at once, so launch the app next.
 - `stop_on_log_marker` (str | None, default `None`): End when this text is added to the selected bridge's Kit log or stop_log_file.
-- `stop_log_file` (str | None, default `None`): A .log file in Kit's log folder or under ~/.local/share/isaac-mcp, for stop_on_log_marker.
+- `stop_log_file` (str | None, default `None`): A .log file in Kit's log folder or under ~/.local/share/twinsmith, for stop_on_log_marker.
 
 ### `stop_screen_recording`
 
@@ -1113,11 +1113,11 @@ Check that a task builds and steps, as a job. Builds it, steps it with zero or r
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
 - `python_paths` (list[str] | None, default `None`): Absolute folders put first on PYTHONPATH: the import roots of an uninstalled project, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way; the install's own path stays.
 - `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, TWINSMITH_*.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
 - `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
 - `cwd` (str | None, default `None`): Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.
-- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.
 
 ### `isaaclab__envs_list`
 
@@ -1128,10 +1128,10 @@ List registered Isaac Lab task ids. Optionally filtered by substring.
 - `filter` (str | None, default `None`): Keep task ids containing this text.
 - `python_paths` (list[str] | None, default `None`): Absolute folders put first on PYTHONPATH: the import roots of an uninstalled project, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way; the install's own path stays.
 - `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, TWINSMITH_*.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
 - `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
-- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.
 
 ### `isaaclab__eval`
 
@@ -1153,11 +1153,11 @@ Run a checkpoint as a job and score it. Returns its job_id; when the job ends, i
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
 - `python_paths` (list[str] | None, default `None`): Absolute folders put first on PYTHONPATH: the import roots of an uninstalled project, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way; the install's own path stays.
 - `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, TWINSMITH_*.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
 - `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
 - `cwd` (str | None, default `None`): Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.
-- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.
 - `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'candidate run'.
 
 ### `isaaclab__install_info`
@@ -1166,7 +1166,7 @@ Listed as `isaaclab__inspect(action="install")`.
 
 Report the Isaac Lab install. Interpreter, versions, root and venv.
 
-- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.
 
 ### `isaaclab__metrics_summary`
 
@@ -1202,11 +1202,11 @@ Play a checkpoint in a window (interactive). Stop it with job_cancel. For a vide
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
 - `python_paths` (list[str] | None, default `None`): Absolute folders put first on PYTHONPATH: the import roots of an uninstalled project, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way; the install's own path stays.
 - `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, TWINSMITH_*.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
 - `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
 - `cwd` (str | None, default `None`): Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.
-- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.
 - `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'candidate run'.
 
 ### `isaaclab__preflight`
@@ -1240,11 +1240,11 @@ Record an MP4 of a task with no window, as a job. With a checkpoint it plays the
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
 - `python_paths` (list[str] | None, default `None`): Absolute folders put first on PYTHONPATH: the import roots of an uninstalled project, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way; the install's own path stays.
 - `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, TWINSMITH_*.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
 - `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
 - `cwd` (str | None, default `None`): Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.
-- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.
 
 ### `isaaclab__tensorboard_tail`
 
@@ -1277,11 +1277,11 @@ Start a training job; returns its job_id at once. Follow it with isaaclab__runs_
 - `allow_concurrent_gpu` (bool, default `False`): Start even if an Isaac Sim (Kit bridge) app is using the GPU.
 - `python_paths` (list[str] | None, default `None`): Absolute folders put first on PYTHONPATH: the import roots of an uninstalled project, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way; the install's own path stays.
 - `python_path` (list[str] | None, default `None`): Older name of python_paths; both may be given and are merged.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, ISAAC_MCP_*.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables for the Isaac Lab process (names are identifiers); the same rules for every Isaac Lab tool, run_script included. PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value. Refused, with the argument to use instead: PYTHONHOME, ISAACLAB_PYTHON/ROOT and ISAACSIM_PATH (use install), LD_PRELOAD/LD_AUDIT, BASH_ENV, TWINSMITH_*.
 - `external_callback` (str | None, default `None`): Dotted module.function that registers external tasks, e.g. my_project.register.register. Default: ISAACLAB_EXTERNAL_CALLBACK. With rsl_rl train/play (eval is a play job) it is passed as --external_callback=module.function; for every other rl_library, and for env_check and record, the server calls it itself before the task is looked up (rl_games, skrl and sb3 projects work the same way).
 - `task_modules` (list[str] | None, default `None`): Dotted modules imported before the task is looked up, for a project whose tasks register on import, e.g. ['my_project.tasks']. Same as ISAACLAB_TASK_MODULES in env; use it with python_paths.
 - `cwd` (str | None, default `None`): Working directory of the job, for projects whose configs use relative data paths. Must be an existing folder. Default: the Isaac Lab checkout. A checkpoint under it (or under python_paths) is also allowed.
-- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when ISAAC_MCP_PROJECT names one. The default is never changed.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.
 - `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'candidate run'.
 
 ## `ros2`: ROS 2 transforms, graphs and occupancy maps
@@ -1440,72 +1440,72 @@ Find Isaac Sim UI widgets. Lists Isaac Sim's own UI widgets (buttons, fields, ch
 - `window` (string, default `""`): Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'.
 - `limit` (integer, default `40`): Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).
 
-<a id="ur5e-twin-ur5e_dt__"></a>
+<a id="ur5e-twin-workcell__"></a>
 
 ## `workcell`: UR5e workcell tools
 
-Toolset `workcell` is off until you select it with `+workcell`. Reference: [README.md](../exts/ur5e-dt/workcell/README.md). 10 tools, listed as 7: `ur5e_dt__eval` (status), `ur5e_dt__jenga` (build, status), `ur5e_dt__perception` (status), `ur5e_dt__planning` (status), `ur5e_dt__real2sim` (status), `ur5e_dt__robot` (status), `ur5e_dt__workcell` (quick_start, status, shutdown).
+Toolset `workcell` is off until you select it with `+workcell`. Reference: [README.md](../exts/workcell/workcell/README.md). 10 tools, listed as 7: `workcell__cell` (quick_start, status, shutdown), `workcell__eval` (status), `workcell__jenga` (build, status), `workcell__perception` (status), `workcell__planning` (status), `workcell__real2sim` (status), `workcell__robot` (status).
 
-### `ur5e_dt__eval_status`
+### `workcell__eval_status`
 
-Listed as `ur5e_dt__eval(action="status")`.
+Listed as `workcell__eval(action="status")`.
 
 Report the evaluation interface availability; no evaluation is implemented.
 
 No arguments.
 
-### `ur5e_dt__jenga_build`
+### `workcell__jenga_build`
 
-Listed as `ur5e_dt__jenga(action="build")`.
+Listed as `workcell__jenga(action="build")`.
 
 Replace the Jenga tower in the current workcell on a stopped timeline using configured or overridden variation. Resamples blocks; not a physics-state reset.
 
 - `profile` (string, optional): Optional name in jenga.variation_profiles; omitted uses the configured variation_profile.
 - `seed` (integer, optional): Optional integer seed; omitted uses the configured variation_seed. A selected profile requires a seed.
 
-### `ur5e_dt__jenga_status`
+### `workcell__jenga_status`
 
-Listed as `ur5e_dt__jenga(action="status")`.
+Listed as `workcell__jenga(action="status")`.
 
 Read Jenga build details from the workcell report.
 
 No arguments.
 
-### `ur5e_dt__perception_status`
+### `workcell__perception_status`
 
-Listed as `ur5e_dt__perception(action="status")`.
+Listed as `workcell__perception(action="status")`.
 
 Read camera build details; this does not capture sensor data.
 
 No arguments.
 
-### `ur5e_dt__planning_status`
+### `workcell__planning_status`
 
-Listed as `ur5e_dt__planning(action="status")`.
+Listed as `workcell__planning(action="status")`.
 
 Report the planning interface availability; no planner is implemented.
 
 No arguments.
 
-### `ur5e_dt__real2sim_status`
+### `workcell__real2sim_status`
 
-Listed as `ur5e_dt__real2sim(action="status")`.
+Listed as `workcell__real2sim(action="status")`.
 
 Report the real-to-simulation interface availability; no synchronization is implemented.
 
 No arguments.
 
-### `ur5e_dt__robot_status`
+### `workcell__robot_status`
 
-Listed as `ur5e_dt__robot(action="status")`.
+Listed as `workcell__robot(action="status")`.
 
 Read robot build details from the workcell report.
 
 No arguments.
 
-### `ur5e_dt__workcell_quick_start`
+### `workcell__workcell_quick_start`
 
-Listed as `ur5e_dt__workcell(action="quick_start")`.
+Listed as `workcell__cell(action="quick_start")`.
 
 Build a stopped PhysX workcell from an external asset pack. Refuses unsaved stage changes unless explicitly allowed.
 
@@ -1513,17 +1513,17 @@ Build a stopped PhysX workcell from an external asset pack. Refuses unsaved stag
 - `mode` (physics|mirror_real, default `"physics"`): Physics mode, or zero-gravity mirror mode.
 - `discard_changes` (boolean, default `false`): Allow replacement of an unsaved stage.
 
-### `ur5e_dt__workcell_shutdown`
+### `workcell__workcell_shutdown`
 
-Listed as `ur5e_dt__workcell(action="shutdown")`.
+Listed as `workcell__cell(action="shutdown")`.
 
 Release workcell state without clearing the stage.
 
 No arguments.
 
-### `ur5e_dt__workcell_status`
+### `workcell__workcell_status`
 
-Listed as `ur5e_dt__workcell(action="status")`.
+Listed as `workcell__cell(action="status")`.
 
 Read the current workcell build report.
 
@@ -1646,8 +1646,8 @@ Listed as `sim__session(action="launch")`.
 
 Launch a separate managed Isaac Sim instance, when explicitly asked.
 
-- `port` (int | None, default `None`): Bridge TCP port 1024-65535. Omit for the first free, unclaimed port in ISAAC_MCP_PORT_RANGE, or upward from the configured port.
-- `ros_domain` (int | None, default `None`): ROS_DOMAIN_ID 0-231. Omit for the first free, unclaimed domain in ISAAC_MCP_ROS_DOMAIN_RANGE, or upward from this server's domain.
+- `port` (int | None, default `None`): Bridge TCP port 1024-65535. Omit for the first free, unclaimed port in TWINSMITH_PORT_RANGE, or upward from the configured port.
+- `ros_domain` (int | None, default `None`): ROS_DOMAIN_ID 0-231. Omit for the first free, unclaimed domain in TWINSMITH_ROS_DOMAIN_RANGE, or upward from this server's domain.
 - `headless` (bool, default `False`): true: no window.
 - `allow_shared_domain` (bool, default `False`): true: allow a ROS domain another session already uses.
 - `enable_motion_bvh` (bool, default `False`): true: accurate RTX LiDAR motion compensation; costs rendering time and GPU memory.

@@ -6,8 +6,8 @@ import threading
 import time
 
 from mcp.shared.memory import create_connected_server_and_client_session
-from isaac_mcp import server as gateway
-from isaac_mcp.client import BridgeClient
+from twinsmith import server as gateway
+from twinsmith.client import BridgeClient
 
 
 def test_call_deadline_applies_to_connect(monkeypatch):
@@ -43,11 +43,10 @@ def test_stalled_bridge_keeps_sdk_initialization_and_host_tools_available(monkey
     worker.start()
     monkeypatch.setattr(gateway, "DISCOVERY_TIMEOUT_S", 0.15)
     env = {
-        "ISAAC_MCP_TOOLSETS": "all,+launch",
-        "ISAAC_MCP_PORT": str(listener.getsockname()[1]),
+        "TWINSMITH_TOOLSETS": "all,+launch",
+        "TWINSMITH_PORT": str(listener.getsockname()[1]),
     }
-    monkeypatch.setenv("ISAAC_MCP_PORT", env["ISAAC_MCP_PORT"])
-    monkeypatch.delenv("UR5E_DT_PORT", raising=False)
+    monkeypatch.setenv("TWINSMITH_PORT", env["TWINSMITH_PORT"])
     server = gateway.build_server(env)
 
     async def exercise():
@@ -60,7 +59,7 @@ def test_stalled_bridge_keeps_sdk_initialization_and_host_tools_available(monkey
             assert {
                 "sim__session",
                 "sim__stage",
-                "ur5e_dt__workcell",
+                "workcell__cell",
             } <= names
             response = await client.call_tool("sim__session", {"action": "list"})
             assert not response.isError

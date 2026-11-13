@@ -4,7 +4,7 @@ title = "Generic MCP scene tools"
 description = "Explicitly targeted scene tools and trusted project snapshot imports"
 category = "Simulation"
 [dependencies]
-"isaac.mcp.bridge" = {}
+"twinsmith.bridge" = {}
 "omni.usd" = {}
 "omni.timeline" = {}
 [[python.module]]

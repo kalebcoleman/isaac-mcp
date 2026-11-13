@@ -10,12 +10,12 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import jobs, tools
+from twinsmith.isaaclab import jobs, tools
 
 
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])
     monkeypatch.setattr(tools, "_WAIT_POLL_S", 0.05)
     jobs._active.clear()

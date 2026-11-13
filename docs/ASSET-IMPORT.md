@@ -140,7 +140,7 @@ Every robot import returns what an agent needs to act without another call: `art
 
 ## From a shell
 
-A tool can be called once from a shell, with no MCP client, against a bridge: `python3 mcp/isaac_mcp/client.py assets.import_path '{"session_id": "...", "stage_id": "...", "source_path": "...", "prim_path": "/World/r"}' --port <port>`. The test helper in the agent-testing skill accepts `./call.py --port <port> <tool> '<json>'` the same way; no `use_bridge` is needed with an explicit port.
+A tool can be called once from a shell, with no MCP client, against a bridge: `python3 mcp/twinsmith/client.py assets.import_path '{"session_id": "...", "stage_id": "...", "source_path": "...", "prim_path": "/World/r"}' --port <port>`. The test helper in the agent-testing skill accepts `./call.py --port <port> <tool> '<json>'` the same way; no `use_bridge` is needed with an explicit port.
 
 ## When it refuses: what each code means
 

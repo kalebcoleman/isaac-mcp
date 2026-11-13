@@ -3,7 +3,7 @@
 A tool package is an ordinary Python package, not a Kit extension. The bridge imports it, calls
 ``register(registrar)``, and lists what that registers under ``MCP_NAMESPACE``. Load it with
 
-    ISAAC_MCP_TOOL_PATHS=<folder holding this package> ISAAC_MCP_TOOL_MODULES=demo_tools
+    TWINSMITH_TOOL_PATHS=<folder holding this package> TWINSMITH_TOOL_MODULES=demo_tools
 
 at launch, or store that with ``scripts/install.py add-project``. After editing it, the
 ``reload_tools`` tool with ``module="demo_tools"`` loads the new code without restarting Kit.
@@ -50,7 +50,7 @@ def register(registrar):
         "value": {"type": "number", "required": True, "description": "The new value."},
     })
     def set_threshold(name: str, value: float):
-        from isaac_mcp_bridge import ToolError
+        from twinsmith_bridge import ToolError
 
         from . import _state
 

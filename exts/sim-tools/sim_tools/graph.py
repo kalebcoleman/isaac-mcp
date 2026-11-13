@@ -217,7 +217,7 @@ def node_types(contains, limit=20, ports=None):
 
 
 def _graph_path(path):
-    from isaac_mcp.project_assets import refuse
+    from twinsmith.project_assets import refuse
 
     from pxr import Sdf
 
@@ -238,7 +238,7 @@ def _headless():
 
     settings = carb.settings.get_settings()
     return (settings.get("/app/window/hideUi") or settings.get("/app/window/enabled") is False
-            or os.environ.get("UR5E_DT_HEADLESS") == "1" or "--no-window" in sys.argv)
+            or os.environ.get("TWINSMITH_HEADLESS") == "1" or "--no-window" in sys.argv)
 
 
 def _allowed_tokens(attr):
@@ -269,7 +269,7 @@ def _messages(node):
 def inspect_graph(stage, path, limit=64):
     """Nodes of an OmniGraph with their types, input values and connections."""
     import omni.graph.core as og
-    from isaac_mcp.project_assets import refuse
+    from twinsmith.project_assets import refuse
 
     graph = og.get_graph_by_path(_graph_path(path))
     if graph is None or not graph.is_valid():
@@ -402,7 +402,7 @@ def editor_ready():
 def show_graph_open(stage, path, width=0, height=0):
     """Step 1 of sim.graph.show: open the editor on *path*. Returns True when the editor was
     already built, so no frames need to pass before step 2."""
-    from isaac_mcp.project_assets import refuse
+    from twinsmith.project_assets import refuse
 
     if _headless():
         refuse("HEADLESS", "The Action Graph editor needs a windowed Isaac Sim: start Kit without --headless.")
@@ -532,7 +532,7 @@ def show_graph_refocus():
 
 
 def _editor_changed(exc):
-    from isaac_mcp.project_assets import refuse
+    from twinsmith.project_assets import refuse
 
     refuse("EDITOR_API_CHANGED", f"This Isaac Sim's Action Graph editor API differs ({type(exc).__name__}: "
            f"{str(exc)[:200]}); open the graph from Window > Graph Editors > Action Graph instead.")
@@ -562,7 +562,7 @@ def pgm_and_origin(buffer, dims_x, dims_y, min_bound, cell_size, meters_per_unit
     pgm = np.full(grid.shape, 205, dtype=np.uint8)  # unknown
     pgm[grid == 0.0] = 254                          # free
     pgm[grid == 1.0] = 0                            # occupied
-    header = f"P5\n# isaac-mcp sim__map__occupancy\n{dims_x} {dims_y}\n255\n".encode()
+    header = f"P5\n# twinsmith sim__map__occupancy\n{dims_x} {dims_y}\n255\n".encode()
     return header + pgm.tobytes(), origin, dict(occupied=int((grid == 1.0).sum()), free=int((grid == 0.0).sum()),
                                                 unknown=int(grid.size - (grid == 1.0).sum() - (grid == 0.0).sum()))
 
@@ -574,7 +574,7 @@ def _numbers(v, n):
 
 def validate_occupancy(scene, stage, a):
     """Check every argument with no side effects, so refusals happen before any Play."""
-    from isaac_mcp.project_assets import refuse
+    from twinsmith.project_assets import refuse
     from pxr import UsdGeom
 
     lo, hi, z = a.get("min"), a.get("max"), a.get("z", [0.05, 0.3])
@@ -748,7 +748,7 @@ def slice_bottom_note(cell):
 
 def occupancy_map(scene, stage, a):
     """Generate a 2D occupancy map from the stage's colliders and write a Nav2 PGM + YAML."""
-    from isaac_mcp.project_assets import refuse
+    from twinsmith.project_assets import refuse
     from pxr import UsdGeom
 
     v = validate_occupancy(scene, stage, a)

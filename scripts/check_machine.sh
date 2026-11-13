@@ -1,8 +1,9 @@
 #!/bin/bash
-# Checks whether this machine can run the twin before you install: OS, GPU and driver, tools,
+# Checks whether this machine can run the work cell before you install: OS, GPU and driver, tools,
 # disk space, network to the sites install needs, the display, and the bridge port.
 # Usage: scripts/check_machine.sh      (prints PASS/FAIL per item; exit 1 if any required item fails)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ -f "$ROOT/scripts/legacy_env.sh" ] && . "$ROOT/scripts/legacy_env.sh"   # old variable names, for one release
 fail=0
 ok()   { echo "PASS  $1"; }
 bad()  { echo "FAIL  $1"; fail=1; }
@@ -48,14 +49,14 @@ done
 if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
   ok "display available (DISPLAY=${DISPLAY:-unset}); MCP screenshots must use this same value, see docs/MCP-SERVER.md"
 else
-  warn "no display: use UR5E_DT_HEADLESS=1 for checks"
+  warn "no display: use TWINSMITH_HEADLESS=1 for checks"
 fi
 
 if (exec 3<>/dev/tcp/127.0.0.1/8766) 2>/dev/null; then warn "port 8766 is in use: stop the running app before launching"; else ok "port 8766 free"; fi
 
-[ -d "$ROOT/exts/ur5e-dt" ] && ok "extensions present (exts/)" || warn "exts/ur5e-dt missing"
+[ -d "$ROOT/exts/workcell" ] && ok "extensions present (exts/)" || warn "exts/workcell missing"
 export OMNI_KIT_ACCEPT_EULA=YES   # importing isaacsim otherwise blocks on the EULA prompt
-PY="${ISAAC_MCP_PYTHON:-${UR5E_DT_PYTHON:-$ROOT/.venv/bin/python}}"
+PY="${TWINSMITH_SIM_PYTHON:-$ROOT/.venv/bin/python}"
 if [ -x "$PY" ]; then
   ok ".venv present ($PY)"
   pyver=$("$PY" -c 'import sys;print("%d.%d"%sys.version_info[:2])' 2>/dev/null)
@@ -64,7 +65,7 @@ if [ -x "$PY" ]; then
   [ "$isv" = "6.2.0.0" ] && ok "isaacsim $isv" || bad "isaacsim 6.2.0.0 required, found: ${isv:-none}"
   case "$codename" in jammy) rd=humble ;; *) rd=jazzy ;; esac
   site=$("$PY" -c 'import isaacsim,os;print(os.path.dirname(isaacsim.__file__))' 2>/dev/null)
-  . "$ROOT/scripts/isaac_ros_libs.sh"
+  . "$ROOT/scripts/ros_libs.sh"
   isaac_ros_lib_dir "$site" "$rd" >/dev/null && ok "ROS 2 $rd libs bundled with Isaac Sim" || bad "missing ROS 2 $rd libs under $site or its install root"
   # Blackwell needs a cu128+ torch build: it imports fine on an older one and fails at the first kernel.
   tinfo=$("$PY" - <<'PYEOF' 2>&1

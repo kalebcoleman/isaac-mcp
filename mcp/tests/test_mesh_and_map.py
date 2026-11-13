@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from isaac_mcp import mesh_refs
-from isaac_mcp.project_assets import AssetError
-from isaac_mcp.urdf_refs import Project
+from twinsmith import mesh_refs
+from twinsmith.project_assets import AssetError
+from twinsmith.urdf_refs import Project
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "exts" / "sim-tools"))

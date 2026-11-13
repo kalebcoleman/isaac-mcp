@@ -9,7 +9,7 @@ import re
 import subprocess
 
 PATTERNS = {
-    "isaac-mcp": r"isaac-mcp", "isaac_mcp": r"isaac_mcp",
+    "isaac-mcp": r"isaac-mcp(?:-[a-z]+)?", "isaac_mcp": r"isaac_mcp",
     "isaac.mcp": r"isaac\.mcp\.(?:bridge|panel)",
     "ISAAC_MCP": r"ISAAC_MCP_[A-Z0-9_]+", "isaac_help": r"isaac_help",
     "mcp__isaac__": r"mcp__isaac__", "ur5e-dt": r"ur5e-dt", "ur5e_dt": r"ur5e_dt",
@@ -72,21 +72,53 @@ def audit(hits):
     }}
 
 
-def enforce(hits, allowlist):
-    import tomllib
+def load_allowlist(path):
+    """The ``[[allow]]`` tables. tomllib when there is one (Python 3.11+), else a reader for the one shape used here."""
+    text = path.read_text()
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        entries = []
+        for raw in text.splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line == "[[allow]]":
+                entries.append({})
+                continue
+            found = re.fullmatch(r'(\w+)\s*=\s*("(?:[^"\\]|\\.)*")', line)
+            if not found or not entries:
+                raise ValueError(f"{path}: cannot read {line!r} without tomllib (use Python 3.11 or install tomli)")
+            entries[-1][found.group(1)] = json.loads(found.group(2))
+        return entries
+    return tomllib.loads(text).get("allow", [])
 
-    entries = tomllib.loads(allowlist.read_text()).get("allow", [])
+
+def version_reached(limit, root):
+    """True when the project version (mcp/pyproject.toml under ``root``) is at or past ``limit``."""
+    try:
+        found = re.search(r'^version\s*=\s*"([0-9.]+)"', (root / "mcp" / "pyproject.toml").read_text(), re.M)
+    except OSError:
+        return False
+    as_tuple = lambda text: tuple(int(part) for part in text.split(".") if part.isdigit())
+    return bool(found) and as_tuple(found.group(1)) >= as_tuple(limit)
+
+
+def enforce(hits, allowlist, root=None):
+    entries = load_allowlist(allowlist)
     errors = []
     covered = set()
     for index, entry in enumerate(entries, 1):
-        if entry.get("pattern") not in PATTERNS or not entry.get("path") or not entry.get("reason", "").strip():
+        if entry.get("pattern") not in (*PATTERNS, "*") or not entry.get("path") or not entry.get("reason", "").strip():
             errors.append(f"allowlist entry {index}: pattern, path and written reason are required")
             continue
         matching = {number for number, hit in enumerate(hits)
-                    if hit["pattern"] == entry["pattern"] and fnmatch.fnmatchcase(hit["path"], entry["path"])
+                    if entry["pattern"] in ("*", hit["pattern"]) and fnmatch.fnmatchcase(hit["path"], entry["path"])
                     and ("literal" not in entry or hit["text"] == entry["literal"])}
         if not matching:
             errors.append(f"allowlist entry {index}: matches nothing ({entry['path']})")
+        if root is not None and entry.get("remove_by") and version_reached(entry["remove_by"], root):
+            errors.append(f"allowlist entry {index}: due for removal in {entry['remove_by']} ({entry['path']})")
         covered.update(matching)
     errors.extend(f"{hit['path']}:{hit['line']}: {hit['pattern']}: {hit['text']}"
                   for number, hit in enumerate(hits) if number not in covered)
@@ -104,7 +136,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     hits = scan(args.root)
     report = audit(hits)
-    report["errors"] = enforce(hits, args.allowlist) if args.enforce else []
+    report["errors"] = enforce(hits, args.allowlist, args.root) if args.enforce else []
     if args.json:
         print(json.dumps(report, indent=2))
     else:

@@ -9,7 +9,7 @@ import os
 import re
 from pathlib import Path
 
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 
 READ_CAP = 1024 * 1024  # 1 MiB per call
 MESSAGE_CAP = 2048

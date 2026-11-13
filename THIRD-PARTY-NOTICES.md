@@ -1,6 +1,6 @@
 # Third-party notices
 
-This repository ships **no assets**. The twin is designed to use the third-party assets
+This repository ships **no assets**. The work cell is designed to use the third-party assets
 below, which each user keeps in packs in their local asset root (see `docs/ASSET-PACKS.md`; each
 pack's `pack.yaml` records the source and licence of every file). Older revisions of the repository
 carried them; these notices apply to anyone who obtains or redistributes them.
@@ -11,10 +11,10 @@ they come from their official source or are supplied by the operator.
 
 Files:
 
-- `<asset-folder>/ur5e-dt/adapter_ref/`
-- `<asset-folder>/ur5e-dt/gripper/husarion_rg2/`
-- `<asset-folder>/ur5e-dt/gripper/QuickChanger.usd`
-- `<asset-folder>/ur5e-dt/gripper/configuration/QuickChanger_*.usd`
+- `<asset-folder>/<pack>/adapter_ref/`
+- `<asset-folder>/<pack>/gripper/husarion_rg2/`
+- `<asset-folder>/<pack>/gripper/QuickChanger.usd`
+- `<asset-folder>/<pack>/gripper/configuration/QuickChanger_*.usd`
 
 Source: <https://github.com/husarion/ur_onrobot_rg2_ros> (`onrobot_rg2_description`).
 
@@ -31,12 +31,12 @@ Quick-Changer was converted and reoriented for the flange mount. The files in
 
 Files:
 
-- `<asset-folder>/ur5e-dt/objects/fmb1/`
-- `<asset-folder>/ur5e-dt/objects/fmb2/`
-- `<asset-folder>/ur5e-dt/objects/fmb3/`
-- `<asset-folder>/ur5e-dt/fmb_assembly1.json`
-- `<asset-folder>/ur5e-dt/fmb_assembly2.json`
-- `<asset-folder>/ur5e-dt/fmb_assembly3.json`
+- `<asset-folder>/<pack>/objects/fmb1/`
+- `<asset-folder>/<pack>/objects/fmb2/`
+- `<asset-folder>/<pack>/objects/fmb3/`
+- `<asset-folder>/<pack>/fmb_assembly1.json`
+- `<asset-folder>/<pack>/fmb_assembly2.json`
+- `<asset-folder>/<pack>/fmb_assembly3.json`
 
 Source: *FMB: A Functional Manipulation Benchmark for Generalizable Robotic
 Learning*, Jianlan Luo, Charles Xu, Xinyang Geng, Gilbert Feng, Kuan Fang,
@@ -54,7 +54,7 @@ original workstation path was removed.
 
 ## Generated ArUco markers
 
-`<asset-folder>/ur5e-dt/objects/aruco/` contains marker images generated from the
+`<asset-folder>/<pack>/objects/aruco/` contains marker images generated from the
 standard OpenCV 4x4 and 5x5 ArUco dictionaries, plus pose JSON produced by the
 twin's tooling. OpenCV is Apache-2.0; the generated dictionary patterns are not
 copyrightable.

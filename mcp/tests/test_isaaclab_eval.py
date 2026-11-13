@@ -13,12 +13,12 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import eval_runner, jobs
+from twinsmith.isaaclab import eval_runner, jobs
 
 
 @pytest.fixture(autouse=True)
 def isolated_jobs(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     jobs._active.clear()
     yield
     jobs._active.clear()
@@ -288,7 +288,7 @@ def test_runs_status_reports_the_result_after_the_starting_host_is_gone():
 def test_a_finished_eval_with_a_stop_trace_in_stderr_is_not_a_crash(tmp_path):
     import json
 
-    from isaac_mcp.isaaclab import jobs
+    from twinsmith.isaaclab import jobs
 
     (tmp_path / "job.json").write_text(json.dumps({"kind": "eval", "log_dir": str(tmp_path)}))
     (tmp_path / "stderr.log").write_text("Traceback (most recent call last):\n  File \"play.py\", line 1\nEvalStop\n")
@@ -300,7 +300,7 @@ def test_a_finished_eval_with_a_stop_trace_in_stderr_is_not_a_crash(tmp_path):
 
 
 def test_eval_stop_passes_through_a_play_scripts_except_exception():
-    from isaac_mcp.isaaclab import eval_runner
+    from twinsmith.isaaclab import eval_runner
 
     assert not issubclass(eval_runner.EvalStop, Exception)
     try:
@@ -313,7 +313,7 @@ def test_eval_stop_passes_through_a_play_scripts_except_exception():
 
 
 def test_the_score_reports_how_episodes_ended_and_each_term():
-    from isaac_mcp.isaaclab.eval_runner import Scorer
+    from twinsmith.isaaclab.eval_runner import Scorer
 
     scorer = Scorer(num_episodes=2)
     log = {"log": {"Episode_Reward/alive": 2.0, "Episode_Reward/pole": -1.0, "Episode_Termination/time_out": 0.5, "Episode_Termination/base_contact": 0.5, "Other": 9}}
@@ -325,7 +325,7 @@ def test_the_score_reports_how_episodes_ended_and_each_term():
 
 
 def test_a_tasks_own_metrics_are_reported():
-    from isaac_mcp.isaaclab.eval_runner import Scorer
+    from twinsmith.isaaclab.eval_runner import Scorer
 
     scorer = Scorer(num_episodes=1)
     scorer.observe([1.0], [True], [False], {"log": {"Metrics/success_rate": 1.0, "Metrics/block_pushed_m": 0.13, "Other/thing": 5.0}})
@@ -333,7 +333,7 @@ def test_a_tasks_own_metrics_are_reported():
 
 
 def test_terms_count_only_at_resets_weighted_by_how_many_ended():
-    from isaac_mcp.isaaclab.eval_runner import Scorer
+    from twinsmith.isaaclab.eval_runner import Scorer
 
     scorer = Scorer(num_episodes=3)
     stale = {"log": {"Metrics/closest": 9.0, "Episode_Reward/alive": 0.0}}  # what Lab's log holds from the reset before the first step

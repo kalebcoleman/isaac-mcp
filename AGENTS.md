@@ -6,18 +6,18 @@ Start here if you are an AI agent working in or with this repository. It is a ma
 ## Setup guide for agents
 
 - **Use the Isaac Sim that is already installed. Never download or install Isaac Sim unless the user explicitly asks for it.**
-  Lab and shared PCs have their own install: find it with `python3 scripts/isaac_env.py find` and install only the MCP server with
+  Lab and shared PCs have their own install: find it with `python3 scripts/env.py find` and install only the MCP server with
   `./install.sh --no-sim` (it uses an installed Isaac Sim 6.x and still records the install it finds). Do not run
   `./install.sh --download-sim`, `uv sync`, `pip install isaacsim`, or `uv run`/`uv lock`/`uv add` in the repository root (the root
   project depends on Isaac Sim, so they create a ~20 GB `.venv`) without the user asking; run tools with `python3 scripts/...` or
   `cd mcp && uv run --locked --isolated ...`, and refresh the host lock only with `uv lock --directory mcp`. Do not replace or
   upgrade their Isaac Sim or Isaac Lab environment. If `find` shows nothing, stop and ask where Isaac Sim is installed
-  (`ISAACSIM_PATH` or `ISAAC_MCP_PYTHON`) instead of installing one.
+  (`ISAACSIM_PATH` or `TWINSMITH_SIM_PYTHON`) instead of installing one.
 - **The physics engine.** The target engine, the current default and how to choose one are in
   [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md#target-engine), with the known limits. Cautions that stay: verify the selected
   engine (`status` reports it); never switch an open scene's engine; never fall back silently in either direction (a request for
   Newton must not become PhysX, and a request for PhysX must not become Newton); a CPU device does not identify the solver; Lab
-  results do not qualify the twin. Isaac Sim 5.1 and Isaac Lab 2.x are PhysX only. Do not claim a Newton result without a recorded
+  results do not qualify the work cell. Isaac Sim 5.1 and Isaac Lab 2.x are PhysX only. Do not claim a Newton result without a recorded
   run.
 - Identify the requested Sim build and workflow from the context or installation; reuse their intended running bridge. The full
   `./install.sh --accept-eula` creates the locked **6.2.0.0** environment; it is not a selector for older builds. For an existing
@@ -42,10 +42,10 @@ Start here if you are an AI agent working in or with this repository. It is a ma
 
 ## Which tools are listed: toolsets
 
-Tools are grouped into **toolsets** that are switched on or off by `~/.config/isaac-mcp/config.toml`, a project `isaac-mcp.toml`,
-`ISAAC_MCP_TOOLSETS` or `--toolsets` (later sources override earlier ones). Start with `status`: its `toolsets` field names what is on
-and off and how to enable more. `isaac-mcp toolsets` prints the same table from a terminal. Disabled toolsets register no tools.
-Toolsets control what is listed, not what is allowed: the bridge token and `ISAAC_MCP_READ_ONLY=1` are enforced inside Kit.
+Tools are grouped into **toolsets** that are switched on or off by `~/.config/twinsmith/config.toml`, a project `twinsmith.toml`,
+`TWINSMITH_TOOLSETS` or `--toolsets` (later sources override earlier ones). Start with `status`: its `toolsets` field names what is on
+and off and how to enable more. `twinsmith toolsets` prints the same table from a terminal. Disabled toolsets register no tools.
+Toolsets control what is listed, not what is allowed: the bridge token and `TWINSMITH_READ_ONLY=1` are enforced inside Kit.
 
 <!-- generated:toolsets-compact -->
 | Toolset | Default | Tools | What it holds |
@@ -68,12 +68,12 @@ Toolsets control what is listed, not what is allowed: the bridge token and `ISAA
 <!-- /generated -->
 
 The counts are listed tools (a grouped tool with an `action` argument counts once) and are generated from the code. The sizes of
-each profile are in [docs/TOOLSETS.md](docs/TOOLSETS.md#size-of-the-tool-list). Use `ISAAC_MCP_TOOLSETS=default,+lab` to add one,
-`isaac-mcp --toolsets minimal` to start small. `core` is always on; `all` excludes `input` and `launch`.
+each profile are in [docs/TOOLSETS.md](docs/TOOLSETS.md#size-of-the-tool-list). Use `TWINSMITH_TOOLSETS=default,+lab` to add one,
+`twinsmith --toolsets minimal` to start small. `core` is always on; `all` excludes `input` and `launch`.
 
 Every registered tool is in the generated [TOOLS-ARGUMENTS.md](docs/TOOLS-ARGUMENTS.md), grouped by toolset, and the pages
 [TOOLS-HOST](docs/TOOLS-HOST.md), [TOOLS-SCENE](docs/TOOLS-SCENE.md), [TOOLS-ISAACLAB](docs/TOOLS-ISAACLAB.md),
-[ROBOSIM](docs/ROBOSIM.md) and the [work cell](exts/ur5e-dt/workcell/README.md) describe behaviour. `ur5e_dt__workcell_quick_start`
+[ROBOSIM](docs/ROBOSIM.md) and the [work cell](exts/workcell/workcell/README.md) describe behaviour. `workcell__cell(action="quick_start")`
 builds a stopped scene; joint tools take the articulation root, not the robot's parent Xform (`sim__ros2__tf_setup` reports it). See
 the [scene workflow](docs/TOOLS-SCENE.md#a-typical-session).
 
@@ -86,9 +86,9 @@ pixels can predate Stop, reset or scene edits.
 ## Getting the full surface
 
 1. Call `status` first, once; it answers with or without a bridge. `refresh_tools` re-reads a bridge's tools after Kit starts or
-   changes. From the checkout, `python3 mcp/isaac_mcp/client.py --list-bridges` lists advertised PID, host and port (exit 2 with `[]`
-   if none). From elsewhere use `"$(uv tool dir)/isaac-mcp/bin/python" -m isaac_mcp.client --list-bridges`.
-2. Without the MCP tools, confirm the intended bridge with `python3 mcp/isaac_mcp/client.py status --host <host> --port <port>`; use
+   changes. From the checkout, `python3 mcp/twinsmith/client.py --list-bridges` lists advertised PID, host and port (exit 2 with `[]`
+   if none). From elsewhere use `"$(uv tool dir)/twinsmith/bin/python" -m twinsmith.client --list-bridges`.
+2. Without the MCP tools, confirm the intended bridge with `python3 mcp/twinsmith/client.py status --host <host> --port <port>`; use
    `use_bridge` when needed. Pinned port variables override discovery, and an ambiguous unpinned selection is refused.
 3. If none exists and the requested work needs one, `./run.sh --headless` starts a bridge and the work cell on port 8766 by default.
    Start additional instances only when explicitly requested and resource checks pass; use distinct ports, ROS domains and output
@@ -111,16 +111,16 @@ links to NVIDIA's official skills.
 - Long simulator work runs as a job: `run_python` with `background=true`, `sim__simulation(action="run")` and
   `sim__simulation(action="replay")` return a `job_id`. Wait with `jobs(action="status", wait_s=...)` rather than polling, stop with
   `jobs(action="cancel")`, and after a failed run call `sim__timeline__control` with `action=reset`. A Python controller is code in
-  Kit and needs `ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1` at launch; a `tcp://127.0.0.1:<port>` controller needs nothing.
+  Kit and needs `TWINSMITH_ENABLE_SCENE_SCRIPTS=1` at launch; a `tcp://127.0.0.1:<port>` controller needs nothing.
 - `isaaclab__launch` starts GPU jobs and is blocked by a running Kit bridge unless `allow_concurrent_gpu=true`; `jobs(action="cancel")`
   kills one.
-- Screen tools return window titles and pixels to the model and save captures under `~/Pictures/screen-mcp` and `~/Videos/screen-mcp`.
+- Screen tools return window titles and pixels to the model and save captures under `~/Pictures/twinsmith` and `~/Videos/twinsmith`.
 - Desktop input (`input`) is off unless explicitly selected. It operates a shared X11 desktop and can trigger arbitrary application
   actions; inspect the actual window, its PID and a screenshot first.
 - `launch` is off by default. Its launch guard counts known bridge, managed Sim and configured Lab job processes and checks headroom,
   but cannot detect every untracked workload. Never stop an unrelated process to make room, and use separate desktops or coordinate
   input between agents.
-- Annotations on tools (`readOnlyHint`, `destructiveHint`, ...) are hints, not enforcement. `ISAAC_MCP_READ_ONLY=1` in Kit is what
+- Annotations on tools (`readOnlyHint`, `destructiveHint`, ...) are hints, not enforcement. `TWINSMITH_READ_ONLY=1` in Kit is what
   refuses scene writes.
 
 ## Importing robots and assets
@@ -134,7 +134,7 @@ option on that tool, not a new tool. Packs of assets are in [docs/ASSET-PACKS.md
 ## Changing tools
 
 Every registered tool is documented in the generated [docs/TOOLS-ARGUMENTS.md](docs/TOOLS-ARGUMENTS.md), and its toolset in
-`mcp/isaac_mcp/toolsets.py`. No tool count is typed in a page: counts sit in generated blocks. After changing a tool registry or
+`mcp/twinsmith/toolsets.py`. No tool count is typed in a page: counts sit in generated blocks. After changing a tool registry or
 contract, run `python3 scripts/gen_host_catalog.py --write`, then `python3 scripts/gen_tool_reference.py --write` (it rewrites the
 tool reference and every count block), and commit the results. `python3 scripts/check_docs.py` fails on a page that names a tool
 that is not registered, on a retired phrase, on stale generated content and on private paths; CI runs it with the host test suite

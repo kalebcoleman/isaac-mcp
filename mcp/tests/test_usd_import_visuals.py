@@ -10,7 +10,7 @@ pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
 from pxr import UsdGeom
 
-from isaac_mcp.project_assets import AssetError, Broker
+from twinsmith.project_assets import AssetError, Broker
 from test_scene_usd import scene  # noqa: F401 - fixture
 
 HEADER = '''#usda 1.0

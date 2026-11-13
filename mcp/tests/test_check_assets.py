@@ -29,15 +29,15 @@ def track(guard, relative):
 def test_a_clean_code_only_repository_passes(asset_guard, capsys):
     track(asset_guard, "scripts/tool.py")
     track(asset_guard, "docs/media/screenshot.png")
-    track(asset_guard, "exts/ur5e-dt/data/icon.png")
+    track(asset_guard, "exts/workcell/data/icon.png")
     assert asset_guard.main() == 0
     assert "code-only" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("relative", [
-    "exts/ur5e-dt/assets/gripper/QuickChanger.usd",
-    "exts/ur5e-dt/assets/fmb_assembly1.json",
-    "exts/ur5e-dt/assets/README.md",
+    "exts/workcell/assets/gripper/QuickChanger.usd",
+    "exts/workcell/assets/fmb_assembly1.json",
+    "exts/workcell/assets/README.md",
 ])
 def test_anything_in_the_old_asset_folder_is_rejected(asset_guard, capsys, relative):
     track(asset_guard, relative)
@@ -61,7 +61,7 @@ def test_images_outside_docs_and_extension_data_are_rejected(asset_guard, capsys
 
 
 def test_untracked_local_files_are_ignored(asset_guard):
-    path = asset_guard.REPO / "exts/ur5e-dt/assets/robot/ur5e.usd"
+    path = asset_guard.REPO / "exts/workcell/assets/robot/ur5e.usd"
     path.parent.mkdir(parents=True)
     path.write_text("local only\n")
     assert asset_guard.main() == 0
@@ -69,6 +69,6 @@ def test_untracked_local_files_are_ignored(asset_guard):
 
 def test_the_repository_ships_no_assets():
     repo = Path(__file__).resolve().parents[2]
-    tracked = subprocess.run(["git", "ls-files", "exts/ur5e-dt/assets"], cwd=repo, capture_output=True, text=True,
+    tracked = subprocess.run(["git", "ls-files", "exts/workcell/assets"], cwd=repo, capture_output=True, text=True,
                              check=True).stdout.split()
     assert tracked == []

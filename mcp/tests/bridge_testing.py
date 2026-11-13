@@ -5,7 +5,7 @@ import json
 import socket
 import threading
 
-from isaac_mcp_bridge.bridge import McpBridge, ToolDefinition
+from twinsmith_bridge.bridge import McpBridge, ToolDefinition
 
 
 def make_bridge(loop=None, **options):

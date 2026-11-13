@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 
 STAT_TIMEOUT_S = 10.0
 ROBOTS = "Isaac/Robots/"

@@ -1,4 +1,4 @@
-"""Extra unit tests for isaac_mcp.isaaclab.metrics.
+"""Extra unit tests for twinsmith.isaaclab.metrics.
 
 Complements tests/test_isaaclab_metrics.py (which covers the happy path) with
 the edge cases around TensorBoard event-file discovery and parsing:
@@ -31,7 +31,7 @@ def _allow_tmp(monkeypatch):
     monkeypatch.setenv("ISAACLAB_ALLOW_TMP", "1")
 
 
-from isaac_mcp.isaaclab import metrics  # noqa: E402
+from twinsmith.isaaclab import metrics  # noqa: E402
 
 
 # --------------------------------------------------------------------------
@@ -625,7 +625,7 @@ def test_checkpoints_list_search_roots_without_run_dir_skips_missing_roots(tmp_p
 
 
 def test_outside_roots_error_says_which_roots_and_what_to_do(tmp_path):
-    from isaac_mcp.isaaclab import metrics
+    from twinsmith.isaaclab import metrics
 
     res = metrics.checkpoints_list(run_dir="/etc")
     assert res["error"] == "path outside allowed roots" and isinstance(res["allowed_roots"], list)
@@ -633,8 +633,8 @@ def test_outside_roots_error_says_which_roots_and_what_to_do(tmp_path):
 
 
 def _tail_tool(tmp_path, monkeypatch, last_n):
-    from isaac_mcp.isaaclab import metrics
-    from isaac_mcp.server import build_server
+    from twinsmith.isaaclab import metrics
+    from twinsmith.server import build_server
 
     seen = {}
 
@@ -643,7 +643,7 @@ def _tail_tool(tmp_path, monkeypatch, last_n):
         return {"points": []}
 
     monkeypatch.setattr(metrics, "tensorboard_tail", tail)
-    server = build_server({"ISAAC_MCP_TOOLSETS": "minimal,+lab"})
+    server = build_server({"TWINSMITH_TOOLSETS": "minimal,+lab"})
     args = {"run_dir": str(tmp_path), "tag": "loss", "last_n": last_n}
     return asyncio.run(server.call_tool("isaaclab__tensorboard_tail", args)), seen
 

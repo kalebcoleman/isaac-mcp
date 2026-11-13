@@ -20,7 +20,7 @@ def requirement(specs, name):
 
 
 def test_the_server_under_test_is_this_checkout_s():
-    import isaac_mcp.server as server
+    import twinsmith.server as server
     from mcp.server.fastmcp import FastMCP
 
     assert Path(server.__file__).resolve().is_relative_to(MCP_DIR)

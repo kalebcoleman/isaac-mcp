@@ -1,7 +1,7 @@
 [project]
-name = "isaac-mcp"
-version = "0.2.0"
-description = "MCP tools for Isaac Sim 6.2 and Isaac Lab 3.0: Kit bridge, screen capture, and the UR5e digital-twin tool pack"
+name = "twinsmith-sim"
+version = "0.3.0"
+description = "MCP tools for Isaac Sim 6.2 and Isaac Lab 3.0: Kit bridge, screen capture, and the UR5e digital-work cell tool pack"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "isaacsim[all,extscache]==6.2.0.0",

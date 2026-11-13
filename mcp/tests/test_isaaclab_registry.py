@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import registry, tools
+from twinsmith.isaaclab import registry, tools
 
 
 def ckpt(tmp_path, name="recC.pt", data=b"weights"):

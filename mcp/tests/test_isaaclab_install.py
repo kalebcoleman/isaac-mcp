@@ -4,7 +4,7 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from isaac_mcp.isaaclab import install
+from twinsmith.isaaclab import install
 
 
 def _make_install(tmp_path):
@@ -125,7 +125,7 @@ def test_install_info_success(monkeypatch, tmp_path):
     fake.returncode = 0
     fake.stdout = json.dumps({"isaaclab": "3.0.0", "isaacsim": "6.2.0.0"}) + "\n"
     fake.stderr = ""
-    with patch("isaac_mcp.isaaclab.install.subprocess.run", return_value=fake) as m:
+    with patch("twinsmith.isaaclab.install.subprocess.run", return_value=fake) as m:
         res = install.install_info(env)
     assert res["python"] == str(py)
     assert res["isaaclab_version"] == "3.0.0"
@@ -149,7 +149,7 @@ def test_install_info_timeout(monkeypatch, tmp_path):
     py, root, venv = _make_install(tmp_path)
     env = {"ISAACLAB_PYTHON": str(py), "ISAACLAB_ROOT": str(root)}
     with patch(
-        "isaac_mcp.isaaclab.install.subprocess.run",
+        "twinsmith.isaaclab.install.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd="x", timeout=60),
     ):
         res = install.install_info(env)
@@ -163,7 +163,7 @@ def test_install_info_malformed(monkeypatch, tmp_path):
     fake.returncode = 0
     fake.stdout = "not json at all"
     fake.stderr = ""
-    with patch("isaac_mcp.isaaclab.install.subprocess.run", return_value=fake):
+    with patch("twinsmith.isaaclab.install.subprocess.run", return_value=fake):
         res = install.install_info(env)
     assert "error" in res
 
@@ -176,7 +176,7 @@ def test_envs_list_filter(monkeypatch, tmp_path):
     fake.returncode = 0
     fake.stdout = json.dumps(payload) + "\n"
     fake.stderr = ""
-    with patch("isaac_mcp.isaaclab.install.subprocess.run", return_value=fake):
+    with patch("twinsmith.isaaclab.install.subprocess.run", return_value=fake):
         res = install.envs_list(filter="reach", env=env)
         res2 = install.envs_list(filter="REACH", env=env)
     assert res["envs"] == [{"id": "Isaac-Reach-UR10-v0", "entry_point": "x"}]
@@ -191,7 +191,7 @@ def test_envs_list_no_filter(monkeypatch, tmp_path):
     fake.returncode = 0
     fake.stdout = json.dumps(payload) + "\n"
     fake.stderr = ""
-    with patch("isaac_mcp.isaaclab.install.subprocess.run", return_value=fake):
+    with patch("twinsmith.isaaclab.install.subprocess.run", return_value=fake):
         res = install.envs_list(env=env)
     assert len(res["envs"]) == 2
 
@@ -200,7 +200,7 @@ def test_envs_list_timeout(monkeypatch, tmp_path):
     py, root, venv = _make_install(tmp_path)
     env = {"ISAACLAB_PYTHON": str(py), "ISAACLAB_ROOT": str(root)}
     with patch(
-        "isaac_mcp.isaaclab.install.subprocess.run",
+        "twinsmith.isaaclab.install.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd="x", timeout=5),
     ):
         res = install.envs_list(env=env, timeout=5)
@@ -214,7 +214,7 @@ def test_envs_list_malformed(monkeypatch, tmp_path):
     fake.returncode = 0
     fake.stdout = "{bad"
     fake.stderr = ""
-    with patch("isaac_mcp.isaaclab.install.subprocess.run", return_value=fake):
+    with patch("twinsmith.isaaclab.install.subprocess.run", return_value=fake):
         res = install.envs_list(env=env)
     assert "error" in res
 
@@ -239,7 +239,7 @@ def test_envs_list_task_modules_and_import_errors(tmp_path):
     fake.returncode = 0
     fake.stdout = json.dumps(payload) + "\n"
     fake.stderr = ""
-    with patch("isaac_mcp.isaaclab.install.subprocess.run", return_value=fake) as run:
+    with patch("twinsmith.isaaclab.install.subprocess.run", return_value=fake) as run:
         res = install.envs_list(env=env)
     assert res["import_errors"] == {"nope": "ModuleNotFoundError: nope"}
     code = run.call_args.args[0][2]
@@ -270,12 +270,12 @@ def test_envs_list_real_subprocess_survives_bad_modules(tmp_path):
     assert res["import_errors"] == {"boom": "RuntimeError: boom", "exits": "SystemExit: 3"}
 
 
-# ---- a per-project interpreter (isaac-mcp.json) ----
+# ---- a per-project interpreter (twinsmith.json) ----
 
 
 def _project(tmp_path, data):
-    (tmp_path / "isaac-mcp.json").write_text(json.dumps(data))
-    return {"ISAAC_MCP_PROJECT": str(tmp_path)}
+    (tmp_path / "twinsmith.json").write_text(json.dumps(data))
+    return {"TWINSMITH_PROJECT": str(tmp_path)}
 
 
 def _lab_venv(tmp_path):
@@ -320,8 +320,8 @@ def test_an_interpreter_without_lab_metadata_is_refused_and_never_run(tmp_path):
 
 
 def test_a_broken_project_file_does_not_fall_through_silently(tmp_path):
-    (tmp_path / "isaac-mcp.json").write_text("{not json")
-    info = install.install_info({"ISAAC_MCP_PROJECT": str(tmp_path)})
+    (tmp_path / "twinsmith.json").write_text("{not json")
+    info = install.install_info({"TWINSMITH_PROJECT": str(tmp_path)})
     assert "cannot read" in info["error"]
 
 
@@ -360,7 +360,7 @@ def test_walked_up_file_with_a_hostile_interpreter_never_runs_it(tmp_path, monke
     py.write_text(f"#!/bin/sh\ntouch {marker}\n")
     py.chmod(0o755)
     _mark_lab_installed(venv)  # forged metadata passes the file check, so only the rule protects this
-    (tmp_path / "isaac-mcp.json").write_text(json.dumps({"isaaclab_python": str(py)}))
+    (tmp_path / "twinsmith.json").write_text(json.dumps({"isaaclab_python": str(py)}))
     inner = tmp_path / "src" / "deep"
     inner.mkdir(parents=True)
     monkeypatch.chdir(inner)
@@ -368,14 +368,14 @@ def test_walked_up_file_with_a_hostile_interpreter_never_runs_it(tmp_path, monke
     with patch("subprocess.run", side_effect=AssertionError("must not run")):
         info = install.install_info({})
     assert not marker.exists() and "error" in info
-    assert "ISAAC_MCP_PROJECT=" + str(tmp_path) in info["project_setting_ignored"]
+    assert "TWINSMITH_PROJECT=" + str(tmp_path) in info["project_setting_ignored"]
 
 
 def test_walked_up_file_is_reported_next_to_an_install_found_another_way(tmp_path, monkeypatch):
     py, root, _ = _lab_venv(tmp_path)
     repo = tmp_path / "cloned"
     repo.mkdir()
-    (repo / "isaac-mcp.json").write_text(json.dumps({"isaaclab_python": "/hostile/bin/python", "isaaclab_root": "/hostile"}))
+    (repo / "twinsmith.json").write_text(json.dumps({"isaaclab_python": "/hostile/bin/python", "isaaclab_root": "/hostile"}))
     monkeypatch.chdir(repo)
     env = {"ISAACLAB_PYTHON": str(py), "ISAACLAB_ROOT": str(root)}
     assert install.locate_install(env)["python"] == str(py)
@@ -387,25 +387,25 @@ def test_walked_up_file_is_reported_next_to_an_install_found_another_way(tmp_pat
 def test_walked_up_file_without_lab_keys_or_broken_changes_nothing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert install.project_lab_setting({}) is None
-    (tmp_path / "isaac-mcp.json").write_text(json.dumps({"asset_path": ["x"]}))
+    (tmp_path / "twinsmith.json").write_text(json.dumps({"asset_path": ["x"]}))
     assert install.project_lab_setting({}) is None
-    (tmp_path / "isaac-mcp.json").write_text("{not json")
+    (tmp_path / "twinsmith.json").write_text("{not json")
     assert install.project_lab_setting({}) is None
     assert "project_setting_ignored" not in install.install_info({})
 
 
 def test_naming_the_project_honors_the_same_file_from_anywhere(tmp_path, monkeypatch):
     py, root, _ = _lab_venv(tmp_path)
-    (tmp_path / "isaac-mcp.json").write_text(json.dumps({"isaaclab_python": str(py), "isaaclab_root": str(root)}))
+    (tmp_path / "twinsmith.json").write_text(json.dumps({"isaaclab_python": str(py), "isaaclab_root": str(root)}))
     monkeypatch.chdir(tmp_path)
     assert install.locate_install({}) is None
-    found = install.locate_install({"ISAAC_MCP_PROJECT": str(tmp_path)})
+    found = install.locate_install({"TWINSMITH_PROJECT": str(tmp_path)})
     assert found["python"] == str(py) and found["source"].startswith("project:")
-    assert install.locate_install({"ISAAC_MCP_PROJECT": str(tmp_path / "isaac-mcp.json")})["python"] == str(py)
+    assert install.locate_install({"TWINSMITH_PROJECT": str(tmp_path / "twinsmith.json")})["python"] == str(py)
 
 
 def test_a_named_project_with_no_file_does_not_fall_back_to_the_walk(tmp_path, monkeypatch):
     py, _, _ = _lab_venv(tmp_path)
-    (tmp_path / "isaac-mcp.json").write_text(json.dumps({"isaaclab_python": str(py)}))
+    (tmp_path / "twinsmith.json").write_text(json.dumps({"isaaclab_python": str(py)}))
     monkeypatch.chdir(tmp_path)
-    assert install.project_lab_setting({"ISAAC_MCP_PROJECT": str(tmp_path / "nowhere")}) is None
+    assert install.project_lab_setting({"TWINSMITH_PROJECT": str(tmp_path / "nowhere")}) is None

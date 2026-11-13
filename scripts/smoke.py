@@ -27,7 +27,7 @@ TOOLSETS = {
 # Checks that only mean something on Newton: on PhysX they are skipped, with a note, not failed.
 NEWTON_ONLY = ("newton_checks",)
 
-# The ISAAC_MCP_TOOLSETS value each check's MCP server is started with, so a check never relies on the
+# The TWINSMITH_TOOLSETS value each check's MCP server is started with, so a check never relies on the
 # default selection: the smallest selection that lists every tool the check calls (a test compares this
 # table with the tool names in each check's source). Lab and workcell run their own processes.
 DEFAULT_TOOLSETS = "default"
@@ -265,7 +265,7 @@ def main(argv=None, client_factory=None):
     parser.add_argument("--mutate-stage", action="store_true")
     parser.add_argument("--discard-changes", action="store_true")
     parser.add_argument("--output-dir", type=Path)
-    parser.add_argument("--toolsets", help="ISAAC_MCP_TOOLSETS for every check's MCP server, instead of each check's own")
+    parser.add_argument("--toolsets", help="TWINSMITH_TOOLSETS for every check's MCP server, instead of each check's own")
     args = parser.parse_args(argv)
     if args.toolset is None:
         if not args.list:
@@ -292,15 +292,15 @@ def main(argv=None, client_factory=None):
         return 2
     if client_factory is None:
         sys.path.insert(0, str(SCRIPTS.parent / "mcp"))
-        from isaac_mcp.client import BridgeClient
+        from twinsmith.client import BridgeClient
         client_factory = BridgeClient
     output_dir = args.output_dir or Path(tempfile.mkdtemp(prefix="smoke-"))
     output_dir.mkdir(parents=True, exist_ok=True)
     rows = []
     exit_code = 0
-    previous_host = os.environ.get("ISAAC_MCP_HOST")
-    previous_toolsets = os.environ.get("ISAAC_MCP_TOOLSETS")
-    os.environ["ISAAC_MCP_HOST"] = args.host
+    previous_host = os.environ.get("TWINSMITH_HOST")
+    previous_toolsets = os.environ.get("TWINSMITH_TOOLSETS")
+    os.environ["TWINSMITH_HOST"] = args.host
     checks = plan(checks)
     results = {}
     halted = None
@@ -326,8 +326,8 @@ def main(argv=None, client_factory=None):
             start = time.monotonic()
             metadata = {"backend": None, "simulator_build": None}
             row = {"check": name, "status": "fail"}
-            os.environ["ISAAC_MCP_TOOLSETS"] = args.toolsets or CHECK_TOOLSETS.get(name, DEFAULT_TOOLSETS)
-            row["toolsets"] = os.environ["ISAAC_MCP_TOOLSETS"]
+            os.environ["TWINSMITH_TOOLSETS"] = args.toolsets or CHECK_TOOLSETS.get(name, DEFAULT_TOOLSETS)
+            row["toolsets"] = os.environ["TWINSMITH_TOOLSETS"]
             try:
                 if name != "smoke_test":
                     with client_factory(host=args.host, port=args.port) as client:
@@ -362,13 +362,13 @@ def main(argv=None, client_factory=None):
             on_suite_stage = name in SUITE
     finally:
         if previous_host is None:
-            os.environ.pop("ISAAC_MCP_HOST", None)
+            os.environ.pop("TWINSMITH_HOST", None)
         else:
-            os.environ["ISAAC_MCP_HOST"] = previous_host
+            os.environ["TWINSMITH_HOST"] = previous_host
         if previous_toolsets is None:
-            os.environ.pop("ISAAC_MCP_TOOLSETS", None)
+            os.environ.pop("TWINSMITH_TOOLSETS", None)
         else:
-            os.environ["ISAAC_MCP_TOOLSETS"] = previous_toolsets
+            os.environ["TWINSMITH_TOOLSETS"] = previous_toolsets
     for name in checks[len(rows):]:
         rows.append({"check": name, "status": "not_run", "backend": None,
                      "simulator_build": None, "seconds": 0, "error": "Not reached"})

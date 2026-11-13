@@ -1,7 +1,7 @@
 """Arm tools: the kinematic model of an articulation, inverse and forward kinematics."""
 
 from pxr import UsdGeom, UsdPhysics
-from isaac_mcp.project_assets import AssetError, refuse
+from twinsmith.project_assets import AssetError, refuse
 from .core import vector
 from .values import scalar
 from .joint_tools import articulation_joints

@@ -1,7 +1,7 @@
 # Real simulation demo
 
 These are original, unedited MCP window captures of an operator-approved workstation.
-They show the full UR5e and attached Husarion RG2 during a commanded target-and-return
+They show the full UR5e and attached RG2 during a commanded target-and-return
 workflow. They are simulation observations, not physical robot demonstrations.
 
 | Target | Return |
@@ -41,18 +41,18 @@ It shows the full robot and gripper during target and return.
 It is currently inside **`agent62w-2fdf-evidence-v2.tar.gz`** in the unpublished draft evidence
 release (3129287 bytes, SHA-256
 `fb864cfa1d5aceaa61aed501494bf626bc58c758f5e2cd66fa9417e3296a360e`).
-A [standalone MP4 attachment](https://github.com/kalebcoleman/isaac-mcp/releases/download/untagged-8a38d708b61458020a38/agent-62w-2fdf-full-ur-video.mp4)
+A [standalone MP4 attachment](https://github.com/kalebcoleman/twinsmith/releases/download/untagged-8a38d708b61458020a38/agent-62w-2fdf-full-ur-video.mp4)
 now exists in the same **unpublished draft**; its remote size and SHA-256 matched the original.
 It is not publicly accessible, so the README does not link to it. The README thumbnail therefore opens this page, where access
 requirements are explicit, rather than promising a public player. Authorized repository reviewers can obtain the bundle:
 
 ```bash
-gh release download untagged-8a38d708b61458020a38 --repo kalebcoleman/isaac-mcp \
+gh release download untagged-8a38d708b61458020a38 --repo kalebcoleman/twinsmith \
   --pattern agent62w-2fdf-evidence-v2.tar.gz
 sha256sum agent62w-2fdf-evidence-v2.tar.gz
 ```
 
-Draft access requires repository permissions. See the [draft evidence release](https://github.com/kalebcoleman/isaac-mcp/releases/tag/untagged-8a38d708b61458020a38).
+Draft access requires repository permissions. See the [draft evidence release](https://github.com/kalebcoleman/twinsmith/releases/tag/untagged-8a38d708b61458020a38).
 Before public video publication, the maintainer must confirm permissions and the final
 privacy review, upload the approved original recording as a release asset, verify its bytes
 and SHA-256, then replace the README thumbnail destination with the actual public asset URL.
@@ -61,7 +61,7 @@ Do not publish the draft release merely to make a README link work.
 ## Asset notices
 
 The captures show licensed, operator-approved NVIDIA/Vention workstation assets and the
-Husarion gripper. They do not include USD, URDF, textures or composed geometry. Selection
+RG2 gripper. They do not include USD, URDF, textures or composed geometry. Selection
 of these captures for the user's demo request is **not a new license grant** or permission
 to redistribute the underlying assets. See [vendoring](../VENDORING.md) and
 [third-party notices](../../THIRD-PARTY-NOTICES.md). The wider task used the BSD-3-Clause

@@ -6,7 +6,7 @@ objects, layouts) lives in each user's asset root as a pack (see
 ``docs/ASSET-PACKS.md``), so nothing with a redistribution question is ever pushed. This
 check fails when:
 
-* anything is tracked under ``exts/ur5e-dt/assets/`` (a folder old checkouts kept; it is git-ignored);
+* anything is tracked under ``exts/workcell/assets/`` (a folder old checkouts kept; it is git-ignored);
 * a 3D, robot-description or material file is tracked anywhere;
 * an image is tracked outside the documentation and the extensions' UI ``data/`` folders.
 """
@@ -37,7 +37,7 @@ def tracked_files() -> set[str]:
 def main() -> int:
     errors: list[str] = []
     tracked = tracked_files()
-    folder = "exts/ur5e-dt/assets/"
+    folder = "exts/workcell/assets/"
 
     for path in sorted(tracked):
         suffix = Path(path).suffix.lower()

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from isaac_mcp_bridge.bridge import McpBridge
+from twinsmith_bridge.bridge import McpBridge
 
 REPO = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("sim_tools_reload_under_test", REPO / "exts/sim-tools/sim_tools/reload.py")
@@ -112,7 +112,7 @@ def test_startup_defers_registration_only_while_draining():
 
 def test_run_sh_turns_the_watcher_off_by_flag_and_variable():
     text = (REPO / "run.sh").read_text()
-    assert "--no-hot-reload)" in text and "ISAAC_MCP_NO_HOT_RELOAD" in text
+    assert "--no-hot-reload)" in text and "TWINSMITH_NO_HOT_RELOAD" in text
     assert '"--/app/extensions/fsWatcherEnabled=0"' in text
 
 
@@ -132,7 +132,7 @@ def test_run_sh_refuses_newton_before_kit_when_the_build_has_none(tmp_path, layo
     python.write_text(f'#!/bin/sh\ncase "$2" in *dirname*) echo "{site}";; esac\n[ "$1" = "-c" ] && exit 0\necho started; exit 0\n')
     python.chmod(0o755)
     result = subprocess.run(["bash", str(REPO / "run.sh"), "--headless", "--port", "18999", "--physics-backend", "newton"],
-                            env={"ISAAC_MCP_PYTHON": str(python), "PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},
+                            env={"TWINSMITH_SIM_PYTHON": str(python), "PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},
                             capture_output=True, text=True, timeout=30)
     if code is None:
         assert result.returncode == 0 and "started" in result.stdout, result.stderr

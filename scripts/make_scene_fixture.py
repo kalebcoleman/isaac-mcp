@@ -62,7 +62,7 @@ def Xform "Robot" (prepend apiSchemas = ["PhysicsArticulationRootAPI"]) {
 }
 """)
     (root / "LICENSE.txt").write_text(
-        "Original test fixture dedicated to the public domain under CC0-1.0. Generated for isaac-mcp, 2026. No third-party asset content.\n"
+        "Original test fixture dedicated to the public domain under CC0-1.0. Generated for twinsmith, 2026. No third-party asset content.\n"
     )
     (root / "minimal.urdf").write_text(
         '<robot name="single_link"><link name="base"><inertial><mass value="1"/><inertia ixx=".01" ixy="0" ixz="0" iyy=".01" iyz="0" izz=".01"/></inertial><visual><geometry><box size=".2 .2 .2"/></geometry></visual><collision><geometry><box size=".2 .2 .2"/></geometry></collision></link></robot>'

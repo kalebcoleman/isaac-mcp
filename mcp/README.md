@@ -1,7 +1,7 @@
-# isaac-mcp (host package)
+# twinsmith (host package)
 
-The host side of isaac-mcp: a Model Context Protocol (MCP) server for Isaac Sim, Isaac Lab and Omniverse Kit, with one command,
-`isaac-mcp`. It connects MCP clients to the tools inside a running Kit process and adds desktop capture, Isaac Lab job control and
+The host side of twinsmith: a Model Context Protocol (MCP) server for Isaac Sim, Isaac Lab and Omniverse Kit, with one command,
+`twinsmith`. It connects MCP clients to the tools inside a running Kit process and adds desktop capture, Isaac Lab job control and
 a bridge to RoboSimStudio. This is the package readme; the project overview is the [root README](../README.md).
 
 ## Install
@@ -9,7 +9,7 @@ a bridge to RoboSimStudio. This is the package readme; the project overview is t
 Install it as an editable tool shared by every MCP client (Linux x86_64):
 
 ```bash
-./install.sh --no-sim        # from the repository root; links ~/.local/bin/isaac-mcp
+./install.sh --no-sim        # from the repository root; links ~/.local/bin/twinsmith
 # The same host environment, without client registration or the ffmpeg shim:
 uv sync --project mcp --locked --extra isaaclab --no-dev
 ```
@@ -32,13 +32,13 @@ register a client, see [client configuration](../docs/MCP-SERVER.md#4-client-con
 ## Layout
 
 ```
-mcp/isaac_mcp/            the MCP server, the bridge client, Isaac Lab jobs, screen tools, RoboSimStudio bridge
+mcp/twinsmith/            the MCP server, the bridge client, Isaac Lab jobs, screen tools, RoboSimStudio bridge
 mcp/templates/            a tool package to copy, a remote driver, an Isaac Lab launch script
 mcp/tests/                host tests; the bridge is tested here too, outside Kit
 mcp/docs/                 the bridge: protocol, writing tools
-exts/isaac.mcp.bridge/    the bridge extension
+exts/twinsmith.bridge/    the bridge extension
 exts/sim-tools/           generic scene and asset tools
-exts/ur5e-dt/             the lab's UR5e work cell
+exts/workcell/             the lab's UR5e work cell
 scripts/install.py        load the bridge in a Kit app on every launch
 ```
 

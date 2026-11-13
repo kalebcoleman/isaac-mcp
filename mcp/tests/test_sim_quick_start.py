@@ -17,8 +17,8 @@ from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts" / "sim-tools"))
 
-from isaac_mcp.project_assets import AssetError, Broker  # noqa: E402
-from isaac_mcp.scene_contracts import REGISTRY  # noqa: E402
+from twinsmith.project_assets import AssetError, Broker  # noqa: E402
+from twinsmith.scene_contracts import REGISTRY  # noqa: E402
 from sim_tools import public_robots, quick_start as qs  # noqa: E402
 from sim_tools.core import Scene  # noqa: E402
 
@@ -99,8 +99,8 @@ def kit(monkeypatch, tmp_path):
 
     monkeypatch.setattr(public_robots, "assets_root", lambda: str(nvidia))
     monkeypatch.setattr(public_robots, "client_stat", stat)
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(store))
-    for name in ("ISAAC_MCP_PROJECT", "ISAAC_MCP_ASSET_PATH", "ISAAC_MCP_ASSET_STRICT", "ISAAC_MCP_WORKSPACE"):
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(store))
+    for name in ("TWINSMITH_PROJECT", "TWINSMITH_WORKSPACE"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.chdir(tmp_path)
     state.store = store
@@ -229,7 +229,7 @@ def test_the_warehouse_and_its_default_robot_do_not_touch_the_pack_model():
     root = Path(qs.__file__).parent
     for module in ("warehouse.py", "jenga.py", "quick_start.py", "public_robots.py"):
         source = (root / module).read_text()
-        assert "isaac_mcp import assets" not in source and "asset_packs" not in source, module
+        assert "twinsmith import assets" not in source and "asset_packs" not in source, module
     assert 'robot = "carter_v1" if environment == "warehouse" else "franka"' in (root / "quick_start.py").read_text()
     assert {"carter_v1", "franka"} <= set(public_robots.NVIDIA_ROBOTS)
 
@@ -242,9 +242,10 @@ def test_public_robot_the_simulators_root_lacks_is_refused_with_the_names(kit):
 
 
 def test_nothing_is_downloaded_whatever_the_old_settings_say(kit, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_ASSET_STRICT", "0")
-    monkeypatch.setenv("UR5E_DT_ASSET_ROOT", "https://example.invalid/mirror")
-    monkeypatch.setenv("ISAAC_MCP_ASSET_REMOTE_ROOT", "https://example.invalid/mirror")
+    from twinsmith import pack_manifest
+
+    for name in pack_manifest.REMOVED_ENVIRONMENT:
+        monkeypatch.setenv(name, "https://example.invalid/mirror")
     out = kit.run(robot="ur5e")
     assert out["assets"][0]["location"].startswith(str(kit.nvidia)) and "example.invalid" not in json.dumps(out["assets"])
 
@@ -252,7 +253,7 @@ def test_nothing_is_downloaded_whatever_the_old_settings_say(kit, monkeypatch):
 def test_a_project_file_does_not_name_a_robot_or_a_folder(kit, tmp_path, monkeypatch):
     repo = tmp_path / "cloned"
     repo.mkdir()
-    (repo / "isaac-mcp.json").write_text(json.dumps({"pack": "mine/v1"}))
+    (repo / "twinsmith.json").write_text(json.dumps({"pack": "mine/v1"}))
     monkeypatch.chdir(repo)
     kit.pack("mine", "v1", {"arm.usd": ROBOT_USDA})
     out = kit.run(robot="ur5e")  # a public name is still the simulator's file, never the project's
@@ -305,10 +306,10 @@ def test_a_symlinked_pack_file_is_never_followed(kit, tmp_path):
 
 
 def test_without_an_asset_root_a_pack_file_says_which_setting_to_make(kit, monkeypatch, tmp_path):
-    monkeypatch.delenv("ISAAC_MCP_ASSET_ROOT")
-    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(tmp_path / "empty-workspace"))
+    monkeypatch.delenv("TWINSMITH_ASSET_ROOT")
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(tmp_path / "empty-workspace"))
     error = refused(kit, robot="mine/v1/arm.usd")
-    assert error.code == "ASSET_MISSING" and "ISAAC_MCP_ASSET_ROOT" in str(error)
+    assert error.code == "ASSET_MISSING" and "TWINSMITH_ASSET_ROOT" in str(error)
 
 
 def test_a_robot_file_that_composes_to_nothing_is_refused(kit):
@@ -552,7 +553,7 @@ def test_contract_needs_no_ids_and_cannot_name_a_command():
 
 
 def test_host_turns_an_absolute_path_into_a_snapshot_or_refuses(monkeypatch):
-    from isaac_mcp import server as gw
+    from twinsmith import server as gw
 
     calls = []
 
@@ -582,7 +583,7 @@ def test_host_turns_an_absolute_path_into_a_snapshot_or_refuses(monkeypatch):
 
 
 def test_host_passes_names_and_packs_straight_through(monkeypatch):
-    from isaac_mcp import server as gw
+    from twinsmith import server as gw
 
     calls = []
     client = SimpleNamespace(call=lambda name, params=None: calls.append((name, params)) or dict(status="ok"))
@@ -626,7 +627,7 @@ class Calls:
 
 
 def quick_start(monkeypatch, calls, **params):
-    from isaac_mcp import server
+    from twinsmith import server
 
     monkeypatch.setattr(server, "_dispatch", calls)
     return json.loads(server._quick_start_with_import({"robot": "/data/go2", **params}, None))
@@ -660,7 +661,7 @@ def test_quick_start_with_a_file_leaves_the_base_to_the_file_unless_told(monkeyp
 
 def test_the_quick_start_contract_does_not_invent_a_fixed_base():
     """A default of true bolted a MuJoCo Go2 and a Gazebo Pioneer to the world through quick start, and not through the import."""
-    from isaac_mcp.scene_contracts import REGISTRY
+    from twinsmith.scene_contracts import REGISTRY
 
     fields = REGISTRY["sim.quick_start"]["parameters"]
     assert "default" not in fields["fixed_base"] and "xacro_args" in fields and "sdf_model" in fields
@@ -704,7 +705,7 @@ def test_quick_start_with_a_file_runs_ros_after_the_import(monkeypatch):
 
 
 def test_a_urdf_that_holds_xacro_goes_through_the_import_from_quick_start(tmp_path):
-    from isaac_mcp import server
+    from twinsmith import server
 
     real = tmp_path / "plain.urdf"
     real.write_text('<robot name="r"/>')

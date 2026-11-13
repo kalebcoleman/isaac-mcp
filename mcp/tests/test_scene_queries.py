@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
 from pxr import Usd, UsdGeom  # noqa: E402
 from sim_tools import geometry, logs, queries  # noqa: E402
 from sim_tools.core import Scene  # noqa: E402
-from isaac_mcp.project_assets import AssetError  # noqa: E402
+from twinsmith.project_assets import AssetError  # noqa: E402
 from test_scene_usd import scene  # noqa: E402,F401
 
 

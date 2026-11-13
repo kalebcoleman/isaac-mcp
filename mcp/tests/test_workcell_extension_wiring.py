@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def load_commands():
-    spec = importlib.util.spec_from_file_location("workcell_commands", ROOT / "exts/ur5e-dt/ur5e_dt/commands.py")
+    spec = importlib.util.spec_from_file_location("workcell_commands", ROOT / "exts/workcell/workcell/commands.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.Commands()

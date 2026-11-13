@@ -6,7 +6,7 @@ No app.update(), render(), World.step(), network fetch or arbitrary attribute se
 import hashlib
 import os
 from pxr import Usd
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 from .joint_tools import JointTools
 from .prim_tools import PrimTools
 from .sensor_tools import SensorTools
@@ -168,10 +168,10 @@ class Advanced(JointTools, PrimTools, SensorTools, ArmTools, RobotImport, StepTo
 
     def tool_controller(self, name, stage, a, camera_frame=None):
         s = self.s
-        if os.getenv("ISAAC_MCP_ENABLE_SCENE_SCRIPTS") != "1":
+        if os.getenv("TWINSMITH_ENABLE_SCENE_SCRIPTS") != "1":
             refuse(
                 "SCRIPT_DISABLED",
-                "User must opt in at Kit launch with ISAAC_MCP_ENABLE_SCENE_SCRIPTS=1. This executes arbitrary code.",
+                "User must opt in at Kit launch with TWINSMITH_ENABLE_SCENE_SCRIPTS=1. This executes arbitrary code.",
             )
         code = a["code"]
         p = a["path"]

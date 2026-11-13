@@ -27,9 +27,9 @@ over both.
 | [Host and bridge](TOOLS-HOST.md) | Gateway, desktop, opt-in input and sessions, bridge built-ins |
 | [Isaac Lab](TOOLS-ISAACLAB.md) | `isaaclab__*`: discovery, jobs, guards, metrics |
 | [RoboSimStudio](ROBOSIM.md) | The `robosim` tool: real-to-sim runs in RoboSimStudio's own environment |
-| [Work cell](../exts/ur5e-dt/workcell/README.md) | The lab's UR5e Jenga work cell: BOM, private pack, tools. [Jenga variation contract](TOOLS-UR5E.md) |
+| [Work cell](../exts/workcell/workcell/README.md) | The lab's UR5e Jenga work cell: BOM, private pack, tools. [Jenga variation contract](TOOLS-WORKCELL.md) |
 | [BrickSim](BRICKSIM.md) | LEGO bricks with these tools: the bridge next to BrickSim, which tools work on bricks, its RL task |
-| [Agent skill](AGENT-SKILLS.md) | The `isaac-mcp` skill and where each client finds it |
+| [Agent skill](AGENT-SKILLS.md) | The `twinsmith` skill and where each client finds it |
 
 **Workflows and examples**
 
@@ -47,7 +47,7 @@ over both.
 | [Host package readme](../mcp/README.md) | The server package, install, layout |
 | [Tool authoring](../mcp/docs/tool-authoring.md) | Your own tool package: arguments, errors, flags, reloading, Kit surprises |
 | [Bridge protocol](../mcp/docs/protocol.md) | Messages, finding a bridge, the token, scheduling, read-only mode, jobs, access from another machine |
-| Extension notes: [bridge](../exts/isaac.mcp.bridge/docs/README.md) · [sim-tools](../exts/sim-tools/README.md) · [ur5e-dt](../exts/ur5e-dt/docs/README.md) | What each Kit extension is |
+| Extension notes: [bridge](../exts/twinsmith.bridge/docs/README.md) · [sim-tools](../exts/sim-tools/README.md) · [workcell](../exts/workcell/docs/README.md) | What each Kit extension is |
 
 **Project**
 
@@ -75,8 +75,8 @@ away. Scripts that import `mcp` need `uv run --locked --isolated --project mcp -
 
 | Purpose | Scripts |
 |---|---|
-| Find and prepare | `isaac_env.py` (find an install, create a workspace), `isaac_assets.py` (asset packs), `install.py` (register the bridge in a Kit app), `check_machine.sh` (6.2 preflight; can use the GPU) |
-| Start | `run_ur5e_dt.py` (what `run.sh` runs) |
+| Find and prepare | `env.py` (find an install, create a workspace), `assets.py` (asset packs), `install.py` (register the bridge in a Kit app), `check_machine.sh` (6.2 preflight; can use the GPU) |
+| Start | `run_kit.py` (what `run.sh` runs) |
 | Project checks (CPU, also in CI) | `check_docs.py`, `check_assets.py`, `check_portable_paths.py`, `check_private_paths.py`, `gen_host_catalog.py`, `gen_tool_reference.py` (also rewrites the generated count blocks) |
 | Work-cell check (live, disposable) | `workcell_smoke.py` (requires an explicitly selected disposable bridge and lab config; PhysX only) |
 | Smoke checks (live, disposable) | `smoke.py <toolset>`; `smoke.py --list` lists GPU/simulator requirements offline. Validators live in `scripts/smoke/`; helpers: `scene_mcp_client.py`, `smoke_mcp_surface.py`, `make_scene_fixture.py`, `make_scene_package_fixture.py` |

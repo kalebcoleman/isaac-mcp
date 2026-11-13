@@ -13,8 +13,8 @@ from pxr import Usd  # noqa: E402
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "exts" / "sim-tools"))
 
-from isaac_mcp.project_assets import AssetError  # noqa: E402
-from isaac_mcp.scene_contracts import REGISTRY  # noqa: E402
+from twinsmith.project_assets import AssetError  # noqa: E402
+from twinsmith.scene_contracts import REGISTRY  # noqa: E402
 from sim_tools import public_robots as pr, quick_start as qs, ros2  # noqa: E402
 from sim_tools.placement import flat_box_warning  # noqa: E402
 from sim_tools.stage_open import time_code_report  # noqa: E402

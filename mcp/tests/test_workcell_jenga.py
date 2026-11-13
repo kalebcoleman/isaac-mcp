@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 
-PACKAGE = Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt"
+PACKAGE = Path(__file__).resolve().parents[2] / "exts/workcell/workcell"
 SPEC = importlib.util.spec_from_file_location("workcell_jenga", PACKAGE / "jenga.py")
 jenga = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(jenga)

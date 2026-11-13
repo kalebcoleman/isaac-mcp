@@ -22,8 +22,8 @@ import socket
 import time
 from pathlib import Path
 
-from isaac_mcp.project_assets import AssetError, refuse
-from isaac_mcp_bridge.jobs import JobError
+from twinsmith.project_assets import AssetError, refuse
+from twinsmith_bridge.jobs import JobError
 
 from . import physics
 
@@ -44,7 +44,7 @@ LOG_COLUMNS = {
     "torque": ("tx", "ty", "tz"),
 }
 DEFAULT_LOG = ("position", "orientation", "linear_velocity", "angular_velocity", "force", "torque")
-SCRIPTS_ENV = "ISAAC_MCP_ENABLE_SCENE_SCRIPTS"
+SCRIPTS_ENV = "TWINSMITH_ENABLE_SCENE_SCRIPTS"
 _PYTHON_SPEC = re.compile(r"(?P<source>[^:]+):(?P<name>[A-Za-z_][A-Za-z0-9_]*)")
 _TCP_SPEC = re.compile(r"tcp://(?P<host>[A-Za-z0-9_.-]+|\[[0-9A-Fa-f:]+\]):(?P<port>\d{1,5})")
 LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")
@@ -77,14 +77,14 @@ def load_python(source, name):
         refuse("CONTROLLER_NOT_ALLOWED",
                f"A Python controller runs your code inside Kit, which needs {SCRIPTS_ENV}=1 in Kit's launch "
                "environment (the same opt-in as sim__controller__create). Without it, run the controller as its own "
-               "process and pass controller='tcp://127.0.0.1:<port>': isaac_mcp.controller_server.serve(fn, port) "
+               "process and pass controller='tcp://127.0.0.1:<port>': twinsmith.controller_server.serve(fn, port) "
                "is a ready-made server, and run_script starts it as a managed job. Nothing ran.")
     try:
         if source.endswith(".py"):
             file = Path(os.path.expanduser(source))
             if not file.is_absolute() or not file.is_file():
                 refuse("NOT_FOUND", f"{source} is not an existing absolute .py path on Kit's machine.")
-            spec = importlib.util.spec_from_file_location("isaac_mcp_controller_" + file.stem, str(file))
+            spec = importlib.util.spec_from_file_location("twinsmith_controller_" + file.stem, str(file))
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
         else:
@@ -107,7 +107,7 @@ class TcpController:
             self.sock = socket.create_connection((host, port), timeout=TCP_TIMEOUT_S)
         except OSError as exc:
             refuse("CONTROLLER_UNREACHABLE", f"No controller answers on {host}:{port} ({exc}). Start it first "
-                   "(isaac_mcp.controller_server.serve, e.g. through run_script), then call again. Nothing ran.")
+                   "(twinsmith.controller_server.serve, e.g. through run_script), then call again. Nothing ran.")
         self.sock.settimeout(TCP_TIMEOUT_S)
         self.reader = self.sock.makefile("rb")
 
@@ -581,7 +581,7 @@ class Run:
 def job_store(ext):
     store = getattr(ext.bridge, "jobs", None)
     if store is None:
-        refuse("JOBS_UNAVAILABLE", "This Kit runs an isaac.mcp.bridge without background jobs; update the "
+        refuse("JOBS_UNAVAILABLE", "This Kit runs a twinsmith.bridge without background jobs; update the "
                "extension (it ships in the same checkout as sim-tools) and restart Kit.")
     return store
 

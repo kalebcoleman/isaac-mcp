@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from isaac_mcp import asset_packs as packs
-from isaac_mcp import pack_manifest as pm, urdf_physics, urdf_refs
-from isaac_mcp.project_assets import AssetError, Broker
+from twinsmith import asset_packs as packs
+from twinsmith import pack_manifest as pm, urdf_physics, urdf_refs
+from twinsmith.project_assets import AssetError, Broker
 
-ENV = ("ISAAC_MCP_ASSET_ROOT", "ISAAC_MCP_PROJECT", "ISAAC_MCP_WORKSPACE", "ISAAC_MCP_USD_PYTHON", *pm.REMOVED_ENVIRONMENT)
+ENV = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_PROJECT", "TWINSMITH_WORKSPACE", "TWINSMITH_USD_PYTHON", *pm.REMOVED_ENVIRONMENT)
 PROVENANCE = dict(source="unit test", license="test fixture")
 
 
@@ -56,10 +56,10 @@ def env(tmp_path, monkeypatch):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "home" / ".cache"))
-    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(tmp_path / "no-project"))
+    monkeypatch.setenv("TWINSMITH_PROJECT", str(tmp_path / "no-project"))
     store = tmp_path / "store"
     store.mkdir()
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(store))
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(store))
     return store
 
 
@@ -352,9 +352,9 @@ def test_a_symlink_in_a_urdf_pack_is_refused(env, tmp_path):
 
 def test_a_project_file_is_not_approval_for_a_urdf(env, tmp_path, monkeypatch):
     project = tmp_path / "cloned"
-    put(project, "isaac-mcp.json", json.dumps(dict(pack="bot/v1")))
+    put(project, "twinsmith.json", json.dumps(dict(pack="bot/v1")))
     path = put(tmp_path / "elsewhere" / "bot", "r.urdf", urdf())
-    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(project))
+    monkeypatch.setenv("TWINSMITH_PROJECT", str(project))
     with pytest.raises(AssetError) as caught:
         Broker("").locate(str(path), kind="urdf")
     assert caught.value.code == "ROOT_NOT_APPROVED"

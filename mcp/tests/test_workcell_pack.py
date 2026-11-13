@@ -8,7 +8,7 @@ import pytest
 
 
 SPEC = importlib.util.spec_from_file_location(
-    "workcell_pack", Path(__file__).resolve().parents[2] / "exts/ur5e-dt/ur5e_dt/asset_pack.py")
+    "workcell_pack", Path(__file__).resolve().parents[2] / "exts/workcell/workcell/asset_pack.py")
 pack_module = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(pack_module)
 
@@ -28,7 +28,7 @@ def pack_root(tmp_path):
 
 def test_resolve_logical_ids_and_environment_root(pack_root, monkeypatch):
     root, directory, _ = pack_root
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(root))
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(root))
     pack = pack_module.resolve_pack({"pack": {"id": "cell", "version": "v1"}, "assets": {"robot": "robot"}})
     assert pack.asset("robot") == directory / "part.usda"
     with pytest.raises(pack_module.PackError, match="no asset id"):

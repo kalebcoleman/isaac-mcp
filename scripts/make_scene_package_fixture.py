@@ -27,7 +27,7 @@ def create(folder):
         Sdf.AssetPath(str(folder / "assembly.usda")), str(folder / "assembly.usdz")
     )
     (folder / "LICENSE.txt").write_text(
-        "Original fixture authored for isaac-mcp. Dedicated to the public domain under CC0-1.0.\n"
+        "Original fixture authored for twinsmith. Dedicated to the public domain under CC0-1.0.\n"
         "https://creativecommons.org/publicdomain/zero/1.0/\n"
     )
     return folder

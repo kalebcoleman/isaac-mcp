@@ -1,6 +1,6 @@
 """CPU-only checks for the work-cell wrist and overhead D415 camera slice.
 
-The camera module is loaded by path, as the other twin host tests do. No Kit,
+The camera module is loaded by path, as the other work cell host tests do. No Kit,
 pxr, GPU or asset store is touched: ``build_cameras`` uses a fake author seam and
 a role-to-path pack double, so intrinsics, optical offsets and BOM tagging are
 checked without a simulator.
@@ -18,7 +18,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKAGE = ROOT / "exts/ur5e-dt/ur5e_dt"
+PACKAGE = ROOT / "exts/workcell/workcell"
 if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
@@ -309,7 +309,7 @@ def test_d415_is_the_unconfirmed_proxy_and_never_d455(config, tmp_path):
 
 
 def test_repository_internal_old_cache_and_d455_paths_are_refused(config, tmp_path):
-    internal = build(config, tmp_path, assets=_FixedPack(ROOT / "exts/ur5e-dt/workcell/d415.usd"))
+    internal = build(config, tmp_path, assets=_FixedPack(ROOT / "exts/workcell/workcell/d415.usd"))
     assert internal["parts"] == []
     assert any("inside the checkout" in item for item in internal["limitations"])
 

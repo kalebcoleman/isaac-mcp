@@ -9,7 +9,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
-from isaac_mcp.project_assets import AssetError
+from twinsmith.project_assets import AssetError
 from sim_tools import timeline
 
 
@@ -262,15 +262,15 @@ def test_missing_or_unknown_loaded_api_refuses(monkeypatch, api):
 def handler(monkeypatch, native):
     pytest.importorskip("pxr.Usd")
     modules = {}
-    for name in ["omni", "omni.ext", "omni.usd", "omni.timeline", "omni.kit", "omni.kit.app", "isaac_mcp_bridge"]:
+    for name in ["omni", "omni.ext", "omni.usd", "omni.timeline", "omni.kit", "omni.kit.app", "twinsmith_bridge"]:
         modules[name] = ModuleType(name)
         monkeypatch.setitem(sys.modules, name, modules[name])
         if "." in name:
             parent, child = name.rsplit(".", 1)
             setattr(modules[parent], child, modules[name])
     modules["omni.ext"].IExt = object
-    modules["isaac_mcp_bridge"].get_mcp_bridge = lambda: None
-    modules["isaac_mcp_bridge"].ToolDefinition = object
+    modules["twinsmith_bridge"].get_mcp_bridge = lambda: None
+    modules["twinsmith_bridge"].ToolDefinition = object
     path = Path(__file__).resolve().parents[2] / "exts/sim-tools/sim_tools/extension.py"
     spec = importlib.util.spec_from_file_location("sim_tools._test_timeline_extension", path)
     module = importlib.util.module_from_spec(spec)

@@ -3,7 +3,7 @@
 import itertools
 import math
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics, UsdShade
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 from .core import KIT_ROOTS, bounded, vector
 from .values import ATTRIBUTE_NAME, SUPPORTED_TYPES, attribute_kind, color, jsonable, scalar, typed_value
 

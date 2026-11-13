@@ -1,7 +1,7 @@
 """Identity reconciliation is independent of Kit and cannot collapse 6.0.0 builds."""
 
 import pytest
-from isaac_mcp.sim_versions import (
+from twinsmith.sim_versions import (
     RELEASE_BUILDS,
     CPU_SENSOR_STACKS,
     reconcile_identity,
@@ -97,7 +97,7 @@ def test_sensor_adapter_requires_expected_kit_and_enabled_extension_versions(
 
 
 def test_isaac_51_is_identified_but_has_no_newton_adapter():
-    from isaac_mcp.sim_versions import newton_stack_issues
+    from twinsmith.sim_versions import newton_stack_issues
 
     assert "5.1.0.0" in RELEASE_BUILDS
     identity = dict(qualified_build=True, release="5.1.0.0", extensions={})
@@ -106,7 +106,7 @@ def test_isaac_51_is_identified_but_has_no_newton_adapter():
 
 @pytest.mark.parametrize("release", [release for release in RELEASE_BUILDS if release != "5.1.0.0"])
 def test_newton_qualification_rejects_extension_and_loaded_warp_drift(release):
-    from isaac_mcp.sim_versions import (
+    from twinsmith.sim_versions import (
         NEWTON_STACKS,
         NEWTON_LIBRARIES,
         newton_stack_issues,

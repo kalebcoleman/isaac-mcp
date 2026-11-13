@@ -9,12 +9,12 @@ import pytest
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import jobs, tools
+from twinsmith.isaaclab import jobs, tools
 
 
 @pytest.fixture(autouse=True)
 def isolated_jobs(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     monkeypatch.delenv("ISAACLAB_TASK_MODULES", raising=False)
     monkeypatch.delenv("ISAACLAB_TASK_PATH", raising=False)
     jobs._active.clear()

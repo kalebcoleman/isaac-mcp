@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from isaac_mcp import frames_video, screen
+from twinsmith import frames_video, screen
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def test_frames_become_a_video_with_the_label_drawn_on_them(tmp_path, ffmpeg):
     info = screen.probe_video(ffmpeg, tmp_path / "labelled.mp4")
     assert (info["width"], info["height"]) == (96, 64) and info["duration"] == pytest.approx(2.0, abs=0.4)
     first = tmp_path / "first.png"
-    from isaac_mcp import contact_sheet
+    from twinsmith import contact_sheet
 
     contact_sheet.extract_frame(ffmpeg, tmp_path / "labelled.mp4", 0.0, first, 96)
     with Image.open(first) as image:

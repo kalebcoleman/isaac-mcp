@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from isaac_mcp.isaaclab import check_runner as cr
-from isaac_mcp.isaaclab import jobs, preflight as pf
+from twinsmith.isaaclab import check_runner as cr
+from twinsmith.isaaclab import jobs, preflight as pf
 
 
 def test_stats_flag_nan_and_instant_resets():

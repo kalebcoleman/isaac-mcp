@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import jobs
+from twinsmith.isaaclab import jobs
 
 
 def make_lab_root(root: Path) -> None:
@@ -92,7 +92,7 @@ def test_ambiguous_or_incompatible_visualizer_is_refused_before_launch(monkeypat
 @pytest.fixture(autouse=True)
 def isolated_jobs(tmp_path, monkeypatch):
     jd = tmp_path / "jobs"
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(jd))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(jd))
     # reset module jobs_dir cache (none) and active map
     jobs._active.clear()
     yield
@@ -113,9 +113,9 @@ def test_import_does_not_create_jobs_directory_but_launch_does(tmp_path, monkeyp
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.delenv("ISAACLAB_JOBS_DIR", raising=False)
-    directory = home / ".local" / "share" / "isaac-mcp" / "jobs"
-    subprocess.run([sys.executable, "-c", "import isaac_mcp.isaaclab.jobs"], check=True, env=os.environ.copy())
+    monkeypatch.delenv("TWINSMITH_JOBS_DIR", raising=False)
+    directory = home / ".local" / "share" / "twinsmith" / "jobs"
+    subprocess.run([sys.executable, "-c", "import twinsmith.isaaclab.jobs"], check=True, env=os.environ.copy())
     assert not directory.exists()
 
     fake_py = make_fake_python(tmp_path)
@@ -279,7 +279,7 @@ def test_runs_tail_lines_cap(tmp_path, monkeypatch):
 
 
 def test_job_id_validation_rejects_traversal(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     (tmp_path / "jobs").mkdir()
     for bad in ["../x", "..", "a/b", "", "20260101-000000-../../etc"]:
         for fn in (jobs.runs_status, jobs.runs_cancel):

@@ -8,13 +8,13 @@ import time
 import pytest
 
 from bridge_testing import LiveBridge, td
-from isaac_mcp import client as cl
-from isaac_mcp.client import BridgeClient, BridgeError
+from twinsmith import client as cl
+from twinsmith.client import BridgeClient, BridgeError
 
 
 @pytest.fixture(autouse=True)
 def no_configured_port(monkeypatch):
-    for name in ("ISAAC_MCP_PORT", "UR5E_DT_PORT", "ISAAC_MCP_HOST", "ISAAC_MCP_TOKEN"):
+    for name in ("TWINSMITH_PORT", "TWINSMITH_HOST", "TWINSMITH_TOKEN"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -47,10 +47,10 @@ def test_with_no_port_given_the_one_advertised_bridge_is_used_and_several_are_re
 
 def test_a_configured_port_wins_over_discovery(monkeypatch):
     with LiveBridge() as live, LiveBridge() as other:
-        monkeypatch.setenv("ISAAC_MCP_PORT", str(other.port))
+        monkeypatch.setenv("TWINSMITH_PORT", str(other.port))
         assert BridgeClient(timeout=5).call("status")["port"] == other.port
-        monkeypatch.setenv("UR5E_DT_PORT", str(live.port))
-        assert BridgeClient(timeout=5).call("status")["port"] == live.port, "the twin's variable is read first"
+        monkeypatch.setenv("TWINSMITH_PORT", str(live.port))
+        assert BridgeClient(timeout=5).call("status")["port"] == live.port, "the work cell's variable is read first"
 
 
 def test_a_reply_that_arrives_after_its_call_timed_out_is_not_taken_for_the_next_one():
@@ -106,7 +106,7 @@ def test_a_connection_lost_mid_call_says_the_call_may_have_run():
 
 def test_advertisements_in_a_folder_others_can_write_to_are_ignored(tmp_path):
     with LiveBridge():
-        folder = tmp_path / "xdg" / "isaac-mcp"
+        folder = tmp_path / "xdg" / "twinsmith"
         assert len(cl.discover_bridges()) == 1
         folder.chmod(0o777)
         assert cl.discover_bridges() == [], "another account could have planted a bridge there"

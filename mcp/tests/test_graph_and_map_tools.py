@@ -95,7 +95,7 @@ def test_clear_circles_mark_the_robot_footprint_free(np):
 
 def test_contracts_registered_with_the_expected_fields():
     sys.path.insert(0, str(REPO / "mcp"))
-    from isaac_mcp.scene_contracts import REGISTRY
+    from twinsmith.scene_contracts import REGISTRY
 
     assert {"contains", "limit", "ports"} <= set(REGISTRY["sim.graph.node_types"]["parameters"])
     assert {"path", "limit"} <= set(REGISTRY["sim.graph.inspect"]["parameters"])
@@ -163,7 +163,7 @@ def test_graph_paths_accept_unicode_and_refuse_property_paths(monkeypatch):
     def refuse(code, message, **kw):
         raise Refused(code)
 
-    monkeypatch.setitem(sys.modules, "isaac_mcp.project_assets", types.SimpleNamespace(refuse=refuse))
+    monkeypatch.setitem(sys.modules, "twinsmith.project_assets", types.SimpleNamespace(refuse=refuse))
     assert graph._graph_path("/World/Graphe_\u00e9") == "/World/Graphe_\u00e9"
     for bad in ("World/Graph", "/World/Graph.inputs:x", "/World/Graph{v=a}", "", "/World/a b", "/World/1abc"):
         with pytest.raises(Refused):

@@ -11,7 +11,7 @@ import copy
 from dataclasses import dataclass
 import time
 
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 
 from .compat import has_drawable_events, observe_drawable_changed
 

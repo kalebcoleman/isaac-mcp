@@ -13,14 +13,14 @@ from pathlib import Path
 
 import pytest
 
-from isaac_mcp import pack_manifest as pm
+from twinsmith import pack_manifest as pm
 
 REPO = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location("workcell_asset_pack", REPO / "exts/ur5e-dt/ur5e_dt/asset_pack.py")
+SPEC = importlib.util.spec_from_file_location("workcell_asset_pack", REPO / "exts/workcell/workcell/asset_pack.py")
 workcell = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(workcell)
 
-SETTINGS = ("ISAAC_MCP_ASSET_ROOT", "ISAAC_MCP_WORKSPACE", "ISAAC_MCP_PROJECT", *pm.REMOVED_ENVIRONMENT)
+SETTINGS = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_WORKSPACE", "TWINSMITH_PROJECT", *pm.REMOVED_ENVIRONMENT)
 
 
 def sha(data: bytes) -> str:
@@ -57,8 +57,8 @@ def clean(monkeypatch, tmp_path):
 
 def test_the_environment_wins(clean, monkeypatch):
     (clean / "ws" / "assets").mkdir(parents=True)
-    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(clean / "ws"))
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(clean / "elsewhere"))
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(clean / "ws"))
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(clean / "elsewhere"))
     root = pm.resolve_asset_root()
     assert root.path == (clean / "elsewhere").resolve() and root.source == "environment" and not root.exists
 
@@ -66,14 +66,14 @@ def test_the_environment_wins(clean, monkeypatch):
 def test_the_workspace_assets_folder_is_next(clean, monkeypatch):
     (clean / "ws" / "assets").mkdir(parents=True)
     (clean / "ws" / "isaac-mcp-assets").mkdir()
-    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(clean / "ws"))
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(clean / "ws"))
     root = pm.resolve_asset_root()
     assert root.path == (clean / "ws" / "assets").resolve() and root.source == "workspace" and root.warnings == ()
 
 
 def test_the_transitional_name_works_and_says_so(clean, monkeypatch):
     (clean / "ws" / "isaac-mcp-assets").mkdir(parents=True)
-    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(clean / "ws"))
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(clean / "ws"))
     root = pm.resolve_asset_root()
     assert root.source == "transitional" and any("transitional" in w for w in root.warnings)
 
@@ -86,24 +86,24 @@ def test_the_workspace_defaults_to_the_folder_holding_the_checkout(clean, monkey
 
 def test_nothing_found_names_the_setting_and_never_defaults_into_a_home_folder(clean, monkeypatch):
     (clean / "home" / "isaac-workspace" / "isaac-mcp-assets").mkdir(parents=True)
-    monkeypatch.setenv("ISAAC_MCP_WORKSPACE", str(clean / "empty-ws"))
-    with pytest.raises(pm.RootError, match="ISAAC_MCP_ASSET_ROOT") as caught:
+    monkeypatch.setenv("TWINSMITH_WORKSPACE", str(clean / "empty-ws"))
+    with pytest.raises(pm.RootError, match="TWINSMITH_ASSET_ROOT") as caught:
         pm.resolve_asset_root()
     assert caught.value.code == "NO_ASSET_ROOT"
-    monkeypatch.delenv("ISAAC_MCP_WORKSPACE")
+    monkeypatch.delenv("TWINSMITH_WORKSPACE")
     monkeypatch.setattr(pm, "checkout_root", lambda: None)
-    with pytest.raises(pm.RootError, match="ISAAC_MCP_ASSET_ROOT"):
+    with pytest.raises(pm.RootError, match="TWINSMITH_ASSET_ROOT"):
         pm.resolve_asset_root()
 
 
 def test_a_relative_setting_is_refused(clean, monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", "relative/assets")
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", "relative/assets")
     with pytest.raises(pm.RootError, match="absolute"):
         pm.resolve_asset_root()
 
 
 def test_the_module_has_no_literal_home_default():
-    source = (REPO / "mcp/isaac_mcp/pack_manifest.py").read_text()
+    source = (REPO / "mcp/twinsmith/pack_manifest.py").read_text()
     assert "isaac-workspace" not in source and "expanduser(\"~" not in source
 
 
@@ -113,7 +113,7 @@ def test_the_module_has_no_literal_home_default():
 @pytest.mark.parametrize("name", sorted(pm.REMOVED_ENVIRONMENT))
 def test_a_removed_variable_is_announced_once_not_ignored_silently(clean, monkeypatch, caplog, name):
     monkeypatch.setenv(name, "1")
-    monkeypatch.setenv("ISAAC_MCP_ASSET_ROOT", str(clean / "root"))
+    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(clean / "root"))
     with caplog.at_level("WARNING"):
         first = pm.resolve_asset_root()
         pm.resolve_asset_root()
@@ -123,10 +123,9 @@ def test_a_removed_variable_is_announced_once_not_ignored_silently(clean, monkey
 
 
 def test_the_replacement_variable_is_named(clean, monkeypatch):
-    for name in ("ISAAC_MCP_ASSET_PATH", "UR5E_DT_ASSET_CACHE", "ISAAC_MCP_ASSET_STRICT", "UR5E_DT_OFFLINE",
-                 "ISAAC_MCP_ASSET_REMOTE_ROOT", "UR5E_DT_ASSET_ROOT"):
-        assert "ISAAC_MCP_ASSET_ROOT" in pm.REMOVED_ENVIRONMENT[name]
-    monkeypatch.setenv("UR5E_DT_ASSET_CACHE", "/x")
+    for name, text in pm.REMOVED_ENVIRONMENT.items():
+        assert "TWINSMITH_ASSET_ROOT" in text or "pack" in text
+    monkeypatch.setenv(next(iter(pm.REMOVED_ENVIRONMENT)), "/x")
     assert pm.removed_environment() and pm.removed_environment({}) == []
 
 
@@ -136,13 +135,13 @@ def test_the_replacement_variable_is_named(clean, monkeypatch):
 def project(clean, monkeypatch, data):
     folder = clean / "proj"
     folder.mkdir(exist_ok=True)
-    (folder / "isaac-mcp.json").write_text(data if isinstance(data, str) else json.dumps(data))
-    monkeypatch.setenv("ISAAC_MCP_PROJECT", str(folder))
+    (folder / "twinsmith.json").write_text(data if isinstance(data, str) else json.dumps(data))
+    monkeypatch.setenv("TWINSMITH_PROJECT", str(folder))
 
 
 def test_the_project_file_selects_a_pack_as_id_and_version(clean, monkeypatch):
     project(clean, monkeypatch, {"pack": "bricksim/v2"})
-    assert pm.project_pack() == "bricksim/v2" and pm.project_file() == (clean / "proj" / "isaac-mcp.json").resolve()
+    assert pm.project_pack() == "bricksim/v2" and pm.project_file() == (clean / "proj" / "twinsmith.json").resolve()
     project(clean, monkeypatch, {})
     assert pm.project_pack() is None
 
@@ -248,7 +247,7 @@ FAILURES = ["tamper", "unlisted", "missing", "escape", "absolute", "duplicate", 
 
 @pytest.mark.parametrize("how", FAILURES)
 def test_the_host_reader_and_the_work_cell_loader_agree(clean, how):
-    """The host reader implements the contract of exts/ur5e-dt/ur5e_dt/asset_pack.py: same verdict, same message."""
+    """The host reader implements the contract of exts/workcell/workcell/asset_pack.py: same verdict, same message."""
     directory = make_pack(clean)
     mutate(directory, how)
     with pytest.raises(workcell.PackError) as expected:
@@ -330,7 +329,7 @@ def test_list_shows_every_version_with_count_size_and_verdict(clean):
 
 
 def test_list_reports_an_old_format_pack_with_a_hint_and_nothing_reads_it(clean):
-    old = clean / "ur5e-dt"
+    old = clean / "workcell"
     (old / "robot").mkdir(parents=True)
     (old / "robot" / "ur5e.usd").write_text("x")
     (old / "SHA256SUMS").write_text(f"{sha(b'x')}  robot/ur5e.usd\n")
@@ -340,19 +339,19 @@ def test_list_reports_an_old_format_pack_with_a_hint_and_nothing_reads_it(clean)
     (clean / "empty").mkdir()
     (clean / "empty" / "sub").mkdir()
     listing = pm.list_packs(clean)
-    assert [o["id"] for o in listing["old_format"]] == ["pins-only", "ur5e-dt"] and listing["packs"] == []
+    assert [o["id"] for o in listing["old_format"]] == ["pins-only", "workcell"] and listing["packs"] == []
     assert all("adopt" in o["hint"] and o["format"] == "old" and "\n" not in o["hint"] for o in listing["old_format"])
     with pytest.raises(pm.ManifestError, match="Missing pack"):
-        pm.AssetPack(clean, "ur5e-dt", "v1")
+        pm.AssetPack(clean, "workcell", "v1")
 
 
 def test_a_converted_pack_is_listed_once_and_its_old_files_are_not_noise(clean):
-    old = clean / "ur5e-dt"
+    old = clean / "workcell"
     (old / "robot").mkdir(parents=True)
     (old / "robot" / "ur5e.usd").write_text("x")
-    make_pack(clean, "ur5e-dt", "v1")
+    make_pack(clean, "workcell", "v1")
     listing = pm.list_packs(clean)
-    assert [f"{p['id']}/{p['version']}" for p in listing["packs"]] == ["ur5e-dt/v1"] and listing["old_format"] == []
+    assert [f"{p['id']}/{p['version']}" for p in listing["packs"]] == ["workcell/v1"] and listing["old_format"] == []
 
 
 def test_a_new_version_folder_without_a_manifest_is_reported(clean):
@@ -402,7 +401,7 @@ def test_resolve_pack_file_refuses_an_unlisted_changed_or_symlinked_file(clean):
 
 def test_the_reader_is_standard_library_only():
     for name in ("pack_manifest.py", "asset_packs.py", "usd_closure.py"):
-        tree = ast.parse((REPO / "mcp" / "isaac_mcp" / name).read_text())
+        tree = ast.parse((REPO / "mcp" / "twinsmith" / name).read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 modules = [alias.name for alias in node.names]
@@ -416,8 +415,8 @@ def test_the_reader_is_standard_library_only():
 
 
 def test_importing_the_reader_pulls_in_no_server_or_sdk():
-    code = ("import sys; from isaac_mcp import pack_manifest; "
-            "assert 'mcp' not in sys.modules and 'isaac_mcp.server' not in sys.modules and 'pxr' not in sys.modules")
+    code = ("import sys; from twinsmith import pack_manifest; "
+            "assert 'mcp' not in sys.modules and 'twinsmith.server' not in sys.modules and 'pxr' not in sys.modules")
     env = {**os.environ, "PYTHONPATH": str(REPO / "mcp")}
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env)
     assert done.returncode == 0, done.stderr

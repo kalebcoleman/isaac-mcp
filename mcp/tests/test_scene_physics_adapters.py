@@ -10,7 +10,7 @@ pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
 from sim_tools import physics, runtime
 from sim_tools.physics import body_path
-from isaac_mcp.project_assets import AssetError
+from twinsmith.project_assets import AssetError
 
 
 @pytest.mark.parametrize(

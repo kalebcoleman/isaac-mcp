@@ -13,12 +13,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import install, jobs, tools
+from twinsmith.isaaclab import install, jobs, tools
 
 
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     for name in ("ISAACLAB_TASK_MODULES", "ISAACLAB_TASK_PATH", "ISAACLAB_EXTERNAL_CALLBACK"):
         monkeypatch.delenv(name, raising=False)
     jobs._active.clear()
@@ -61,7 +61,7 @@ def test_validate_accepts_good_options(tmp_path):
                    "external_callback": "g1_recovery.register.register"}
 
 
-@pytest.mark.parametrize("key", ["LD_PRELOAD", "ld_audit", "PYTHONHOME", "ISAAC_MCP_X", "ISAACLAB_PYTHON", "BASH_ENV"])
+@pytest.mark.parametrize("key", ["LD_PRELOAD", "ld_audit", "PYTHONHOME", "TWINSMITH_X", "ISAACLAB_PYTHON", "BASH_ENV"])
 def test_validate_refuses_protected_env(key):
     with pytest.raises(ValueError, match="not accepted"):
         install.validate_launch_options(env={key: "x"}, environ={})
@@ -209,7 +209,7 @@ def make_install(tmp_path):
 
 def fake_run(payload):
     fake = MagicMock(returncode=0, stdout=json.dumps(payload) + "\n", stderr="")
-    return patch("isaac_mcp.isaaclab.install.subprocess.run", return_value=fake)
+    return patch("twinsmith.isaaclab.install.subprocess.run", return_value=fake)
 
 
 def test_envs_list_hint_when_empty_or_filter_misses(tmp_path):

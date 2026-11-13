@@ -1,7 +1,7 @@
-"""Offline UR5e tool discovery: the host lists all 10 ``ur5e_dt__*`` tools with no bridge running.
+"""Offline UR5e tool discovery: the host lists all 10 ``workcell__*`` tools with no bridge running.
 
 A server built by ``build_server`` registers callable proxies for every tool in the packaged
-catalog (``isaac_mcp/catalogs/ur5e_dt.json``). A call dials the selected bridge and, when there
+catalog (``twinsmith/catalogs/workcell.json``). A call dials the selected bridge and, when there
 is none or it lacks the extension, answers with an actionable error. A live bridge's own
 ``list_tools`` metadata replaces the proxy; the filters, hooks, per-server isolation and the
 ``refresh_tools`` / ``use_bridge`` semantics are unchanged. Nothing here starts a simulator
@@ -28,23 +28,23 @@ from mcp.server.fastmcp import FastMCP
 from mcp.shared.memory import create_connected_server_and_client_session
 import mcp.types as types
 
-import isaac_mcp.screen as screen
-import isaac_mcp.server as gw
-from isaac_mcp import host_catalog, local_tools as lt, sim_sessions, tool_groups
-from isaac_mcp_bridge.bridge import ToolDefinition
-from isaac_mcp_bridge.schema import field_specs
+import twinsmith.screen as screen
+import twinsmith.server as gw
+from twinsmith import host_catalog, local_tools as lt, sim_sessions, tool_groups
+from twinsmith_bridge.bridge import ToolDefinition
+from twinsmith_bridge.schema import field_specs
 from bridge_testing import LiveBridge
-from test_twin_shared_bridge import OWNER, attach, twin_registry
+from test_workcell_shared_bridge import OWNER, attach, workcell_registry
 
 ROOT = Path(__file__).resolve().parents[2]
 _spec = importlib.util.spec_from_file_location("gen_host_catalog", ROOT / "scripts" / "gen_host_catalog.py")
 generator = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(generator)
 
-PROXIES = {gw._mcp_name(canonical): canonical for canonical in host_catalog.catalog_tool_names() if canonical.startswith("ur5e_dt.")}
-STATUS = "ur5e_dt__workcell_status"
+PROXIES = {gw._mcp_name(canonical): canonical for canonical in host_catalog.catalog_tool_names() if canonical.startswith("workcell.")}
+STATUS = "workcell__workcell_status"
 # Registered host proxies: each catalogued member plus the grouped tools that list them.
-REGISTERED = len(PROXIES) + sum(name.startswith("ur5e_dt__") for name in tool_groups.GROUPS)
+REGISTERED = len(PROXIES) + sum(name.startswith("workcell__") for name in tool_groups.GROUPS)
 
 
 @pytest.fixture(autouse=True)
@@ -59,9 +59,9 @@ def isolated(monkeypatch, tmp_path):
     # This regression module exercises the existing UR5e-only bridge/catalog surface.
     # The full multi-catalog surface is covered in test_scene_gateway.py.
     full_catalog = host_catalog.load_catalog()
-    monkeypatch.setattr(host_catalog, "load_catalog", lambda: __import__("copy").deepcopy({k:v for k,v in full_catalog.items() if k.startswith("ur5e_dt.")}))
-    for var in ("ISAAC_MCP_NAMESPACE", "ISAAC_MCP_BUILTINS", "ISAAC_MCP_PORT", "UR5E_DT_PORT",
-                "ISAAC_MCP_HOST", "ISAAC_MCP_TOOLSETS"):
+    monkeypatch.setattr(host_catalog, "load_catalog", lambda: __import__("copy").deepcopy({k:v for k,v in full_catalog.items() if k.startswith("workcell.")}))
+    for var in ("TWINSMITH_PORT",
+                "TWINSMITH_HOST", "TWINSMITH_TOOLSETS"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(screen, "SHOT_DIR", tmp_path / "shots")
     monkeypatch.setattr(screen, "VIDEO_DIR", tmp_path / "videos")
@@ -72,7 +72,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(subprocess, "Popen", no_spawn)
 
 
-class Twin:
+class Cell:
     """Every tool answers with its own name and the arguments it received."""
 
     def __getattr__(self, name):
@@ -81,17 +81,17 @@ class Twin:
         raise AttributeError(name)
 
 
-def attach_twin(live, registry=None):
-    attach(live.bridge, registry or twin_registry(), Twin(), ToolDefinition, requested_port=live.port)
+def attach_workcell(live, registry=None):
+    attach(live.bridge, registry or workcell_registry(), Cell(), ToolDefinition, requested_port=live.port)
 
 
 # These tests start fake bridges. A real managed simulator on the machine (its session record under the user's data folder)
 # made refresh_tools add "a managed simulator is also running" and fail them, so every server looks in an empty folder.
-_NO_REAL_SESSIONS = {"ISAAC_MCP_SIM_SESSIONS_DIR": tempfile.mkdtemp(prefix="isaac-mcp-no-sessions-")}
+_NO_REAL_SESSIONS = {"TWINSMITH_SIM_SESSIONS_DIR": tempfile.mkdtemp(prefix="twinsmith-no-sessions-")}
 
 
 def build(env=None):
-    return gw.build_server({"ISAAC_MCP_TOOLSETS": "all", **_NO_REAL_SESSIONS, **({} if env is None else env)})
+    return gw.build_server({"TWINSMITH_TOOLSETS": "all", **_NO_REAL_SESSIONS, **({} if env is None else env)})
 
 
 def session(server, notes=None):
@@ -127,8 +127,8 @@ def enum_of(prop):
     return prop.get("enum") or next(o["enum"] for o in prop.get("anyOf", []) if "enum" in o)
 
 
-def live_twin_tools(server):
-    return [name for name in gw.registered_tools(server) if name.startswith("ur5e_dt.")]
+def live_workcell_tools(server):
+    return [name for name in gw.registered_tools(server) if name.startswith("workcell.")]
 
 
 # ---- the snapshot ----------------------------------------------------------------------
@@ -136,37 +136,37 @@ def live_twin_tools(server):
 def test_the_snapshot_is_packaged_valid_and_complete():
     assert len(PROXIES) == 10
     catalog = host_catalog.load_catalog()
-    assert len(catalog) == 10 and all(name.startswith("ur5e_dt.") for name in catalog)
+    assert len(catalog) == 10 and all(name.startswith("workcell.") for name in catalog)
     assert {meta["owner_id"] for meta in catalog.values()} == {OWNER}
     # It is data inside the package, read through importlib.resources (what a wheel ships).
     from importlib import resources
-    assert resources.files("isaac_mcp").joinpath("catalogs/ur5e_dt.json").is_file()
+    assert resources.files("twinsmith").joinpath("catalogs/workcell.json").is_file()
     # A caller cannot corrupt the cache.
-    catalog["ur5e_dt.workcell_status"]["description"] = "tampered"
-    assert host_catalog.load_catalog()["ur5e_dt.workcell_status"]["description"] != "tampered"
+    catalog["workcell.workcell_status"]["description"] = "tampered"
+    assert host_catalog.load_catalog()["workcell.workcell_status"]["description"] != "tampered"
 
 
 def test_the_snapshot_matches_the_extension_registry_exactly():
     """Drift guard: a registry edit without a regenerated snapshot fails here."""
-    registry = twin_registry()
+    registry = workcell_registry()
     assert len(registry) == 10
-    expected = {f"ur5e_dt.{name}": {
+    expected = {f"workcell.{name}": {
         "description": schema["description"],
         "parameters": schema.get("parameters", {}),
         "fields": field_specs(schema.get("parameters", {})),
-        "namespace": "ur5e_dt", "owner_id": OWNER} for name, schema in registry.items()}
+        "namespace": "workcell", "owner_id": OWNER} for name, schema in registry.items()}
     assert host_catalog.load_catalog() == expected
     assert list(host_catalog.load_catalog()) == list(expected)          # declaration order too
     # The committed bytes are what the generator writes, and its --check agrees.
-    path = ROOT / "mcp/isaac_mcp/catalogs/ur5e_dt.json"
+    path = ROOT / "mcp/twinsmith/catalogs/workcell.json"
     assert path.read_text(encoding="utf-8") == generator.render(generator.build_ur5e_catalog())
     assert generator.main(["--check"]) == 0
 
 
 def test_the_generator_check_fails_on_drift(tmp_path, capsys):
-    stale = tmp_path / "ur5e_dt.json"
+    stale = tmp_path / "workcell.json"
     document = generator.build_ur5e_catalog()
-    document["tools"]["ur5e_dt.workcell_status"]["description"] = "an old description"
+    document["tools"]["workcell.workcell_status"]["description"] = "an old description"
     stale.write_text(generator.render(document), encoding="utf-8")
     assert generator.main(["--check", "--output", str(stale)]) == 1
     assert "stale" in capsys.readouterr().err
@@ -176,10 +176,10 @@ def test_the_generator_check_fails_on_drift(tmp_path, capsys):
 
 @pytest.mark.parametrize("mutate, message", [
     (lambda d: d.update(version=99), "version"),
-    (lambda d: d["tools"]["ur5e_dt.workcell_status"].update(namespace="other"), "namespace"),
-    (lambda d: d["tools"]["ur5e_dt.jenga_build"]["fields"][0].update(kind="blob"), "malformed"),
-    (lambda d: d["tools"]["ur5e_dt.jenga_build"]["fields"][0].update(name="renamed"), "do not match"),
-    (lambda d: d["tools"].update({"elsewhere.tool": d["tools"]["ur5e_dt.workcell_status"]}), "namespace"),
+    (lambda d: d["tools"]["workcell.workcell_status"].update(namespace="other"), "namespace"),
+    (lambda d: d["tools"]["workcell.jenga_build"]["fields"][0].update(kind="blob"), "malformed"),
+    (lambda d: d["tools"]["workcell.jenga_build"]["fields"][0].update(name="renamed"), "do not match"),
+    (lambda d: d["tools"].update({"elsewhere.tool": d["tools"]["workcell.workcell_status"]}), "namespace"),
 ])
 def test_a_malformed_catalog_is_refused_loudly(monkeypatch, tmp_path, mutate, message):
     document = generator.build_ur5e_catalog()
@@ -213,8 +213,8 @@ def test_a_missing_catalog_is_an_error_not_an_empty_one(monkeypatch, tmp_path):
 def test_every_tool_is_listed_with_no_bridge_and_matches_the_registry_schema():
     server = build()
     (listed,) = run(server, tools)
-    assert {name for name in listed if name.startswith("ur5e_dt__")} == set(PROXIES)
-    registry = twin_registry()
+    assert {name for name in listed if name.startswith("workcell__")} == set(PROXIES)
+    registry = workcell_registry()
     for name, canonical in PROXIES.items():
         short = canonical.split(".", 1)[1]
         fields = field_specs(registry[short].get("parameters", {}))
@@ -229,9 +229,9 @@ def test_every_tool_is_listed_with_no_bridge_and_matches_the_registry_schema():
             if f["kind"] == "enum":
                 assert enum_of(properties[f["name"]]) == f["enum"], (name, f["name"])
     assert listed[STATUS].inputSchema.get("properties", {}) == {}
-    assert set(listed["ur5e_dt__jenga_build"].inputSchema["properties"]) == {"profile", "seed"}
+    assert set(listed["workcell__jenga_build"].inputSchema["properties"]) == {"profile", "seed"}
     assert gw.offline_tools(server) == sorted(PROXIES.values())
-    assert live_twin_tools(server) == []              # the roster of live bridge tools stays empty
+    assert live_workcell_tools(server) == []              # the roster of live bridge tools stays empty
 
 
 def test_the_default_server_excludes_workcell():
@@ -244,8 +244,8 @@ def test_offline_tools_defaults_to_the_default_server_and_tracks_its_live_bridge
     monkeypatch.setattr(gw, "mcp", default)
     assert gw.offline_tools() == gw.offline_tools(None) == sorted(PROXIES.values())
     with LiveBridge() as live:
-        attach_twin(live)
-        monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
+        attach_workcell(live)
+        monkeypatch.setenv("TWINSMITH_PORT", str(live.port))
         gw.discover_and_register_tools(default)
         assert gw.offline_tools() == []
         assert gw.offline_tools(other) == sorted(PROXIES.values())
@@ -259,14 +259,14 @@ def test_a_client_that_never_refreshes_still_sees_them_after_a_failed_startup_di
 
 @pytest.mark.parametrize("groups", ["all", "minimal,+workcell", "default,+workcell"])
 def test_local_tool_groups_filter_only_local_tools(groups):
-    server = build({"ISAAC_MCP_TOOLSETS": groups})
+    server = build({"TWINSMITH_TOOLSETS": groups})
     assert set(PROXIES) <= set(server._tool_manager._tools)
-    assert all(__import__("isaac_mcp.toolsets", fromlist=["owner"]).owner(name) in gw._state_for(server).toolsets for name in server._tool_manager._tools)
+    assert all(__import__("twinsmith.toolsets", fromlist=["owner"]).owner(name) in gw._state_for(server).toolsets for name in server._tool_manager._tools)
 
 
 def test_every_offline_proxy_answers_with_an_actionable_error_and_starts_nothing():
     server = build()
-    registry = twin_registry()
+    registry = workcell_registry()
     values = {"boolean": True, "integer": 1, "number": 1.0, "array": [], "object": {}, "string": "x"}
 
     def args(canonical):
@@ -296,13 +296,13 @@ def test_a_failure_after_connecting_is_not_reported_as_not_run(monkeypatch):
 
         server = build()
         gw._state_for(server).client = Dies()
-        answer = gw._tool_implementation("ur5e_dt.workcell_status", {}, gw._state_for(server))
+        answer = gw._tool_implementation("workcell.workcell_status", {}, gw._state_for(server))
         assert answer == f"Error: {error}", answer
 
 
 
 def test_several_bridges_and_no_choice_points_at_use_bridge(monkeypatch, tmp_path):
-    import isaac_mcp.client as client_module
+    import twinsmith.client as client_module
     monkeypatch.setattr(client_module, "discover_bridges", lambda: [
         {"pid": 1, "port": 8001, "app": "a"}, {"pid": 2, "port": 8002, "app": "b"}])
     (answer,) = run(build(), call(STATUS))
@@ -314,11 +314,11 @@ def test_several_bridges_and_no_choice_points_at_use_bridge(monkeypatch, tmp_pat
 def test_a_proxy_call_reaches_a_bridge_that_appeared_after_startup(monkeypatch):
     server = build()
     with LiveBridge() as live:
-        attach_twin(live)
-        monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
+        attach_workcell(live)
+        monkeypatch.setenv("TWINSMITH_PORT", str(live.port))
         play, assembled = run(
             server, call(STATUS),                                   # no refresh_tools first
-            call("ur5e_dt__jenga_build", {"profile": "lab_unconfirmed", "seed": 42}))
+            call("workcell__jenga_build", {"profile": "lab_unconfirmed", "seed": 42}))
     assert json.loads(play) == {"handler": "workcell_status", "args": {}}
     assert json.loads(assembled) == {"handler": "jenga_build", "args": {"profile": "lab_unconfirmed", "seed": 42}}
 
@@ -327,56 +327,56 @@ def test_refresh_makes_the_tools_live_without_telling_the_client_nothing_changed
     server = build()
     notes = []
     with LiveBridge() as live:
-        attach_twin(live)
-        monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
+        attach_workcell(live)
+        monkeypatch.setenv("TWINSMITH_PORT", str(live.port))
         before, refreshed, after, again = run(
             server, tools, call("refresh_tools"), tools, call("refresh_tools"), notes=notes)
     assert "No new or changed tools" in refreshed and "Note:" not in refreshed
     assert not notes                                     # the listing a client has did not change
     assert set(PROXIES) <= set(before) and {k: v.inputSchema for k, v in before.items() if k in PROXIES} == {
         k: v.inputSchema for k, v in after.items() if k in PROXIES}
-    assert live_twin_tools(server) == sorted(PROXIES.values())     # now live, not proxies
+    assert live_workcell_tools(server) == sorted(PROXIES.values())     # now live, not proxies
     assert gw.offline_tools(server) == []
     assert "No new or changed tools" in again
 
 
 def test_the_live_bridges_metadata_is_authoritative(monkeypatch):
     server = build()
-    registry = twin_registry()
+    registry = workcell_registry()
     registry["workcell_status"] = {"description": "LIVE play", "parameters": {
         "speed": {"type": "number", "required": True}}}
     registry["brand_new"] = {"description": "only on this bridge", "parameters": {}}
     with LiveBridge() as live:
-        attach_twin(live, registry)
-        monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
+        attach_workcell(live, registry)
+        monkeypatch.setenv("TWINSMITH_PORT", str(live.port))
         changed = gw.discover_and_register_tools(server)
         notes = []
         listed, played = run(server, tools, call(STATUS, {"speed": 2.5}), notes=notes)
         refreshed, = run(server, call("refresh_tools"))
-    assert "ur5e_dt.workcell_status (updated)" in changed and "ur5e_dt.brand_new" in changed
-    assert sorted(c for c in changed if c.startswith("ur5e_dt.")) == [   # the other 22 are unchanged
-        "ur5e_dt.brand_new", "ur5e_dt.workcell_status (updated)"]
+    assert "workcell.workcell_status (updated)" in changed and "workcell.brand_new" in changed
+    assert sorted(c for c in changed if c.startswith("workcell.")) == [   # the other 22 are unchanged
+        "workcell.brand_new", "workcell.workcell_status (updated)"]
     assert "No new or changed tools" in refreshed
     assert listed[STATUS].description == "LIVE play"
     assert listed[STATUS].inputSchema["required"] == ["speed"]
-    assert "ur5e_dt__brand_new" in listed
+    assert "workcell__brand_new" in listed
     assert json.loads(played)["args"] == {"speed": 2.5}
 
 
 def test_a_bridge_that_drops_the_extension_reverts_tools_to_their_proxies(monkeypatch):
     server = build()
     with LiveBridge() as live:
-        attach_twin(live, {**twin_registry(), "workcell_status": {"description": "LIVE", "parameters": {}},
+        attach_workcell(live, {**workcell_registry(), "workcell_status": {"description": "LIVE", "parameters": {}},
                            "brand_new": {"description": "extra", "parameters": {}}})
-        monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
+        monkeypatch.setenv("TWINSMITH_PORT", str(live.port))
         gw.discover_and_register_tools(server)
-        assert gw.offline_tools(server) == [] and "ur5e_dt.brand_new" in live_twin_tools(server)
-        live.bridge.unregister_owner(OWNER)               # the twin extension is unloaded
+        assert gw.offline_tools(server) == [] and "workcell.brand_new" in live_workcell_tools(server)
+        live.bridge.unregister_owner(OWNER)               # the work cell extension is unloaded
         changed = gw.discover_and_register_tools(server)
         listed, answer = run(server, tools, call(STATUS))
-    assert sorted(changed) == ["ur5e_dt.brand_new (removed)", "ur5e_dt.workcell_status (offline)"]
-    assert listed[STATUS].description == twin_registry()["workcell_status"]["description"]
-    assert set(PROXIES) <= set(listed) and "ur5e_dt__brand_new" not in listed
+    assert sorted(changed) == ["workcell.brand_new (removed)", "workcell.workcell_status (offline)"]
+    assert listed[STATUS].description == workcell_registry()["workcell_status"]["description"]
+    assert set(PROXIES) <= set(listed) and "workcell__brand_new" not in listed
     assert gw.offline_tools(server) == sorted(PROXIES.values())
     assert "did not register it" in answer and "extension" in answer
 
@@ -386,8 +386,8 @@ def test_a_bridge_that_drops_the_extension_reverts_tools_to_their_proxies(monkey
 def test_calls_after_the_bridge_stops_say_so(monkeypatch):
     server = build()
     with LiveBridge() as live:
-        attach_twin(live)
-        monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
+        attach_workcell(live)
+        monkeypatch.setenv("TWINSMITH_PORT", str(live.port))
         ok, = run(server, call("refresh_tools"))
         live_answer, = run(server, call(STATUS))
     assert json.loads(live_answer)["handler"] == "workcell_status"
@@ -407,7 +407,7 @@ def test_use_bridge_to_a_bridge_without_the_extension_keeps_every_proxy():
             server, call("use_bridge", {"port": other.port}), tools, call(STATUS),
             call("demo__inspect"))
     assert "switched to bridge" in switched
-    assert "Note: ur5e_dt: 10 tool(s) are listed from the packaged catalog" in switched
+    assert "Note: workcell: 10 tool(s) are listed from the packaged catalog" in switched
     assert set(PROXIES) <= set(listed) and "demo__inspect" in listed
     assert "did not register it" in play and f"port {other.port}" in play
     assert json.loads(inspect) == {"seen": True}
@@ -417,7 +417,7 @@ def test_use_bridge_to_a_bridge_without_the_extension_keeps_every_proxy():
 def test_switching_between_a_twin_bridge_and_a_plain_one_follows_the_selected_bridge():
     server = build()
     with LiveBridge() as twin, LiveBridge() as plain:
-        attach_twin(twin)
+        attach_workcell(twin)
         plain.bridge.register_owner("demo", "demo").add(ToolDefinition(
             name="inspect", description="inspect", parameters={}, handler=lambda: {}))
         notes = []
@@ -459,10 +459,10 @@ def test_use_bridge_whose_discovery_fails_still_leaves_the_proxies(monkeypatch):
 
 
 def test_servers_keep_independent_bridges_and_independent_proxies(monkeypatch):
-    monkeypatch.setenv("ISAAC_MCP_PORT", "1")           # b's own choice: nothing listens there
+    monkeypatch.setenv("TWINSMITH_PORT", "1")           # b's own choice: nothing listens there
     a, b = build(), build()
     with LiveBridge() as twin:
-        attach_twin(twin)
+        attach_workcell(twin)
         # One session: closing it drops the connection, and a server's choice lasts as long as it.
         _, on_a = run(a, call("use_bridge", {"port": twin.port}), call(STATUS))
         assert gw.offline_tools(a) == [] and gw.offline_tools(b) == sorted(PROXIES.values())
@@ -489,16 +489,16 @@ def test_bare_fastmcp_servers_do_not_grow_proxies(monkeypatch):
 # ---- filters, hooks, collisions ----------------------------------------------------------
 
 def test_toolsets_filter_proxies():
-    server = build({"ISAAC_MCP_TOOLSETS": "minimal"})
+    server = build({"TWINSMITH_TOOLSETS": "minimal"})
     assert not set(PROXIES) & set(server._tool_manager._tools)
     assert gw.offline_tools(server) == []
-    assert set(PROXIES) <= set(build({"ISAAC_MCP_TOOLSETS": "minimal,+workcell"})._tool_manager._tools)
+    assert set(PROXIES) <= set(build({"TWINSMITH_TOOLSETS": "minimal,+workcell"})._tool_manager._tools)
 
 
 def test_a_namespace_filter_that_hides_ur5e_keeps_other_tools_and_survives_switches(monkeypatch):
-    server = build({"ISAAC_MCP_TOOLSETS": "minimal,+extensions"})
+    server = build({"TWINSMITH_TOOLSETS": "minimal,+extensions"})
     with LiveBridge() as live:
-        attach_twin(live)
+        attach_workcell(live)
         live.bridge.register_owner("demo", "demo").add(ToolDefinition(
             name="inspect", description="inspect", parameters={}, handler=lambda: {"ok": 1}))
         run(server, call("use_bridge", {"port": live.port}))
@@ -529,7 +529,7 @@ def test_filter_changes_notify_for_catalog_tools(monkeypatch, action, one_live_t
         def call(self, tool, params=None, **kwargs):
             if tool == "list_tools":
                 catalog = host_catalog.load_catalog()
-                return {"tools": {"ur5e_dt.workcell_status": catalog["ur5e_dt.workcell_status"]} if one_live_tool else {}}
+                return {"tools": {"workcell.workcell_status": catalog["workcell.workcell_status"]} if one_live_tool else {}}
             return {"pid": 1, "port": self.port}
 
         def close(self):
@@ -574,7 +574,7 @@ def test_switch_to_identical_client_surface_does_not_notify(monkeypatch):
             if tool == "status":
                 return {"pid": 1, "port": self.port}
             catalog = host_catalog.load_catalog()
-            return {"tools": {"ur5e_dt.workcell_status": catalog["ur5e_dt.workcell_status"]}}
+            return {"tools": {"workcell.workcell_status": catalog["workcell.workcell_status"]}}
 
         def close(self):
             pass
@@ -623,11 +623,11 @@ def test_failed_switch_still_notifies_when_it_changes_offline_proxies(monkeypatc
 
 
 def test_the_builtins_gate_does_not_hide_catalog_tools(monkeypatch):
-    server = build({"ISAAC_MCP_TOOLSETS": "minimal,+workcell"})
+    server = build({"TWINSMITH_TOOLSETS": "minimal,+workcell"})
     assert set(PROXIES) <= set(server._tool_manager._tools)
     with LiveBridge() as live:
-        attach_twin(live)
-        monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
+        attach_workcell(live)
+        monkeypatch.setenv("TWINSMITH_PORT", str(live.port))
         refreshed, listed = run(server, call("refresh_tools"), tools)
     assert "run_python" not in listed and set(PROXIES) <= set(listed)
 
@@ -640,7 +640,7 @@ def test_a_live_tool_may_not_take_an_offline_proxys_name_under_another_canonical
 
     class Fake:
         def call(self, tool, params=None, **kw):
-            return {"tools": {"ur5e_dt__workcell_status": clash}}   # same MCP name, other canonical
+            return {"tools": {"workcell__workcell_status": clash}}   # same MCP name, other canonical
 
     state.client = Fake()
     with pytest.raises(RuntimeError, match="collides with host tool"):
@@ -672,24 +672,24 @@ def test_the_host_tool_collision_check_still_protects_local_tools(monkeypatch):
 
 
 def test_the_offline_proxies_carry_hints_from_their_own_table():
-    server = build({"ISAAC_MCP_TOOLSETS": "minimal,+workcell"})
+    server = build({"TWINSMITH_TOOLSETS": "minimal,+workcell"})
     tool = server._tool_manager._tools[STATUS]
     assert tool.annotations.readOnlyHint is True and tool.annotations.destructiveHint is False
 
 
 def test_a_tool_from_a_projects_own_extension_gets_no_hints():
-    server = build({"ISAAC_MCP_TOOLSETS": "minimal,+workcell"})
+    server = build({"TWINSMITH_TOOLSETS": "minimal,+workcell"})
     gw.register_dynamic_tool(server, "demo__ping", "demo.ping", {"description": "d", "parameters": {}, "fields": []})
     assert server._tool_manager._tools["demo__ping"].annotations is None
 
 
 def test_instructions_explain_selection_without_advertising_optional_tools():
     assert "status" in gw.SERVER_INSTRUCTIONS and "toolsets" in gw.SERVER_INSTRUCTIONS
-    assert "ur5e_dt__" not in gw.SERVER_INSTRUCTIONS
+    assert "workcell__" not in gw.SERVER_INSTRUCTIONS
 
 
 def test_the_wheel_config_ships_the_whole_package_directory():
-    """hatch's `packages = ["isaac_mcp"]` takes every file in the package, the catalog JSON
+    """hatch's `packages = ["twinsmith"]` takes every file in the package, the catalog JSON
     included (verified with `uv build`); an include/exclude rule here could silently drop it."""
     try:
         import tomllib
@@ -697,12 +697,12 @@ def test_the_wheel_config_ships_the_whole_package_directory():
         import tomli as tomllib
     with open(ROOT / "mcp/pyproject.toml", "rb") as handle:
         targets = tomllib.load(handle)["tool"]["hatch"]["build"]["targets"]
-    assert targets["wheel"]["packages"] == ["isaac_mcp"]
+    assert targets["wheel"]["packages"] == ["twinsmith"]
     for target in targets.values():
         assert not {"exclude", "only-include", "only-packages"} & set(target)
     from importlib import resources
-    packaged = resources.files("isaac_mcp").joinpath(host_catalog.CATALOG_DIR)
-    assert sorted(entry.name for entry in packaged.iterdir() if entry.name.endswith(".json")) == ["assets.json", "builtins.json", "sim.json", "ur5e_dt.json"]
+    packaged = resources.files("twinsmith").joinpath(host_catalog.CATALOG_DIR)
+    assert sorted(entry.name for entry in packaged.iterdir() if entry.name.endswith(".json")) == ["assets.json", "builtins.json", "sim.json", "workcell.json"]
 
 
 
@@ -711,17 +711,17 @@ def test_the_wheel_config_ships_the_whole_package_directory():
 def test_jenga_is_accepted_by_real_mcp_schema_and_forwarded(monkeypatch, arguments):
     """Optional variation arguments survive the real MCP schema and gateway."""
     with LiveBridge() as live:
-        attach_twin(live)
-        server = build({"ISAAC_MCP_PORT": str(live.port)})
+        attach_workcell(live)
+        server = build({"TWINSMITH_PORT": str(live.port)})
 
         async def exercise(client):
             listed = await tools(client)
-            assert set(listed["ur5e_dt__jenga_build"].inputSchema["properties"]) == {"profile", "seed"}
-            response = await client.call_tool("ur5e_dt__jenga_build", arguments)
+            assert set(listed["workcell__jenga_build"].inputSchema["properties"]) == {"profile", "seed"}
+            response = await client.call_tool("workcell__jenga_build", arguments)
             assert not response.isError, response
             data = json.loads(response.content[0].text)
             assert data == {"handler": "jenga_build", "args": arguments}
-            refused = await client.call_tool("ur5e_dt__jenga_build", {"seed": "not-an-integer"})
+            refused = await client.call_tool("workcell__jenga_build", {"seed": "not-an-integer"})
             assert refused.isError
 
         run(server, exercise)
@@ -738,8 +738,8 @@ def dead_port():
 @pytest.fixture()
 def managed(monkeypatch, tmp_path):
     """A server with sim__launch whose launches are faked as session records of a live process."""
-    env = {"ISAAC_MCP_TOOLSETS": "all,+launch",
-           "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "sessions")}
+    env = {"TWINSMITH_TOOLSETS": "all,+launch",
+           "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path / "sessions")}
 
     def write_session(port, pid=None):
         pid = os.getpid() if pid is None else pid
@@ -765,7 +765,7 @@ def managed(monkeypatch, tmp_path):
 
 def test_refresh_selects_the_launched_session_when_nothing_listens_on_the_pinned_port(managed, monkeypatch):
     pinned = dead_port()
-    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    monkeypatch.setenv("TWINSMITH_PORT", str(pinned))
     notes = []
     with LiveBridge() as live:
         launched, message, port, status = run(
@@ -782,7 +782,7 @@ def test_refresh_selects_the_launched_session_when_nothing_listens_on_the_pinned
 
 
 def test_refresh_without_wait_also_selects_a_ready_launched_session(managed, monkeypatch):
-    monkeypatch.setenv("UR5E_DT_PORT", str(dead_port()))
+    monkeypatch.setenv("TWINSMITH_PORT", str(dead_port()))
     with LiveBridge() as live:
         _, message, port = run(managed.server, managed.launch(live.port), call("refresh_tools"), managed.selected)
     assert port == live.port and "Selected the bridge" in message
@@ -790,7 +790,7 @@ def test_refresh_without_wait_also_selects_a_ready_launched_session(managed, mon
 
 def test_refresh_wait_polls_the_session_until_it_is_ready(managed, monkeypatch):
     pinned = dead_port()
-    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    monkeypatch.setenv("TWINSMITH_PORT", str(pinned))
     monkeypatch.setattr(gw, "REFRESH_POLL_S", 0.01)
     real, checks = gw._session_not_ready, []
 
@@ -807,7 +807,7 @@ def test_refresh_wait_polls_the_session_until_it_is_ready(managed, monkeypatch):
 
 def test_refresh_wait_timeout_names_the_session_port_it_polled(managed, monkeypatch):
     pinned, session_port = dead_port(), dead_port()
-    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    monkeypatch.setenv("TWINSMITH_PORT", str(pinned))
     monkeypatch.setattr(gw, "REFRESH_POLL_S", 0.01)
     monkeypatch.setattr(gw, "REFRESH_WAIT_MAX_S", 0.05)
     _, message, port = run(managed.server, managed.launch(session_port),
@@ -821,7 +821,7 @@ def test_refresh_wait_timeout_names_the_session_port_it_polled(managed, monkeypa
 def test_refresh_never_leaves_a_pinned_bridge_that_answers(managed, monkeypatch):
     monkeypatch.setattr(gw, "_session_not_ready", lambda session: pytest.fail("polled away from a live pin"))
     with LiveBridge() as pinned, LiveBridge() as launched:
-        monkeypatch.setenv("UR5E_DT_PORT", str(pinned.port))
+        monkeypatch.setenv("TWINSMITH_PORT", str(pinned.port))
         _, message, port = run(managed.server, managed.launch(launched.port),
                                call("refresh_tools", {"wait_s": 5}), managed.selected)
     assert port == pinned.port and "Selected the bridge" not in message
@@ -836,7 +836,7 @@ def test_refresh_does_not_leave_a_pinned_port_that_accepts_but_is_still_booting(
         booting.bind(("127.0.0.1", 0))
         booting.listen(8)
         pinned = booting.getsockname()[1]
-        monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+        monkeypatch.setenv("TWINSMITH_PORT", str(pinned))
         _, message, port = run(managed.server, managed.launch(launched.port),
                                call("refresh_tools"), managed.selected)
     assert port == pinned and "accepted the connection" in message and "Selected" not in message
@@ -845,7 +845,7 @@ def test_refresh_does_not_leave_a_pinned_port_that_accepts_but_is_still_booting(
 
 def test_refresh_does_not_guess_between_several_managed_sessions(managed, monkeypatch):
     pinned = dead_port()
-    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    monkeypatch.setenv("TWINSMITH_PORT", str(pinned))
     monkeypatch.setattr(gw, "_session_not_ready", lambda session: pytest.fail("guessed"))
     with LiveBridge() as first, LiveBridge() as second:
         _, _, message, port = run(managed.server, managed.launch(first.port), managed.launch(second.port),
@@ -858,7 +858,7 @@ def test_refresh_does_not_guess_between_several_managed_sessions(managed, monkey
 def test_refresh_names_but_does_not_select_a_session_this_server_did_not_launch(managed, monkeypatch):
     # The session directory is shared with other hosts and agents.
     pinned = dead_port()
-    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    monkeypatch.setenv("TWINSMITH_PORT", str(pinned))
     with LiveBridge() as foreign:
         managed.write_session(foreign.port)
         message, port = run(managed.server, call("refresh_tools", {"wait_s": 0}), managed.selected)
@@ -869,7 +869,7 @@ def test_refresh_names_but_does_not_select_a_session_this_server_did_not_launch(
 
 def test_refresh_refuses_a_session_port_answered_by_another_process(managed, monkeypatch):
     pinned = dead_port()
-    monkeypatch.setenv("UR5E_DT_PORT", str(pinned))
+    monkeypatch.setenv("TWINSMITH_PORT", str(pinned))
     managed.pid_box["pid"] = os.getppid()
     with LiveBridge() as impostor:
         _, message, port = run(managed.server, managed.launch(impostor.port),
@@ -879,9 +879,9 @@ def test_refresh_refuses_a_session_port_answered_by_another_process(managed, mon
 
 
 def test_refresh_waits_for_the_session_app_to_finish_loading(managed, monkeypatch):
-    from isaac_mcp_bridge import builtins as bridge_builtins
+    from twinsmith_bridge import builtins as bridge_builtins
 
-    monkeypatch.setenv("UR5E_DT_PORT", str(dead_port()))
+    monkeypatch.setenv("TWINSMITH_PORT", str(dead_port()))
     monkeypatch.setattr(bridge_builtins, "_app_ready", lambda: False)
 
     async def app_ready(client):
@@ -897,7 +897,7 @@ def test_refresh_waits_for_the_session_app_to_finish_loading(managed, monkeypatc
 def test_a_session_on_the_selected_port_is_waited_for_not_replaced(managed, monkeypatch):
     # The pin itself is the launched session, still starting: there is nothing to switch to.
     session_port = dead_port()
-    monkeypatch.setenv("UR5E_DT_PORT", str(session_port))
+    monkeypatch.setenv("TWINSMITH_PORT", str(session_port))
     _, message, port = run(managed.server, managed.launch(session_port), call("refresh_tools"), managed.selected)
     assert port == session_port and f"polls port {session_port} for you" in message
 
@@ -906,16 +906,16 @@ def test_a_remote_dial_host_is_not_redirected_to_a_local_session(managed, monkey
     with LiveBridge() as live:
         record = managed.write_session(live.port)
         managed.state.launched_sessions.add(record["id"])
-        monkeypatch.setenv("UR5E_DT_PORT", str(dead_port()))
+        monkeypatch.setenv("TWINSMITH_PORT", str(dead_port()))
         assert gw._followable_session(managed.state)["port"] == live.port
-        monkeypatch.setenv("ISAAC_MCP_HOST", "192.0.2.1")
+        monkeypatch.setenv("TWINSMITH_HOST", "192.0.2.1")
         assert gw._followable_session(managed.state) is None
 
 
 def test_refresh_with_no_pin_and_no_bridge_reports_it(monkeypatch, tmp_path):
     # client.port raises when discovery finds nothing; the hint must not turn that into a crash.
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    server = build({"ISAAC_MCP_TOOLSETS": "all", "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")})
+    server = build({"TWINSMITH_TOOLSETS": "all", "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path / "none")})
     (message,) = run(server, call("refresh_tools"))
     assert message.startswith("Error: no Isaac Sim bridge is reachable") and "polls for you" in message
 
@@ -929,7 +929,7 @@ def test_refresh_hint_with_no_pin_names_only_the_session_port(managed, monkeypat
 
 
 def test_use_bridge_still_switches_to_any_port_and_keeps_its_result(managed, monkeypatch):
-    monkeypatch.setenv("UR5E_DT_PORT", str(dead_port()))
+    monkeypatch.setenv("TWINSMITH_PORT", str(dead_port()))
     with LiveBridge() as live:
         message, port = run(managed.server, call("use_bridge", {"port": live.port}), managed.selected)
     assert message.startswith(f"switched to bridge on port {live.port}\n") and port == live.port
@@ -944,7 +944,7 @@ def test_launch_notes_no_longer_claim_refresh_cannot_switch(monkeypatch, tmp_pat
     (directory / "session.json").write_text(json.dumps(record))
     monkeypatch.setattr(sim_sessions.client, "call", lambda *a, **k: {"pid": os.getpid(), "app_ready": True})
     monkeypatch.setattr(sim_sessions, "_resources", lambda: {})
-    status = sim_sessions._status({"ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path)}, record["id"])
+    status = sim_sessions._status({"TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path)}, record["id"])
     assert "use_bridge(port=18766)" in status["next"] and "while that port answers" in status["next"]
 
 
@@ -992,10 +992,10 @@ def test_read_git_head_reports_nothing_rather_than_guessing(tmp_path, head):
 
 def test_find_checkout_recognizes_a_source_tree_but_not_an_installed_copy(tmp_path):
     tree = fake_checkout(tmp_path / "tree")
-    (tree / "mcp" / "isaac_mcp").mkdir(parents=True)
+    (tree / "mcp" / "twinsmith").mkdir(parents=True)
     (tree / "mcp" / "pyproject.toml").write_text("")
-    assert gw._find_checkout(str(tree / "mcp" / "isaac_mcp" / "server.py")) == tree.resolve()
-    installed = fake_checkout(tmp_path / "repo") / ".venv" / "lib" / "site-packages" / "isaac_mcp"
+    assert gw._find_checkout(str(tree / "mcp" / "twinsmith" / "server.py")) == tree.resolve()
+    installed = fake_checkout(tmp_path / "repo") / ".venv" / "lib" / "site-packages" / "twinsmith"
     installed.mkdir(parents=True)
     assert gw._find_checkout(str(installed / "server.py")) is None
 
@@ -1025,13 +1025,13 @@ def test_host_identity_of_an_installed_wheel_is_just_the_version(monkeypatch):
 
 
 def test_status_through_the_host_adds_host_and_keeps_every_bridge_field(monkeypatch, tmp_path):
-    from isaac_mcp.client import call as direct_call
+    from twinsmith.client import call as direct_call
 
     checkout = fake_checkout(tmp_path / "tree")
     monkeypatch.setattr(gw, "_HOST_CHECKOUT", checkout)
     monkeypatch.setattr(gw, "_HOST_COMMIT", COMMIT_B)   # the server started before the pull
     with LiveBridge() as live:
-        monkeypatch.setenv("ISAAC_MCP_PORT", str(live.port))
+        monkeypatch.setenv("TWINSMITH_PORT", str(live.port))
         direct = direct_call("status", port=live.port, timeout=5)
         assert "host" not in direct, "the bridge must not grow a field this would overwrite"
         answer, short = run(build(), call("status", {"detail": True}), call("status"))
@@ -1049,33 +1049,33 @@ def test_status_through_the_host_adds_host_and_keeps_every_bridge_field(monkeypa
 
 
 def test_status_with_no_bridge_still_reports_the_host(monkeypatch, tmp_path):
-    monkeypatch.setenv("UR5E_DT_PORT", str(dead_port()))
+    monkeypatch.setenv("TWINSMITH_PORT", str(dead_port()))
     checkout = fake_checkout(tmp_path / "tree")
     monkeypatch.setattr(gw, "_HOST_CHECKOUT", checkout)
     monkeypatch.setattr(gw, "_HOST_COMMIT", COMMIT_B)
-    state = gw._state_for(build({"ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")}))
+    state = gw._state_for(build({"TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path / "none")}))
     answer = json.loads(gw._dispatch("status", {}, state))
     assert answer["running"] is False and "toolsets" in answer["message"], "no bridge is an answer, not an error"
     assert answer["bridges"] == [] and "Restart the MCP connection" in answer["host"]["warning"]
-    other = gw._dispatch("ur5e_dt.workcell_status", {}, state)
+    other = gw._dispatch("workcell.workcell_status", {}, state)
     assert "MCP host:" not in other
 
 
 # ---- help text must work on a stock python3 --------------------------------------
 
 def test_bridge_listing_help_is_one_working_form(monkeypatch, tmp_path):
-    bare = "python -m isaac_mcp.client"    # fails on a python3 without the package
+    bare = "python -m twinsmith.client"    # fails on a python3 without the package
     assert bare not in gw.LIST_BRIDGES_HELP
-    assert "python3 mcp/isaac_mcp/client.py --list-bridges" in gw.LIST_BRIDGES_HELP
-    assert (ROOT / "mcp" / "isaac_mcp" / "client.py").is_file()
-    server = build({"ISAAC_MCP_TOOLSETS": "all", "ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")})
+    assert "python3 mcp/twinsmith/client.py --list-bridges" in gw.LIST_BRIDGES_HELP
+    assert (ROOT / "mcp" / "twinsmith" / "client.py").is_file()
+    server = build({"TWINSMITH_TOOLSETS": "all", "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path / "none")})
     state = gw._state_for(server)
     listed = {tool.name: tool for tool in asyncio.run(server.list_tools())}
     refused = ConnectionRefusedError("[Errno 111] Connection refused")
     full_use_bridge = json.loads(gw._tool_help(server, "use_bridge"))["use_bridge"]["description"]   # the listing is short
     assert "Find candidates with status" in listed["use_bridge"].description
     messages = [gw._BRIDGE_HELP, full_use_bridge,
-                gw._catalog_error("status", refused, state), gw._catalog_error("ur5e_dt.workcell_status", refused, state),
+                gw._catalog_error("status", refused, state), gw._catalog_error("workcell.workcell_status", refused, state),
                 gw._starting_hint(server, refused)]
     for message in messages:
         assert gw.LIST_BRIDGES_HELP in message and bare not in message
@@ -1083,9 +1083,9 @@ def test_bridge_listing_help_is_one_working_form(monkeypatch, tmp_path):
     reference_spec = importlib.util.spec_from_file_location("gen_tool_reference", ROOT / "scripts" / "gen_tool_reference.py")
     reference = importlib.util.module_from_spec(reference_spec)
     reference_spec.loader.exec_module(reference)
-    summary = reference.local_tools(ROOT / "mcp" / "isaac_mcp" / "server.py")["use_bridge"][0]
+    summary = reference.local_tools(ROOT / "mcp" / "twinsmith" / "server.py")["use_bridge"][0]
     assert summary and listed["use_bridge"].description.startswith(summary)
-    source = (ROOT / "mcp" / "isaac_mcp" / "server.py").read_text()
+    source = (ROOT / "mcp" / "twinsmith" / "server.py").read_text()
     assert source.count("--list-bridges`") == 2, "the two forms live only in LIST_BRIDGES_HELP"
     monkeypatch.setattr(gw, "discover_and_register_tools",
                         lambda s: (_ for _ in ()).throw(RuntimeError("multiple bridges running (a, b)")))

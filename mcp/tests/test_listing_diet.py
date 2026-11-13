@@ -5,11 +5,11 @@ import json
 
 import pytest
 
-from isaac_mcp import grouped_tools, server, tool_groups
+from twinsmith import grouped_tools, server, tool_groups
 
 
 def listing(selection="all"):
-    instance = server.build_server({"ISAAC_MCP_TOOLSETS": selection})
+    instance = server.build_server({"TWINSMITH_TOOLSETS": selection})
     state = server._state_for(instance)
     state.get_client = lambda: (_ for _ in ()).throw(ConnectionRefusedError("Connection refused"))
     return instance, asyncio.run(instance.list_tools())
@@ -43,7 +43,7 @@ def test_clip_never_cuts_a_word_or_leaves_a_bracket_open(text):
 
 
 def test_shortened_description_keeps_the_warning_and_names_where_the_rest_is():
-    hint = ' Full text: isaac_help(tool="x").'
+    hint = ' Full text: help(tool="x").'
     text = ("Does a harmless thing with a long account of how. " + "Filler sentence number one is here to add length. " * 8
             + "WARNING: executes arbitrary code with your rights. " + "More filler follows after that. " * 4)
     short, lost = grouped_tools.shorten_description(text, hint, 400)
@@ -91,10 +91,10 @@ def test_help_returns_the_members_text_as_written(everything):
     assert any(len(spec.get("description", "")) > 120 for spec in answer["create"]["arguments"].values())
 
 
-def test_isaac_help_tool_returns_the_full_text_of_a_shortened_tool(everything):
+def test_help_tool_returns_the_full_text_of_a_shortened_tool(everything):
     instance, tools = everything
     run_script = next(t for t in tools if t.name == "run_script")
-    assert "executes arbitrary code" in run_script.description and 'isaac_help(tool="run_script")' in run_script.description
+    assert "executes arbitrary code" in run_script.description and 'help(tool="run_script")' in run_script.description
     full = json.loads(server._tool_help(instance, "run_script"))["run_script"]
     assert len(full["description"]) > len(run_script.description) and "no Isaac Lab" in full["description"]
     assert full["arguments"]["uses_gpu"]["description"].startswith("true: the script uses the GPU")
@@ -103,7 +103,7 @@ def test_isaac_help_tool_returns_the_full_text_of_a_shortened_tool(everything):
     assert "No listed tool is called" in server._tool_help(instance, "nonsense")
     member = json.loads(server._tool_help(instance, "sim__prim__create"))["sim__prim__create"]
     assert member["description"] == tool_groups.listed_form(instance._tool_manager._tools["sim__prim__create"].description)
-    via_tool = instance._tool_manager._tools["isaac_help"].fn(tool="run_script")
+    via_tool = instance._tool_manager._tools["help"].fn(tool="run_script")
     assert json.loads(via_tool)["run_script"]["description"] == full["description"]
 
 
@@ -121,4 +121,4 @@ def test_warnings_survive_the_diet(everything):
 def test_a_tool_that_lost_nothing_has_no_hint(everything):
     _, tools = everything
     reload = next(t for t in tools if t.name == "reload_tools")
-    assert "isaac_help(tool=" not in reload.description
+    assert "help(tool=" not in reload.description

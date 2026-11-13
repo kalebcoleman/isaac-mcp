@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from isaac_mcp.isaaclab import jobs
+from twinsmith.isaaclab import jobs
 
 REAL_PROBE = jobs._probe_kit_bridges
 
@@ -45,7 +45,7 @@ def make_fake_python(tmp_path: Path) -> Path:
 @pytest.fixture(autouse=True)
 def isolated_jobs(tmp_path, monkeypatch):
     jd = tmp_path / "jobs"
-    monkeypatch.setenv("ISAACLAB_JOBS_DIR", str(jd))
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(jd))
     jobs._active.clear()
     yield
     jobs._active.clear()
@@ -94,7 +94,7 @@ def live_job():
 
 def test_probe_listening_socket(monkeypatch):
     monkeypatch.setattr(jobs, "_probe_kit_bridges", REAL_PROBE)
-    from isaac_mcp import client
+    from twinsmith import client
 
     monkeypatch.setattr(client, "discover_bridges", lambda: [])
 
@@ -103,8 +103,7 @@ def test_probe_listening_socket(monkeypatch):
     sock.listen(1)
     try:
         port = sock.getsockname()[1]
-        monkeypatch.setenv("UR5E_DT_PORT", str(port))
-        monkeypatch.delenv("ISAAC_MCP_PORT", raising=False)
+        monkeypatch.setenv("TWINSMITH_PORT", str(port))
         bridges = jobs._probe_kit_bridges()
         assert bridges == [{"host": "127.0.0.1", "port": port}]
     finally:
@@ -113,17 +112,16 @@ def test_probe_listening_socket(monkeypatch):
 
 def test_probe_env_port_zero(monkeypatch):
     monkeypatch.setattr(jobs, "_probe_kit_bridges", REAL_PROBE)
-    from isaac_mcp import client
+    from twinsmith import client
 
     monkeypatch.setattr(client, "discover_bridges", lambda: [])
-    monkeypatch.setenv("UR5E_DT_PORT", "0")
-    monkeypatch.delenv("ISAAC_MCP_PORT", raising=False)
+    monkeypatch.setenv("TWINSMITH_PORT", "0")
     assert jobs._probe_kit_bridges() == []
 
 
 def test_probe_closed_port(monkeypatch):
     monkeypatch.setattr(jobs, "_probe_kit_bridges", REAL_PROBE)
-    from isaac_mcp import client
+    from twinsmith import client
 
     monkeypatch.setattr(client, "discover_bridges", lambda: [])
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -131,14 +129,13 @@ def test_probe_closed_port(monkeypatch):
     port = sock.getsockname()[1]
     sock.close()
 
-    monkeypatch.setenv("UR5E_DT_PORT", str(port))
-    monkeypatch.delenv("ISAAC_MCP_PORT", raising=False)
+    monkeypatch.setenv("TWINSMITH_PORT", str(port))
     assert jobs._probe_kit_bridges() == []
 
 
 def test_probe_discover_bridges(monkeypatch):
     monkeypatch.setattr(jobs, "_probe_kit_bridges", REAL_PROBE)
-    from isaac_mcp import client
+    from twinsmith import client
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("127.0.0.1", 0))
@@ -147,8 +144,7 @@ def test_probe_discover_bridges(monkeypatch):
         port = sock.getsockname()[1]
         discovered = [{"pid": 1, "port": port, "host": "127.0.0.1"}]
         monkeypatch.setattr(client, "discover_bridges", lambda: discovered)
-        monkeypatch.setenv("UR5E_DT_PORT", "0")
-        monkeypatch.delenv("ISAAC_MCP_PORT", raising=False)
+        monkeypatch.setenv("TWINSMITH_PORT", "0")
         bridges = jobs._probe_kit_bridges()
         assert bridges == [{"host": "127.0.0.1", "port": port}]
     finally:
@@ -314,10 +310,10 @@ def test_order_concurrency_guard_runs_before_kit_guard(tmp_path, monkeypatch):
 
 
 def test_loopback_aliases_are_listed_once(monkeypatch):
-    from isaac_mcp import client
+    from twinsmith import client
 
     monkeypatch.setattr(client, "discover_bridges", lambda *a, **k: [{"host": "127.0.0.1", "port": 8766}])
-    monkeypatch.setenv(client.TWIN_PORT_ENV, "8766")
+    monkeypatch.setenv(client.PORT_ENV, "8766")
     monkeypatch.setenv(client.HOST_ENV, "localhost")
     import socket
 

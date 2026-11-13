@@ -1,6 +1,6 @@
 # Host and bridge tools
 
-The host `isaac-mcp` process speaks MCP to the client. It provides the gateway and desktop tools below even when Kit is
+The host `twinsmith` process speaks MCP to the client. It provides the gateway and desktop tools below even when Kit is
 disconnected. The bridge built-ins (`status`, `run_python`, the file tools, job control) are listed from packaged schemas.
 This page holds what the generated [tool arguments](TOOLS-ARGUMENTS.md) cannot: behaviour, contracts, limits and worked
 sequences. Which tools exist for a toolset is in [toolsets](TOOLSETS.md); settings are in
@@ -12,15 +12,15 @@ objects are not shell commands or complete MCP protocol messages.
 ## Connect and discover
 
 Start a compatible Kit application with its bridge enabled; `./run.sh --headless` starts the bridge on port 8766 by default.
-The host chooses an explicit port first, then `UR5E_DT_PORT`, then `ISAAC_MCP_PORT`; otherwise it discovers an unambiguous
+The host chooses an explicit port first, then `TWINSMITH_PORT`; otherwise it discovers an unambiguous
 advertised bridge. Discovery can fail if there are no live bridges or several candidates. The host and the Kit app are separate
 processes: the screen tools work while the bridge is unavailable.
 
-**`isaac_help`** (`core`) names the tools to load and call for what you want to do, ranked by how many of the task's words a
+**`help`** (`core`) names the tools to load and call for what you want to do, ranked by how many of the task's words a
 topic uses. When nothing matches it says no tool is known to fit, gives the `run_python` pattern (one background call that runs
-the whole loop), and appends the question to `help-gaps.jsonl` in the server's log folder (`ISAAC_MCP_LOG_DIR`); `no_fit=true`
+the whole loop), and appends the question to `help-gaps.jsonl` in the server's log folder (`TWINSMITH_LOG_DIR`); `no_fit=true`
 does the same for a task whose named tools did not fit. The file stays on this machine, is capped at 1 MiB, and
-`ISAAC_MCP_LOG=0` turns it off. It reads nothing from the simulator and works with no bridge. It names the toolset when the tool
+`TWINSMITH_LOG=0` turns it off. It reads nothing from the simulator and works with no bridge. It names the toolset when the tool
 for a task is off.
 
 **`refresh_tools`** rediscovers the selected bridge's registry after a bridge starts or a module changes.
@@ -31,7 +31,7 @@ for a task is off.
 - It adds or updates visible tools and removes tools no longer advertised; catalogue-listed tools stay visible as proxies. A
   failed or malformed discovery, or a name collision, leaves the existing list intact.
 - The host advertises `tools.listChanged` and sends `notifications/tools/list_changed` after a refresh that changed the list. A
-  client that ignores the notification still needs a reconnect (or `python3 mcp/isaac_mcp/client.py list_tools`).
+  client that ignores the notification still needs a reconnect (or `python3 mcp/twinsmith/client.py list_tools`).
 - With no bridge, or a bridge whose `list_tools` times out, the error says Kit is probably still starting and names any managed
   session with its age. With `wait_s` above 0 (clamped to 180) it polls every 3 s until the bridge answers. When another bridge
   is advertised, the error lists each one's port, PID and app with the `use_bridge` call and does not suggest waiting; an explicit
@@ -46,9 +46,9 @@ toolsets, even with no bridge. Uncatalogued extension tools appear after discove
 advertised bridges without an MCP connection:
 
 ```bash
-python3 mcp/isaac_mcp/client.py --list-bridges
-python3 mcp/isaac_mcp/client.py status --port 8766
-python3 mcp/isaac_mcp/client.py list_tools --port 8766
+python3 mcp/twinsmith/client.py --list-bridges
+python3 mcp/twinsmith/client.py status --port 8766
+python3 mcp/twinsmith/client.py list_tools --port 8766
 ```
 
 The command-line client uses canonical bridge names with dots (`sim.stage.info`); the MCP server exposes them with double
@@ -71,7 +71,7 @@ grouped tool with its actions, by toolset.
 ## Desktop and window tools
 
 These tools use the host's X11 display (`DISPLAY`, default `:0`) and do not require a Kit bridge. Their behaviour depends on an
-accessible graphical session. Screenshots are saved under `~/Pictures/screen-mcp/` and recordings under `~/Videos/screen-mcp/` on
+accessible graphical session. Screenshots are saved under `~/Pictures/twinsmith/` and recordings under `~/Videos/twinsmith/` on
 the **host server** machine. Mouse and keyboard tools need the separate opt-in below.
 
 - X11 reuses window IDs after a window closes. On a shared desktop, call `windows(action="list")` again right before a
@@ -97,7 +97,7 @@ the **host server** machine. Mouse and keyboard tools need the separate opt-in b
 These tools (`window_input`, toolset `input`) use the existing `python-xlib` dependency and the X11 XTEST extension; no `xdotool`
 is needed. They work on the host's shared X11 desktop; native Wayland and headless sessions are not supported. They do not
 require a bridge and can operate windows other than Isaac Sim and Isaac Lab, so enable them only for a client you trust. They are
-off even when `ISAAC_MCP_TOOLSETS=all`. Window activation requires a window manager that implements `_NET_ACTIVE_WINDOW`.
+off even when `TWINSMITH_TOOLSETS=all`. Window activation requires a window manager that implements `_NET_ACTIVE_WINDOW`.
 
 Every input call also requires integer `window_id` and `expected_pid`, taken from a fresh `windows(action="list")` result.
 Identify the actual client window, not an unrelated frame or dialog; some desktops list both.
@@ -143,7 +143,7 @@ did not start it. `physics_backend="newton"` refuses before starting anything wh
 adapter, such as 5.1; a launch never falls back to another engine.
 
 **Choosing the port and ROS domain.** With no `port` or `ros_domain`, the launch takes the first value that is free, unclaimed by
-another launch and not advertised by a live bridge: inside `ISAAC_MCP_PORT_RANGE` and `ISAAC_MCP_ROS_DOMAIN_RANGE` when they are
+another launch and not advertised by a live bridge: inside `TWINSMITH_PORT_RANGE` and `TWINSMITH_ROS_DOMAIN_RANGE` when they are
 set; otherwise from the configured port (else 8766) over the next 64 ports, and from this server's `ROS_DOMAIN_ID` (else 0) up to
 231. The result's `port` and `ros_domain` are the chosen values and `auto_selected` names the ones chosen for you. A stated value
 outside its range is refused as `PORT_OUT_OF_RANGE` or `ROS_DOMAIN_OUT_OF_RANGE`, naming the range. A refused port or domain
@@ -151,8 +151,8 @@ message suggests a free one, or `allow_shared_domain=true`. Managed launches acc
 DDS profile's participant-index range, domain 232 would make discovery probe beyond UDP port 65535. Use different ROS domains for
 isolated simulations; other ROS nodes must use the matching domain to communicate with a simulator.
 
-**Claims.** Each launch claims its port and ROS domain in the bridge runtime folder (`$XDG_RUNTIME_DIR/isaac-mcp`, else
-`/tmp/isaac-mcp-<uid>`): one file per value, created exclusively and holding the claiming host's PID, start time and boot ID. A
+**Claims.** Each launch claims its port and ROS domain in the bridge runtime folder (`$XDG_RUNTIME_DIR/twinsmith`, else
+`/tmp/twinsmith-<uid>`): one file per value, created exclusively and holding the claiming host's PID, start time and boot ID. A
 second launch is refused while that claim is live, including one from another host process with a different sessions directory. A
 claim whose owner has died is removed. Claims are released when the launch returns or fails; from then on the bridge's portfile and
 process environment make its port, PID and ROS domain visible to later launches. The folder must belong to you and not be writable
@@ -162,14 +162,14 @@ by group or others, and a symlink planted at a claim path is refused. A program 
 Kit readiness (for example an older bridge); verify the application before using scene tools. An unavailable bridge reports
 `starting_or_unresponsive`. Restart a session started with an older version so it receives the session identity.
 
-**Environment.** A launched simulator inherits this server's environment, so `ISAAC_MCP_ASSET_ROOT` and `DISPLAY` come from the
-`env` of your MCP client's server entry, not from a shell you opened later. The launch removes `PYTHONPATH` and `UR5E_DT_HEADLESS`,
-sets its own port, bind address, ROS domain, backend and output folder, and passes `ISAAC_MCP_PYTHON`, `UR5E_DT_PYTHON` and
-`ISAAC_MCP_WORKSPACE` only from the server's own settings. The operator's settings for ranges, instance count and free-memory
+**Environment.** A launched simulator inherits this server's environment, so `TWINSMITH_ASSET_ROOT` and `DISPLAY` come from the
+`env` of your MCP client's server entry, not from a shell you opened later. The launch removes `PYTHONPATH` and `TWINSMITH_HEADLESS`,
+sets its own port, bind address, ROS domain, backend and output folder, and passes `TWINSMITH_SIM_PYTHON` and
+`TWINSMITH_WORKSPACE` only from the server's own settings. The operator's settings for ranges, instance count and free-memory
 thresholds are in [ENVIRONMENT.md](ENVIRONMENT.md#managed-simulator-sessions-launch-toolset).
 
 **Limits of the resource checks.** The instance count includes advertised local bridges, managed sessions still starting, and
-running jobs in `ISAACLAB_JOBS_DIR`; processes outside those sources may not be counted. Port availability and ROS domains of known
+running jobs in `TWINSMITH_JOBS_DIR`; processes outside those sources may not be counted. Port availability and ROS domains of known
 processes are checked, but other unadvertised ROS nodes may share a domain. Host servers using the same sessions directory
 serialise their launches, and each launch claims its port and ROS domain across host processes; other programs or differently
 configured servers that do not claim them can still race the checks. The checks require Linux, `nvidia-smi` and exactly one NVIDIA
@@ -183,31 +183,31 @@ to avoid signalling a reused PID. Linux 6.9 and newer signal the process group; 
 ### A project's own launcher
 
 A project with its own environment can have `sim__session(action="launch")` start its launcher instead of `run.sh`. Set
-`ISAAC_MCP_SIM_LAUNCHER` in the `env` of that project's MCP server entry; it is read when the server starts.
+`TWINSMITH_SIM_LAUNCHER` in the `env` of that project's MCP server entry; it is read when the server starts.
 
 The launcher gets the same arguments as `run.sh` (`--port N`, `--headless`, `--motion-bvh`, then `-- <kit args>`) and the same
-environment, including `ISAAC_MCP_PHYSICS_BACKEND`, and runs in its own folder. It must end by `exec`ing Kit, because the PID that
+environment, including `TWINSMITH_PHYSICS_BACKEND`, and runs in its own folder. It must end by `exec`ing Kit, because the PID that
 the launch records must be the simulator; otherwise `sim__session(action="status")` reports `port_conflict`. The file must be executable,
 belong to you or root, and not be writable by group or others. For example, to use 5.1 with this repository's launcher:
 
 ```bash
 #!/bin/bash
-export ISAAC_MCP_PYTHON=<project>/.venv/bin/python
+export TWINSMITH_SIM_PYTHON=<project>/.venv/bin/python
 exec <repo>/run.sh "$@"
 ```
 
 With a launcher set, refusing an engine the build lacks is the launcher's job (`run.sh` also refuses, with exit status 2).
 
-This setting is deliberately not in `isaac-mcp.json` and not a tool argument. A launcher is an arbitrary command, and a model can
+This setting is deliberately not in `twinsmith.json` and not a tool argument. A launcher is an arbitrary command, and a model can
 write files on this machine (`put_file` has no path limit), so a project file would let it choose what runs. The server
-configuration comes from you, through your MCP client. `isaaclab_python` in `isaac-mcp.json` is a narrower exception: it is
-honoured only for a project you named with `ISAAC_MCP_PROJECT` in that same configuration, and it must be a virtual environment
+configuration comes from you, through your MCP client. `isaaclab_python` in `twinsmith.json` is a narrower exception: it is
+honoured only for a project you named with `TWINSMITH_PROJECT` in that same configuration, and it must be a virtual environment
 with Isaac Lab ([details](TOOLS-ISAACLAB.md#setup-and-configuration)).
 
 ## Kit bridge built-ins
 
 These tools operate on the **bridge machine**, inside or alongside the Kit process. The host lists them from a packaged snapshot
-(`mcp/isaac_mcp/catalogs/builtins.json`, regenerated by `scripts/gen_host_catalog.py --write`); each call is sent to the selected
+(`mcp/twinsmith/catalogs/builtins.json`, regenerated by `scripts/gen_host_catalog.py --write`); each call is sent to the selected
 bridge, and without one it returns an error that says what to do. `status` and `job_status` belong to `core`; `run_python`, the
 file tools and `reload_tools` belong to `code`.
 
@@ -247,7 +247,7 @@ running ones. This is the simulator-side counterpart of the Isaac Lab job tools,
 - Every job also has a record on disk, `<jobs folder>/<job_id>/job.json`, in the same format as an Isaac Lab job
   (`"runner": "kit"`). So the status call still answers after the simulator has exited (a job that was running then reads `failed`:
   the simulator exited before it finished), and `jobs(action="list")` shows simulator and Lab jobs together. The jobs folder is
-  `ISAACLAB_JOBS_DIR`, or `~/.local/share/isaac-mcp/jobs`.
+  `TWINSMITH_JOBS_DIR`, or `~/.local/share/twinsmith/jobs`.
 - A job is not a queued request. Another caller's `run_python` that pumps the app loop from inside its own call can end a job; the
   job then reads `failed` with the reason, never `running` forever.
 - A job's state is `running`, `succeeded`, `failed` or `cancelled`, with `elapsed_s`, `progress`, the last 2000 characters of output,
@@ -277,8 +277,8 @@ result = {"frames": 600}
 
 The bridge listens on loopback and requires a token on every connection. The token is in a file only your account can read, so
 your own clients connect without configuration and another local account cannot run Python in your simulator. The token is not
-encryption: do not expose the bridge to an untrusted network; use an SSH tunnel, or a private address with `ISAAC_MCP_TOKEN` given
-to the client. `ISAAC_MCP_READ_ONLY=1` starts a bridge that refuses every tool that changes something. Toolsets control host
+encryption: do not expose the bridge to an untrusted network; use an SSH tunnel, or a private address with `TWINSMITH_TOKEN` given
+to the client. `TWINSMITH_READ_ONLY=1` starts a bridge that refuses every tool that changes something. Toolsets control host
 registration, not direct bridge access. See [limiting what a client can reach](MCP-SERVER.md#limiting-what-a-client-can-reach).
 
 Desktop capture depends on the display session and permissions, and can contain sensitive information. Confirm the target window

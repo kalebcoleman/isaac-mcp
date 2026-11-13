@@ -75,7 +75,7 @@ def apply_joint_targets(stage, path, targets) -> dict:
     """Author drive targets (radians, or stage units for a prismatic joint) so the robot starts in a pose. Unknown names are reported."""
     if not isinstance(targets, dict) or not targets or len(targets) > 200 or not all(
             isinstance(k, str) and isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for k, v in targets.items()):
-        from isaac_mcp.project_assets import refuse
+        from twinsmith.project_assets import refuse
 
         refuse("INVALID_VALUE", "joint_targets is an object of joint names to finite numbers (radians, or stage units for a sliding joint).")
     applied, nodes, beyond = {}, {}, {}

@@ -1,0 +1,19 @@
+[package]
+# Semantic Versioning — https://semver.org/
+version = "0.3.0"
+authors = ["Kaleb Coleman"]
+title = "twinsmith.bridge"
+description = "Serves tools registered by Kit extensions to MCP clients over a local socket, each run on the main loop."
+readme = "docs/README.md"
+repository = ""
+category = "Internal"
+keywords = ["kit", "mcp", "bridge", "socket"]
+
+[dependencies]
+# Schedules each tool call on the main loop.
+"omni.kit.async_engine" = {}
+
+[[python.module]]
+name = "twinsmith_bridge"
+
+# Settings are listed in twinsmith_bridge/knobs.py and docs/ENVIRONMENT.md.

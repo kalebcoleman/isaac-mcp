@@ -14,7 +14,7 @@ import time
 
 import numpy as np
 
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 
 AXES = {"X": (1.0, 0.0, 0.0), "Y": (0.0, 1.0, 0.0), "Z": (0.0, 0.0, 1.0)}
 MAX_CHAIN = 16

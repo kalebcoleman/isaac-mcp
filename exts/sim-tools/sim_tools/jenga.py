@@ -86,7 +86,7 @@ def build(stage, backend="physx", timeline=None) -> dict:
         nonlocal newton_ok
         if not newton_ok:
             return
-        from isaac_mcp.project_assets import AssetError
+        from twinsmith.project_assets import AssetError
         from .newton_support import collision_settings
 
         try:
@@ -140,7 +140,7 @@ def build(stage, backend="physx", timeline=None) -> dict:
             newton_ok = False
             newton["newton_error"] = dict(code="NOT_FOUND", message="No /World/PhysicsScene: no Newton scene settings or buffers were authored.")
         if newton_ok:
-            from isaac_mcp.project_assets import AssetError
+            from twinsmith.project_assets import AssetError
             from .newton_support import apply_buffers, prepare_buffers, scene_settings
 
             try:

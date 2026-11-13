@@ -6,7 +6,7 @@ with a stable code (Newton has no raycast). Nothing here invents a hit, an impul
 
 import math
 
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 
 MAX_HITS = 32
 MAX_CAPTURE = 1024  # contact pairs kept per report before filtering by the caller's paths

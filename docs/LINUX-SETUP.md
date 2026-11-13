@@ -26,8 +26,8 @@ See [compatibility](COMPATIBILITY.md) for tested simulator releases and their in
 
 | Environment | Required for | Selection |
 |---|---|---|
-| Host Python **3.10+** | MCP connection, tool discovery, desktop capture, Lab job management | `isaac-mcp` installed by `uv tool`; independent of Sim |
-| Sim Python **3.12** | Kit, rendering, physics, bridge and scene/UR tools | Explicit `ISAAC_MCP_PYTHON`, else checkout `.venv`, else auto-detected (see [One workspace folder](#one-workspace-folder)) |
+| Host Python **3.10+** | MCP connection, tool discovery, desktop capture, Lab job management | `twinsmith` installed by `uv tool`; independent of Sim |
+| Sim Python **3.12** | Kit, rendering, physics, bridge and scene/UR tools | Explicit `TWINSMITH_SIM_PYTHON`, else checkout `.venv`, else auto-detected (see [One workspace folder](#one-workspace-folder)) |
 | Optional Isaac Lab | Training, evaluation and play | Existing `ISAACLAB_PYTHON` and `ISAACLAB_ROOT`; select a compatible Sim/Lab version pairing |
 | Optional system ROS | External ROS nodes: RViz 2, Nav2 | Matching system ROS distribution, separate from Sim's bundled bridge |
 
@@ -37,7 +37,7 @@ A callable offline catalog proxy still needs its runtime prerequisites to execut
 
 ## New pinned 6.2 installation
 
-Use a **new dedicated checkout** (recommended location: `<workspace>/isaac-mcp`, see
+Use a **new dedicated checkout** (recommended location: `<workspace>/twinsmith`, see
 [One workspace folder](#one-workspace-folder)) and run every command below from its root. Install
 [uv](https://docs.astral.sh/uv/getting-started/installation/) first, and ensure Git and your NVIDIA
 driver are available. Read NVIDIA's [requirements](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/requirements.html)
@@ -46,8 +46,8 @@ driver and free space; its 40 GB floor is not a promise that every asset/cache w
 
 ```bash
 mkdir -p <workspace>
-git clone https://github.com/kalebcoleman/isaac-mcp.git <workspace>/isaac-mcp
-cd <workspace>/isaac-mcp
+git clone https://github.com/kalebcoleman/twinsmith.git <workspace>/twinsmith
+cd <workspace>/twinsmith
 uv --version
 nvidia-smi
 ./install.sh --accept-eula --download-sim   # this section is the pinned 6.2 download; without --download-sim an installed Isaac Sim 6.x is used instead
@@ -69,14 +69,14 @@ The convenience installer:
   downloads or syncs a simulator. `--no-sim` still looks for an installed Isaac Sim 6.x and records it in client entries.
 - Runs **`uv sync --python 3.12` in the current directory** only when it is installing the simulator.
   That sync may update the root lock's environment; it does not enforce `--locked` and does not use
-  `ISAAC_MCP_PYTHON` (or its alias `UR5E_DT_PYTHON`) as its install target.
+  `TWINSMITH_SIM_PYTHON` as its install target.
 - Installs the host from `mcp/uv.lock`, not from a fresh resolve:
   `uv sync --project mcp --locked --extra isaaclab --no-dev`, with `UV_PROJECT_ENVIRONMENT` set to
   `mcp/.venv` so an activated simulator environment is left alone. `uv tool install` does not read
-  `uv.lock`. The installer then links `~/.local/bin/isaac-mcp` at that executable. Keep the checkout.
+  `uv.lock`. The installer then links `~/.local/bin/twinsmith` at that executable. Keep the checkout.
 - Creates or refreshes its `~/.local/bin/ffmpeg` shim, preserving unrelated files/symlinks.
 - Changes client configuration **only** when requested with registration flags.
-  `--claude-code` replaces the user-scope `isaac` entry and removes the legacy `twin` entry;
+  `--claude-code` replaces the user-scope `twinsmith` entry and removes the legacy `twin` entry;
   `--claude-desktop` updates an existing Desktop config with a backup. `--claude` requests both.
   `--print-opencode` prints configuration without writing it. Missing clients/configs can be skipped;
   inspect installer output and use the [manual client guide](MCP-SERVER.md#4-client-configuration).
@@ -94,13 +94,13 @@ From the same checkout root, after accepting the EULA:
 ./run.sh --port 8766
 ```
 
-`run.sh` chooses the Sim interpreter in this order: `ISAAC_MCP_PYTHON` (alias `UR5E_DT_PYTHON`),
-then `<repo>/.venv/bin/python`, then auto-detection (`scripts/isaac_env.py resolve-python`). It prints
+`run.sh` chooses the Sim interpreter in this order: `TWINSMITH_SIM_PYTHON`,
+then `<repo>/.venv/bin/python`, then auto-detection (`scripts/env.py resolve-python`). It prints
 the interpreter it chose and how to pin it. See [what is auto-detected](#what-is-auto-detected-and-where-it-looks).
 
 Use an unused port. A live bridge may already exist: inspect it before starting another process.
 The launcher enables the bridge, the generic scene tools, the work-cell tools and NVIDIA's bundled ROS bridge. The physics
-engine is chosen with `--physics-backend` or `ISAAC_MCP_PHYSICS_BACKEND`; the target and the current default are in
+engine is chosen with `--physics-backend` or `TWINSMITH_PHYSICS_BACKEND`; the target and the current default are in
 [compatibility](COMPATIBILITY.md#target-engine), and a request for an engine the build lacks starts nothing.
 
 For a windowless GPU session, use `./run.sh --headless --port 8766` instead. To leave either running after your shell or a tool's time limit ends, use `setsid nohup ./run.sh --port 8766 > kit.log 2>&1 < /dev/null &`. Headless Sim still
@@ -119,7 +119,7 @@ not be run against an older build or alongside someone else's GPU job as a gener
 Leave the simulator running; use a second terminal from the same checkout root for terminal checks or registration.
 
 Configure the host as a **stdio MCP server** using the [client guide](MCP-SERVER.md#4-client-configuration),
-then reconnect the client. The server command is `isaac-mcp`, not the simulator Python.
+then reconnect the client. The server command is `twinsmith`, not the simulator Python.
 `./install.sh --no-sim --claude-code --port 8766` is the explicit Claude Code registration shortcut;
 it also replaces the host tool and handles the shim as described above.
 
@@ -133,12 +133,12 @@ For the equivalent read-only terminal check, use the repository's standard-libra
 
 ```bash
 # From checkout root; no Sim imports and no host-package installation needed for this CLI.
-python3 mcp/isaac_mcp/client.py --list-bridges
+python3 mcp/twinsmith/client.py --list-bridges
 # Set these to the intended endpoint from that listing, not an arbitrary visible window.
 BRIDGE_HOST=localhost
 BRIDGE_PORT=8766
-python3 mcp/isaac_mcp/client.py status --host "$BRIDGE_HOST" --port "$BRIDGE_PORT"
-python3 mcp/isaac_mcp/client.py sim.stage.info '{}' --host "$BRIDGE_HOST" --port "$BRIDGE_PORT"
+python3 mcp/twinsmith/client.py status --host "$BRIDGE_HOST" --port "$BRIDGE_PORT"
+python3 mcp/twinsmith/client.py sim.stage.info '{}' --host "$BRIDGE_HOST" --port "$BRIDGE_PORT"
 ```
 
 The direct bridge CLI uses **`sim.stage.info`**; the MCP name is **`sim__stage__info`**.
@@ -153,18 +153,18 @@ and [scene reference](TOOLS-SCENE.md) for your actual task.
 an installed Isaac Sim 6.x and then installs only the MCP server (`--no-sim` does the same
 explicitly); it downloads the locked 6.2 environment only when nothing is found or with
 `--download-sim`. Install only the host, inspect your interpreter, then select it explicitly if needed.
-List what the tool can find with `python3 scripts/isaac_env.py find`. Replace `<env>` with your own
+List what the tool can find with `python3 scripts/env.py find`. Replace `<env>` with your own
 compatible installation. Do not rename, relocate or reinstall an environment just to match this guide
 (a symlink into `<workspace>/envs/` is optional and changes nothing).
 
 ```bash
 # From checkout root; this replaces only the user-level host tool and may create its ffmpeg shim.
-# Export ISAAC_MCP_PYTHON first if the install is outside the searched locations, so it is recorded.
+# Export TWINSMITH_SIM_PYTHON first if the install is outside the searched locations, so it is recorded.
 ./install.sh --no-sim
-ISAAC_SIM_PYTHON=<env>/bin/python
-"$ISAAC_SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'
-uv pip check --python "$ISAAC_SIM_PYTHON"
-ISAAC_MCP_PYTHON="$ISAAC_SIM_PYTHON" ./run.sh --port 8766
+TWINSMITH_SIM_PYTHON=<env>/bin/python
+"$TWINSMITH_SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))'
+uv pip check --python "$TWINSMITH_SIM_PYTHON"
+TWINSMITH_SIM_PYTHON="$TWINSMITH_SIM_PYTHON" ./run.sh --port 8766
 ```
 
 Without the override, `run.sh` uses this checkout's `.venv/bin/python` and otherwise searches
@@ -175,7 +175,7 @@ A plain Python `import omni` failure outside Kit does not prove the installation
 | Requested build | Installation path | Qualification |
 |---|---|---|
 | **6.2.0.0** | New pinned checkout above, locked alternative, or explicit existing interpreter | Per-source/mode results in the matrix; inspect dependency conflicts in existing environments |
-| **6.0.0.0, 6.0.0.1, 6.0.1.0, 6.1.0.0** | Separately prepared compatible Python 3.12 environment; explicit `ISAAC_MCP_PYTHON` | Scoped historical and follow-up results, not clean-install recipes or latest-fix certification for every mode |
+| **6.0.0.0, 6.0.0.1, 6.0.1.0, 6.1.0.0** | Separately prepared compatible Python 3.12 environment; explicit `TWINSMITH_SIM_PYTHON` | Scoped historical and follow-up results, not clean-install recipes or latest-fix certification for every mode |
 | Other/future builds | No tested setup recipe here | Unverified |
 
 Consult NVIDIA's version-specific [6.0 install guide](https://docs.isaacsim.omniverse.nvidia.com/6.0.0/installation/install_python.html)
@@ -192,21 +192,21 @@ viewport and URDF follow-ups have superseded some early pending checks, while th
 
 The host connection and `sim__stage__info` do not require a robot or workstation, and NVIDIA's public robots
 (`ur5e`, `franka`, `unitree_g1`, ...) load by name from the running simulator's own asset root. The UR5e Jenga work cell uses
-[a private asset pack](../exts/ur5e-dt/workcell/README.md#private-asset-pack) (`ur5e-jenga-workcell/v1`) that you supply. The
+[a private asset pack](../exts/workcell/workcell/README.md#private-asset-pack) (`ur5e-jenga-workcell/v1`) that you supply. The
 repository ships **no assets**, `install.sh` installs packages, not assets, and nothing is ever downloaded for you.
 
-Every pack lives in one **asset root**: `ISAAC_MCP_ASSET_ROOT`, else `<workspace>/assets` (a folder named
+Every pack lives in one **asset root**: `TWINSMITH_ASSET_ROOT`, else `<workspace>/assets` (a folder named
 `isaac-mcp-assets` there still works, with a warning). See [asset packs](ASSET-PACKS.md) for the format and the tools.
 Copy the pack folder onto the machine, then check it:
 
 ```bash
-export ISAAC_MCP_ASSET_ROOT=<asset-root>        # outside Git; set it for the MCP server and for any Kit you start yourself
-python3 scripts/isaac_assets.py list              # every <id>/<version> and whether it verifies
-python3 scripts/isaac_assets.py doctor ur5e-jenga-workcell/v1
+export TWINSMITH_ASSET_ROOT=<asset-root>        # outside Git; set it for the MCP server and for any Kit you start yourself
+python3 scripts/assets.py list              # every <id>/<version> and whether it verifies
+python3 scripts/assets.py doctor ur5e-jenga-workcell/v1
 ```
 
 `list` also names any pack in the old format (files or a `SHA256SUMS`, no `pack.yaml`), which nothing reads; convert one with
-`isaac_assets.py adopt --from-old` ([converting an old pack](ASSET-PACKS.md#converting-an-old-pack)). Setting the root
+`assets.py adopt --from-old` ([converting an old pack](ASSET-PACKS.md#converting-an-old-pack)). Setting the root
 only in the MCP client cannot change an already-running Kit process's environment: give Kit the same value.
 
 The files remain subject to their own terms (see [third-party notices](../THIRD-PARTY-NOTICES.md) and
@@ -214,24 +214,24 @@ The files remain subject to their own terms (see [third-party notices](../THIRD-
 license. Obtain the necessary permission before copying. A missing or unverifiable pack is a real failed operation: it must
 not be counted as a loaded robot.
 
-The **Vention bench** has no public download. Put an approved licensed copy in a pack with `isaac_assets.py adopt`. Basic
+The **Vention bench** has no public download. Put an approved licensed copy in a pack with `assets.py adopt`. Basic
 connection and generic scene work require neither.
 
 ## Troubleshooting the first connection
 
 | Symptom | Check and next step |
 |---|---|
-| `isaac-mcp` not found | Add the uv tool bin directory to PATH, or use its absolute executable path in the client; keep the editable checkout available |
-| Interpreter missing | Run `python3 scripts/isaac_env.py find`, select a compatible `ISAAC_MCP_PYTHON`, or install in the new checkout; do not overwrite an unrelated environment |
+| `twinsmith` not found | Add the uv tool bin directory to PATH, or use its absolute executable path in the client; keep the editable checkout available |
+| Interpreter missing | Run `python3 scripts/env.py find`, select a compatible `TWINSMITH_SIM_PYTHON`, or install in the new checkout; do not overwrite an unrelated environment |
 | `uv pip check` fails | Record exact versions and conflicts. Use a new isolated locked environment for comparison; do not infer a native failure's cause from metadata alone |
 | Tools are listed but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, the [toolsets](TOOLSETS.md) and the selected endpoint |
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
 | Missing `omni`, renderer or `.pyi` imports | Verify selected Sim and enabled Kit extensions. Do not pip-install `omni` or hand-copy type stubs |
-| `Missing pack ...; sync this private pack first` | The pack is not under the asset root the process resolved. Run `python3 scripts/isaac_assets.py where` and `list`, and give Kit the same `ISAAC_MCP_ASSET_ROOT` |
-| `Checksum mismatch` / `Pack contains files not listed` | The pack differs from its `pack.yaml`. Run `isaac_assets.py doctor <id>/<version>`; restore the file, or write a new version. See [asset packs](ASSET-PACKS.md) |
-| `No asset root: ...` | Set `ISAAC_MCP_ASSET_ROOT`, or create `<workspace>/assets` |
-| `No module named 'Xlib'` when starting the MCP host | You ran the host with Isaac Sim's Python. It has its own dependencies: use the installed `isaac-mcp`, or `cd mcp && uv run --locked --isolated ...` |
+| `Missing pack ...; sync this private pack first` | The pack is not under the asset root the process resolved. Run `python3 scripts/assets.py where` and `list`, and give Kit the same `TWINSMITH_ASSET_ROOT` |
+| `Checksum mismatch` / `Pack contains files not listed` | The pack differs from its `pack.yaml`. Run `assets.py doctor <id>/<version>`; restore the file, or write a new version. See [asset packs](ASSET-PACKS.md) |
+| `No asset root: ...` | Set `TWINSMITH_ASSET_ROOT`, or create `<workspace>/assets` |
+| `No module named 'Xlib'` when starting the MCP host | You ran the host with Isaac Sim's Python. It has its own dependencies: use the installed `twinsmith`, or `cd mcp && uv run --locked --isolated ...` |
 | `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK, and the validators `pxr` and `numpy`: `uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
 | `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; `sim__ros2__tf_setup` reports it. See the [typical session](TOOLS-SCENE.md#a-typical-session) |
 | `/scan` missing after reopening a saved scene | Open it with `sim__stage__open`, which repairs stale LiDAR products. See [saved LiDAR scenes](TOOLS-SCENE.md#saved-lidar-scenes-and-scan) |
@@ -266,7 +266,7 @@ no mouse or keyboard control by default; the X11 input tools can be explicitly e
 
 If a Kit module or renderer extension appears missing, first check the selected Sim interpreter and the
 running Kit extension manager/startup log. Do not try to fix a Kit import by installing `omni` or `.pyi` files
-into the host Python. The supplied launcher requests `isaac.mcp.bridge`, `sim-tools`, `ur5e-dt` (the work cell) and
+into the host Python. The supplied launcher requests `twinsmith.bridge`, `sim-tools`, `workcell` (the work cell) and
 `isaacsim.ros2.bridge`. After connecting the correct bridge, `status` and
 `sim__stage__info` help verify the running process and build; listing catalog tools by itself does not.
 
@@ -290,7 +290,7 @@ A successful job launch is not a completed job: inspect status and logs. Jobs no
 alongside an active Kit bridge; coordinate GPU ownership instead of bypassing the guard by default.
 
 **Desktop input and managed sessions** are opt-in host groups. Set
-`ISAAC_MCP_TOOLSETS=all,+input,+launch` in the client server environment only
+`TWINSMITH_TOOLSETS=all,+input,+launch` in the client server environment only
 when both are needed. Desktop input acts on a shared X11 session; verify window/PID first.
 Managed launches require resource checks and distinct endpoints. See [host tools](TOOLS-HOST.md).
 
@@ -303,7 +303,7 @@ and [third-party notices](../THIRD-PARTY-NOTICES.md).
 
 ## One workspace folder
 
-Keep the isaac-mcp checkout, your asset stores and your Isaac Sim / Isaac Lab Python environments together in one folder.
+Keep the twinsmith checkout, your asset stores and your Isaac Sim / Isaac Lab Python environments together in one folder.
 This section says how, and how the tool finds things that are already installed somewhere else. It documents no Windows or
 macOS paths: a Windows install, for example one under `C:` and reached from WSL as `/mnt/c/...`, cannot be used.
 
@@ -321,21 +321,21 @@ macOS paths: a Windows install, for example one under `C:` and reached from WSL 
 
 ```text
 <workspace>/
-  isaac-mcp/     the checkout (code only, never edited by projects)
+  twinsmith/     the checkout (code only, never edited by projects)
   isaac-mcp-assets/  your asset root: packs as <pack id>/<version>/pack.yaml; never pushed (the name `assets/` is preferred)
   envs/          Isaac Sim / Isaac Lab Python environments (e.g. sim-6.2/, lab-3.0/)
-  projects/      your projects, each may hold an isaac-mcp.json
+  projects/      your projects, each may hold a twinsmith.json
   runs/          logs, job outputs, captures
 ```
 
 `<workspace>` can be any folder you own. The default is `~/isaac-workspace`, or whatever
-`ISAAC_MCP_WORKSPACE` says. It must not be inside the checkout; `init` refuses that.
+`TWINSMITH_WORKSPACE` says. It must not be inside the checkout; `init` refuses that.
 
 ### Agent rules for every project
 
 `init` writes `<workspace>/AGENTS.md` and `<workspace>/CLAUDE.md` (which only contains `@AGENTS.md`). Claude Code, Codex
 and OpenCode read parent-folder instruction files, so every project under `projects/` gets them. The text is the `AGENTS`
-constant in `scripts/isaac_env.py`. In short: load the `mcp__isaac` tools, run `status` once before the first simulator action, use the
+constant in `scripts/env.py`. In short: load the `mcp__twinsmith` tools, run `status` once before the first simulator action, use the
 screenshot, recording, contact and Isaac Lab tools, and say why before falling back to plain scripts. A project's own
 `AGENTS.md` can add to it. Run `init` again on an old workspace to add the files; nothing is overwritten.
 
@@ -344,7 +344,7 @@ To see at the start of every session whether a bridge is up, add a Claude Code h
 
 ```json
 {"hooks": {"SessionStart": [{"hooks": [{"type": "command",
-  "command": "python3 /path/to/isaac-mcp/scripts/session_check.py"}]}]}}
+  "command": "python3 /path/to/twinsmith/scripts/session_check.py"}]}]}}
 ```
 
 ### Set up a new machine
@@ -352,28 +352,28 @@ To see at the start of every session whether a bridge is up, add a Claude Code h
 1. **Create the folder and clone into it.**
 
    ```bash
-   export ISAAC_MCP_WORKSPACE=~/isaac-workspace      # choose your own location
-   mkdir -p "$ISAAC_MCP_WORKSPACE"
-   git clone <repo-url> "$ISAAC_MCP_WORKSPACE/isaac-mcp"
-   cd "$ISAAC_MCP_WORKSPACE/isaac-mcp"
+   export TWINSMITH_WORKSPACE=~/isaac-workspace      # choose your own location
+   mkdir -p "$TWINSMITH_WORKSPACE"
+   git clone <repo-url> "$TWINSMITH_WORKSPACE/twinsmith"
+   cd "$TWINSMITH_WORKSPACE/twinsmith"
    ```
 
 2. **Create the sub-folders.** `init` never overwrites anything that exists. New folders are
    not group- or world-writable (0755 under the usual umask).
 
    ```bash
-   python3 scripts/isaac_env.py init
+   python3 scripts/env.py init
    ```
 
    It creates `isaac-mcp-assets`, `envs`, `projects`, `runs` and a short README under
-   `$ISAAC_MCP_WORKSPACE`. Use `--workspace DIR` to name the folder explicitly.
+   `$TWINSMITH_WORKSPACE`. Use `--workspace DIR` to name the folder explicitly.
 
 3. **Make the choice permanent.** Add the export to your shell profile (for example
    `~/.bashrc`) and to the environment of your MCP client config
    ([client configuration](MCP-SERVER.md#4-client-configuration)).
 
    ```bash
-   echo 'export ISAAC_MCP_WORKSPACE=~/isaac-workspace' >> ~/.bashrc
+   echo 'export TWINSMITH_WORKSPACE=~/isaac-workspace' >> ~/.bashrc
    ```
 
 4. **Install or point to Isaac Sim.** For a new pinned 6.2 install, follow
@@ -381,15 +381,15 @@ To see at the start of every session whether a bridge is up, add a Claude Code h
    `<repo>/.venv`, which is found automatically. If you already have Isaac Sim, see
    [I already have Isaac Sim installed](#i-already-have-isaac-sim-installed).
 
-5. **Add your assets and check.** The asset root is `ISAAC_MCP_ASSET_ROOT`, else `<workspace>/assets`, else
+5. **Add your assets and check.** The asset root is `TWINSMITH_ASSET_ROOT`, else `<workspace>/assets`, else
    `<workspace>/isaac-mcp-assets` (what `init` creates; found with a warning that the name is transitional, so
-   set `ISAAC_MCP_ASSET_ROOT` to it). Fill it with `scripts/isaac_assets.py adopt` or by copying a pack folder
+   set `TWINSMITH_ASSET_ROOT` to it). Fill it with `scripts/assets.py adopt` or by copying a pack folder
    in (see [ASSET-PACKS.md](ASSET-PACKS.md)).
 
    ```bash
-   export ISAAC_MCP_ASSET_ROOT="$ISAAC_MCP_WORKSPACE/isaac-mcp-assets"
-   python3 scripts/isaac_assets.py list
-   python3 scripts/isaac_env.py where
+   export TWINSMITH_ASSET_ROOT="$TWINSMITH_WORKSPACE/isaac-mcp-assets"
+   python3 scripts/assets.py list
+   python3 scripts/env.py where
    ./run.sh --port 8766   # not if a Kit already holds this port; choose another with --port
    ```
 
@@ -398,8 +398,8 @@ To see at the start of every session whether a bridge is up, add a Claude Code h
 Do not reinstall. Ask the tool what it can find:
 
 ```bash
-python3 scripts/isaac_env.py find          # human-readable list
-python3 scripts/isaac_env.py find --json   # same, for scripts
+python3 scripts/env.py find          # human-readable list
+python3 scripts/env.py find --json   # same, for scripts
 ```
 
 `find` lists the Isaac Sim and Isaac Lab environments it discovers, in the search order
@@ -409,24 +409,24 @@ a candidate, not proof that the environment works.
 Pick one:
 
 ```bash
-python3 scripts/isaac_env.py resolve-python                       # print the chosen interpreter
-python3 scripts/isaac_env.py resolve-python --require-version 6.2 # only a matching version
-python3 scripts/isaac_env.py resolve-python --lab                 # prefer an environment that also has Isaac Lab
+python3 scripts/env.py resolve-python                       # print the chosen interpreter
+python3 scripts/env.py resolve-python --require-version 6.2 # only a matching version
+python3 scripts/env.py resolve-python --lab                 # prefer an environment that also has Isaac Lab
 ```
 
 Then confirm it before you rely on it:
 
 ```bash
-PY="$(python3 scripts/isaac_env.py resolve-python)" &&
+PY="$(python3 scripts/env.py resolve-python)" &&
   "$PY" -c 'import importlib.metadata as m, sys; print(sys.version); print(m.version("isaacsim"))' &&
   uv pip check --python "$PY"
 ```
 
 **Pin it.** Auto-detect is a convenience. To make the choice explicit, set
-`ISAAC_MCP_PYTHON`. It wins over everything else:
+`TWINSMITH_SIM_PYTHON`. It wins over everything else:
 
 ```bash
-export ISAAC_MCP_PYTHON=<env>/bin/python
+export TWINSMITH_SIM_PYTHON=<env>/bin/python
 ./run.sh --port 8766
 ```
 
@@ -434,7 +434,7 @@ export ISAAC_MCP_PYTHON=<env>/bin/python
 symlink it. Nothing is moved or modified:
 
 ```bash
-ln -s <env> "$ISAAC_MCP_WORKSPACE/envs/sim-6.2"
+ln -s <env> "$TWINSMITH_WORKSPACE/envs/sim-6.2"
 ```
 
 `<env>` is the directory that holds `bin/python`. Anything in `<workspace>/envs/*/bin/python`
@@ -446,9 +446,9 @@ is found.
 
 The first match in this order is used, even if a newer Isaac Sim exists further down the
 list; the version only filters. `run.sh` asks for any Isaac Sim 6.x
-(`resolve-python --require-version 6`). Pin a specific interpreter with `ISAAC_MCP_PYTHON`.
+(`resolve-python --require-version 6`). Pin a specific interpreter with `TWINSMITH_SIM_PYTHON`.
 
-1. `ISAAC_MCP_PYTHON`, then `UR5E_DT_PYTHON` (deprecated alias), then `ISAAC_SIM_PYTHON`.
+1. `TWINSMITH_SIM_PYTHON`.
 2. `<workspace>/envs/*/bin/python`.
 3. `<repo>/.venv/bin/python`.
 4. The active environment: `$VIRTUAL_ENV` or `$CONDA_PREFIX`.
@@ -456,19 +456,19 @@ list; the version only filters. `run.sh` asks for any Isaac Sim 6.x
 6. Conda-style roots and common virtual-environment folders under your home directory, then
    project virtual environments one and two folders below it (`~/<project>/.venv`,
    `~/<group>/<project>/.venv`; hidden folders are skipped, nothing deeper is scanned).
-7. Standalone installs: `$ISAACSIM_PATH`, `$ISAAC_SIM_PATH`, `$ISAAC_PATH`, `~/isaacsim`,
+7. Standalone installs: `$ISAACSIM_PATH`, `$ISAAC_PATH`, `~/isaacsim`,
    `~/isaac-sim`, `~/.local/share/ov/pkg/isaac-sim-*`, `/opt/nvidia/isaac-sim*`,
    `/isaac-sim`.
 
 The asset root is found in this order (see [ASSET-PACKS.md](ASSET-PACKS.md#the-asset-root-and-how-it-is-found)):
-`ISAAC_MCP_ASSET_ROOT`, then `<workspace>/assets`, then `<workspace>/isaac-mcp-assets` (with a warning), else an error
+`TWINSMITH_ASSET_ROOT`, then `<workspace>/assets`, then `<workspace>/isaac-mcp-assets` (with a warning), else an error
 that names the setting.
 
 ### What is not auto-detected
 
 - Any Windows install, including under `C:` or `/mnt/c`. Not supported, untested.
 - macOS. Not supported.
-- Environments outside the places listed above. Set `ISAAC_MCP_PYTHON`, or symlink the
+- Environments outside the places listed above. Set `TWINSMITH_SIM_PYTHON`, or symlink the
   environment into `<workspace>/envs/`.
 - A version that matches. `find` does not execute Python, so check the version yourself
   as shown above, or use `--require-version`.
@@ -493,8 +493,8 @@ Paths differ between machines. The bytes must not.
 3. Run on the second machine:
 
    ```bash
-   python3 scripts/isaac_assets.py list
-   python3 scripts/isaac_assets.py doctor <pack id>/<version>
+   python3 scripts/assets.py list
+   python3 scripts/assets.py doctor <pack id>/<version>
    ```
 
    Every version must say `verified`: `pack.yaml` carries the hashes, so a file that differs fails. See
@@ -505,17 +505,17 @@ Paths differ between machines. The bytes must not.
 ### Workspace troubleshooting
 
 **`find` lists nothing.** Your install is outside the search locations. Set
-`ISAAC_MCP_PYTHON`, or symlink it into `<workspace>/envs/`.
+`TWINSMITH_SIM_PYTHON`, or symlink it into `<workspace>/envs/`.
 
 **`init` refuses the folder.** It is inside the checkout. Choose a folder outside it.
 
 **`run.sh` picked the wrong interpreter.** Read its printed line, then pin the one you want
-with `ISAAC_MCP_PYTHON`. `python3 scripts/isaac_env.py where` shows the effective workspace
+with `TWINSMITH_SIM_PYTHON`. `python3 scripts/env.py where` shows the effective workspace
 and interpreter.
 
 **Assets are not found.** The asset root must be the one the Kit process sees: check
-`ISAAC_MCP_ASSET_ROOT` / `ISAAC_MCP_WORKSPACE` in the Kit process's environment. Run
-`python3 scripts/isaac_assets.py where` to see the root and how it was found.
+`TWINSMITH_ASSET_ROOT` / `TWINSMITH_WORKSPACE` in the Kit process's environment. Run
+`python3 scripts/assets.py where` to see the root and how it was found.
 
 **Found but broken.** An interpreter listed by `find` can still be incompatible. Run the
 version one-liner and `uv pip check` shown above.

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from Xlib import X
 
-import isaac_mcp.screen as screen
+import twinsmith.screen as screen
 
 
 def _make_window(wid, title, viewable=True, size=(1440, 900)):
@@ -296,7 +296,7 @@ def test_move_window_waits_for_a_position_only_move(monkeypatch):
 def test_locked_screen_is_detected_from_loginctl_or_the_screensaver(monkeypatch):
     import itertools
 
-    from isaac_mcp import screen
+    from twinsmith import screen
 
     ticks = itertools.count(100, 10)  # each call is 10 s after the last: no cache hits
 
@@ -319,7 +319,7 @@ def test_locked_screen_is_detected_from_loginctl_or_the_screensaver(monkeypatch)
 
 
 def test_lock_probe_is_cached_and_skips_gdbus_without_a_session_bus(monkeypatch):
-    from isaac_mcp import screen
+    from twinsmith import screen
 
     calls = []
     monkeypatch.setattr(screen.shutil, "which", lambda cmd: "/usr/bin/" + cmd)
@@ -339,7 +339,7 @@ def test_lock_probe_is_cached_and_skips_gdbus_without_a_session_bus(monkeypatch)
 def test_monitor_captures_warn_when_locked_and_window_captures_do_not(monkeypatch, tmp_path):
     from mcp.server.fastmcp import FastMCP
 
-    from isaac_mcp import screen
+    from twinsmith import screen
 
     class FakeShot:
         size = (4, 2)
@@ -371,7 +371,7 @@ def test_monitor_captures_warn_when_locked_and_window_captures_do_not(monkeypatc
 
 
 def test_locked_screenshot_is_composed_bottom_to_top_without_wm_frames():
-    from isaac_mcp import screen
+    from twinsmith import screen
 
     wins = [{"id": 1, "class": "Isaac"}, {"id": 2, "class": "mutter-x11-frames"}, {"id": 3, "class": "rviz2"},
             {"id": 4, "class": "unmanaged"}]
@@ -381,7 +381,7 @@ def test_locked_screenshot_is_composed_bottom_to_top_without_wm_frames():
 
 def test_lock_probe_is_unknown_when_only_loginctl_says_no(monkeypatch):
     # Started over SSH, XDG_SESSION_ID is the SSH session: "no" says nothing about the desktop.
-    from isaac_mcp import screen
+    from twinsmith import screen
 
     outputs = {"loginctl": "no", "gdbus": ""}
     monkeypatch.setattr(screen.shutil, "which", lambda cmd: "/usr/bin/" + cmd)

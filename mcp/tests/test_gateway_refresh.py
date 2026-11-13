@@ -6,8 +6,8 @@ import types
 import pytest
 from mcp.server.fastmcp import FastMCP
 
-import isaac_mcp.server as gw
-from isaac_mcp_bridge.schema import field_specs
+import twinsmith.server as gw
+from twinsmith_bridge.schema import field_specs
 
 
 def _meta(description, parameters, namespace, owner_id):
@@ -63,7 +63,7 @@ def test_a_listing_without_argument_lists_is_refused(fresh_gateway, monkeypatch)
 def test_the_namespace_and_builtin_filters_apply_to_rediscovery(fresh_gateway, monkeypatch):
     gw._state_for(fresh_gateway).toolsets = frozenset({"core", "extensions"})
     _fake_registry(monkeypatch, {"pm.read_state": _meta("d", {}, "pm", "P"), "demo.ping": _meta("d", {}, "demo", "A"),
-                                 "run_python": _meta("d", {}, None, "isaac.mcp.bridge")})
+                                 "run_python": _meta("d", {}, None, "twinsmith.bridge")})
     assert gw.discover_and_register_tools(fresh_gateway) == ["demo.ping", "pm.read_state"]
     assert set(fresh_gateway._tool_manager._tools) == {"pm__read_state", "demo__ping"}
 
@@ -162,7 +162,7 @@ def test_two_bridge_names_cannot_map_to_the_same_mcp_name(fresh_gateway, monkeyp
 
 
 def test_refresh_tools_without_a_simulator_says_what_to_do(monkeypatch):
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
 
     def offline(_server):
         raise ConnectionRefusedError("[Errno 111] Connection refused")
@@ -183,7 +183,7 @@ def test_host_run_asset_tools_are_not_reported_as_unconfirmed(monkeypatch):
 
 
 def test_refresh_tools_with_several_bridges_says_pick_one(monkeypatch):
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
 
     def several(_server):
         raise RuntimeError("multiple bridges running: ports 8766, 8781.")
@@ -196,7 +196,7 @@ def test_refresh_tools_with_several_bridges_says_pick_one(monkeypatch):
 def test_refresh_tools_names_managed_simulators_on_other_ports(monkeypatch):
     # The config pinned port 8766, sim__launch used 8771, and refresh_tools
     # kept saying "no bridge" until the agent found use_bridge on its own.
-    server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "all"})
 
     def offline(_server):
         raise ConnectionRefusedError("[Errno 111] Connection refused")

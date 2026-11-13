@@ -10,7 +10,7 @@ pytest.importorskip("pxr.Usd")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "exts/sim-tools"))
 from pxr import Gf, UsdGeom
 
-from isaac_mcp.project_assets import AssetError
+from twinsmith.project_assets import AssetError
 from sim_tools import physics
 from test_scene_usd import scene  # noqa: F401 - fixture
 

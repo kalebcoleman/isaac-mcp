@@ -37,7 +37,7 @@ ALLOWED_HOME_DIRS = {
     "ros2_ws",  # default for WS_SETUP in the ROS scripts, overridable
     "ros2",  # RoboStack prefixes documented in ROS2-RVIZ.md; ros_env.sh search root, ISAAC_ROS_SEARCH overrides
     ".ursim",  # URSim program data, overridable with PROGRAM_DIR
-    "isaac-workspace",  # documented default workspace, overridable with ISAAC_MCP_WORKSPACE
+    "isaac-workspace",  # documented default workspace, overridable with TWINSMITH_WORKSPACE
 }
 
 ABSOLUTE = re.compile(r"(?<![\w.])(?:/home/[A-Za-z0-9_.@-]+|/Users/[A-Za-z0-9_.@-]+|[A-Za-z]:\\\\?[A-Za-z0-9_.-]+)")

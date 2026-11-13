@@ -8,12 +8,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-WORKCELL = ROOT / "exts/ur5e-dt/workcell"
-ASSET_ROOT = Path(os.environ.get("ISAAC_MCP_ASSET_ROOT")
+WORKCELL = ROOT / "exts/workcell/workcell"
+ASSET_ROOT = Path(os.environ.get("TWINSMITH_ASSET_ROOT")
                   or Path.home() / "isaac-workspace/isaac-mcp-assets")
 PRIVATE_PACK = ASSET_ROOT / "ur5e-jenga-workcell/v1"
 SPEC = importlib.util.spec_from_file_location(
-    "workcell_bom", ROOT / "exts/ur5e-dt/ur5e_dt/bom.py")
+    "workcell_bom", ROOT / "exts/workcell/workcell/bom.py")
 bom = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(bom)
 
@@ -131,7 +131,7 @@ def test_docs_name_the_pack_contract_and_neutral_paths():
     text = (WORKCELL / "README.md").read_text(encoding="utf-8")
     for row in bom.load_bom():
         assert row["bom_id"] in text
-    for required in ("ISAAC_MCP_ASSET_ROOT", "pack.yaml", "asset_pack.resolve_pack",
+    for required in ("TWINSMITH_ASSET_ROOT", "pack.yaml", "asset_pack.resolve_pack",
                      "verify_dependencies", "--discard-changes", "PhysX"):
         assert required in text
     assert "/home/" not in text and "~/Desktop" not in text

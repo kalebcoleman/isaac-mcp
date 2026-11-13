@@ -314,7 +314,7 @@ Every "the map is wrong", "frames jump" or "RobotModel is white" problem we have
    publish one) disagree by a few frames, so time keeps jumping back: RViz logs "Detected
    jump back in time", resets and clears TF many times a second. `sim__ros2__tf_setup` reuses
    an existing clock (`clock=auto`), or else publishes one shared clock
-   (`/Graph/isaac_mcp_ros2_clock`) for every robot it sets up, and matches its TF stamps to that
+   (`/Graph/twinsmith_ros2_clock`) for every robot it sets up, and matches its TF stamps to that
    clock's stop/play behaviour. If another graph adds a second
    clock afterwards, call the tool again with `clock=auto`; it drops its clock and updates every robot it
    set up. The shared clock stays after the last robot graph is deleted (`sim__stage__clear_owned`
@@ -334,7 +334,7 @@ Every "the map is wrong", "frames jump" or "RobotModel is white" problem we have
 ## 1. Publish the robot from Isaac Sim
 
 Stop the timeline, then call the tool once per robot. Calling it again rebuilds that robot's
-graph (`/Graph/isaac_mcp_ros2`, or `/Graph/isaac_mcp_ros2_<namespace>_<hash>`), so nothing is ever
+graph (`/Graph/twinsmith_ros2`, or `/Graph/twinsmith_ros2_<namespace>_<hash>`), so nothing is ever
 published twice by it. The static `world -> base_link` (or `world -> <odom>`) is the pose at setup
 time: call it again after moving the robot.
 
@@ -482,7 +482,7 @@ Example: an extra `robot_state_publisher` running next to Isaac's link TF:
 ```text
 ERROR: frame 'wrist_3_link' has 2 parents (base_link, wrist_2_link): two publishers disagree about the tree, so RViz jumps between them. Keep exactly one.
 ERROR: simulation-time and wall-clock stamps are mixed: ... Start every node with use_sim_time:=true.
-WARNING: several nodes publish TF: /_Graph_isaac_mcp_ros2_TFRobotLinks, ..., /robot_state_publisher. If Isaac publishes the robot's links, do not also run robot_state_publisher for it.
+WARNING: several nodes publish TF: /_Graph_twinsmith_ros2_TFRobotLinks, ..., /robot_state_publisher. If Isaac publishes the robot's links, do not also run robot_state_publisher for it.
 ```
 
 ## Frames Isaac Sim 6.2 publishes

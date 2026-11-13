@@ -8,7 +8,7 @@ generated USD, which ``prepare_generated_physics`` (shared with the URDF path) t
 import os
 from pathlib import Path
 
-from isaac_mcp.project_assets import refuse
+from twinsmith.project_assets import refuse
 
 CONVERSION_VERSION = 4  # bump when what is written into a conversion changes
 EXTENSION = "isaacsim.asset.importer.mjcf"
@@ -84,7 +84,7 @@ def _legacy_input(copy_root, entry, found):
             if rel not in renamed:
                 n = 1
                 while True:
-                    target = source.with_name(f"{source.stem}__isaac_mcp_{n}{source.suffix}")
+                    target = source.with_name(f"{source.stem}__twinsmith_{n}{source.suffix}")
                     stem = (target.parent, target.stem.lower())
                     if stem not in occupied:
                         break
@@ -245,7 +245,7 @@ def restore_legacy_equalities(filename, trees):
     untouched. This does not reconstruct tendon actuators or MuJoCo solver tuning.
     """
     from collections import Counter
-    from isaac_mcp.urdf_physics import usd_name
+    from twinsmith.urdf_physics import usd_name
     from pxr import Sdf, Usd, UsdPhysics
 
     trees = list(trees)

@@ -5,10 +5,10 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from isaac_mcp import sdf_urdf as s
-from isaac_mcp import urdf_refs
-from isaac_mcp.project_assets import AssetError
-from isaac_mcp.urdf_refs import Project
+from twinsmith import sdf_urdf as s
+from twinsmith import urdf_refs
+from twinsmith.project_assets import AssetError
+from twinsmith.urdf_refs import Project
 
 LINK = '<link name="{n}"><pose>{pose}</pose><inertial><mass>2</mass><inertia><ixx>1</ixx><iyy>1</iyy><izz>1</izz></inertia></inertial>' \
        '<visual name="v"><geometry>{geom}</geometry><material><diffuse>1 0 0 1</diffuse></material></visual>' \

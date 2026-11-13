@@ -120,7 +120,7 @@ async def open_stage(scene, args):
     """Open *path* after checking the current target, the timeline and unsaved edits."""
     import omni.kit.app
     import omni.usd
-    from isaac_mcp.project_assets import refuse
+    from twinsmith.project_assets import refuse
 
     if not omni.kit.app.get_app().is_app_ready():
         refuse("APP_STARTING", "Kit startup is still running. Wait until sim.stage.info reports app_ready=true; "

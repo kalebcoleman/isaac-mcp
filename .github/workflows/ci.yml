@@ -21,6 +21,9 @@ jobs:
       - name: Check documentation
         run: python3 scripts/check_docs.py
 
+      - name: Check for old names
+        run: python3 scripts/check_names.py --enforce
+
       - name: Check bundled asset licences
         run: python3 scripts/check_assets.py
 

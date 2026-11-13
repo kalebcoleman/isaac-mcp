@@ -2,9 +2,9 @@
 
 import pytest
 
-from isaac_mcp import mjcf_refs as m
-from isaac_mcp.project_assets import AssetError
-from isaac_mcp.urdf_refs import Project
+from twinsmith import mjcf_refs as m
+from twinsmith.project_assets import AssetError
+from twinsmith.urdf_refs import Project
 
 
 def project(files, symlinks=()):
@@ -132,7 +132,7 @@ def test_closure_result_has_the_shape_the_pack_tools_read(tmp_path):
     (root / "ur5e.xml").write_text(UR5E)
     (root / "assets" / "base_0.obj").write_text("o")
     (root / "assets" / "link.stl").write_text("s")
-    from isaac_mcp.urdf_refs import project_from_folder
+    from twinsmith.urdf_refs import project_from_folder
 
     result = m.closure_result(root / "ur5e.xml", project_from_folder(root), root)
     assert result["mjcf"] is True and "error" not in result and result["problems"] == []
