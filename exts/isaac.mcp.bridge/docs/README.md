@@ -4,7 +4,7 @@ The part of isaac-mcp that runs inside Kit. It keeps a registry of tools, listen
 port, and runs each requested tool on Kit's main loop. Tool packs (the scene tools, the UR5e twin,
 your own package) register under a namespace and are served as `<namespace>.<tool>`.
 
-Its own tools: `status`, `run_python`, `job_status`, `job_cancel`, `list_tools`, `list_bridges`,
+Its own tools: `status`, `run_python`, `job_status`, `job_cancel`, `list_tools`,
 `reload_tools`, `put_file`, `get_file` and `stat_file`.
 
 Connections must present a token (clients on the same account find it automatically), and

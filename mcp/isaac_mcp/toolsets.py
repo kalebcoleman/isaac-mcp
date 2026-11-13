@@ -40,13 +40,13 @@ PLANNED = {
 }
 
 _ROOTS = {
-    "core": "status isaac_help refresh_tools use_bridge jobs list_bridges isaaclab__runs_cancel",
+    "core": "status isaac_help refresh_tools use_bridge jobs",
     "scene": "sim__quick_start sim__stage sim__prim sim__timeline__control sim__light sim__material",
     "physics": "sim__physics sim__joints sim__arm sim__simulation",
     "sensors": "sim__camera sim__lidar sim__viewport__frame",
-    "assets": "assets__import_path assets__library assets__pack assets__prepare_workstation",
+    "assets": "assets__import_path assets__library assets__pack",
     "code": "run_python files reload_tools sim__controller run_script",
-    "screen": "screenshot screen_recording windows join_videos screen_info",
+    "screen": "screenshot screen_recording windows join_videos",
     "ros2": "sim__ros2__tf_setup sim__graph sim__map__occupancy",
     "kit_debug": "sim__ui sim__logs",
     "input": "window_input",

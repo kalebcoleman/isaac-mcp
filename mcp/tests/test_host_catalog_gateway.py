@@ -233,8 +233,8 @@ def test_every_tool_is_listed_with_no_bridge_and_matches_the_registry_schema():
     assert live_twin_tools(server) == []              # the roster of live bridge tools stays empty
 
 
-def test_the_default_server_lists_them_too():
-    assert set(PROXIES) <= set(gw.mcp._tool_manager._tools)
+def test_the_default_server_excludes_workcell():
+    assert not set(PROXIES) & set(gw.build_server({})._tool_manager._tools)
 
 
 def test_offline_tools_defaults_to_the_default_server_and_tracks_its_live_bridge(monkeypatch):
@@ -503,7 +503,8 @@ def test_a_namespace_filter_that_hides_ur5e_keeps_other_tools_and_survives_switc
         run(server, call("use_bridge", {"port": live.port}))
         (listed,) = run(server, tools)
     assert "demo__inspect" in listed and not set(PROXIES) & set(listed)
-    assert gw.registered_tools(server) == ["demo.inspect"] and gw.offline_tools(server) == []
+    assert set(gw.registered_tools(server)) == {"demo.inspect", "status", "job_status", "job_cancel"}
+    assert gw.offline_tools(server) == []
 
 
 def test_changing_the_filter_is_applied_at_the_next_switch(monkeypatch):
@@ -679,8 +680,9 @@ def test_a_tool_from_a_projects_own_extension_gets_no_hints():
     assert server._tool_manager._tools["demo__ping"].annotations is None
 
 
-def test_instructions_say_the_tools_are_always_listed():
-    assert "listed by default" in gw.SERVER_INSTRUCTIONS and "ur5e_dt__" in gw.SERVER_INSTRUCTIONS
+def test_instructions_explain_selection_without_advertising_optional_tools():
+    assert "status" in gw.SERVER_INSTRUCTIONS and "toolsets" in gw.SERVER_INSTRUCTIONS
+    assert "ur5e_dt__" not in gw.SERVER_INSTRUCTIONS
 
 
 def test_the_wheel_config_ships_the_whole_package_directory():
@@ -1033,6 +1035,7 @@ def test_status_through_the_host_adds_host_and_keeps_every_bridge_field(monkeypa
         answer, short = run(build(), call("status", {"detail": True}), call("status"))
     payload = json.loads(answer)
     host = payload.pop("host")
+    assert "core" in payload.pop("toolsets")["on"]
     assert set(payload) == set(direct) and payload["pid"] == direct["pid"] and payload["port"] == live.port
     assert host["stale"] is True and host["commit"] == COMMIT_B and "warning" in host
     assert str(tmp_path) not in answer, "status must not publish the checkout path"
@@ -1049,7 +1052,7 @@ def test_status_with_no_bridge_still_reports_the_host(monkeypatch, tmp_path):
     monkeypatch.setattr(gw, "_HOST_COMMIT", COMMIT_B)
     state = gw._state_for(build({"ISAAC_MCP_SIM_SESSIONS_DIR": str(tmp_path / "none")}))
     answer = json.loads(gw._dispatch("status", {}, state))
-    assert answer["running"] is False and "sim__launch" in answer["message"], "no bridge is an answer, not an error"
+    assert answer["running"] is False and "toolsets" in answer["message"], "no bridge is an answer, not an error"
     assert answer["bridges"] == [] and "Restart the MCP connection" in answer["host"]["warning"]
     other = gw._dispatch("ur5e_dt.play_scene", {}, state)
     assert "MCP host:" not in other
@@ -1066,7 +1069,7 @@ def test_bridge_listing_help_is_one_working_form(monkeypatch, tmp_path):
     state = gw._state_for(server)
     listed = {tool.name: tool for tool in asyncio.run(server.list_tools())}
     refused = ConnectionRefusedError("[Errno 111] Connection refused")
-    messages = [gw._BRIDGE_HELP, gw.SERVER_INSTRUCTIONS, listed["use_bridge"].description,
+    messages = [gw._BRIDGE_HELP, listed["use_bridge"].description,
                 gw._catalog_error("status", refused, state), gw._catalog_error("ur5e_dt.play_scene", refused, state),
                 gw._starting_hint(server, refused)]
     for message in messages:

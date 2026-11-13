@@ -454,12 +454,11 @@ def test_input_and_output_paths_stay_under_home_and_never_overwrite(monkeypatch,
 
 
 def test_new_tools_are_grouped_and_annotated():
-    from isaac_mcp import local_tools
+    from isaac_mcp import toolsets
 
-    assert "join_videos" in local_tools.GROUPS["screen_capture"]
-    assert "tile_windows" in local_tools.GROUPS["screen_control"]
-    assert {"join_videos", "tile_windows"} <= local_tools.DEFAULT_TOOLS
-    assert not {"join_videos", "tile_windows"} & local_tools.READ_ONLY_TOOLS
+    assert toolsets.owner("join_videos") == "screen"
+    assert toolsets.owner("tile_windows") == "screen"
+    assert "screen" in toolsets.DEFAULT
 
 
 # ------------------------------------------------------------------ Kit UI: close and single-level menus

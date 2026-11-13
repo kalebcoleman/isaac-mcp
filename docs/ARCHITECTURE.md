@@ -30,7 +30,7 @@ start. It offers three kinds of tool:
 |---|---|---|
 | Host server | `mcp/isaac_mcp/` (command `isaac-mcp`) | The MCP server. Speaks MCP to the client on stdio; is a TCP client of the bridge. |
 | Bridge | `exts/isaac.mcp.bridge/` | A Kit extension inside Isaac Sim: a TCP server that runs tool calls on Kit's main thread. Robot-agnostic. |
-| Scene tools | `exts/sim-tools/` | A Kit extension that registers the 71 generic sim and assets tools on the bridge. |
+| Scene tools | `exts/sim-tools/` | A Kit extension that registers the 70 generic sim and assets tools on the bridge. |
 | UR5e twin | `exts/ur5e-dt/` | One lab's digital twin: 23 `ur5e_dt.*` tools on the same bridge. Optional. |
 | Panel | `exts/isaac.mcp.panel/` | An optional in-app window listing the registered tools. |
 | Launch and checks | `run.sh`, `install.sh`, `verify.sh`, `scripts/` | Start Isaac Sim with the extensions, install the host, run checks. |
@@ -169,7 +169,7 @@ Kit (set them where `run.sh` runs; `sim__launch` passes the server's on), or an 
 | `ISAAC_MCP_ASSET_PATH` | server, Kit | The asset folder. |
 | `ISAAC_MCP_SCENE_OUTPUT` | Kit | Where scene tools write captures, saves and logs. |
 | `ISAACLAB_PYTHON`, `ISAACLAB_ROOT` | server | The default Isaac Lab install. |
-| `ISAAC_MCP_LOCAL_TOOLS`, `ISAAC_MCP_NAMESPACE`, `ISAAC_MCP_BUILTINS`, `ISAAC_MCP_SCENE_TOOLS`, `ISAAC_MCP_GROUP_TOOLS` | server | Which tools a client is shown. These control visibility, not security. |
+| `ISAAC_MCP_TOOLSETS` | server | Which tools a client is shown. These control visibility, not security. |
 | `ISAAC_MCP_READ_ONLY`, `ISAAC_MCP_AUTH`, `ISAAC_MCP_TOKEN` | Kit (the token also by clients) | Enforced by the bridge: read-only mode, and the token connections must present. |
 | `ISAAC_MCP_ENABLE_SCENE_SCRIPTS` | Kit | Opt in to tools that run the caller's Python inside Kit. |
 

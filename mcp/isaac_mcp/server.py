@@ -16,13 +16,10 @@ bridge tool ``<namespace>.<tool>`` is ``<namespace>__<tool>`` to MCP, which allo
 Environment:
 
     ISAAC_MCP_PORT, ISAAC_MCP_HOST   the bridge to use. Unset: the one advertised on this machine.
-    ISAAC_MCP_NAMESPACE              only these bridge namespaces (comma-separated).
-    ISAAC_MCP_BUILTINS=0             hide the bridge's built-ins (run_python, the file tools, ...).
-    ISAAC_MCP_LOCAL_TOOLS            which groups of the host's own tools to register (local_tools.py).
-    ISAAC_MCP_GROUP_TOOLS=0          list every tool singly instead of grouped.
+    ISAAC_MCP_TOOLSETS               profile and adjustments (default,+lab,-screen).
     ISAAC_MCP_NAME, ISAAC_MCP_INSTRUCTIONS   the server's name and instructions.
 
-Nothing here starts a simulator unless the optional ``sim_launch`` group is selected.
+Nothing here starts a simulator unless the explicit ``launch`` toolset is selected.
 """
 
 import functools
@@ -53,11 +50,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("isaac_mcp.server")
 
 # How to find running bridges. A stock python3 has no isaac_mcp package, so `python -m isaac_mcp.client`
-# alone fails there; the file itself is stdlib-only. list_bridges needs a bridge that already answers.
+# alone fails there; the file itself is stdlib-only. status also lists advertised bridges.
 LIST_BRIDGES_HELP = (
     "`python3 mcp/isaac_mcp/client.py --list-bridges` from an isaac-mcp checkout, "
     "`\"$(uv tool dir)/isaac-mcp/bin/python\" -m isaac_mcp.client --list-bridges` for the isaac-mcp "
-    "tool's own Python, or the list_bridges tool (a bridge built-in) when a bridge already answers")
+    "tool's own Python, or status")
 
 SERVER_NAME = os.getenv("ISAAC_MCP_NAME", "isaac")
 SERVER_INSTRUCTIONS = (
@@ -386,9 +383,8 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
 
 # ==================== Offline catalog proxies ====================
 #
-# A server built by build_server() lists every catalogued tool (host_catalog) as a proxy registered
-# straight on the server, never through ScopedTools: ISAAC_MCP_LOCAL_TOOLS selects the host's own
-# tools and has no say over bridge tools, offline or not. The bookkeeping lives on the server object
+# A server built by build_server() registers proxies for enabled catalogued tools.
+# Toolset selection applies to both host tools and bridge tools, offline or not. The bookkeeping lives on the server object
 # (not in _BridgeState) because the default state is shared with bare FastMCP instances used by
 # scripts and tests, which must not grow proxies. Servers without it behave exactly as before.
 
@@ -710,7 +706,7 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                         return json.dumps(dict(status="error", code=e.code, message=str(e), **e.details))
                     except ValueError as e:  # an invalid pack name or project file
                         return json.dumps(dict(status="error", code=getattr(e, "code", "INVALID_CONFIG"), message=str(e)))
-                if canonical in ("assets.info", "assets.prepare_workstation", "assets.import_path"):
+                if canonical in ("assets.info", "assets.import_path"):
                     # Verify destination identity BEFORE reading/copying project files.
                     info = active.get_client().call("sim.stage.info")
                     if info.get("session_id") != params.get("session_id") or info.get("stage_id") != params.get("stage_id"):
@@ -722,9 +718,6 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                         from . import asset_import  # one entry for every format: the host picks and converts
                         kit_canonical, params, routed_info = asset_import.route(broker, params)
                         root_id = None
-                    elif canonical == "assets.prepare_workstation":
-                        params = dict(params)
-                        root_id, relative_path = broker.locate(params.pop("source_path"))
                     else:
                         root_id, relative_path = params["root_id"], params["relative_path"]
                     if root_id is not None:  # import_path was snapshotted by the router
@@ -1628,9 +1621,9 @@ _HELP_TOPICS = (
      "their start pose. Then sim__stage__info."),
     ("train or evaluate a policy", ("train", "rl", "policy", "reward", "eval", "isaac lab", "isaaclab", "play", "checkpoint", "job", "wait", "baseline", "register", "summar", "pass count", "run dir", "exit code"),
      "isaaclab__envs_list, isaaclab__train, isaaclab__runs_status, isaaclab__runs_tail, isaaclab__metrics_summary, "
-     "isaaclab__eval, isaaclab__play, isaaclab__runs_cancel. Before a long run: isaaclab__preflight (GPU and jobs) and "
+     "isaaclab__eval, isaaclab__play, job_cancel. Before a long run: isaaclab__preflight (GPU and jobs) and "
      "isaaclab__env_check (NaNs, resets, memory). isaaclab__runs_status(job_id, wait_s=45) waits for a job to end; "
-     "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises your evaluation-result files against criteria you give; isaaclab__checkpoint_register protects a baseline; isaaclab__run_script runs your own script as a job. "
+     "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises your evaluation-result files against criteria you give; isaaclab__checkpoint_register protects a baseline; run_script runs your own script as a job. "
      "isaaclab__record gives an MP4 with no window. No bridge needed."),
     ("start, check or recover a simulator", ("start", "launch", "bridge", "kit", "hang", "stuck kit", "status", "connect", "where am i", "running"),
      "status (one call: the bridge, what is running, the stage IDs; says so when nothing runs), refresh_tools(wait_s=120), "

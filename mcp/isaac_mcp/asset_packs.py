@@ -244,7 +244,7 @@ def write_pins(pack_folder: Path, entries: dict[str, str]) -> None:
 def private_dirs(path: Path, notes: list | None = None) -> None:
     """Create *path* (and missing parents) as 0755 and make sure *path* itself, the pack
     folder, is not group- or world-writable when it is the user's own
-    (``assets__prepare_workstation`` refuses such folders, and others must not be able to
+    (others must not be able to
     swap your assets). Folders above it are left as they are. A note goes to *notes*, or to
     stdout for the CLI."""
     missing = []

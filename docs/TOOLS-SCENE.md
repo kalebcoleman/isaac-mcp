@@ -145,11 +145,9 @@ A missing/different mount produces an error, never an implicit transfer via `put
 
 ## Tools
 
-All names below remain discoverable offline by default, subject to existing namespace filters.
-Set `ISAAC_MCP_SCENE_TOOLS=0` on the host server and restart that MCP connection to hide
-all generic tools, including live bridge discovery. This per-server preference preserves
-UR5e, Isaac Lab, desktop and managed-session tools; it is not an enforcement boundary.
-`ISAAC_MCP_LOCAL_TOOLS` does not select these catalogued tools. `assets__roots`,
+Names below are registered only when their toolset is enabled. Use `status` to inspect toolsets
+or `ISAAC_MCP_TOOLSETS=default,+ros2,+kit_debug` to include the optional scene integrations.
+`assets__roots`,
 `assets__scan`, `assets__search`, `assets__packs` and the `assets__pack_*` tools execute on the host even without Kit
 (`assets__dependencies` and the USD parts of the pack tools use a host USD helper if one is set, otherwise the
 selected Kit; see [asset packs](ASSETS.md#packs-from-mcp-tools)). Other tools explain an absent
@@ -166,7 +164,6 @@ bridge/extension. Existing `sim__launch/list/status/stop` remain separate option
 | `assets__pack_pin` | Record the current SHA-256 of a pack's files in its SHA256SUMS, in the primary asset folder. New files are pinned; a pin that would change accepts whatever bytes are there, so it is refused with before and after hashes unless the file is named in files or force=true. |
 | `assets__pack_build` | Copy USD files and only what they depend on into a pack in the primary asset folder, keeping relative layout, and pin them. Sources must be under an approved root or a user asset store; dependencies outside those are never copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import until the files are added, and the result says `importable: false` with `import_blockers`. Files that differ need force=true. Checks the new pack afterwards. |
 | `assets__info` | Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. |
-| `assets__prepare_workstation` | Take an absolute USD path under an already approved trusted root, validate its bounded snapshot in the selected Kit, and prepare a private workstation cache without overwriting. Returns `loaded:false`; call `ur5e_dt__load_workstation` and inspect `/World/Vention` to verify. |
 | `assets__import_path` | The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF, or a folder that holds one. `format=auto` picks it from the name; xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. A USD composes with its own variant selections and payloads, and the result's `visuals` counts the geometry that will be drawn: a robot with physics but nothing to draw comes back with a warning instead of looking fine until you render it. See [ASSET-IMPORT.md](ASSET-IMPORT.md). |
 | `sim__stage__info` | Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations. Also returns `ros`: the simulator's ROS_DISTRO, ROS_DOMAIN_ID, RMW, localhost and Cyclone settings, plus the shell line that matches them. |
 | `sim__quick_start` | Build a ground plane, physics scene, lights and an aimed camera with no IDs, optionally with a robot and ROS 2. See [Start a scene](#start-a-scene). |
@@ -297,18 +294,6 @@ absolute USD path to `assets__import_path` (or use the approved root ID and rela
 approved project with relative layout intact. Kit checks the snapshot's USD layers, material
 and texture dependencies and returns the created prim path, units and dependency counts. Inspect
 the resulting prim or viewport before assuming physics is ready.
-
-For a workstation, after the same one-time trusted-root approval, call
-`assets__prepare_workstation` with the exact `session_id` and `stage_id` from `sim__stage__info`
-and `source_path` set to the absolute USD path under that root. The tool writes a private project
-copy and wrapper to `workstation/vention.usd` under the first store of `ISAAC_MCP_ASSET_PATH` (deprecated alias
-`UR5E_DT_ASSET_CACHE`, then `<workspace>/isaac-mcp-assets` when `ISAAC_MCP_WORKSPACE` is set, otherwise the `isaac-mcp-assets` folder next to the checkout), in its `ur5e-dt` pack folder, and reports the destination and dependency checks. It does **not** load the scene:
-call `ur5e_dt__load_workstation` or the appropriate workstation quick-start, then inspect
-`/World/Vention`. The twin and selected Kit must use the same asset folder. A project store
-(`isaac-mcp.json`) still takes precedence; check which file the twin actually used with
-`scripts/isaac_assets.py doctor`. Existing workstation files are never replaced. The asset folder
-must be outside the repository, not group- or world-writable, and disjoint from approved roots
-and staging.
 
 The user is responsible for trusting and having rights to the asset. Existing USD checks refuse
 missing or outside-snapshot dependencies, URLs and unsupported paths; native USD parsing can

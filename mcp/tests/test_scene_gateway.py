@@ -24,7 +24,7 @@ def single_purpose_tool_list(member_listing):
 def test_full_catalog_and_errors(monkeypatch):
     monkeypatch.delenv("ISAAC_MCP_NAMESPACE", raising=False)
     catalog = load_catalog()
-    builtins = {"run_python", "status", "list_bridges", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
+    builtins = {"run_python", "status", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
     assert len(catalog) == sum(name.startswith("ur5e_dt.") for name in catalog) + len(REGISTRY) + len(builtins)
     assert {k for k in catalog if "." not in k} == builtins
     server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
@@ -50,7 +50,7 @@ def test_full_catalog_and_errors(monkeypatch):
             assert schema["properties"]["orientation"]["maxItems"] == 4
             assert "quaternion" in schema["properties"]["orientation"]["description"]
             assert not listed["assets__import_path"].annotations.readOnlyHint
-            for name in ("assets__import_path", "assets__prepare_workstation"):
+            for name in ("assets__import_path",):
                 schema = listed[name].inputSchema
                 needed = {"session_id", "stage_id"} | ({"source_path"} if name != "assets__import_path" else set())
                 assert needed <= set(schema["required"])
@@ -205,7 +205,7 @@ def test_asset_stale_target_includes_current_identity_before_snapshot(monkeypatc
     assert out["current_target"] == info
 
 
-@pytest.mark.parametrize("tool", ["assets.import_path", "assets.prepare_workstation"])
+@pytest.mark.parametrize("tool", ["assets.import_path"])
 def test_absolute_path_is_snapshotted_before_bridge_dispatch(tmp_path, tool):
     root = tmp_path / "root"
     root.mkdir()

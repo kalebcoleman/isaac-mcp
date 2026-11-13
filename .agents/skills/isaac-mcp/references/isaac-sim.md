@@ -10,7 +10,7 @@ MCP client ──stdio──► isaac-mcp (host process)
                         │  NDJSON over TCP (loopback by default)
                         ▼
                       isaac.mcp.bridge (extension inside Kit: Isaac Sim or Isaac Lab)
-                        ├── built-ins: status, list_bridges, run_python, job_status, job_cancel,
+                        ├── built-ins: status, run_python, job_status, job_cancel,
                         │              reload_tools, put_file, get_file, stat_file
                         └── tool packs registered under a namespace, e.g. ur5e_dt.*, sim.*, assets.*
 ```
@@ -93,8 +93,8 @@ Rules of thumb:
 
 ## Generic scene and project assets (`sim__*`, `assets__*`)
 
-The `sim`/`assets` pack is on by default (`run.sh` enables `sim-tools`). `ISAAC_MCP_SCENE_TOOLS=0`
-on the host hides all of them per server; it is a visibility preference, not access control.
+The `sim`/`assets` pack is divided among toolsets (`run.sh` enables `sim-tools`).
+Call `status` for selection and enable instructions; toolsets are not access control.
 Arguments are in `docs/TOOLS-ARGUMENTS.md`. The workcell uses external assets and starts stopped. After reopening a scene, adopt cameras and LiDARs for capture; generic edits require a stopped timeline.
 
 - Call `sim__stage__info` first. Keep its `session_id` and `stage_id`; every call except discovery

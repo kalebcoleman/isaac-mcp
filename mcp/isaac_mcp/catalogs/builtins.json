@@ -77,13 +77,6 @@
       "namespace": null,
       "owner_id": "isaac.mcp.bridge"
     },
-    "list_bridges": {
-      "description": "List all isaac.mcp.bridge bridges advertised on this box (this Kit process and any siblings, e.g. a second instance on an ephemeral port). status lists them too, and also answers when no bridge is running.",
-      "parameters": {},
-      "fields": [],
-      "namespace": null,
-      "owner_id": "isaac.mcp.bridge"
-    },
     "reload_tools": {
       "description": "Hot-reload one of a project's own tool packages: unregister it, import it again and register its tools. Follow with refresh_tools so the new schemas are seen.",
       "parameters": {

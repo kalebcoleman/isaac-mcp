@@ -127,57 +127,6 @@
       "namespace": "assets",
       "owner_id": "generic-assets"
     },
-    "assets.prepare_workstation": {
-      "description": "Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox. Requires session_id and stage_id from sim__stage__info.",
-      "parameters": {
-        "session_id": {
-          "type": "string",
-          "description": "Exact session_id from sim__stage__info (call it first; process incarnation).",
-          "required": true
-        },
-        "stage_id": {
-          "type": "string",
-          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused.",
-          "required": true
-        },
-        "source_path": {
-          "type": "string",
-          "description": "Absolute local USD path inside an already approved trusted root.",
-          "required": true
-        }
-      },
-      "fields": [
-        {
-          "name": "session_id",
-          "kind": "string",
-          "enum": null,
-          "required": true,
-          "default": null,
-          "has_default": false,
-          "description": "Exact session_id from sim__stage__info (call it first; process incarnation)."
-        },
-        {
-          "name": "stage_id",
-          "kind": "string",
-          "enum": null,
-          "required": true,
-          "default": null,
-          "has_default": false,
-          "description": "Exact stage_id from sim__stage__info (call it first); stale stages are refused."
-        },
-        {
-          "name": "source_path",
-          "kind": "string",
-          "enum": null,
-          "required": true,
-          "default": null,
-          "has_default": false,
-          "description": "Absolute local USD path inside an already approved trusted root."
-        }
-      ],
-      "namespace": "assets",
-      "owner_id": "generic-assets"
-    },
     "assets.import_path": {
       "description": "The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; sources never change. Robot formats take fixed_base and default_drives. A USD reports its drawn `visuals`; none is a warning. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {

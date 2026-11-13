@@ -231,7 +231,7 @@ def test_stale_tool_reference_is_reported(tmp_path, monkeypatch):
 
 
 def test_stale_readme_row_is_reported():
-    text = (ROOT / "README.md").read_text().replace("| UR5e digital twin | 23 |", "| UR5e digital twin | 99 |")
+    text = (ROOT / "README.md").read_text().replace("| UR5e digital twin | 10 |", "| UR5e digital twin | 99 |")
     errors = []
     check_docs.check_readme_counts(errors, text=text)
     assert any("'UR5e digital twin' row" in error for error in errors)
@@ -251,7 +251,7 @@ def test_architecture_generic_wording_is_checked():
     assert "generic sim" in text
     errors = []
     check_docs.check_generic_counts(
-        errors, pages={"docs/ARCHITECTURE.md": text.replace("71 generic sim", "55 generic sim")})
+        errors, pages={"docs/ARCHITECTURE.md": text.replace("70 generic sim", "55 generic sim")})
     assert any("55 generic sim" in error for error in errors)
     ignored = []
     check_docs.check_generic_counts(
@@ -260,21 +260,12 @@ def test_architecture_generic_wording_is_checked():
     assert ignored == []
 
 
-def test_scene_opt_out_count_matches_and_a_stale_value_fails():
-    errors = []
-    check_docs.check_scene_opt_out(errors)
-    assert errors == []
-    expected = check_docs.standard_without_generic()
-    agents = (ROOT / "AGENTS.md").read_text().replace(
-        f"leaving {expected} tools", f"leaving {expected + 1} tools")
-    host = (ROOT / "docs/TOOLS-HOST.md").read_text()
-    errors = []
-    check_docs.check_scene_opt_out(errors, pages={"AGENTS.md": agents, "docs/TOOLS-HOST.md": host})
-    assert len(errors) == 1 and "AGENTS.md" in errors[0] and str(expected + 1) in errors[0]
-    missing = agents.replace(f"leaving {expected + 1} tools", "hides the generic pack")
-    errors = []
-    check_docs.check_scene_opt_out(errors, pages={"AGENTS.md": missing})
-    assert any("says nothing" in error for error in errors)
+def test_default_tool_inventory_excludes_disabled_toolsets():
+    from isaac_mcp.toolsets import DEFAULT, owner
+    names = check_docs.default_tool_names()
+    assert names
+    assert all(owner(name) in DEFAULT for name in names)
+    assert not any(name.startswith("ur5e_dt__") for name in names)
 
 
 def test_vendoring_rejects_a_bundled_asset_claim():

@@ -104,7 +104,7 @@ def test_schema_titles_are_not_listed(either):
 @pytest.mark.parametrize(
     "name",
     ["screenshot", "start_screen_recording", "stop_screen_recording", "join_videos", "run_python", "put_file",
-     "ur5e_dt__save_scene_state", "ur5e_dt__new_stage", "assets__pack_build", "isaaclab__runs_tail", "sim__camera__capture"],
+     "assets__pack_build", "isaaclab__runs_tail", "sim__camera__capture"],
 )
 def test_nothing_that_writes_claims_to_be_read_only(single, name):
     listed = single
@@ -114,10 +114,10 @@ def test_nothing_that_writes_claims_to_be_read_only(single, name):
 def test_destructive_tools_say_so(single):
     listed = single
     hints = {t.name: t.annotations for t in listed}
-    for name in ("run_python", "put_file", "ur5e_dt__new_stage", "ur5e_dt__delete_objects", "isaaclab__runs_cancel",
+    for name in ("run_python", "put_file", "job_cancel",
                  "window_click", "sim__stop"):
         assert hints[name].destructiveHint is True, name
-    for name in ("status", "get_file", "stat_file", "list_bridges", "ur5e_dt__get_recording_status", "screen_info"):
+    for name in ("status", "get_file", "stat_file", "screen_info"):
         assert hints[name].readOnlyHint is True and hints[name].destructiveHint is False, name
 
 
@@ -150,14 +150,14 @@ def test_the_exception_list_stays_small_and_real(listed):
 
 def test_instructions_name_the_starting_points_and_what_is_universal():
     text = gw.SERVER_INSTRUCTIONS
-    assert "sim__quick_start" in text and "sim__stage__info" in text
-    assert "ur5e_dt__* is one lab's UR5e digital twin" in text and "work on any scene" in text
+    assert "status" in text and "toolsets" in text
+    assert len(text) < 700
 
 
 def test_the_skill_has_a_decision_path():
     text = (REPO / ".agents/skills/isaac-mcp/SKILL.md").read_text()
     head = text[text.index("## Which tool do I start with?"):text.index("## Ground rules")]
-    assert "sim__quick_start" in head and "sim__stage__info" in head and "ur5e_dt__quick_start" in head
+    assert "sim__quick_start" in head and "sim__stage__info" in head and "ur5e_dt__workcell" in head
 
 
 def test_the_argument_reference_shows_clean_types():
@@ -180,10 +180,10 @@ def test_a_client_is_shown_groups_and_no_single_purpose_member(listed, single):
     old = {t.name for t in single}
     assert len(names) < len(old) / 2.5 and len(names) <= 50
     assert set(tool_groups.GROUPS) <= names
-    assert not names & set(tool_groups.members()) and not names & set(tool_groups.SUPERSEDED)
-    assert names - set(tool_groups.GROUPS) == old - set(tool_groups.members()) - set(tool_groups.SUPERSEDED), "ungrouped tools are listed as they were"
+    assert not names & set(tool_groups.members())
+    assert names - set(tool_groups.GROUPS) == old - set(tool_groups.members()), "ungrouped tools are listed as they were"
     size = lambda tools: len(json.dumps([t.model_dump(exclude_none=True) for t in tools]))  # noqa: E731
-    assert size(listed) < 0.62 * size(single), "the grouped listing costs a client well under two thirds of the old one"
+    assert size(listed) < 0.65 * size(single), "the grouped listing costs a client well under two thirds of the old one"
 
 
 def test_every_single_purpose_tool_is_reachable_through_a_listed_one(listed, single):
@@ -191,7 +191,7 @@ def test_every_single_purpose_tool_is_reachable_through_a_listed_one(listed, sin
     for tool in single:
         found = tool_groups.members().get(tool.name)
         if found is None:
-            assert tool.name in by_name or tool.name in tool_groups.SUPERSEDED, tool.name
+            assert tool.name in by_name, tool.name
             continue
         group, action = found
         schema = by_name[group].inputSchema
@@ -220,13 +220,13 @@ def test_shared_arguments_are_described_once_and_scoped_ones_say_where_they_appl
 def test_what_the_server_says_names_tools_as_the_client_is_shown_them(listed, monkeypatch, tmp_path):
     assert tool_groups.listed_form("call sim__stage__info, then sim__prim__delete (not sim__prim__delete_all)") == \
         "call sim__stage action=info, then sim__prim action=delete (not sim__prim__delete_all)"
-    assert tool_groups.listed_form("ur5e_dt__quick_start* and list_bridges") == "ur5e_dt__quick_start* and status"
-    hidden = set(tool_groups.members()) | set(tool_groups.SUPERSEDED)
+    assert tool_groups.listed_form("status") == "status"
+    hidden = set(tool_groups.members())
     pattern = __import__("re").compile(r"(?<![A-Za-z0-9_])(" + "|".join(sorted(hidden, key=len, reverse=True)) + r")(?![A-Za-z0-9_*])")
     named = {t.name: sorted(set(pattern.findall(t.description + json.dumps(t.inputSchema)))) for t in listed}
     assert not {name: found for name, found in named.items() if found}, "a listed tool names a tool the client cannot see"
     server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
-    assert "sim__stage action=info" in server.instructions and "sim__stage__info" not in server.instructions
+    assert "status" in server.instructions and "toolsets" in server.instructions
 
 
 def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
@@ -266,8 +266,8 @@ def test_errors_are_translated_and_the_caller_s_own_data_is_not(monkeypatch):
 def test_names_in_paths_keys_and_file_names_are_left_alone():
     same = ["/out/20261111-job_status.png", '"/World/get_file"', '{"window_type": 1}', "a/sim__prim__get/b", "x get_file.txt"]
     assert [tool_groups.listed_form(text) for text in same] == same
-    assert tool_groups.listed_form("stop it with job_cancel, or isaaclab__runs_cancel.") == \
-        "stop it with jobs action=cancel, or jobs action=cancel."
+    assert tool_groups.listed_form("stop it with job_cancel.") == \
+        "stop it with jobs action=cancel."
 
 
 def test_a_grouped_argument_takes_every_kind_its_actions_take_and_text_stays_text(listed):

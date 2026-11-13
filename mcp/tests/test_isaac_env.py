@@ -343,7 +343,7 @@ def test_init_creates_layout_idempotent_and_never_overwrites(world):
 
 
 def test_init_does_not_create_group_writable_folders(world):
-    """assets__prepare_workstation refuses a store that group/others can write to."""
+    """The asset store must not be writable by group/others."""
     old = os.umask(0o002)
     try:
         target = world.tmp / "umask-ws"

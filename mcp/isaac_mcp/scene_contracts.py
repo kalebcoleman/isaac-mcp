@@ -60,16 +60,6 @@ add(
     dict(**TARGET, **ASSET),
 )
 add(
-    "assets.prepare_workstation",
-    "Prepare a trusted project USD and its project files in the UR5e workstation cache without overwriting. Requires an approved root and live Kit dependency validation; call ur5e_dt.load_workstation afterward. Not a sandbox.",
-    dict(
-        **TARGET,
-        source_path=field(
-            "string", "Absolute local USD path inside an already approved trusted root."
-        ),
-    ),
-)
-add(
     "assets.import_path",
     "The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF (.xml), a mesh prop (glTF, GLB, OBJ, STL, FBX, PLY), a ROS map (.yaml, as walls), or a folder that holds one. format=auto picks it from the name; a folder names its own entry file, or the refusal lists the candidates. Xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; sources never change. Robot formats take fixed_base and default_drives. A USD reports its drawn `visuals`; none is a warning.",
     dict(

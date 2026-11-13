@@ -1,6 +1,6 @@
 # Isaac Lab Host Tools (`isaaclab__*`)
 
-This document covers the 18 host-side tools registered by `mcp/isaac_mcp/isaaclab/tools.py`
+This document covers the 16 host-side tools registered by `mcp/isaac_mcp/isaaclab/tools.py`
 (`install.py`, `jobs.py`, `metrics.py`). It is the implementation reference; every argument is
 listed in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md#isaac-lab).
 
@@ -47,7 +47,7 @@ is not an approval.
 The interpreter must be a virtual environment with Isaac Lab installed, which is checked from its files before anything
 runs it. An invalid setting is an error, not a fallback. That check catches mistakes; it does not stop a deliberately
 faked environment, so name only a project you trust. A model with `put_file` can write any file there. Hide `put_file`
-(`ISAAC_MCP_BUILTINS=0`) if that matters. Explicit `ISAACLAB_PYTHON` or `ISAACLAB_ROOT` win, and then
+(`ISAAC_MCP_TOOLSETS=default,-code`) if that matters. Explicit `ISAACLAB_PYTHON` or `ISAACLAB_ROOT` win, and then
 `isaaclab__install_info` reports `project_setting_ignored`; remove them from that server's configuration to use the
 project's. It reports `source`, and `tested: false` for a pair other than the two this project claims (Lab 3.0.0 with Sim 6.2, Lab 2.3.2 with Sim 5.1):
 the version read works, but jobs on it are untested. A pip-only Lab has no `scripts/reinforcement_learning`, so
@@ -233,13 +233,11 @@ simultaneously running Kit bridge. Keep the default guards unless you have check
 | `isaaclab__play` | Play a checkpoint with a window (async, interactive) |
 | `isaaclab__env_check` | Build a task, step it with zero or random actions, and report problems (async) |
 | `isaaclab__record` | Record an MP4 with no window, from a checkpoint or from zero/random actions (async) |
-| `isaaclab__run_script` | Run your own bounded Python script as a managed job (async; executes arbitrary code) |
 | `run_script` | The same managed-job runner for any Python script: no Isaac Lab or GPU needed, and no GPU guards unless `uses_gpu=true` |
 | `isaaclab__preflight` | Free GPU memory, running jobs, Kit bridges, `can_start`, a suggested `num_envs`, and optionally GPU-hours used |
 | `isaaclab__runs_list` | List jobs, newest first, filtered (task, kind, state, since) and limited (default 25) |
 | `isaaclab__runs_status` | State, pid, elapsed, exit code, log tail, checkpoint, run dir (with its source), window, and for a running job its `health` and `progress`; `wait_s` waits for the job to end; or a run folder by name under a log root |
 | `isaaclab__runs_tail` | Last lines of a job's stdout/stderr |
-| `isaaclab__runs_cancel` | Stop a job (SIGTERM then SIGKILL process group) |
 | `isaaclab__checkpoints_list` | List `*.pt`/`*.pth` checkpoints (newest first) |
 | `isaaclab__checkpoint_register` | Record a checkpoint's sha256, role and provenance in an append-only README table; refuses to overwrite a registered path |
 | `isaaclab__metrics_summary` | Summarise TensorBoard scalars (last/min/max/step/count), or, with `eval_json`, your evaluation-result files scored against criteria you give (optionally against a baseline) |
@@ -435,7 +433,7 @@ An optional cap exists for those who want one: `ISAACLAB_GPU_BUDGET_HOURS`, or a
 `<jobs dir>/gpu_ledger.json`) with `budget_hours`, `since` and `carried_hours`. With a cap, `gpu_hours` shows `remaining_hours`, and
 the job tools refuse to start once it is used up. A malformed setting is an error, never a silently absent cap.
 
-### `isaaclab__run_script`
+### `run_script`
 
 Runs **your own Python script** as a job of kind `script`, for work the registered-task tools cannot express
 (a sweep, a standalone Kit script, a custom evaluation). **It executes arbitrary code from the script with your
@@ -459,7 +457,7 @@ never imported.
 | `allow_concurrent` | `false` | As for `isaaclab__train`: start although another job runs. |
 | `allow_concurrent_gpu` | `false` | As for `isaaclab__train`: refuse while a Kit bridge runs unless `true`. |
 
-The script leads its own session and process group, so `isaaclab__runs_cancel` and the timeout kill Kit, ffmpeg
+The script leads its own session and process group, so `jobs(action="cancel")` and the timeout kill Kit, ffmpeg
 and any other child it started. Output goes to the job's `stdout.log` and `stderr.log`; follow it with
 `isaaclab__runs_tail`. This is the supported route for a project's own evaluator (`isaaclab__eval` only scores Isaac
 Lab's `play.py` loop). A line `ISAAC_MCP_PROGRESS: <fraction | percent% | done/total> [text]` makes `isaaclab__runs_status`
@@ -468,22 +466,21 @@ report `progress` (see [progress](#progress-marker)). A script job's `run_dir` i
 `isaaclab__runs_status` returns `script_result`: `status`, `exit_code`, `wall_time_s`, `log_path`,
 `stderr_log_path` and `artifacts` (the printed paths, in order; they are not checked to exist).
 
-### `run_script`
+#### General scripts
 
-The same runner under a name that does not say Isaac Lab, for a script that needs neither Isaac Lab nor a
+The runner under a name that does not say Isaac Lab, for a script that needs neither Isaac Lab nor a
 simulator: a controller server for `sim__simulation__run`, a data conversion, a plot, one step of a sweep. It
 starts the same kind of job (`script`) in the same job folder, so `isaaclab__runs_status` (with `wait_s`),
-`isaaclab__runs_tail`, `isaaclab__runs_list` and `isaaclab__runs_cancel` follow and stop it, and the
-`ISAAC_MCP_PROGRESS` and `ISAAC_MCP_ARTIFACT` lines work the same way. It differs from `isaaclab__run_script` in
-two defaults:
+`isaaclab__runs_tail`, `isaaclab__runs_list` and `jobs(action="cancel")` follow and stop it, and the
+`ISAAC_MCP_PROGRESS` and `ISAAC_MCP_ARTIFACT` lines work the same way. Its interpreter and GPU defaults are:
 
 | Name | Default | Notes |
 |---|---|---|
 | `python` | `python3` on `PATH` | Any executable interpreter. `install` picks an Isaac Lab environment instead. |
-| `uses_gpu` | `false` | `false`: the script starts at once, beside a running Isaac Sim or another job, is not counted in the GPU-hour ledger and does not block GPU jobs. `true`: the GPU guards of `isaaclab__run_script` apply (one GPU job at a time, none beside a running Kit bridge, the GPU-hour budget). `min_free_vram_mb` needs `uses_gpu=true`. |
+| `uses_gpu` | `false` | `false`: the script starts at once, beside a running Isaac Sim or another job, is not counted in the GPU-hour ledger and does not block GPU jobs. `true`: the GPU guards of the managed runner apply (one GPU job at a time, none beside a running Kit bridge, the GPU-hour budget). `min_free_vram_mb` needs `uses_gpu=true`. |
 
 `script`, `args`, `env`, `python_paths`, `cwd`, `label`, `timeout_s`, `single_instance_key`, `min_free_vram_mb` and
-`wait_for_vram_s` are as above. It executes arbitrary code with your rights, like `isaaclab__run_script`.
+`wait_for_vram_s` are as above. It executes arbitrary code with your rights, with no sandbox.
 
 ### `isaaclab__play`
 
@@ -501,7 +498,7 @@ two defaults:
   | `timeout_s` | number | no | `null` | |
   | `allow_concurrent` | boolean | no | `false` | |
   | `allow_concurrent_gpu` | boolean | no | `false` | |
-- Returns: same shape as `isaaclab__train`. Interactive; stop it with `isaaclab__runs_cancel`. With `headless=false` a window opens, titled "Isaac Lab 3.0.0" on that version and "Isaac Sim 5.1.0" on Lab 2.3.2; `isaaclab__runs_status` reports its `window` (id, title, size) for screenshot/recording.
+- Returns: same shape as `isaaclab__train`. Interactive; stop it with `jobs(action="cancel")`. With `headless=false` a window opens, titled "Isaac Lab 3.0.0" on that version and "Isaac Sim 5.1.0" on Lab 2.3.2; `isaaclab__runs_status` reports its `window` (id, title, size) for screenshot/recording.
 - Example: `{"task": "Isaac-Reach-UR10", "checkpoint": "/abs/path/to/model.pth", "rl_library": "rl_games", "num_envs": 4, "headless": false}`
 
 ### `isaaclab__runs_list`
@@ -561,16 +558,10 @@ two defaults:
 - Returns: `{lines: [str]}`.
 - Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10", "stream": "stderr", "lines": 50}`
 
-### `isaaclab__runs_cancel`
+### Cancelling jobs
 
-- Parameters:
-
-  | Name | Type | Required | Default | Notes |
-  |---|---|---|---|---|
-  | `job_id` | string | yes | — | |
-  | `grace_s` | integer | no | `10` | Seconds to wait after SIGTERM before SIGKILL. |
-- Returns: `{"cancelled": true, "state": "cancelled"}` when stopped; `{"cancelled": false, "state": <state>, "note": "job already <state>"}` when the job already finished. SIGTERM is sent to the process group, then SIGKILL after `grace_s`.
-- Example: `{"job_id": "20261030-120000-Isaac-Reach-UR10", "grace_s": 10}`
+Use `jobs(action="cancel", job_id="...")` to stop a Lab or script process group.
+Inspect `jobs(action="lab_status", job_id="...")` to confirm the final state.
 
 ### `isaaclab__checkpoints_list`
 
@@ -710,7 +701,7 @@ Example train call shape (illustrative):
    `screenshot(window_id=...)` / `start_screen_recording(window_id=...)` tools to inspect.
    The viewport is black until the log contains "Completed setting up the environment"; check for it with
    `isaaclab__runs_tail`, since later lines can push it out of `last_log_lines`, then wait ~5 s before capturing.
-3. Stop with `isaaclab__runs_cancel` when done.
+3. Stop with `jobs(action="cancel")` when done.
 
 Example play call shape (illustrative):
 
@@ -728,7 +719,7 @@ Example play call shape (illustrative):
 
 ### 5. Cancel and clean up
 
-- `isaaclab__runs_cancel` with `{"job_id": "...", "grace_s": 10}`.
+- `jobs(action="cancel")` with `{"job_id": "...", "grace_s": 10}`.
 - Re-check with `isaaclab__runs_list` / `isaaclab__runs_status`. Cancelled jobs release the
   job-vs-job guard.
 

@@ -21,7 +21,7 @@ import isaac_mcp.server as gw
 from isaac_mcp import host_catalog
 from isaac_mcp.client import BridgeClient
 
-BUILTINS = {"run_python", "status", "list_bridges", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
+BUILTINS = {"run_python", "status", "reload_tools", "put_file", "get_file", "stat_file", "job_status", "job_cancel"}
 
 
 @pytest.fixture(autouse=True)
@@ -83,7 +83,7 @@ def test_builtins_are_listed_and_callable_through_an_mcp_client_before_discovery
             assert not where.isError, "with nothing running, status still answers"
             nothing = json.loads(where.content[0].text)
             assert nothing["running"] is False and "refresh_tools(wait_s=120)" in nothing["message"]
-            answer = await client.call_tool("list_bridges", {})
+            answer = await client.call_tool("run_python", {"code": "result = 1"})
             assert answer.isError
             text = answer.content[0].text
             assert "no Isaac Sim bridge could be reached" in text and "refresh_tools(wait_s=" in text
@@ -114,7 +114,7 @@ def test_builtins_are_listed_and_callable_through_an_mcp_client_before_discovery
 
 def test_offline_note_counts_builtins_as_one_group():
     server = gw.build_server({"ISAAC_MCP_TOOLSETS": "all"})
-    assert "built-ins: 9" in gw._offline_note(server)
+    assert "built-ins: 8" in gw._offline_note(server)
 
 
 def test_refresh_reports_a_list_tools_timeout_as_kit_still_starting(monkeypatch):
