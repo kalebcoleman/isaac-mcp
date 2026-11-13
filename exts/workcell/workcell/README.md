@@ -112,7 +112,7 @@ The pack is external to the repository:
 
 - Pack ID and version: `ur5e-jenga-workcell/v1`
 - Default root: `<workspace>/assets` (the transitional `<workspace>/isaac-mcp-assets` is found if `assets/` is absent);
-  `<workspace>` is `TWINSMITH_WORKSPACE`, else the folder that holds the checkout, else `<home>/robotics-workspace`
+  `<workspace>` is `TWINSMITH_WORKSPACE`, else the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace`
 - Pack directory: `<workspace>/assets/ur5e-jenga-workcell/v1`
 - Override: set `TWINSMITH_ASSET_ROOT` to a different asset root; the loader appends the
   pack ID and version.

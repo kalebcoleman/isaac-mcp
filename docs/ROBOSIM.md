@@ -11,7 +11,7 @@ Missing installations give setup guidance; the bridge never installs anything.
 
 Set `TWINSMITH_ROBOSIM_ROOT` to the RSS checkout. Default:
 `<workspace>/tools/robosimstudio`, with `TWINSMITH_WORKSPACE` selecting the workspace
-(otherwise the folder that holds the checkout, else `<home>/robotics-workspace`). No changes to RSS tracked source are needed.
+(otherwise the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace`). No changes to RSS tracked source are needed.
 
 **Which physics ran.** `device="cpu"` runs plain MuJoCo (MuJoCo's C library); `device="cuda:0"` runs
 Newton's MuJoCo-Warp solver (RSS `sim/scene.py`, `build` docstring; `specs/arrangement.py`, `CPU`).

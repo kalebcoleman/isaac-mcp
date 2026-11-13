@@ -110,8 +110,17 @@ def test_the_workspace_variable_wins_over_the_checkout_and_both_home_folders(cle
 
 def test_the_checkout_parent_wins_over_the_home_folders(clean, monkeypatch):
     (clean / "home" / "robotics-workspace").mkdir(parents=True)
+    (clean / "ws" / "envs").mkdir(parents=True)
     monkeypatch.setattr(pm, "checkout_root", lambda: clean / "ws" / "twinsmith")
     assert pm.workspace_dir() == clean / "ws"
+
+
+def test_a_checkout_parent_that_is_not_a_workspace_is_not_used(clean, monkeypatch):
+    # a git worktree of the checkout: its parent folder has no envs/ and no asset folder
+    (clean / "home" / "robotics-workspace").mkdir(parents=True)
+    (clean / "worktrees").mkdir()
+    monkeypatch.setattr(pm, "checkout_root", lambda: clean / "worktrees" / "twinsmith-branch")
+    assert pm.workspace_dir() == clean / "home" / "robotics-workspace"
 
 
 def test_without_a_checkout_the_new_home_folder_wins(clean, monkeypatch):

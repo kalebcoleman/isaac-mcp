@@ -117,7 +117,7 @@ These must be the same for the host and for Kit: each reads its own environment.
 | `TWINSMITH_ASSET_CONFIG` | unset | host, Kit | The [trusted-project approval file](TOOLS-SCENE.md#one-time-approval). No file means no approved roots. |
 | `TWINSMITH_STAGING` | `~/.cache/twinsmith/staging` | host, Kit | With no approval file: the private folder the host copies import snapshots into and Kit reads them from. |
 | `TWINSMITH_USD_PYTHON` | unset | host | A Python with `usd-core` for USD dependency checks on the host; without it they use the selected Kit. |
-| `TWINSMITH_WORKSPACE` | the folder that holds the checkout, else `<home>/robotics-workspace` (the old `<home>/isaac-workspace` only while the new folder is absent); `scripts/env.py init` uses `<home>/robotics-workspace` | host, Kit, installer | The [workspace folder](LINUX-SETUP.md#one-workspace-folder); `<workspace>/assets` is where the asset root is looked for. |
+| `TWINSMITH_WORKSPACE` | the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace` (the old `<home>/isaac-workspace` only while the new folder is absent); `scripts/env.py init` uses `<home>/robotics-workspace` | host, Kit, installer | The [workspace folder](LINUX-SETUP.md#one-workspace-folder); `<workspace>/assets` is where the asset root is looked for. |
 | `TWINSMITH_PROJECT` | walk up from the working directory | host, Kit | A project directory or its `twinsmith.json`; its `"pack"` key (`"<id>/<version>"`) is the default pack for `doctor` and `pin`. Only a project named here can set `isaaclab_python` and `isaaclab_root`. |
 
 ## Set by the code, read by the code

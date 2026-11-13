@@ -109,7 +109,7 @@ def default_root(environ=None, home=None):
 
     ``$TWINSMITH_ASSET_ROOT`` (alias ``ISAAC_MCP_ASSET_ROOT``), else ``<workspace>/assets``, else the transitional
     ``<workspace>/isaac-mcp-assets``. The workspace is ``$TWINSMITH_WORKSPACE``, else the folder that contains the
-    checkout, else ``<home>/robotics-workspace`` (the old ``<home>/isaac-workspace`` only while the new folder is absent).
+    checkout when that folder holds ``envs/`` or an asset folder, else ``<home>/robotics-workspace`` (the old ``<home>/isaac-workspace`` only while the new folder is absent).
     With nothing there it returns ``<workspace>/assets``, which the pack check then reports as missing.
     """
     environ = os.environ if environ is None else environ
@@ -121,7 +121,8 @@ def default_root(environ=None, home=None):
         base = Path(workspace).expanduser().resolve()
     else:
         checkout = Path(__file__).resolve().parents[3]
-        if (checkout / "exts" / "workcell").is_dir():
+        if (checkout / "exts" / "workcell").is_dir() and any(
+                (checkout.parent / name).is_dir() for name in ("envs", "assets", "isaac-mcp-assets")):
             base = checkout.parent
         else:
             home = Path(home).expanduser() if home is not None else Path.home()
