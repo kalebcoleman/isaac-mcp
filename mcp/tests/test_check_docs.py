@@ -24,11 +24,11 @@ LABELS = check_docs.TIER_ROWS
 # The three subtotal statements in the guide and the figure the code implies for each.
 PHRASES = {
     "host_isaaclab": (r"exactly \d+ tools", "exactly {} tools",
-                      lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"]),
+                      lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"] + c["robosim"]),
     "bridge": (r"The other \d+ tools", "The other {} tools",
                lambda c: c["builtins"]),
     "total": (r"there are \d+ tools in total", "there are {} tools in total",
-              lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic"))),
+              lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic", "robosim"))),
     "optional": (r"groups add \d+ more", "groups add {} more",
                  lambda c: c["desktop_input"] + c["sim_sessions"]),
 }

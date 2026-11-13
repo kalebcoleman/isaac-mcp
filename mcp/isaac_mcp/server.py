@@ -23,6 +23,7 @@ Nothing here starts a simulator unless the explicit ``launch`` toolset is select
 """
 
 import functools
+import inspect
 import json
 import logging
 import os
@@ -1790,6 +1791,10 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     if "robosim" in groups:
         from .robosim import register_robosim_tools
         register_robosim_tools(server)
+        # Listed like every other host tool: no generated titles, no docstring indentation.
+        tool = server._tool_manager._tools["robosim"]
+        tool.description = inspect.cleandoc(tool.description)
+        strip_schema_titles(server, "robosim")
     _register_gateway_tools(server, groups)
     setattr(server, _OFFLINE_ATTR, _OfflineTools(host_catalog.load_catalog()))
     _sync_offline(server, state)
