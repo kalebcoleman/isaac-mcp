@@ -15,6 +15,10 @@ and required uv to be installed anyway. Check PyPI name availability before publ
    textures must not be in the public tree or its history. The Apache-2.0 and CC BY 4.0 notices are
    in `THIRD-PARTY-NOTICES.md`.
 5. Fill in `project.urls` (repository, issues) in `mcp/pyproject.toml`; the repository is public.
+6. **A release states the engine and Isaac Sim build it was qualified on.** Put both in the release notes, with the Isaac Lab
+   version if Lab was exercised, taken from a recorded live run (see [verification](VERIFICATION.md)) and not from memory. The
+   target engine and its current limits are in [compatibility](COMPATIBILITY.md#target-engine); do not state a stronger claim
+   than the last recorded run shows. A release whose live checks did not run says that.
 
 ## PyPI (Python host server)
 ```bash
@@ -29,6 +33,7 @@ Install check: `uv tool install isaac-mcp` then `isaac-mcp --version`. Optional 
 ## Client config after publishing
 ```json
 { "mcpServers": { "isaac": { "command": "uvx", "args": ["isaac-mcp"],
-  "env": { "DISPLAY": ":0", "UR5E_DT_PORT": "8766" } } } }
+  "env": { "DISPLAY": ":0", "ISAAC_MCP_PORT": "8766" } } } }
 ```
-(`DISPLAY` must match the desktop session; `UR5E_DT_PORT` is the Kit bridge port.)
+(`DISPLAY` must match the desktop session; `ISAAC_MCP_PORT` is the Kit bridge port. Add `ISAAC_MCP_TOOLSETS` to change which
+[toolsets](TOOLSETS.md) the client is shown.)

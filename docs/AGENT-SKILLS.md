@@ -5,7 +5,7 @@ Codex, OpenCode and Antigravity) that teaches an agent how to drive
 this server: discover and verify a bridge, run Isaac Lab jobs within the GPU guards, inspect and
 edit a live Isaac Sim stage with the generic `sim__*`/`assets__*` tools or `run_python`, and look at
 the simulator itself. It complements the tool
-references (`TOOLS-*.md`), which say what each tool does; the skill says in what order to use them
+references ([TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md) and the `TOOLS-*.md` pages), which say what each tool does; the skill says in what order to use them
 and when to stop and ask.
 
 ```
@@ -13,7 +13,7 @@ and when to stop and ask.
 ├── SKILL.md                       ground rules, first calls, Lab and Sim workflows, troubleshooting
 └── references/
     ├── isaac-lab.md               train/eval/play, Isaac Lab 3 conventions, guards, reading metrics
-    ├── isaac-sim.md               bridge selection, generic scene/assets, run_python, capture, UR5e pack
+    ├── isaac-sim.md               bridge selection, generic scene/assets, run_python, capture, work cell
     └── official-skills.md         NVIDIA's Isaac Lab and Isaac Sim skills, mapped to isaac-mcp tools
 .claude/skills/isaac-mcp           symlink to the canonical copy (Claude Code)
 ```
@@ -27,8 +27,8 @@ An agent learns this project from four layers. Put new text in the first one tha
 
 | Layer | Loaded | Holds | Keep it |
 |---|---|---|---|
-| Tool listing (names, descriptions, parameter descriptions, hints) | Always, in every client | What a tool does, when to use it, what to call first, safety warnings and trust limits | Short: 600 characters per tool and 450 per parameter, enforced by `mcp/tests/test_tool_listing.py` |
-| Server instructions (`SERVER_INSTRUCTIONS` in `server.py`) | Always, in clients that show them | Which tool to start with, what is universal and what is one lab's twin, how to find a bridge | A few sentences |
+| Tool listing (names, descriptions, parameter descriptions, hints) | Always, in every client | What a tool does, when to use it, what to call first, safety warnings and trust limits | Short: the per-tool and per-parameter limits are enforced by `mcp/tests/test_tool_listing.py` |
+| Server instructions (`SERVER_INSTRUCTIONS` in `server.py`) | Always, in clients that show them | Which tool to start with, what is universal and what is one lab's work cell, how to find a bridge, which toolsets are on | A few sentences |
 | This skill | When a task matches, where the client supports skills | Order of calls, decisions, when to stop and ask, lessons from real runs | A decision path first; detail in `references/` |
 | `docs/` | When someone opens them | Everything else: limits, refusal codes, per-tool reference, evidence | Complete |
 
@@ -98,8 +98,8 @@ user skills directory.
 
 ## Keeping it current
 
-`scripts/check_docs.py` checks the skill's local links and that every `isaaclab__*` / `ur5e_dt__*`
-name it mentions is a registered tool. It also checks `sim__*` / `assets__*` names against
-the checked-in catalogs and optional host tools. Renaming a tool fails
-CI until the skill is updated.
-When adding a tool group or a safety rule, update `SKILL.md` alongside the `TOOLS-*.md` page.
+`scripts/check_docs.py` checks the skill's local links and that every tool name it mentions is registered: a `sim__*`,
+`assets__*`, `isaaclab__*` or `ur5e_dt__*` name, or the action of a `group(action="...")` call. It also fails on retired tool
+names and retired phrases, and on tool counts that differ from the code: counts in the skill and in `AGENTS.md` sit in generated
+blocks that `python3 scripts/gen_tool_reference.py --write` refreshes, so nobody types them. Renaming a tool fails CI until the
+skill is updated. When adding a tool or a toolset, or a safety rule, update `SKILL.md` and the relevant `docs/` page alongside it.

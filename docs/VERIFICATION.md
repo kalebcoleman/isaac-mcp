@@ -1,95 +1,107 @@
 # Verification
 
-The automated host suite and live simulator checks cover different things. A passing host suite does not establish
-that Isaac Sim, the renderer, ROS, or a particular robot work on a machine. Record the commit, machine, driver,
-versions, commands, and any warnings when reporting a result.
+The automated host suite and the live simulator checks cover different things. A passing host suite does not establish
+that Isaac Sim, the renderer, ROS, or a particular robot work on a machine. This page is the test matrix: for each toolset,
+the CPU checks that run in CI and on any machine, the live smoke check that needs a simulator, what each proves, and whether it
+needs a GPU. Record the commit, machine, driver, versions, commands and any warnings when reporting a result; the
+[last section](#recording-a-run-so-it-can-be-reproduced) says how. For a non-destructive first connection use the
+[setup check](LINUX-SETUP.md#connect-and-check-without-changing-the-scene).
 
-To record an installation and a result so that someone else can reproduce it, see
-[the last section](#recording-a-run-so-it-can-be-reproduced). For a non-destructive first connection, use the
-[setup check](LINUX-SETUP.md#connect-and-check-without-changing-the-scene). The suites below have
-different scopes; native verifiers can build scenes and move joints.
+The physics engine matters to every live result. The target engine and the current default are in
+[compatibility](COMPATIBILITY.md#target-engine). Every live smoke below takes `--backend newton` or `--backend physx`,
+verifies the engine the simulator reports before it runs, and refuses a mismatch with exit 2. Each result records the engine,
+the Isaac Sim build and the loaded Newton version when there is one.
 
-## If a simulation call stops returning
+## CPU checks
 
-The original 6.0.1.0 windowed PhysX stall remains unexplained; two later replays did not
-reproduce it. A timeout or closed socket does not cancel a native call. Stop dependent
-mutations and follow the [recovery guidance](TOOLS-SCENE.md#bounds-and-security-limits)
-instead of blindly retrying. Expected failures in a negative test are not successful scene
-loads; unexplained missing or corrupt assets need investigation.
-
-## Host checks
-
-From the repo root, run:
+These need no simulator and no GPU. Run them from the repository root; CI runs the same ones.
 
 ```bash
+python3 scripts/check_docs.py
+python3 scripts/check_assets.py
+python3 scripts/check_portable_paths.py
+python3 scripts/check_private_paths.py
+python3 scripts/gen_host_catalog.py --check
+python3 scripts/gen_tool_reference.py --check
 cd mcp
 uv run --locked --isolated --python 3.12 --extra test --extra isaaclab --extra scene-test pytest -q
 uv build
 ```
 
-From the repository root, `python3 scripts/check_docs.py` checks relative file links, fenced JSON examples and the
-registered tool names in the four tool references, agent tier counts, skill tool names, and private-path bytes. It does not check external URLs, link fragments, parameter
-semantics, or every prose claim.
+- `check_docs.py` checks relative links, fenced JSON examples, that every tool name a page names is registered (and every
+  `group(action)` has that action), that retired phrases do not return, and that the generated reference and count blocks are
+  current. It does not check external URLs or prose claims.
+- `test_environment_docs.py` (in the suite) checks that [ENVIRONMENT.md](ENVIRONMENT.md) lists exactly the variables the code reads.
+- The `scene-test` extra installs standalone `usd-core` into the isolated **host test** environment. Do not add it to a Sim
+  environment as a substitute for Kit's USD bindings.
+- The workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs these on pushes and pull requests. It does not
+  launch Isaac Sim, train a policy, or test hardware. A CI job that did not start because of billing or spending limits did not
+  run; that is not a test failure, and a report should say so.
 
-The `scene-test` extra installs standalone `usd-core` into the isolated **host test** environment.
-Do not add it to a Sim environment as a substitute for Kit's USD bindings. From the repository root,
-`python3 scripts/check_assets.py` checks bundled asset licences and
-`python3 scripts/gen_host_catalog.py --check` detects packaged twin-catalog drift.
+## Test matrix
 
-The GitHub Actions workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs these CPU-only checks
-plus the documentation check on pushes and pull requests. It does not launch Isaac Sim, train a policy, or test real
-hardware. A workflow is only verified on GitHub after its run actually completes.
+Live smokes are run with `python3 scripts/smoke.py <toolset>`; `python3 scripts/smoke.py --list` lists every check with its GPU
+and simulator needs without connecting to anything. A smoke mutates the selected simulator, so use a disposable one on its own
+port. The runner verifies the engine before each check, prints a results table, writes a JSON report to a temporary folder (or
+`--output-dir`), and stops after the first failure. `--check <name>` runs one check; it can be repeated.
 
-## Live UR5e baseline
+| Toolset | CPU proof (pytest, from `mcp/`) | Live smoke | Proves | GPU |
+|---|---|---|---|---|
+| all | `test_toolsets`, `test_tool_listing`, `test_measure_tool_list`, `test_check_docs` | none | Every tool is in exactly one toolset; each toolset builds a server alone; off means no tools registered | no |
+| `core` | `test_gateway_*`, `test_status_and_help`, `test_host_catalog_gateway`, `test_offline_builtins`, `test_tools_list_changed`, `test_bridge_*`, `test_job_health_and_script_jobs` | `smoke.py core --port 8766 --second-port 8767` | Two simulators stay isolated; a write aimed at the wrong one is refused | yes, two simulators |
+| `scene` | `test_scene_prim_edit`, `test_scene_queries`, `test_scene_timeline`, `test_sim_quick_start`, `test_stage_open_unsaved`, `test_session_layer_authoring`, `test_scene_reopened` | `smoke.py scene --port 8766 --discard-changes --directory <dir>` | Quick start, create, edit, revert, clear and a generic read-only scene succeed. The reopen check needs a fresh process with the saved scene (`--saved`, `--body`, `--expected-z`) | yes |
+| `physics` | `test_scene_joints`, `test_arm_ik`, `test_arm_path`, `test_controller_run`, `test_scene_step_failures`, `test_scene_physics_adapters`, `test_trajectory_replay`, `test_newton_parity` | `smoke.py physics --backend physx --port 8766 --discard-changes`, and again with `--backend newton` | A joint move converges and clamps; exact steps return the expected time; edge cases are refused. `newton_checks` runs only on Newton (on PhysX it is skipped, with a note) | yes |
+| `sensors` | `test_scene_camera_*`, `test_scene_sensor_*`, `test_scene_lidar_save`, `test_scene_viewport`, `test_sensors_viewport` | `smoke.py sensors --port 8766` | A fresh camera picture after motion, and a non-empty LiDAR scan | yes |
+| `ros2` | `test_ros2_tools`, `test_graph_and_map_tools`, `test_graph_build_and_stage`, `test_mesh_and_map`, `test_ros_env`, `test_nav2_params_message` | none registered; use the [TF doctor](ROS2-RVIZ.md#3-check-the-tree) against a quick-start robot | `/tf` and `/joint_states` publish | yes |
+| `assets` | `test_asset_import`, `test_asset_packs`, `test_pack_manifest`, `test_project_assets`, `test_urdf_*`, `test_mjcf_*`, `test_sdf_urdf`, `test_xacro_lite`, `test_usdz`, `test_import_hardening` | none registered | An import's prim exists and has no composition errors (checked by hand) | yes |
+| `lab` | `test_isaaclab_*` | `smoke.py lab` (runs `scripts/smoke_test.py`: an environment check and a short record on Cartpole; `--no-lab` skips Lab) | Both jobs end with exit code 0. The task chooses its own engine, so `--backend` is refused | yes, a Lab job |
+| `screen` | `test_screen_*`, `test_contact_sheet`, `test_frames_video`, `test_capture_grid` | none registered; take one `screenshot` on a desktop session | A file is written | no for the tools; the desktop session needs a display |
+| `code` | `test_run_python`, `test_sim_reload`, `test_tool_packages` | none registered; `run_python` returns a value and a file round-trips | | yes |
+| `kit_debug` | `test_sim_ui`, `test_scene_advanced` | none registered; tail the Kit log | | yes |
+| `workcell` | `test_workcell_*`, `test_lab_hardware_config` | `smoke.py workcell --port 8766 --config <absolute-config> --mutate-stage` (delegates to `scripts/workcell_smoke.py`; PhysX only) | Stopped-stage authoring and BOM validation, not dynamics or renders | yes |
+| `robosim` | `test_robosim_bridge` | none registered | | no |
+| `input`, `launch` | `test_desktop_input`, `test_sim_sessions`, `test_launch_script_newton` | manual, on request only | | yes for `launch` |
+| BrickSim | `test_sim_compat`, `test_sim_versions`, the external-bridge cases in `test_sim_sessions` | the launch line in [BRICKSIM.md](BRICKSIM.md) on an Isaac Sim 5.1 BrickSim environment, then `status`, `sim__stage(action="info")` and one body-state read | `status` reports app version 5.1.0 and the tools answer. Not yet verified live since the toolsets change | yes |
 
-Use [`scripts/workcell_smoke.py`](../scripts/workcell_smoke.py) with an already-running,
-explicitly selected disposable Kit bridge and an absolute lab config path on the Kit host.
-It requires `--port`, `--config` and `--mutate-stage`; it rebuilds the workcell, so do not
-run it against a scene you need to preserve. It checks the ready/stopped PhysX report,
-units, gravity, Jenga dimensions/counts and part metadata. It does not replace the old
-workstation verifier’s joint-motion or checkpoint checks. See [asset packs](ASSET-PACKS.md) for lab files.
+Prerequisites that still apply to individual checks:
 
-## Live checks
+- The scene checks use the fixture folder made by `scripts/make_scene_fixture.py`; approve it as a project root first. Each
+  validator's docstring in `scripts/smoke/` states its own prerequisites (an explicit Kit script opt-in, a stopped fresh Sim, a
+  fixture name).
+- Clear requires the stage left by the equivalents check. Reopen requires a fresh process with the saved scene. Prim-edit needs
+  `--directory` for its fixture. Generic scene replaces the stage and requires `--discard-changes`.
+- The work-cell check requires `--config` (absolute on the Kit host) and `--mutate-stage`, and rebuilds the work cell; do not run
+  it against a scene you need to keep. `--discard-changes` is allowed only with explicit authorization, because the smoke
+  replaces the stage.
+- The Lab smoke starts GPU jobs rather than using the selected bridge, so its engine and build are unavailable in the report.
+  Isaac Lab jobs refuse to start beside a running Kit bridge unless you knowingly pass `allow_concurrent_gpu=true`.
+- A GPU run does not share a GPU with another job. Check what is running first; say so in one line before a long run.
 
-Use `python3 scripts/smoke.py all --list` to list checks and their GPU/simulator
-requirements without connecting to anything. The entry point is
-`python3 scripts/smoke.py <toolset> --host <host> --port <port> --backend physx`
-(or `--backend newton` for an explicitly requested Newton check). It verifies the
-selected engine before each live check, refuses a mismatch with exit 2, and prints
-a results table and the path to a JSON report in a temporary directory. Use a host
-Python environment with this checkout's dependencies. No simulator is started by
-the scene runner; checks mutate an explicitly selected disposable bridge.
+## If a simulation call stops returning
 
-Existing fixture and sequencing prerequisites still apply. Use repeated `--check`
-to select individual validators: clear requires the stage left by equivalents;
-reopen requires a fresh process with the saved scene and `--saved`, `--body`, and
-`--expected-z`. Sessions needs `--second-port`; prim-edit needs `--directory` for
-its existing fixture. Generic scene replaces the stage and requires
-`--discard-changes`. Workcell delegates unchanged to `workcell_smoke.py` and needs
-`--config` and `--mutate-stage`; it remains PhysX-only. Lab delegates to
-`smoke_test.py`, which starts GPU jobs rather than using the selected bridge;
-its backend/build are unavailable in the report and `--backend` is refused rather
-than claiming that the task engine was verified. Unmapped toolsets list no checks.
-The runner stops after the first failure rather than continuing on uncertain state.
+The original 6.0.1.0 windowed PhysX stall remains unexplained; two later replays did not reproduce it. A timeout or closed
+socket does not cancel a native call. Stop dependent mutations and follow the
+[recovery guidance](TOOLS-SCENE.md#bounds-and-security-limits) instead of blindly retrying. Expected failures in a negative
+test are not successful scene loads; unexplained missing or corrupt assets need investigation.
+
+## Records of earlier runs
 
 <a id="last-live-check"></a><a id="headless-physx-check"></a>
-On 2026-11-03, headless PhysX checks on Sim 6.2 passed the legacy workstation verifier, the 20-check twin
-smoke, and generic scene checks with the stated test setup. They do not establish all tools,
+On 2026-11-03, headless PhysX checks on Sim 6.2 passed the 20-check smoke of the twin that preceded the work cell, and generic scene checks with the stated test setup. They do not establish all tools,
 versions, windowed workflows, hardware or backends.
 
-LiDAR save/reopen behavior and recovery are described in [scene tools](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
+LiDAR save and reopen behaviour and recovery are described in [scene tools](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
 
-<a id="windowed-viewport-reset-comparison"></a> On 6.2, a windowed reset sequence logged
-`NoneType.GetCamera` while destroying the old stage. The tested sequence subsequently rendered
-and received a ROS camera image; its underlying cause remains open. This does not prove every
-scene or configuration recovers.
+<a id="windowed-viewport-reset-comparison"></a> On 6.2, a windowed reset sequence logged `NoneType.GetCamera` while destroying the
+old stage. The tested sequence subsequently rendered and received a ROS camera image; its underlying cause remains open. This
+does not prove every scene or configuration recovers.
 
-## Generic scene API validation
+### Generic scene API validation
 
 For the current MCP implementation, see [scene tools](TOOLS-SCENE.md). The standalone check below exercises selected underlying Kit/USD
 APIs in a **new headless process** with a synthetic scene containing Xforms, cubes, a sphere, a scope and an inactive
 prim. It creates a new stage in that process and closes the app afterwards; it does not connect to or alter an existing
-simulator session or train a policy. It does not explicitly enable the UR5e extension. Starting Isaac Sim uses the
+simulator session or train a policy. Starting Isaac Sim uses the
 machine's normal graphics and GPU resources.
 
 From the repository root, use an interpreter with Isaac Sim installed and an accepted EULA:
@@ -137,9 +149,9 @@ expectation printed the assertion and exited with status 1. This is one version 
 
 - For a windowed workflow, confirm the intended window and capture with the [host tools](TOOLS-HOST.md).
 - For ROS transforms, use `scripts/ros2_tf_doctor.py` with the matching `config/ros_dds.env` profile.
-- Before a training run, obtain operator authorization and check GPU capacity. Use the
-  [Isaac Lab guide](TOOLS-ISAACLAB.md) for status, metrics, and guard behavior.
-- See [working checklist](CHECKLIST.md) for remaining work.
+- Before a training run, obtain operator authorization and check GPU capacity. Use the [Isaac Lab guide](TOOLS-ISAACLAB.md)
+  for status, metrics, and guard behaviour.
+- See the [open items](OPEN-ITEMS.md) for remaining work.
 
 ## Recording a run so it can be reproduced
 

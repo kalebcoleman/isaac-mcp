@@ -1,8 +1,8 @@
 # Writing your own tools
 
 A tool is a Python function the bridge runs on Kit's main loop. Put yours in an ordinary Python
-package (not a Kit extension), and the bridge serves them beside its own: to MCP clients, to the
-tools panel, and to scripts using the client.
+package (not a Kit extension), and the bridge serves them beside its own: to MCP clients and to
+scripts using the client.
 
 ## A tool package
 

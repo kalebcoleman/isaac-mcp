@@ -1,6 +1,6 @@
 # BrickSim with these tools
 
-[BrickSim](https://github.com/intelligent-control-lab/BrickSim) simulates LEGO bricks and how they connect, on Isaac Sim 5.1. These tools work next to it with no change to BrickSim: you start BrickSim as usual and add the bridge to its command. Everything here was run on Sim 5.1.0 with an RTX 5080, on 2026-11-06.
+[BrickSim](https://github.com/intelligent-control-lab/BrickSim) simulates LEGO bricks and how they connect, on Isaac Sim 5.1. These tools work next to it with no change to BrickSim: you start BrickSim as usual and add the bridge to its command. Everything here was run on Sim 5.1.0 with an RTX 5080, on 2026-11-06. Isaac Sim 5.1 has no Newton, so BrickSim runs on PhysX only; the target engine for newer builds is in [compatibility](COMPATIBILITY.md#target-engine).
 
 ## Run it with the bridge
 
@@ -11,7 +11,7 @@ ISAAC_MCP_PORT=8766 OMNI_KIT_ACCEPT_EULA=YES .venv/bin/bricksim \
     --ext-folder <isaac-mcp>/exts --enable isaac.mcp.bridge --enable sim-tools demos/demo_assembly.py
 ```
 
-Use `.venv/bin/bricksim`, not `uv run`, so that nothing in its environment is changed. Add `--enable ur5e-dt` only if you want the twin's tools. The window opens with BrickSim's scene, 69 tools answer, and `status` reports app version 5.1.0.
+Use `.venv/bin/bricksim`, not `uv run`, so that nothing in its environment is changed. Add `--enable ur5e-dt` only if you want the work cell's tools. The window opens with BrickSim's scene, the tools of the enabled toolsets answer, and `status` reports app version 5.1.0 (the 2026-11-06 run counted 69 tools before the toolsets existed).
 
 ## Start a demo from an agent
 
@@ -24,6 +24,10 @@ sim__timeline__control action=play resume=true
 
 The arm then builds the structure by itself: all four bricks onto the baseplate, in about four minutes. Scene edits stay refused while it runs, because physics writes where the demo set it, not to the session layer.
 
+## Toolsets to enable next to BrickSim
+
+The default toolsets are enough: `scene` (stage, prims), `physics` (body state, contacts, raycast, joints, arm), `sensors` (cameras), `code` (`run_python`) and `screen` (screenshots and recordings). Nothing needs turning on. Add `lab` only to train a project task (see below), and leave `workcell` off. Choose them with [toolsets](TOOLSETS.md#choosing-toolsets).
+
 ## Which tools work on bricks
 
 Bricks are under `/World/managed/Parts/Part_N`, and the arm is `/World/Robot`.
@@ -35,7 +39,7 @@ Bricks are under `/World/managed/Parts/Part_N`, and the arm is `/World/Robot`.
 | `sim__physics__contacts paths=[...]` | Works: names the brick's colliders and what they touch |
 | `sim__physics__raycast` | Works |
 | `sim__joints__state`, `sim__arm__fk` on `/World/Robot` | Work; the FK self-check agreed with physics to 2e-7 m |
-| `sim__camera__list`, `screenshot`, `start_screen_recording` | Work |
+| `sim__camera__list`, `screenshot`, `screen_recording` | Work |
 | `sim__viewport__frame path=/World/LegoWorkspace` | Refused: that mesh is not a framing target. Give `eye` and `target` |
 | `sim__arm__ik move=true`, `sim__joints__command` | Do not use while a demo runs: its own controller is commanding the arm |
 
