@@ -1058,7 +1058,7 @@ Set PhysicsScene gravity and time step. For an explicitly selected scene, while 
 
 Listed as `sim__physics(action="contacts")`.
 
-Read current contact pairs: PhysX impulses, or on Newton the last step's summed world-frame force in N on collider_a (impulse is null). For up to 32 bodies from the last delivered contact report. Subscribes once on first use or Play; a call before any report says so. Only colliders with PhysxContactReportAPI report; paths without it are listed with the fix, and a call where none report refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED only if forces are unavailable. No app update is pumped. Requires session_id and stage_id from sim__stage__info.
+Read current contact pairs: PhysX impulses, or on Newton the last step's summed world-frame force in N on collider_a (impulse is null). For up to 32 bodies from the last delivered contact report. Subscribes on first use or Play. Only colliders with PhysxContactReportAPI report; others are listed with the fix, and none reporting refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED only if forces are unavailable. No app update is pumped. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
@@ -1228,7 +1228,7 @@ Set a static pose on any Xformable prim. Local or world, in the session layer; r
 
 ### `sim__quick_start`
 
-One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer, and sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns session_id, stage_id, paths and next steps; on Newton a newton field with the rate and buffers. For the RISE lab UR5e twin, use ur5e_dt__quick_start.
+One call that builds a working scene, needing no IDs: a ground plane, physics scene, lights and a camera aimed at it, in the current stage if it is new and empty, otherwise a new one. With robot, called again on a scene it built, it adds the robot and keeps your objects. No real-robot wiring. Edits go to the session layer; sim__stage__save keeps them. The timeline stays stopped unless play=true. Refuses to drop unsaved edits unless discard_changes=true. Returns IDs, paths and next steps; on Newton a newton field (rate, buffers). For the RISE lab UR5e twin, use ur5e_dt__quick_start.
 
 - `robot` (string, optional): Optional robot: a public name, <pack>/<file.usd> or <pack>/<file.urdf>, or an absolute path under an approved root, e.g. /approved/robot/model.xml: any file or folder assets__import_path reads. Names: ur5e (your local copy first, then NVIDIA), franka, unitree_h1, unitree_g1, turtlebot3_burger, carter_v1, nova_carter, jetbot, create3. Not a file found only through a project asset_path.
 - `fixed_base` (boolean, optional): Robot files: fix the base to the world. Default: true for URDF and xacro; the file's own for MJCF and SDF. Pass false for a robot that drives or walks. A USD robot keeps what its file says.
@@ -1288,7 +1288,7 @@ Run your own controller in the physics loop as a job. Each step gets the body's 
 
 Listed as `sim__simulation(action="step")`.
 
-Advance exact physics steps while paused. 1..120 steps on the selected PhysX or qualified Newton backend, PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Return measured time delta, plus runtime poses for observe_prims and DOFs for observe_joints; Newton publishes poses to Fabric. Failure after stepping starts reports observed clock/phase in step details; elapsed time does not prove valid physics. No automatic retry or rollback. On Newton it first compares the scene's timestep with Newton's, refuses STEP_DT_SOURCES_DISAGREE if they differ, and adds a newton section. Requires session_id and stage_id from sim__stage__info.
+Advance exact physics steps while paused. 1..120 steps on PhysX or qualified Newton, PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Returns measured time delta, poses for observe_prims, DOFs for observe_joints. A failure after stepping reports the clock and phase. No retry or rollback. On Newton it first refuses STEP_DT_SOURCES_DISAGREE if the scene's timestep differs from Newton's, and adds a newton section. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
