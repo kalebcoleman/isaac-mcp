@@ -27,6 +27,58 @@ def modules(monkeypatch):
     return loaded
 
 
+@pytest.mark.parametrize("disabled", [False, True], ids=["physics", "mirror_real"])
+@pytest.mark.parametrize("asset_disabled", [False, True])
+def test_robot_gravity_overrides_referenced_bodies_only(modules, monkeypatch, disabled, asset_disabled):
+    Usd = pytest.importorskip("pxr.Usd")
+    from pxr import Sdf, UsdPhysics
+    import pxr
+
+    class PhysxRigidBodyAPI:
+        @staticmethod
+        def Apply(prim):
+            return types.SimpleNamespace(CreateDisableGravityAttr=lambda: prim.CreateAttribute(
+                "physxRigidBody:disableGravity", Sdf.ValueTypeNames.Bool))
+
+    monkeypatch.setattr(pxr, "PhysxSchema", types.SimpleNamespace(
+        PhysxRigidBodyAPI=PhysxRigidBodyAPI), raising=False)
+    scene, _ = modules
+    asset = Usd.Stage.CreateInMemory()
+    asset.SetDefaultPrim(asset.DefinePrim("/RG2", "Xform"))
+    for index in range(7):
+        body = asset.DefinePrim(f"/RG2/Body{index}", "Xform")
+        UsdPhysics.RigidBodyAPI.Apply(body)
+        PhysxRigidBodyAPI.Apply(body).CreateDisableGravityAttr().Set(asset_disabled)
+    asset_before = asset.GetRootLayer().ExportToString()
+    stage = Usd.Stage.CreateInMemory()
+    robot_layer = Sdf.Layer.CreateAnonymous()
+    stage.GetSessionLayer().subLayerPaths.insert(0, robot_layer.identifier)
+    with Usd.EditContext(stage, robot_layer):
+        stage.DefinePrim("/World/RobotAssembly/rg2").GetReferences().AddReference(
+            asset.GetRootLayer().identifier)
+    for path in ("/World/Jenga/Block", "/World/RobotAssemblyOther/Body"):
+        body = stage.DefinePrim(path, "Xform")
+        UsdPhysics.RigidBodyAPI.Apply(body)
+        PhysxRigidBodyAPI.Apply(body).CreateDisableGravityAttr().Set(False)
+    physics = UsdPhysics.Scene.Define(stage, "/World/PhysicsScene")
+    physics.CreateGravityMagnitudeAttr().Set(9.81)
+    root_before = stage.GetRootLayer().ExportToString()
+    robot_before = robot_layer.ExportToString()
+
+    scene._configure_robot_gravity(stage, "/World/RobotAssembly", disabled)
+
+    for index in range(7):
+        body = stage.GetPrimAtPath(f"/World/RobotAssembly/rg2/Body{index}")
+        attribute = body.GetAttribute("physxRigidBody:disableGravity")
+        assert attribute.Get() is disabled
+        assert attribute.GetPropertyStack()[0].layer == stage.GetSessionLayer()
+    assert not stage.GetPrimAtPath("/World/RobotAssembly/rg2").GetAttribute("physxRigidBody:disableGravity")
+    assert stage.GetEditTarget().GetLayer() == stage.GetRootLayer()
+    assert stage.GetRootLayer().ExportToString() == root_before
+    assert robot_layer.ExportToString() == robot_before
+    assert asset.GetRootLayer().ExportToString() == asset_before
+
+
 def config(scene):
     return {"pack": {"id": "ur5e-jenga-workcell", "version": "v1"},
             "assets": {role: role for role in scene.ROLES},
