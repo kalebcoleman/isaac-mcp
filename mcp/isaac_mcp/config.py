@@ -1,14 +1,18 @@
 """Resolve startup configuration without importing the MCP SDK or simulator."""
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
 try:
     import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
+except ModuleNotFoundError:          # Python before 3.11: tomli, if it is installed
+    try:
+        import tomli as tomllib
+    except ModuleNotFoundError:
+        tomllib = None
 
 from .toolsets import DEFAULT, PROFILES, TOOLSETS
 
@@ -67,10 +71,82 @@ def select(value) -> frozenset[str]:
     return frozenset(enabled | {"core"})
 
 
+# The one place the default physics engine is written down.
+DEFAULT_PHYSICS_BACKEND = "physx"
+PHYSICS_BACKENDS = ("physx", "newton")
+
+
+def _flag(value, name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be true or false, not {value!r}")
+
+
 @dataclass(frozen=True)
 class Config:
     toolsets: frozenset[str] = DEFAULT
-    physics_backend: str = "physx"
+    physics_backend: str = DEFAULT_PHYSICS_BACKEND
+    physics_backend_source: str = "built-in"       # built-in, user file, project file or environment
+    runtime_enable: bool = True                    # may an agent call toolsets(action="enable")
+
+
+def _minimal_sim_table(text: str, path: Path) -> dict:
+    """Only ``[sim] physics_backend = "..."``, for a Python with no TOML reader (before 3.11, without
+    tomli). Anything it cannot read is an error, never a quiet default."""
+    section, found = "", {}
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line.startswith("["):
+            section = line.strip("[] \t")
+        elif section == "sim":
+            match = re.fullmatch(r"physics_backend\s*=\s*[\"']([^\"']*)[\"']", line)
+            if match:
+                found["physics_backend"] = match.group(1)
+    if "physics_backend" in text and not found:
+        raise ValueError(f"Cannot read physics_backend from {path} without a TOML reader: use Python 3.11 or "
+                         "install tomli, or set ISAAC_MCP_PHYSICS_BACKEND.")
+    return {"sim": found} if found else {}
+
+
+def _config_files(cwd: Path | None = None, home: Path | None = None, minimal: bool = False):
+    """The user and project configuration files that exist, lowest priority first, as (label, data).
+    With ``minimal`` a Python that has no TOML reader still yields the physics setting."""
+    current = (Path.cwd() if cwd is None else Path(cwd)).resolve()
+    user = (Path.home() if home is None else Path(home)) / ".config/isaac-mcp/config.toml"
+    project = next((directory / "isaac-mcp.toml" for directory in (current, *current.parents)
+                    if (directory / "isaac-mcp.toml").is_file()), None)
+    for label, path in (("user file", user), ("project file", project)):
+        if path is not None and path.is_file():
+            if tomllib is None:
+                if not minimal:
+                    raise ValueError(f"Reading {path} needs Python 3.11 or the tomli package.")
+                yield label, _minimal_sim_table(path.read_text(), path)
+                continue
+            with path.open("rb") as stream:
+                yield label, tomllib.load(stream)
+
+
+def resolve_physics_backend(env: Mapping[str, str] | None = None, cwd: Path | None = None,
+                            home: Path | None = None) -> tuple[str, str]:
+    """The configured physics backend and where it came from: built-in, user file, project file or
+    environment. Reads only the physics setting, so a launcher can ask for it with nothing else
+    resolved. This is the one place the default is written down; it changes no simulator's engine."""
+    env = os.environ if env is None else env
+    backend, source = DEFAULT_PHYSICS_BACKEND, "built-in"
+    if env.get("ISAAC_MCP_PHYSICS_BACKEND"):          # the highest priority: the files need not be read
+        backend, source = env["ISAAC_MCP_PHYSICS_BACKEND"], "environment"
+    else:
+        for label, data in _config_files(cwd, home, minimal=True):
+            if "physics_backend" in data.get("sim", {}):
+                backend, source = data["sim"]["physics_backend"], label
+    if backend not in PHYSICS_BACKENDS:
+        raise ValueError(f"physics_backend must be {' or '.join(PHYSICS_BACKENDS)}, not {backend!r} (from the {source})")
+    return backend, source
 
 
 def resolve(env: Mapping[str, str] | None = None, cli_toolsets: str | None = None,
@@ -81,28 +157,42 @@ def resolve(env: Mapping[str, str] | None = None, cli_toolsets: str | None = Non
         raise ValueError("Retired settings: " + "; ".join(
             f"{name} is no longer supported; remove it and use {replacement(name, env[name])}"
             for name in retired))
-    enabled, backend = DEFAULT, "physx"
-    current = (Path.cwd() if cwd is None else Path(cwd)).resolve()
-    user = (Path.home() if home is None else Path(home)) / ".config/isaac-mcp/config.toml"
-    project = next((directory / "isaac-mcp.toml" for directory in (current, *current.parents)
-                    if (directory / "isaac-mcp.toml").is_file()), None)
-    for path in (user, project):
-        if path is not None and path.is_file():
-            with path.open("rb") as stream:
-                data = tomllib.load(stream)
-            if "toolsets" in data.get("tools", {}):
-                enabled = select(data["tools"]["toolsets"])
-            backend = data.get("sim", {}).get("physics_backend", backend)
+    enabled, runtime = DEFAULT, True
+    for _, data in _config_files(cwd, home):
+        if "toolsets" in data.get("tools", {}):
+            enabled = select(data["tools"]["toolsets"])
+        if "runtime_enable" in data.get("tools", {}):
+            runtime = _flag(data["tools"]["runtime_enable"], "tools.runtime_enable")
     if "ISAAC_MCP_TOOLSETS" in env:
         enabled = select(env["ISAAC_MCP_TOOLSETS"])
     if cli_toolsets is not None:
         enabled = select(cli_toolsets)
-    backend = env.get("ISAAC_MCP_PHYSICS_BACKEND", backend)
-    if backend not in {"physx", "newton"}:
-        raise ValueError("physics_backend must be physx or newton")
-    return Config(enabled, backend)
+    if "ISAAC_MCP_RUNTIME_ENABLE" in env:
+        runtime = _flag(env["ISAAC_MCP_RUNTIME_ENABLE"], "ISAAC_MCP_RUNTIME_ENABLE")
+    backend, source = resolve_physics_backend(env, cwd, home)
+    return Config(enabled, backend, source, runtime)
 
 
 def physics_backend(**kwargs) -> str:
     """Return the configured backend; this does not change any simulator's engine."""
     return resolve(**kwargs).physics_backend
+
+
+def main(argv=None) -> int:
+    """``python3 -m isaac_mcp.config --print physics_backend``: what a launcher needs, with only the
+    standard library. ``physics_backend_source`` says where the value came from."""
+    import argparse
+    parser = argparse.ArgumentParser(prog="python3 -m isaac_mcp.config", description=main.__doc__)
+    parser.add_argument("--print", dest="field", required=True, choices=["physics_backend", "physics_backend_source"])
+    args = parser.parse_args(argv)
+    try:
+        backend, source = resolve_physics_backend()
+    except ValueError as error:
+        print(f"isaac-mcp configuration: {error}", file=__import__("sys").stderr)
+        return 2
+    print(backend if args.field == "physics_backend" else source)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

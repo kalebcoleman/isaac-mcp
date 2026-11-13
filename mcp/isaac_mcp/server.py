@@ -30,7 +30,7 @@ import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any, AsyncIterator, Dict, Iterable, List, Mapping, Optional
+from typing import Annotated, Any, AsyncIterator, Dict, Iterable, List, Literal, Mapping, Optional
 
 from pydantic import Field
 
@@ -61,8 +61,8 @@ SERVER_NAME = os.getenv("ISAAC_MCP_NAME", "isaac")
 SERVER_INSTRUCTIONS = (
     "Call status first, once: it identifies the bridge, running work and stage IDs, and lists enabled, "
     "disabled and planned toolsets. The isaac-mcp://toolsets resource reports the same selection. "
-    "Use isaac_help(task=...) to find an available tool or learn which toolset to enable; disabled "
-    "toolsets register nothing. Prefer listed tools over custom code. Confirm the intended simulator "
+    "Use isaac_help(task=...) to find a tool; a needed toolset that is off can be turned on with "
+    "toolsets(action=\"enable\", names=[...]), except input and launch. Prefer listed tools over custom code. Confirm the intended simulator "
     "before changing a scene; do not start extra GPU work or stop unrelated processes without authorization. "
     "Tool visibility is not a security boundary. Respect bridge authentication and read-only refusals.")
 
@@ -217,6 +217,7 @@ class _BridgeState:
 
     def __init__(self) -> None:
         self.toolsets = toolsets.DEFAULT
+        self.runtime_enable = True            # may toolsets(action="enable") change the selection
         self.client: Optional[BridgeClient] = None
         self.name_map: Dict[str, str] = {}
         self.registered_meta: Dict[str, Dict[str, Any]] = {}
@@ -251,6 +252,7 @@ class _DefaultBridgeState(_BridgeState):
 
     def __init__(self) -> None:  # the base class would assign the properties above
         self.toolsets = toolsets.DEFAULT
+        self.runtime_enable = True
         self.env = None
 
     def get_client(self) -> BridgeClient:
@@ -811,6 +813,30 @@ def _host_brief() -> Dict[str, Any]:
             if host.get(k) not in (None, False)}
 
 
+def _active_engine(state: _BridgeState) -> Optional[str]:
+    """The engine the selected bridge runs, or None when it has no scene tools or does not say."""
+    try:
+        info = state.get_client().call("sim.stage.info", timeout=DISCOVERY_TIMEOUT_S)
+        return (info.get("runtime") or {}).get("physics_engine") or None
+    except Exception:  # noqa: BLE001 - status still answers without it
+        return None
+
+
+def _physics_status(state: _BridgeState, active: Optional[str] = None) -> Dict[str, Any]:
+    """The physics engine: the one the selected bridge runs (when one answers), the configured default
+    for new sessions, and where that default came from. A running session keeps its own engine."""
+    settings = getattr(state, "config", None)
+    if settings is not None:
+        default, source = settings.physics_backend, settings.physics_backend_source
+    else:
+        default, source = config.resolve_physics_backend()
+    out: Dict[str, Any] = {"active": active, "default": default, "default_from": source}
+    if active and active != default:
+        out["note"] = (f"The selected simulator runs {active}; the configured default, {default}, applies to new sessions "
+                       "only. A running session's engine is never changed.")
+    return out
+
+
 def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
     """The ``status`` tool. Short by default: the selected bridge, what else runs here, and the
     stage IDs every scene tool needs. With no bridge it is still an answer, not an error."""
@@ -831,12 +857,14 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
         else:
             message = ("Nothing is running: no Isaac Sim bridge answers. Start your configured simulator, then "
                        "refresh_tools(wait_s=120). See toolsets for available host tools and optional launch support.")
-        return {"running": False, "message": message, **around, "host": _host_brief(), "toolsets": toolsets.describe(state.toolsets)}
+        return {"running": False, "message": message, **around, "host": _host_brief(),
+                "physics": _physics_status(state), "toolsets": toolsets.describe(state.toolsets, state.runtime_enable)}
     if not isinstance(identity, dict):
         return identity
     host = _host_identity(identity.get("extension", {}))
     if detail:
-        return {**identity, "host": host, "toolsets": toolsets.describe(state.toolsets)}
+        return {**identity, "host": host, "physics": _physics_status(state, _active_engine(state) if "sim" in (identity.get("namespaces") or []) else None),
+                "toolsets": toolsets.describe(state.toolsets, state.runtime_enable)}
     out: Dict[str, Any] = {"running": True, **{k: identity[k] for k in _STATUS_SHORT if k in identity}}
     if "sim" in (identity.get("namespaces") or []):
         try:
@@ -864,7 +892,8 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
     out.update(around)
     out["host"] = {k: v for k, v in host.items() if k in ("version", "commit", "warning", "code_drift", "code_drift_message",
                                                            "extension_mismatch") and v not in (None, False)}
-    out["toolsets"] = toolsets.describe(state.toolsets)
+    out["physics"] = _physics_status(state, (out.get("stage") or {}).get("physics_engine"))
+    out["toolsets"] = toolsets.describe(state.toolsets, state.runtime_enable)
     out["note"] = "Checked: no need to call this again before each tool. detail=true adds the full bridge identity."
     return out
 
@@ -1149,6 +1178,7 @@ def register_dynamic_tool(server: FastMCP, name: str, canonical: str,
     if canonical in REGISTRY:
         _forbid_unknown_arguments(server, name)
     strip_schema_titles(server, name)
+    grouped_tools.shorten_listed(server._tool_manager._tools[name])
 
 
 def _explain_missing_target(model) -> None:
@@ -1182,6 +1212,121 @@ def _forbid_unknown_arguments(server: FastMCP, name: str) -> None:
     _explain_missing_target(model)
     if isinstance(getattr(tool, "parameters", None), dict):
         tool.parameters["additionalProperties"] = False   # so clients can see the rule up front
+
+
+# ==================== Toolsets at run time ====================
+
+RUNTIME_SCOPE = ("This server process only: nothing was written to any config file, and a restart returns to the "
+                 "configured selection.")
+
+
+def _register_host_tools(server: FastMCP, state: _BridgeState, groups: Iterable[str], env: Mapping[str, str]) -> None:
+    """Register the host tools of the given toolsets (all of them at startup, only the newly enabled
+    ones at run time). A toolset that is not in ``groups`` registers nothing."""
+    groups = frozenset(groups)
+    register_screen_tools(server, port_provider=lambda: _screen_port(state), groups=groups)
+    register_desktop_input_tools(server, groups=groups)
+    register_sim_session_tools(server, groups=groups, env=env,
+                               on_launch=lambda record: state.launched_sessions.add(record["id"]))
+    register_isaaclab_tools(server, groups=groups)
+    if "robosim" in groups:
+        from .robosim import register_robosim_tools
+        register_robosim_tools(server)
+        # Listed like every other host tool: no generated titles, no docstring indentation.
+        tool = server._tool_manager._tools["robosim"]
+        tool.description = inspect.cleandoc(tool.description)
+        strip_schema_titles(server, "robosim")
+        grouped_tools.shorten_listed(tool)
+
+
+def _drop_unselected(server: FastMCP, state: _BridgeState) -> None:
+    """Unregister every tool whose toolset is no longer selected: live bridge tools, host tools and
+    catalog proxies. The grouped tools are rebuilt from what is left by the caller's sync."""
+    for mcp_name, canonical in list(state.name_map.items()):
+        if not _visible(canonical, state.registered_meta.get(mcp_name, {}), state):
+            _drop_tool(server, mcp_name)
+            state.name_map.pop(mcp_name, None)
+            state.registered_meta.pop(mcp_name, None)
+    for name in list(server._tool_manager._tools):
+        if name in tool_groups.GROUPS:
+            continue
+        try:
+            group = toolsets.owner(name)
+        except ValueError:
+            continue
+        if group not in state.toolsets:
+            _drop_tool(server, name)
+
+
+def _listed(server: FastMCP) -> List[str]:
+    return sorted(grouped_tools.listed_names(server))
+
+
+async def _change_toolsets(server: FastMCP, action: str, names: Optional[List[str]] = None,
+                           ctx: Optional[Context] = None) -> Dict[str, Any]:
+    """The ``toolsets`` tool: list, enable or disable toolsets for this server process only."""
+    from mcp.server.fastmcp.exceptions import ToolError
+    state = _state_for(server)
+    if action == "list":
+        return toolsets.describe(state.toolsets, state.runtime_enable)
+    if action not in ("enable", "disable"):
+        raise ToolError(f"action must be list, enable or disable, not {action!r}.")
+    if not state.runtime_enable:
+        raise ToolError(f"Run-time toolset changes are switched off on this server (tools.runtime_enable = false or "
+                        f"ISAAC_MCP_RUNTIME_ENABLE=0), so {action} did nothing. The user changes the selection at "
+                        f"startup. {toolsets.STARTUP}")
+    if not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names):
+        raise ToolError(f'{action} needs names, a list of toolset names, e.g. names=["lab"]. '
+                        f"Valid names: {', '.join(toolsets.TOOLSETS)}.")
+    names = list(dict.fromkeys(name.strip() for name in names))
+    unknown = [name for name in names if name not in toolsets.TOOLSETS]
+    if unknown:
+        raise ToolError(f"Unknown toolset {', '.join(map(repr, unknown))}. Valid names: {', '.join(toolsets.TOOLSETS)}. Nothing changed.")
+    if action == "enable":
+        explicit = [name for name in names if toolsets.TOOLSETS[name].explicit_only]
+        if explicit:
+            raise ToolError(f"{', '.join(explicit)} cannot be enabled at run time: it is explicit-only "
+                            f"({'; '.join(toolsets.TOOLSETS[name].summary for name in explicit)}). "
+                            "Only the user can turn it on, at startup: add +" + explicit[0] + " to tools.toolsets in "
+                            "~/.config/isaac-mcp/config.toml, set ISAAC_MCP_TOOLSETS, or pass --toolsets, then restart the "
+                            "MCP server. Nothing changed.")
+    elif "core" in names:
+        raise ToolError("core cannot be disabled: it holds status, help and this tool. Nothing changed.")
+    before_selection, before_listed, before_surface = state.toolsets, _listed(server), _tool_list_surface(server)
+    changed = [name for name in names if (name in state.toolsets) != (action == "enable")]
+    note = ""
+    if changed:
+        state.toolsets = (state.toolsets | set(changed)) if action == "enable" else (state.toolsets - set(changed))
+        try:
+            if action == "enable":
+                _register_host_tools(server, state, changed, state.env or {})
+            else:
+                _drop_unselected(server, state)
+            _sync_offline(server, state)
+            if action == "enable":
+                try:
+                    discover_and_register_tools(server)
+                except Exception as error:  # noqa: BLE001 - tools answer with their own bridge errors
+                    note = (f"No bridge tools were read ({error}); the new tools are listed from the packaged catalog "
+                            "and dial the selected bridge when called.")
+        except Exception as error:
+            state.toolsets = before_selection
+            _drop_unselected(server, state)
+            _sync_offline(server, state)
+            raise ToolError(f"{action} {', '.join(changed)} failed and was undone: {error}") from error
+    after_listed = _listed(server)
+    if _changed_tool_names(before_surface, _tool_list_surface(server)):
+        await _notify_tools_changed(ctx)
+    result: Dict[str, Any] = {
+        "action": action, "changed": changed, "unchanged": [name for name in names if name not in changed],
+        "tools_available" if action == "enable" else "tools_removed":
+            sorted(set(after_listed) - set(before_listed)) if action == "enable" else sorted(set(before_listed) - set(after_listed)),
+        "on": [name for name in toolsets.TOOLSETS if name in state.toolsets],
+        "scope": RUNTIME_SCOPE,
+        "note": ("Clients that ignore tools/list_changed can call the tools named in tools_available directly."
+                 if action == "enable" and changed else "") + (" " + note if note else ""),
+    }
+    return {key: value for key, value in result.items() if value not in ("", None)}
 
 
 # ---- the server ----
@@ -1671,11 +1816,11 @@ def _help_matches(task: str) -> list:
     return [topic for score, _, topic in sorted(scored, reverse=True) if score and score * 2 >= best]
 
 
-def _enable_toolsets(names) -> str:
-    return "Toolsets off: " + ", ".join(sorted(names)) + ". " + toolsets.ENABLE
+def _enable_toolsets(names, runtime_enable: bool = True) -> str:
+    return "Toolsets off: " + ", ".join(sorted(names)) + ". " + toolsets.enable_hint(names, runtime_enable)
 
 
-def _help_topic(name: str, text: str, enabled) -> str:
+def _help_topic(name: str, text: str, enabled, runtime_enable: bool = True) -> str:
     available, missing = [], set()
     for candidate in dict.fromkeys(re.findall(r"\b[A-Za-z][A-Za-z0-9_]*\b", text)):
         try:
@@ -1687,18 +1832,19 @@ def _help_topic(name: str, text: str, enabled) -> str:
         else:
             missing.add(group)
     if missing:
-        text = ("Available: " + ", ".join(available) + ". " if available else "") + _enable_toolsets(missing)
+        text = ("Available: " + ", ".join(available) + ". " if available else "") + _enable_toolsets(missing, runtime_enable)
     return f"- {name}: {text}"
 
 
-def _isaac_help(task: Optional[str], no_fit: bool = False, enabled=toolsets.DEFAULT) -> str:
+def _isaac_help(task: Optional[str], no_fit: bool = False, enabled=toolsets.DEFAULT,
+                runtime_enable: bool = True) -> str:
     task = (task or "").strip()
     hits = _help_matches(task) if task else []
     lines = []
     if task and (no_fit or not hits):
         recorded = _record_help_gap(task, "no_fit" if no_fit else "no_match")
         lines.append(f"No isaac tool is known to fit {task!r}." if not hits or no_fit else "")
-        lines.append(_RUN_PYTHON_PATTERN if "code" in enabled else _enable_toolsets({"code"}))
+        lines.append(_RUN_PYTHON_PATTERN if "code" in enabled else _enable_toolsets({"code"}, runtime_enable))
         if recorded is not None:
             lines.append(f"This question was recorded for the maintainer in {recorded} (local file, never sent anywhere).")
         if hits:
@@ -1708,7 +1854,7 @@ def _isaac_help(task: Optional[str], no_fit: bool = False, enabled=toolsets.DEFA
     else:
         lines.append("Use these isaac tools before writing your own code. If you skip them, say why.")
     chosen = hits or list(_HELP_TOPICS)
-    lines += [_help_topic(name, tools, enabled) for name, _, tools in chosen]
+    lines += [_help_topic(name, tools, enabled, runtime_enable) for name, _, tools in chosen]
     if task and hits and not no_fit:
         lines.append("None of these fits? Do not bend a tool to the job: call isaac_help(task=..., no_fit=true), which "
                      "records the gap and explains the code fallback.")
@@ -1720,7 +1866,32 @@ def _isaac_help(task: Optional[str], no_fit: bool = False, enabled=toolsets.DEFA
     return "\n".join(lines)
 
 
-def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
+def _tool_help(server: FastMCP, name: str) -> str:
+    """The full description and arguments of one tool, as written before the tool list shortened them."""
+    registered = server._tool_manager._tools
+    name = name.strip().replace(".", "__")
+    if name in tool_groups.GROUPS and name in registered:
+        return f"{name} is a grouped tool: call {name}(action=\"help\") for every action's full description and arguments."
+    if name not in registered:
+        return f"No listed tool is called {name!r}. Listed tools: {', '.join(sorted(grouped_tools.listed_names(server)))}."
+    tool = registered[name]
+    full = grouped_tools.FULL.get(name)
+    if full is None or full["listed"] != tool.description:     # not shortened: what is registered is the full text
+        full = {"description": tool.description, "arguments": tool.parameters.get("properties", {}),
+                "required": tool.parameters.get("required", [])}
+
+    def listed(value):                  # the names a client can call, in the text but not in the keys
+        if isinstance(value, str):
+            return tool_groups.listed_form(value)
+        if isinstance(value, dict):
+            return {key: listed(item) if key == "description" or isinstance(item, (dict, list)) else item
+                    for key, item in value.items()}
+        return [listed(item) for item in value] if isinstance(value, list) else value
+
+    return json.dumps({name: listed({key: full[key] for key in ("description", "arguments", "required")})}, indent=1)
+
+
+def _register_gateway_tools(server: FastMCP, groups: Iterable[str], state: Optional[_BridgeState] = None) -> None:
     """Register ``refresh_tools`` and ``use_bridge`` (the ``gateway`` group) and ``isaac_help`` on ``server``.
 
     Bridge discovery itself runs from the server lifespan, so omitting these two tools does not
@@ -1738,19 +1909,29 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str]) -> None:
         return _reported(await _refresh_tools(server, ctx, wait_s))
 
     @mcp.tool(annotations=READ_ONLY)
-    def isaac_help(task: Annotated[str | None, Field(description="What you are trying to do, in a few words, e.g. 'record a video', 'why did the grasp fail', 'fly a drone with my controller'. Omit for the full map.")] = None,
-                   no_fit: Annotated[bool, Field(description="true: none of the tools named for this task fits. Records the question in a local file for the maintainer and returns the run_python pattern to use instead.")] = False) -> str:
-        """Start here. Say what you want to do and get the exact isaac tools to load and call, in order,
-        instead of writing your own screenshot, recording, contact-logging or training code. When no
-        tool fits it says so, gives the run_python pattern and records the question locally. Reads
-        nothing from the simulator and works with no bridge."""
-        return _isaac_help(task, no_fit, groups)
+    def isaac_help(task: Annotated[str | None, Field(description="What you want to do, in a few words, e.g. 'record a video'. Omit for the full map.")] = None,
+                   no_fit: Annotated[bool, Field(description="true: no tool named for this task fits; records the question locally and returns the run_python pattern.")] = False,
+                   tool: Annotated[str | None, Field(description="A listed tool's name: returns its full description and arguments, which the tool list shortens.")] = None) -> str:
+        """Start here. Say what you want to do and get the isaac tools to call, in order, instead of
+        writing your own screenshot, recording, contact-logging or training code. With tool=name, the
+        full text of one tool. Reads nothing from the simulator; works with no bridge."""
+        live = state or _state_for(server)       # the selection can change at run time
+        if tool:
+            return _tool_help(server, tool)
+        return _isaac_help(task, no_fit, live.toolsets, live.runtime_enable)
+
+    @mcp.tool(name="toolsets", annotations=IDEMPOTENT_WRITE)
+    async def toolsets_tool(action: Annotated[Literal["list", "enable", "disable"], Field(description="list: what is on or off. enable/disable: turn toolsets on or off for this server process.")],
+                            names: Annotated[list[str] | None, Field(description="Toolset names for enable or disable, e.g. [\"lab\"]. Take them from list or status.")] = None,
+                            ctx: Context = None) -> Any:  # type: ignore[assignment]
+        """Toolsets: groups of tools that are on or off. list shows which are on, off with their tool counts, and which you can enable now; enable registers a toolset's tools (the tool list changes and the result names the new tools); disable removes them. Lasts for this server process only. input and launch cannot be enabled at run time; the user sets them at startup."""
+        return await _change_toolsets(server, action, names, ctx)
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE, description=(
         "Switch this MCP server to another running Kit bridge on this machine. Use it when several run "
-        f"or the wrong one answers.\n\nFind candidates with {LIST_BRIDGES_HELP}. Replaces the bridge tools "
-        "with that Kit's, within the enabled toolsets. Host tools are unaffected. "
-        "Lasts until this server restarts."))
+        "or the wrong one answers. Find candidates with status. Replaces the bridge tools with that Kit's, "
+        "within the enabled toolsets. Host tools are unaffected. Lasts until this server restarts."
+        f"\n\nOther ways to list bridges: {LIST_BRIDGES_HELP}."))
     async def use_bridge(port: Annotated[int, Field(description="Bridge TCP port from --list-bridges or status.")], ctx: Context = None) -> Any:  # type: ignore[assignment]
         """Switch this MCP server to another running Kit bridge on this machine."""
         return _reported(await _use_bridge(server, port, ctx))
@@ -1766,6 +1947,7 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     instructions = env.get("ISAAC_MCP_INSTRUCTIONS", SERVER_INSTRUCTIONS)
     state = _BridgeState() if state is None else state
     state.toolsets = groups
+    state.runtime_enable = settings.runtime_enable
     state.config = settings
     from .project_assets import Broker
     state.asset_broker = Broker(env.get("ISAAC_MCP_ASSET_CONFIG", ""))
@@ -1777,24 +1959,13 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     @server.resource("isaac-mcp://toolsets")
     def toolset_status() -> str:
         """Enabled, disabled and planned toolsets for this server."""
-        return json.dumps(toolsets.describe(groups))
+        return json.dumps(toolsets.describe(state.toolsets, state.runtime_enable))
 
     _advertise_tools_list_changed(server)
-    register_screen_tools(server, port_provider=lambda: _screen_port(state), groups=groups)
-    register_desktop_input_tools(server, groups=groups)
     state.env = env
     state.launched_sessions = set()   # IDs sim__launch created in this server process
-    register_sim_session_tools(server, groups=groups, env=env,
-                               on_launch=lambda record: state.launched_sessions.add(record["id"]))
-    register_isaaclab_tools(server, groups=groups)
-    if "robosim" in groups:
-        from .robosim import register_robosim_tools
-        register_robosim_tools(server)
-        # Listed like every other host tool: no generated titles, no docstring indentation.
-        tool = server._tool_manager._tools["robosim"]
-        tool.description = inspect.cleandoc(tool.description)
-        strip_schema_titles(server, "robosim")
-    _register_gateway_tools(server, groups)
+    _register_host_tools(server, state, groups, env)
+    _register_gateway_tools(server, groups, state)
     setattr(server, _OFFLINE_ATTR, _OfflineTools(host_catalog.load_catalog()))
     _sync_offline(server, state)
     return server

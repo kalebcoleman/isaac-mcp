@@ -763,7 +763,8 @@ until process restart. A native crash may bypass that guard. Inspect, save when 
 Stop, and restart only the owned disposable process. See the compatibility follow-up evidence
 for measured outcomes and retained earlier failures; no indefinite lifetime guarantee is made.
 
-Managed launches can select `physics_backend="newton"` (default `"physx"`); an unavailable
+Managed launches can select `physics_backend="newton"` (default: the configured backend, see
+[Choosing which local tools a server exposes](TOOLS-HOST.md#choosing-which-local-tools-a-server-exposes)); an unavailable
 requested engine fails instead of falling back. Newton uses its tensor adapter, explicit
 paused solver steps and Fabric publication; it does not report authored USD as runtime pose.
 On Sim 6.2 one GPU Newton exact-step probe returned `STEP_TIMING_MISMATCH`; inspect state and

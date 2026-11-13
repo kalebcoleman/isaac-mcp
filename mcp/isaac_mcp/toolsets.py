@@ -40,7 +40,7 @@ PLANNED = {
 }
 
 _ROOTS = {
-    "core": "status isaac_help refresh_tools use_bridge jobs",
+    "core": "status isaac_help refresh_tools use_bridge jobs toolsets",
     "scene": "sim__quick_start sim__stage sim__prim sim__timeline__control sim__light sim__material",
     "physics": "sim__physics sim__joints sim__arm sim__simulation",
     "sensors": "sim__camera sim__lidar sim__viewport__frame",
@@ -84,11 +84,55 @@ def owner(name: str, namespace: str | None = None,
     raise ValueError(f"Tool {name!r} has no toolset")
 
 
-ENABLE = "Add +name to tools.toolsets in ~/.config/isaac-mcp/config.toml or set ISAAC_MCP_TOOLSETS, then restart the MCP server."
+STARTUP = "Add +name to tools.toolsets in ~/.config/isaac-mcp/config.toml or set ISAAC_MCP_TOOLSETS, then restart the MCP server."
+EXPLICIT = ("Explicit-only toolsets ({names}) cannot be enabled at run time: the user adds them at startup "
+            "(+name in ISAAC_MCP_TOOLSETS, tools.toolsets in config.toml, or --toolsets).")
+# Kept for callers that only need the startup route.
+ENABLE = STARTUP
+
+_UNGROUPED = {"lab": ("isaaclab__checkpoint_register",)}
 
 
-def describe(enabled) -> dict:
-    """Stable status shared by the host status tool and the MCP resource."""
+def listed_count(name: str):
+    """How many tools a client is shown for a toolset (grouped tools count once); None when it varies."""
+    if name == "extensions":
+        return None
+    roots = set(_ROOTS.get(name, "").split())
+    prefix = {"lab": "isaaclab__", "workcell": "ur5e_dt__"}.get(name)
+    if prefix:
+        roots |= {group for group in GROUPS if group.startswith(prefix)} | set(_UNGROUPED.get(name, ()))
+    return len(roots)
+
+
+def explicit_only() -> list:
+    return [name for name, spec in TOOLSETS.items() if spec.explicit_only]
+
+
+def enable_hint(names, runtime_enable: bool = True) -> str:
+    """How to turn on the named toolsets, as one sentence the agent can act on."""
+    names = sorted(names)
+    explicit = [name for name in names if TOOLSETS[name].explicit_only]
+    runtime = [name for name in names if name not in explicit]
+    parts = []
+    if runtime and runtime_enable:
+        parts.append('Enable ' + ('it' if len(runtime) == 1 else 'them') + ' with toolsets(action="enable", names=['
+                     + ", ".join(f'"{name}"' for name in runtime) + "]) (this server process only), or set it at startup: "
+                     + STARTUP[0].lower() + STARTUP[1:])
+    elif runtime:
+        parts.append("Run-time enabling is switched off; " + STARTUP[0].lower() + STARTUP[1:])
+    if explicit:
+        parts.append(EXPLICIT.format(names=", ".join(explicit)))
+    return " ".join(parts)
+
+
+def describe(enabled, runtime_enable: bool = True) -> dict:
+    """Stable status shared by the host status tool, the toolsets tool and the MCP resource."""
+    off = [name for name in TOOLSETS if name not in enabled]
+    can = [name for name in off if not TOOLSETS[name].explicit_only] if runtime_enable else []
+    enable = ('Call toolsets(action="enable", names=[...]) to turn one on for this server process (the tool list '
+              "then changes). " if runtime_enable else "Run-time enabling is off (runtime_enable). ")
+    enable += EXPLICIT.format(names=", ".join(explicit_only())) + " " + STARTUP.replace("Add +name", "Otherwise add +name")
     return {"on": [name for name in TOOLSETS if name in enabled],
-            "off": {name: spec.summary for name, spec in TOOLSETS.items() if name not in enabled},
-            "planned": list(PLANNED), "enable": ENABLE}
+            "off": {name: TOOLSETS[name].summary for name in off},
+            "tools": {name: listed_count(name) for name in TOOLSETS},
+            "planned": list(PLANNED), "can_enable": can, "runtime_enable": runtime_enable, "enable": enable}

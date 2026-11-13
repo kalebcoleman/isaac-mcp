@@ -36,9 +36,10 @@ def register_robosim_tools(server, *, bridge=None, workspace=None, root=None):
         wait_s: Annotated[float, Field(description="Wait at most this many seconds; poll status with run for completion.", ge=0, le=120)] = 0,
         allow_concurrent_gpu: Annotated[bool, Field(description="start: knowingly permit cuda:0 despite other GPU workloads or an unavailable GPU check.")] = False,
     ) -> str:
-        """RSS live real-to-sim via its private Python: start a trusted scene, extract reference video frames,
-        snapshot, compare masks, record a rollout, compare_take, report and stop. Image-space metrics only,
-        not physics fitting. Long actions return a run to poll with status. CPU is never auto-upgraded to GPU.
+        """RSS live real-to-sim via its private Python: start a trusted scene, extract video frames,
+        snapshot, compare masks, record a rollout, compare_take, report and stop. Runs the scene's Python
+        (not sandboxed); device=cuda:0 uses the GPU. Image-space metrics only, not physics fitting. Long actions
+        return a run; poll status. CPU never auto-upgrades to GPU.
         """
         arguments = locals().copy()
         arguments.pop("bridge", None)

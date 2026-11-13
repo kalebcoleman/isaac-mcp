@@ -58,8 +58,10 @@ def test_status_detail_is_the_full_identity_and_never_reaches_an_older_bridge_as
     out = json.loads(gw._dispatch("status", {"detail": True}, state))
     host = out.pop("host")
     assert "core" in out.pop("toolsets")["on"]
+    assert set(out.pop("physics")) >= {"active", "default", "default_from"}
     assert out == IDENTITY and "version" in host
-    assert state.client.calls == [("status", None)], "detail is the host's own switch"
+    assert state.client.calls[0] == ("status", None), "detail is the host's own switch"
+    assert {name for name, _ in state.client.calls} <= {"status", "sim.stage.info"}   # the second one reads the active engine
 
 
 def test_status_names_what_else_is_running(state, monkeypatch):

@@ -63,7 +63,7 @@
       "owner_id": "generic-assets"
     },
     "assets.info": {
-      "description": "Snapshot and inspect a USER-TRUSTED project on the selected Kit. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Inspect a USER-TRUSTED project on the selected Kit. Takes a snapshot of it. Native USD parsing is NOT sandboxed. Refuses untrusted profiles and unresolved/outside snapshot dependencies. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -469,14 +469,14 @@
       "owner_id": "generic-assets"
     },
     "assets.packs": {
-      "description": "List every <id>/<version> pack in the asset root (ISAAC_MCP_ASSET_ROOT, else <workspace>/assets) with its file count, size and whether it verifies against its pack.yaml, and any old-format pack with a hint to convert it with adopt. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_ROOT. With a Kit connected it also lists kit_environment and warns when Kit and this host use a different asset root or project file.",
+      "description": "List the asset packs in the asset root. Every <id>/<version> pack in the asset root (ISAAC_MCP_ASSET_ROOT, else <workspace>/assets) with its file count, size and whether it verifies against its pack.yaml, and any old-format pack with a hint to convert it with adopt. Host side, no Kit, no USD parser. Writes nothing. Kit reads its own settings: give host and Kit the same ISAAC_MCP_ASSET_ROOT. With a Kit connected it also lists kit_environment and warns when Kit and this host use a different asset root or project file.",
       "parameters": {},
       "fields": [],
       "namespace": "assets",
       "owner_id": "generic-assets"
     },
     "assets.pack_doctor": {
-      "description": "Check a pack without changing it: every file listed in pack.yaml exists and matches its sha256, nothing unlisted or symlinked is in the folder, then the dependencies of its USD, URDF, MJCF, SDF, mesh and map files must all be files of the same pack (unresolved, unreadable, remote and outside-pack references are problems). Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.",
+      "description": "Check a pack without changing it. Every file listed in pack.yaml exists and matches its sha256, nothing unlisted or symlinked is in the folder, then the dependencies of its USD, URDF, MJCF, SDF, mesh and map files must all be files of the same pack (unresolved, unreadable, remote and outside-pack references are problems). Parses USD in a host helper (ISAAC_MCP_USD_PYTHON) or else the selected Kit; says so if neither ran, and ok is then false. A URDF's own references are read on the host.",
       "parameters": {
         "pack": {
           "type": "string",
@@ -522,7 +522,7 @@
       "owner_id": "generic-assets"
     },
     "assets.pack_adopt": {
-      "description": "Copy a folder's asset files into a NEW pack version <id>/<version> in the asset root and write its pack.yaml (sha256 of every file, plus the source and license you give; redistributable is false unless you say so). The source must be under a user-approved root. A version that exists is never modified: give a new one. Symlinks are never followed. With from_old, converts an old-format pack folder of the asset root into <id>/v1, leaving the old files in place.",
+      "description": "Copy a folder into a new pack version. Copies a folder's asset files into a NEW pack version <id>/<version> in the asset root and write its pack.yaml (sha256 of every file, plus the source and license you give; redistributable is false unless you say so). The source must be under a user-approved root. A version that exists is never modified: give a new one. Symlinks are never followed. With from_old, converts an old-format pack folder of the asset root into <id>/v1, leaving the old files in place.",
       "parameters": {
         "pack": {
           "type": "string",
@@ -726,7 +726,7 @@
       "owner_id": "generic-assets"
     },
     "assets.pack_build": {
-      "description": "Copy USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on into a NEW pack version in the asset root, keeping layout, and write its pack.yaml. A file copied out of from_pack keeps that pack's source, license and redistributable; any other file needs source and license. Sources must be under an approved root or the asset root. Unresolved or remote references refuse the build unless allow_unresolved=true. An existing version is never modified. For xacro use assets__import_path.",
+      "description": "Copy asset files and their dependencies into a new pack version. USD, URDF, MuJoCo XML, SDF, mesh or ROS map files and only what they depend on go into a NEW pack version in the asset root, keeping layout, and write its pack.yaml. A file copied out of from_pack keeps that pack's source, license and redistributable; any other file needs source and license. Sources must be under an approved root or the asset root. Unresolved or remote references refuse the build unless allow_unresolved=true. An existing version is never modified. For xacro use assets__import_path.",
       "parameters": {
         "pack": {
           "type": "string",

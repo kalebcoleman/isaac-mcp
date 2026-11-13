@@ -30,7 +30,7 @@ except ImportError:  # Session launch is Linux-only; do not break unrelated host
 
 from mcp.server.fastmcp import FastMCP
 
-from . import client
+from . import client, config
 from .isaaclab import jobs as lab_jobs
 from .local_tools import PYTHON_EXECUTION, ScopedTools
 from .sim_versions import NEWTON_STACKS
@@ -702,9 +702,14 @@ def _interpreter_release(env: Mapping[str, str], root: Path) -> str | None:
 def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | None = None,
             headless: bool = False, allow_shared_domain: bool = False,
             enable_motion_bvh: bool = False,
-            physics_backend: Literal["physx", "newton"] = "physx") -> dict:
-    if physics_backend not in ("physx", "newton"):
-        raise ValueError("physics_backend must be physx or newton")
+            physics_backend: Literal["physx", "newton"] | None = None) -> dict:
+    # No argument: the configured default (environment, project file, user file, then the built-in one).
+    # Either way the engine is named to the new process, so a changed default never changes a request.
+    source = "argument"
+    if physics_backend is None:
+        physics_backend, source = config.resolve_physics_backend(env)
+    if physics_backend not in config.PHYSICS_BACKENDS:
+        raise ValueError(f"physics_backend must be {' or '.join(config.PHYSICS_BACKENDS)}")
     port_range = _launch_range(env, "ISAAC_MCP_PORT_RANGE", 1024, 65535)
     domain_range = _launch_range(env, "ISAAC_MCP_ROS_DOMAIN_RANGE", 0, 231)
     auto_selected = [name for name, value in (("port", port), ("ros_domain", ros_domain)) if value is None]
@@ -816,7 +821,7 @@ def _launch(env: Mapping[str, str], port: int | None = None, ros_domain: int | N
         record = {"id": session_id, "pid": proc.pid, "start_ticks": identity[1], "boot_id": boot_id, "port": port,
                   "ros_domain": ros_domain, "headless": headless,
                   "enable_motion_bvh": enable_motion_bvh,
-                  "physics_backend": physics_backend,
+                  "physics_backend": physics_backend, "physics_backend_source": source,
                   **({"launcher": str(custom)} if custom is not None else {}),
                   **({"auto_selected": auto_selected} if auto_selected else {}),
                   "started_at": time.time(),
@@ -978,7 +983,7 @@ def register_sim_session_tools(server: FastMCP, groups: Iterable[str] | None = N
                    headless: Annotated[bool, Field(description="true: no window.")] = False,
                    allow_shared_domain: Annotated[bool, Field(description="true: allow a ROS domain another session already uses.")] = False,
                    enable_motion_bvh: Annotated[bool, Field(description="true: accurate RTX LiDAR motion compensation; costs rendering time and GPU memory.")] = False,
-                   physics_backend: Annotated[Literal["physx", "newton"], Field(description="Engine for this new process. Missing Newton dependencies fail with no fallback.")] = "physx") -> dict:
+                   physics_backend: Annotated[Literal["physx", "newton"] | None, Field(description="Engine for this new process. Omit for the configured default (status shows it). An engine that cannot be given starts nothing: no fallback.")] = None) -> dict:
         """Launch a separate managed Isaac Sim instance, when explicitly asked.
 
         Omit port and ros_domain to take the first free, unclaimed value inside the configured range;

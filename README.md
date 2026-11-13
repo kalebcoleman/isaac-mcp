@@ -168,8 +168,8 @@ Full details: [Asset packs](docs/ASSET-PACKS.md).
 
 ## The tools
 
-A client is shown **30 tools** by default. Related tools are one tool with an `action` argument, for example
-`sim__prim(action="create")`; behind them are **118 single-purpose tools** (**127** with both optional groups), each
+A client is shown **31 tools** by default. Related tools are one tool with an `action` argument, for example
+`sim__prim(action="create")`; behind them are **119 single-purpose tools** (**128** with both optional groups), each
 still callable by its own name. The [table of groups](docs/TOOLS-HOST.md#grouped-tools) lists them all. Most scene work
 uses the first row.
 
@@ -177,7 +177,7 @@ uses the first row.
 |---|--:|---|
 | Generic scene and assets | 70 | Build and inspect any USD scene: prims, transforms, lights, materials, cameras, LiDAR, joints, physics, contacts, raycasts, OmniGraph, ROS 2 TF, occupancy maps, saving. Run your own controller in the physics loop and replay a saved trajectory into a labelled video. Import USD and URDF, and manage named asset packs. |
 | Isaac Lab | 16 | Find an install, list tasks, check an environment, train, evaluate, play and record, check GPU room, wait for a job and read its exit code and run folder, summarise evaluation pass counts, register baseline checkpoints, read metrics and checkpoints, cancel jobs. `run_script` runs any Python script as a managed job. No simulator needed. |
-| Host gateway and desktop | 13 | `isaac_help`, `refresh_tools`, `use_bridge`, and screenshots, recordings and window tools. |
+| Host gateway and desktop | 14 | `isaac_help`, `refresh_tools`, `use_bridge`, `toolsets`, and screenshots, recordings and window tools. |
 | Bridge built-ins | 8 | `status` (where am I, in one call), `run_python`, `job_status` and `job_cancel` for long simulator work, and file transfer into and out of the running simulator. |
 | UR5e digital twin | 10 | The RISE lab's UR5e twin, Kaleb's work with that robot. Only needed for that twin. |
 | Optional: desktop input, managed sessions | 9 | `window_*` desktop input and `sim__launch` managed simulator sessions, when you switch them on. |
