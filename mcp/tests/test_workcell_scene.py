@@ -33,10 +33,12 @@ def config(scene):
             "world": {"workstation_xy_m": [0.2, -0.1], "bench_scale": 0.01,
                       "bench_asset_top_z_m": 0.8, "tabletop_z_m": 0.0},
             "jenga": {"block_size_m": [0.072, 0.024, 0.014], "block_mass_kg": 0.015,
-                      "tower_layers_built": 18, "tower_xy_m": [0.7, -0.13]}}
+                      "tower_layers_built": 18, "tower_xy_m": [0.7, -0.13],
+                      "static_friction": 0.3, "dynamic_friction": 0.25}}
 
 
 def install_contracts(monkeypatch, scene, tmp_path, values):
+    monkeypatch.setattr(scene, "_bom_rows", lambda *args: [])
     hardware = types.ModuleType("workcell_test.hardware_config")
     hardware.load_config = lambda path: (values, {"provenance": True})
     pack_module = types.ModuleType("workcell_test.asset_pack")
@@ -72,6 +74,85 @@ def test_bad_configuration_never_mutates_stage(modules, monkeypatch, tmp_path):
     install_contracts(monkeypatch, scene, tmp_path, values)
     with pytest.raises(ValueError, match="tabletop"):
         asyncio.run(scene.Workcell().quick_start())
+
+
+def test_bad_variation_never_reaches_pack_or_stage(modules, monkeypatch, tmp_path):
+    scene, _ = modules
+    values = config(scene)
+    values["jenga"]["variation_profile"] = "missing"
+    install_contracts(monkeypatch, scene, tmp_path, values)
+    with pytest.raises(ValueError, match="profile"):
+        asyncio.run(scene.Workcell().quick_start())
+
+
+def test_bom_path_is_relative_to_configuration(modules, monkeypatch, tmp_path):
+    scene, _ = modules
+    values = config(scene)
+    values["documentation"] = {"bom_csv": "../parts.csv"}
+    bom = types.ModuleType("workcell_test.bom")
+    seen = []
+    rows = [{"asset_id": "jenga_block", "quantity": 54}]
+    bom.load_bom = lambda path: seen.append(path.resolve()) or rows
+    bom.verify_config_assets = lambda *args: None
+    monkeypatch.setitem(sys.modules, bom.__name__, bom)
+    assert scene._bom_rows(values, tmp_path / "config/cell.json") == rows
+    assert seen == [tmp_path / "parts.csv"]
+    values["jenga"]["tower_layers_built"] = 17
+    with pytest.raises(ValueError, match="quantity"):
+        scene._bom_rows(values, tmp_path / "config/cell.json")
+
+
+@pytest.mark.parametrize("condition,message", [
+    ("idle", "Build the workcell"), ("stale", "stage changed"),
+    ("playing", "Stop the timeline"), ("newton", "PhysX"),
+])
+def test_rebuild_refuses_unsafe_runtime(modules, monkeypatch, condition, message):
+    scene, _ = modules
+    stage = object()
+    cell = scene.Workcell()
+    if condition != "idle":
+        cell._runtime = (stage, config(scene), {}, [])
+        cell._report = {"state": "ready", "parts": []}
+    omni = types.ModuleType("omni")
+    omni.__path__ = []
+    usd = types.ModuleType("omni.usd")
+    usd.get_context = lambda: types.SimpleNamespace(
+        get_stage=lambda: object() if condition == "stale" else stage)
+    timeline = types.ModuleType("omni.timeline")
+    timeline.get_timeline_interface = lambda: types.SimpleNamespace(is_stopped=lambda: condition != "playing")
+    omni.usd, omni.timeline = usd, timeline
+    physics = types.ModuleType("workcell_test.physics_compat")
+    physics.selected_engine = lambda: "newton" if condition == "newton" else "physx"
+    for module in (omni, usd, timeline, physics):
+        monkeypatch.setitem(sys.modules, module.__name__, module)
+    monkeypatch.setattr(scene, "_replace_tower", lambda *args: pytest.fail("must not replace tower"))
+    with pytest.raises(RuntimeError, match=message):
+        cell.build_jenga()
+
+
+@pytest.mark.parametrize("failure", ["build", "audit"])
+def test_rebuild_failure_preserves_original_layer(modules, monkeypatch, failure):
+    Usd = pytest.importorskip("pxr.Usd")
+    scene, jenga = modules
+    stage = Usd.Stage.CreateInMemory()
+    stage.DefinePrim("/World/Jenga/Original", "Xform")
+    before = stage.GetRootLayer().ExportToString()
+
+    def build(temporary, *args, **kwargs):
+        if failure == "build":
+            raise ValueError("build failed")
+        temporary.DefinePrim("/World/Jenga/Replacement", "Xform")
+        return {"parts": []}
+
+    def audit(*args):
+        assert stage.GetPrimAtPath("/World/Jenga/Replacement")
+        raise ValueError("audit failed")
+
+    monkeypatch.setattr(jenga, "build", build)
+    monkeypatch.setattr(scene, "_finish_scene", audit)
+    with pytest.raises(ValueError, match=failure):
+        scene._replace_tower(stage, config(scene), {"jenga_block": "unused"}, [], [])
+    assert stage.GetRootLayer().ExportToString() == before
 
 
 def test_tower_layout_and_cached_status(modules):
