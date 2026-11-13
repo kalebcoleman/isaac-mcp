@@ -75,11 +75,18 @@ def test_doctor_is_a_read_only_screen_tool_without_arguments(desk):
     assert len(tool.description) < 160 and "sim" not in tool.name
 
 
-@pytest.mark.parametrize("session,wayland,display,backend", [
-    ("x11", None, ":0", "x11"), ("wayland", "wayland-0", ":0", "xwayland"), ("wayland", "wayland-0", None, "wayland"),
-    (None, "wayland-0", None, "wayland"), ("tty", None, None, "none"), (None, None, None, "none")])
-def test_display_backend(session, wayland, display, backend):
-    assert screen.display_backend(session, wayland, display) == backend
+@pytest.mark.parametrize("session,wayland,x_opens,backend", [
+    ("x11", None, True, "x11"), ("wayland", "wayland-0", True, "xwayland"), ("wayland", "wayland-0", False, "wayland"),
+    (None, "wayland-0", False, "wayland"), ("tty", None, False, "none"), ("tty", None, True, "x11")])
+def test_display_backend(session, wayland, x_opens, backend):
+    assert screen.display_backend(session, wayland, x_opens) == backend
+
+
+def test_an_ssh_session_without_display_reports_the_x_server_it_reaches(desk, monkeypatch):
+    monkeypatch.setattr(screen, "ENV_DISPLAY", None)
+    monkeypatch.setenv("XDG_SESSION_TYPE", "tty")
+    report = _doctor(_state("input"))[1]()
+    assert (report["backend"], report["display"], report["ready"]["computer"]) == ("x11", None, True)
 
 
 def test_no_display_and_no_bridge_still_answers(desk, monkeypatch):
@@ -234,3 +241,10 @@ def test_kit_readiness_reads_and_never_enables(monkeypatch):
     assert manager.asked == ["omni.kit.ui_test"]
     monkeypatch.setattr(graph, "_headless", lambda: True)
     assert ui.find({"readiness": True, "limit": 0})["headless"] is True   # answered before any limit check
+
+    def gone():
+        raise RuntimeError("no workspace")
+
+    omni_ui.Workspace = SimpleNamespace(get_dpi_scale=gone, get_main_window_width=gone, get_main_window_height=gone)
+    assert ui.readiness() == {"ui_test_enabled": False, "headless": True, "dpi_scale": None,
+                              "main_window": {"width": None, "height": None}}

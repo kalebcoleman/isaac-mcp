@@ -431,11 +431,18 @@ def readiness():
 
     from .graph import _headless
 
+    def read(getter):
+        try:
+            return getter()
+        except Exception:  # noqa: BLE001 - a headless Kit may have no workspace to ask
+            return None
+
     em = omni.kit.app.get_app().get_extension_manager()
+    width, height = read(ui.Workspace.get_main_window_width), read(ui.Workspace.get_main_window_height)
     return dict(ui_test_enabled=bool(em.is_extension_enabled("omni.kit.ui_test")), headless=bool(_headless()),
-                dpi_scale=ui.Workspace.get_dpi_scale(),
-                main_window=dict(width=round(ui.Workspace.get_main_window_width()),
-                                 height=round(ui.Workspace.get_main_window_height())))
+                dpi_scale=read(ui.Workspace.get_dpi_scale),
+                main_window=dict(width=None if width is None else round(width),
+                                 height=None if height is None else round(height)))
 
 
 def zoom_rect(ref):

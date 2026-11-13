@@ -1503,11 +1503,11 @@ def capture(monitor: int | None = None, window: str | None = None, window_id: in
 BRIDGE_PROBE_S = 3.0
 
 
-def display_backend(session_type: str | None, wayland: str | None, x_display: str | None) -> str:
-    """x11, xwayland (an X server inside a Wayland session), wayland (no X server named) or none."""
+def display_backend(session_type: str | None, wayland: str | None, x_opens: bool) -> str:
+    """x11, xwayland (an X server inside a Wayland session), wayland (no X server) or none."""
     if (session_type or "").lower() == "wayland" or wayland:
-        return "xwayland" if x_display else "wayland"
-    return "x11" if x_display else "none"
+        return "xwayland" if x_opens else "wayland"
+    return "x11" if x_opens else "none"
 
 
 def _x_extensions() -> dict:
@@ -1576,8 +1576,8 @@ def doctor_report(port: int | None, host: str | None, enabled: Iterable[str], ru
                   cursor_badge: bool) -> dict:
     """What the doctor tool answers: each probe's value or short reason, and what to fix first."""
     enabled = frozenset(enabled)
-    backend = display_backend(os.environ.get("XDG_SESSION_TYPE"), os.environ.get("WAYLAND_DISPLAY"), ENV_DISPLAY)
-    x11 = _x_extensions()
+    x11 = _x_extensions()   # opens DISPLAY, or :0 when unset, as the screen and input tools do
+    backend = display_backend(os.environ.get("XDG_SESSION_TYPE"), os.environ.get("WAYLAND_DISPLAY"), "error" not in x11)
     locked = _probe_locked()
     bridge = kit_readiness(host, port)
     if "error" in x11:
