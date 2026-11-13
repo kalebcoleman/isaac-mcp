@@ -731,8 +731,11 @@ class PrimTools:
         if not physics:
             refuse("WRONG_TYPE", "Not a PhysicsScene.")
         gravity = vector(a.get("gravity", [0, 0, -9.81]), 3)
-        dt = scalar(a.get("dt", 1 / 60), 0.001, 0.1)
         engine = sm.get_active_physics_engine()
+        from .newton_support import QUICK_SCENE_HZ
+
+        # Without dt: PhysX keeps 1/60 s; a Newton scene steps at this project's 500 Hz (MuJoCo-Warp does not hold stacks at 60 Hz).
+        dt = scalar(a.get("dt", 1 / QUICK_SCENE_HZ if engine == "newton" else 1 / 60), 0.001, 0.1)
         buffer_config, buffer_report = None, None
         explicit = any(a.get(key) is not None for key in ("nconmax", "njmax"))
         if engine == "newton":

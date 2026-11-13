@@ -7,10 +7,21 @@ The primary tested pairings are **Isaac Sim 5.1 with Isaac Lab 2.3.2** and **Isa
 
 ## Target engine
 
-**Newton is the target engine. PhysX is still the default until the Newton checks pass; choose an engine with
-`[sim] physics_backend`, `TWINSMITH_PHYSICS_BACKEND` or `--physics-backend`.**
+**Newton is the default engine for the scenes these tools build. PhysX is opt-in: choose it with `[sim] physics_backend = "physx"`,
+`TWINSMITH_PHYSICS_BACKEND=physx` or `--physics-backend physx` (`run.sh`). The UR5e work cell is still PhysX-only: on a
+Newton session its quick start refuses and says how to get a PhysX session
+([open item](OPEN-ITEMS.md#work-cell-on-newton)).**
 
-This is the one place the sentence is written; other pages link here. The rules that go with it do not change:
+This is the one place the statement is written; other pages link here. For a session on Newton:
+
+- **Step rate.** Scenes these tools build or configure step at **500 Hz**: the quick scene and the Jenga tower author it, and
+  `sim__physics action=configure` without `dt` does too (with `dt` it uses yours). PhysX rates are unchanged (60 Hz, the tower 120 Hz).
+  MuJoCo-Warp does not hold a stack at 120 Hz.
+- **Contact and constraint buffers.** Raised from Newton's defaults (200 contacts, 1200 rows) on every scene these tools build or
+  configure by the sizing rule in `exts/sim-tools/sim_tools/newton_support.py`: 32 contacts per rigid body and 8 rows per contact,
+  never below 512 contacts and 2048 rows. They are process-local; `sim__physics action=inspect` shows them against what is in use.
+
+The rules that go with the default do not change:
 
 - **Verify the selected engine.** `status` reports the stage's `physics_engine`. A device name does not identify the solver:
   a CPU device does not mean PhysX, and `cuda:0` does not mean Newton.
@@ -30,11 +41,11 @@ this repository, so they are **not yet verified live here**.
 | Exact stepping (`sim__simulation(action="step")`) | Passes. |
 | A one-off push (`sim__physics(action="apply")`) | Passes. |
 | Camera capture after motion | Passes. |
-| The 54-block Jenga tower | **Not yet stable.** |
+| The 54-block Jenga tower | Holds for 10 s at 500 Hz (1.7 mm, Sim 6.2 / Newton 1.6.1); it does not hold at 120 Hz. |
 | A Franka joint move (`sim__joints(action="move")`) | **Does not yet settle within the PhysX tolerance.** |
 | Raycast (`sim__physics(action="raycast")`) | **Not available**: refused with `RAYCAST_UNSUPPORTED`. |
 | Occupancy-map start checks | Skipped (they are PhysX overlap queries); the result lists them in `checks_skipped`. |
-| Work cell (`workcell` toolset) | Qualified on PhysX only; see its [README](../exts/workcell/workcell/README.md). |
+| Work cell (`workcell` toolset) | **Refused on Newton**: qualified on PhysX only; see its [README](../exts/workcell/workcell/README.md) and the [open item](OPEN-ITEMS.md#work-cell-on-newton). |
 
 Earlier records, kept as they were observed. Narrow 6.2 Newton experiments used MuJoCo Warp on CPU; earlier tests also produced
 native crashes, invalid state, rendering and contact failures. On 2026-11-06 a 6.2 headless Newton session reported the MuJoCo
@@ -45,8 +56,7 @@ reads on a MuJoCo scene. The tools now author both from one rate and refuse befo
 [Newton in the generic tools](TOOLS-SCENE.md#newton-in-the-generic-tools)); the exact-stepping row above is the later result.
 None of this qualifies broader scene, contact, robot or Lab workflows.
 
-The checks that remain open before PhysX stops being the default are in the
-[Newton qualification list](OPEN-ITEMS.md#newton-qualification).
+The checks that remain open on Newton are in the [Newton qualification list](OPEN-ITEMS.md#newton-qualification).
 
 Isaac Sim 6.2 loaded its bundled Warp 1.17.0 even though the Python environment also contained a different
 `warp-lang` distribution. Inspect the version **loaded inside Kit**, not just `pip show`. NVIDIA notes that

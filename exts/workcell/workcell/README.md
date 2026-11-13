@@ -255,7 +255,8 @@ outside a mapped part, or a report part whose prim is missing, fails the audit.
 
 ## PhysX authoring/BOM smoke
 
-The release target is PhysX. Run the smoke only against an explicitly selected bridge and
+The work cell is qualified on PhysX only: start a PhysX session (`run.sh --physics-backend physx`); a Newton session refuses it
+(see [Work cell on Newton](../../../docs/OPEN-ITEMS.md#work-cell-on-newton)). Run the smoke only against an explicitly selected bridge and
 configuration:
 
 ```bash

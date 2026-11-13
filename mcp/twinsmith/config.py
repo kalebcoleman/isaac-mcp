@@ -73,7 +73,7 @@ def select(value) -> frozenset[str]:
 
 
 # The one place the default physics engine is written down.
-DEFAULT_PHYSICS_BACKEND = "physx"
+DEFAULT_PHYSICS_BACKEND = "newton"
 PHYSICS_BACKENDS = ("physx", "newton")
 
 

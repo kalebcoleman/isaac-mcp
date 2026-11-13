@@ -545,13 +545,13 @@ Add or remove colliders and rigid bodies, set mass. Add or remove a collider, ri
 
 Listed as `sim__physics(action="configure")`.
 
-Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. On Newton it also sizes the solver's contact and constraint buffers, reported as newton_buffers. Requires session_id and stage_id from sim__stage__info.
+Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. On Newton it also sizes the solver's contact and constraint buffers, reported as newton_buffers, and without dt steps at 500 Hz. Requires session_id and stage_id from sim__stage__info.
 
 - `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `path` (string, required): PhysicsScene prim path.
 - `gravity` (array, default `[0, 0, -9.81]`): Acceleration vector in stage units/s^2.
-- `dt` (number, default `0.016666666666666666`): Physics timestep seconds, 1/1000..1/10.
+- `dt` (number, optional): Physics timestep seconds, 1/1000..1/10. Default 1/60 on PhysX and 1/500 on Newton, the rate this project's Newton scenes use.
 - `nconmax` (integer, optional): Newton only: MuJoCo-Warp contact buffer per world. Default: sized from the rigid-body count. Refused on PhysX.
 - `njmax` (integer, optional): Newton only: constraint rows per world; same rules as nconmax.
 
@@ -1507,7 +1507,7 @@ No arguments.
 
 Listed as `workcell__cell(action="quick_start")`.
 
-Build a stopped PhysX workcell from an external asset pack. Refuses unsaved stage changes unless explicitly allowed.
+Build a stopped workcell from an external asset pack; qualified on PhysX only, so a Newton session refuses it. Refuses unsaved stage changes unless explicitly allowed.
 
 - `config_path` (string, optional): Optional hardware configuration path.
 - `mode` (physics|mirror_real, default `"physics"`): Physics mode, or zero-gravity mirror mode.

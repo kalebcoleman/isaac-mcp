@@ -493,7 +493,7 @@ add(
 )
 add(
     "sim.physics.configure",
-    'Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. On Newton it also sizes the solver\'s contact and constraint buffers, reported as newton_buffers.',
+    'Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. On Newton it also sizes the solver\'s contact and constraint buffers, reported as newton_buffers, and without dt steps at 500 Hz.',
     dict(
         **TARGET,
         path=field("string", "PhysicsScene prim path."),
@@ -504,7 +504,8 @@ add(
             default=[0, 0, -9.81],
         ),
         dt=field(
-            "number", "Physics timestep seconds, 1/1000..1/10.", False, default=1 / 60
+            "number", "Physics timestep seconds, 1/1000..1/10. Default 1/60 on PhysX and 1/500 on Newton, "
+                      "the rate this project's Newton scenes use.", False
         ),
         nconmax=field("integer", "Newton only: MuJoCo-Warp contact buffer per world. Default: sized from the rigid-body count. Refused on PhysX.", False),
         njmax=field("integer", "Newton only: constraint rows per world; same rules as nconmax.", False),

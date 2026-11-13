@@ -1150,9 +1150,9 @@ def test_the_launch_argument_defaults_to_the_configured_backend_not_a_literal():
     assert inspect.signature(sim._launch).parameters["physics_backend"].default is None
 
 
-def test_the_current_default_is_physx():
+def test_the_current_default_is_newton():
     """The one test that pins the value: flipping the default in twinsmith.config changes this line only."""
-    assert config.DEFAULT_PHYSICS_BACKEND == "physx"
+    assert config.DEFAULT_PHYSICS_BACKEND == "newton"
 
 
 @pytest.mark.parametrize("configured,other", [("physx", "newton"), ("newton", "physx")])

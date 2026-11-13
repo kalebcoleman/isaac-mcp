@@ -2376,7 +2376,7 @@
       "owner_id": "generic-sim"
     },
     "sim.physics.configure": {
-      "description": "Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. On Newton it also sizes the solver's contact and constraint buffers, reported as newton_buffers. Requires session_id and stage_id from sim__stage__info.",
+      "description": "Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. On Newton it also sizes the solver's contact and constraint buffers, reported as newton_buffers, and without dt steps at 500 Hz. Requires session_id and stage_id from sim__stage__info.",
       "parameters": {
         "session_id": {
           "type": "string",
@@ -2405,9 +2405,8 @@
         },
         "dt": {
           "type": "number",
-          "description": "Physics timestep seconds, 1/1000..1/10.",
-          "required": false,
-          "default": 0.016666666666666666
+          "description": "Physics timestep seconds, 1/1000..1/10. Default 1/60 on PhysX and 1/500 on Newton, the rate this project's Newton scenes use.",
+          "required": false
         },
         "nconmax": {
           "type": "integer",
@@ -2466,9 +2465,9 @@
           "kind": "number",
           "enum": null,
           "required": false,
-          "default": 0.016666666666666666,
-          "has_default": true,
-          "description": "Physics timestep seconds, 1/1000..1/10."
+          "default": null,
+          "has_default": false,
+          "description": "Physics timestep seconds, 1/1000..1/10. Default 1/60 on PhysX and 1/500 on Newton, the rate this project's Newton scenes use."
         },
         {
           "name": "nconmax",
