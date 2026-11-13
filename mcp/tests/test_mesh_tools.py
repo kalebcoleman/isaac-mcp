@@ -15,23 +15,22 @@ pytest.importorskip("trimesh")
 import mesh_fixture  # noqa: E402
 
 from twinsmith import mesh_worker  # noqa: E402
-from twinsmith import pack_manifest as pm  # noqa: E402
 from twinsmith import server as gw  # noqa: E402
 from twinsmith.isaaclab import jobs  # noqa: E402
 from twinsmith.project_assets import Broker  # noqa: E402
 
-ENV = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_WORKSPACE", "TWINSMITH_PROJECT", "TWINSMITH_USD_PYTHON", *pm.REMOVED_ENVIRONMENT)
+ENV = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_WORKSPACE", "TWINSMITH_PROJECT", "TWINSMITH_USD_PYTHON")
 
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
     for name in ENV:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(pm, "_announced", set())
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("TWINSMITH_PROJECT", str(tmp_path / "no-project"))
     monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [])
+    jobs._active.clear()
     assets = tmp_path / "assets"
     assets.mkdir()
     monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(assets))
@@ -45,7 +44,10 @@ def setup(tmp_path, monkeypatch):
     state.asset_broker = Broker(str(config))
     source = project / "src" / "bench.usdc"
     mesh_fixture.build(source)
-    return dict(state=state, project=project, assets=assets, source=source, tmp=tmp_path)
+    yield dict(state=state, project=project, assets=assets, source=source, tmp=tmp_path)
+    for job_id in list(jobs._active):           # leave no job behind for later tests' status answers
+        jobs.runs_cancel(job_id, grace_s=2)
+    jobs._active.clear()
 
 
 def call(setup, canonical, **params):
@@ -108,10 +110,11 @@ def test_split_runs_as_a_job_and_writes_a_report(setup):
     assert {p.name for p in out.iterdir()} == {"bench.usda", "bench_render.usdc", "bench_collision.usdc", mesh_worker.REPORT}
 
 
-def test_listed_schemas_take_prim_paths_as_strings():
+def test_listed_schemas_take_prim_paths_as_strings(tmp_path):
     import asyncio
 
-    tools = {t.name: t for t in asyncio.run(gw.mcp.list_tools())}
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "default", "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path)})
+    tools = {t.name: t for t in asyncio.run(server.list_tools())}
     for name in ("assets__mesh", "assets__validate"):
         assert name in tools
     assert tools["assets__mesh"].inputSchema["properties"]["prims"]["items"] == {"type": "string"}
