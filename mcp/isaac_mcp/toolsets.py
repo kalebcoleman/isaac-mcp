@@ -24,6 +24,7 @@ TOOLSETS = {
     "ros2": Toolset("ROS 2 transforms, graphs and occupancy maps"),
     "kit_debug": Toolset("Inspect Kit logs and operate its UI"),
     "workcell": Toolset("UR5e workcell tools"),
+    "robosim": Toolset("RoboSimStudio real-to-sim runs in its own private environment"),
     "input": Toolset("Desktop mouse and keyboard input", explicit_only=True),
     "launch": Toolset("Launch and stop simulator processes", explicit_only=True),
     "extensions": Toolset("Tools from uncatalogued extension namespaces", True),
@@ -32,7 +33,6 @@ TOOLSETS = {
 PLANNED = {
     "backend": "Select and inspect physics backends",
     "params": "Inspect and tune runtime parameters",
-    "robosim": "Robot simulation workflows",
     "compare": "Compare simulation results",
     "planning": "Plan robot actions",
     "real2sim": "Synchronize real and simulated systems",
@@ -51,6 +51,7 @@ _ROOTS = {
     "kit_debug": "sim__ui sim__logs",
     "input": "window_input",
     "launch": "sim__session",
+    "robosim": "robosim",
 }
 
 MEMBERS = {

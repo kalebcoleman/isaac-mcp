@@ -172,7 +172,7 @@ Full details, including the UR5e twin's files: [Assets](docs/ASSETS.md).
 ## The tools
 
 A client is shown **30 tools** by default. Related tools are one tool with an `action` argument, for example
-`sim__prim(action="create")`; behind them are **117 single-purpose tools** (**126** with both optional groups), each
+`sim__prim(action="create")`; behind them are **118 single-purpose tools** (**127** with both optional groups), each
 still callable by its own name. The [table of groups](docs/TOOLS-HOST.md#grouped-tools) lists them all. Most scene work
 uses the first row.
 

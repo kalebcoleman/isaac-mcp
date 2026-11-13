@@ -71,18 +71,19 @@ configured filters.
 | Host gateway and desktop | 13 (`isaac_help`, `refresh_tools`, `use_bridge`, and 10 screen tools) | selected by `core`, `screen` and `code`, even with Kit down | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
 | Desktop input (optional) | 5 (`window_*`) | only when `input` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-desktop-input) |
 | Simulator sessions (optional) | 4 (`sim__*`) | only when `launch` is explicitly selected | [TOOLS-HOST.md](docs/TOOLS-HOST.md#optional-simulator-sessions) |
+| RoboSimStudio (`robosim`) | 1 | selected by `robosim` (off by default); one grouped tool that runs RoboSimStudio in its own private Python environment, no Kit bridge needed | [ROBOSIM.md](docs/ROBOSIM.md) |
 | Isaac Lab (`isaaclab__*`, `run_script`) | 16 | selected by `lab` (off by default), no bridge needed; job tools also need `ISAACLAB_PYTHON` / `ISAACLAB_ROOT`, and refuse to start next to a running Kit bridge | [TOOLS-ISAACLAB.md](docs/TOOLS-ISAACLAB.md) |
 | Bridge built-ins (`run_python`, `status`, `job_status`, `job_cancel`, `reload_tools`, file tools) | 8 | listed from a packaged catalog even with Kit down; execution needs a reachable bridge; selected by `core` and `code` | [TOOLS-HOST.md](docs/TOOLS-HOST.md) |
 | Generic scene and assets | 70 (`sim__quick_start`, `assets__*`, `sim__stage__*`, `sim__prim__*`, physics, timeline, controller runs, trajectory replay, body, viewport, ROS 2 TF, OmniGraph, maps and Kit UI) | on by default, catalogued offline; selected by the scene, physics, sensors, assets, code, ros2 and kit_debug toolsets; roots, scan, search and the pack tools run on host, others need sim-tools in selected Kit | [TOOLS-SCENE.md](docs/TOOLS-SCENE.md) |
 | UR5e twin (`ur5e_dt__*`) | 10 | RISE lab's UR5e digital twin, Kaleb's work with that robot; every other tier is robot-agnostic. Listed from a packaged catalog even with Kit down; execution needs a selected Kit bridge with the twin extension | [TOOLS-UR5E.md](docs/TOOLS-UR5E.md) |
 
-With the `all` profile, the server registers exactly 117 tools from startup, whether or not Kit runs.
+With the `all` profile, the server registers exactly 118 tools from startup, whether or not Kit runs.
 With the default profile a client is shown **30 tools**: related tools share one grouped tool
 with an `action` argument. The single-purpose names in these docs remain callable only while
 their toolset is enabled, but are not listed separately. `action="help"` describes available actions.
 The [table of groups](docs/TOOLS-HOST.md#grouped-tools) maps each action to its member.
 
-The other 8 tools in the tier inventory are bridge built-ins. With `all`, there are 117 tools in total;
+The other 8 tools in the tier inventory are bridge built-ins. With `all`, there are 118 tools in total;
 the explicit-only desktop input and simulator session groups add 9 more.
 Use `ISAAC_MCP_TOOLSETS=default,+lab` or `isaac-mcp --toolsets minimal` to select toolsets.
 Configuration precedence is defaults, user `~/.config/isaac-mcp/config.toml`, nearest project

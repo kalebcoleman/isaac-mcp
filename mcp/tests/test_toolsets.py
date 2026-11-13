@@ -32,6 +32,23 @@ def test_each_toolset_alone_and_disabled_registers_nothing(name):
         assert all(toolsets.owner(tool) != name for tool in disabled._tool_manager._tools)
 
 
+def test_robosim_is_off_by_default_and_registers_only_its_grouped_tool():
+    assert "robosim" not in toolsets.DEFAULT and "robosim" not in toolsets.PLANNED
+    assert "robosim" in config.select("all")
+    assert "robosim" not in {name for name in toolsets.TOOLSETS if name in server._state_for(build()).toolsets}
+    assert "robosim" not in build()._tool_manager._tools
+    alone = build("minimal,+robosim")
+    assert {name for name in alone._tool_manager._tools if toolsets.owner(name) == "robosim"} == {"robosim"}
+    assert toolsets.MEMBERS["robosim"] == {"robosim"}
+
+
+def test_documented_default_and_planned_selection():
+    assert toolsets.DEFAULT == {"core", "scene", "physics", "sensors", "assets", "code", "screen", "extensions"}
+    assert config.select("all") == set(toolsets.TOOLSETS) - {"input", "launch"}
+    assert set(toolsets.PLANNED) == {"backend", "params", "compare", "planning", "real2sim", "eval"}
+    assert not set(toolsets.PLANNED) & set(toolsets.TOOLSETS)
+
+
 def test_profiles_and_guards():
     assert config.select("default") == toolsets.DEFAULT
     assert config.select("all").isdisjoint({"input", "launch"})
@@ -98,9 +115,10 @@ def test_listing_size(profile, budget):
     instance = build(profile)
     tools = asyncio.run(instance.list_tools())
     payload = json.dumps([{key: value for key, value in tool.model_dump(mode="json").items()
-                           if key in ("name", "description", "inputSchema", "annotations")} for tool in tools])
-    print(f"\n{profile}: {len(tools)} tools, {len(payload)} characters, {len(payload) / 4} estimated tokens")
-    assert len(payload) / 4 < budget
+                           if key in ("name", "description", "inputSchema", "annotations")} for tool in tools],
+                         separators=(",", ":"))
+    print(f"\n{profile}: {len(tools)} tools, {len(payload)} characters, {len(payload) // 4} estimated tokens")
+    assert len(payload) // 4 < budget
 
 
 @pytest.mark.parametrize("enabled", [True, False])
@@ -160,3 +178,9 @@ def test_instructions_are_short_and_selection_neutral():
     assert 450 < len(server.SERVER_INSTRUCTIONS) < 700
     assert "status" in server.SERVER_INSTRUCTIONS and "toolsets" in server.SERVER_INSTRUCTIONS
     assert "isaaclab__" not in server.SERVER_INSTRUCTIONS
+
+
+def test_workcell_owns_the_whole_ur5e_dt_namespace():
+    owned = {name for name in build("minimal,+workcell")._tool_manager._tools if toolsets.owner(name) == "workcell"}
+    assert owned and all(name.startswith("ur5e_dt__") for name in owned)
+    assert {"ur5e_dt__jenga", "ur5e_dt__jenga_build", "ur5e_dt__workcell"} <= owned

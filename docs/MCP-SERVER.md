@@ -343,8 +343,8 @@ Client side (these are client settings, not part of this server; check your clie
 ### Tool counts depend on toolsets
 
 The server registers **84 tools** with the default toolsets. A client is shown **30 tools**, because related
-members are grouped behind an `action` argument. `all` registers 117 single-purpose tools (46 shown);
-`all,+input,+launch` registers **126** with both explicit-only toolsets. Disabled toolsets register nothing, including hidden members.
+members are grouped behind an `action` argument. `all` registers 118 single-purpose tools (47 shown);
+`all,+input,+launch` registers **127** with both explicit-only toolsets. Disabled toolsets register nothing, including hidden members.
 Use `isaac-mcp toolsets`, the startup log or the `isaac-mcp://toolsets` resource to inspect selection.
 
 ### Diagnosing disconnects: the server log

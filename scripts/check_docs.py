@@ -59,6 +59,7 @@ def expected_tools():
         "docs/TOOLS-SCENE.md": {name.replace(".","__") for name in REGISTRY},
         "docs/TOOLS-UR5E.md": {"ur5e_dt__" + name for name in registry},
         "docs/TOOLS-ISAACLAB.md": tool_decorators(ROOT / "mcp/isaac_mcp/isaaclab/tools.py"),
+        "docs/ROBOSIM.md": tool_decorators(ROOT / "mcp/isaac_mcp/robosim/tools.py"),
         "docs/TOOLS-HOST.md": host,
     }
 
@@ -73,10 +74,11 @@ def tier_counts():
             "desktop_input": len(tool_decorators(ROOT / "mcp/isaac_mcp/desktop_input.py")),
             "sim_sessions": len(tool_decorators(ROOT / "mcp/isaac_mcp/sim_sessions.py")),
             "isaaclab": len(expected["docs/TOOLS-ISAACLAB.md"]),
+            "robosim": len(expected["docs/ROBOSIM.md"]),
             "builtins": len(builtins), "ur5e": len(expected["docs/TOOLS-UR5E.md"])}
 
 
-TIER_ROWS = {"host": "Host gateway", "desktop_input": "Desktop input (optional)",
+TIER_ROWS = {"robosim": "RoboSimStudio (`robosim`", "host": "Host gateway", "desktop_input": "Desktop input (optional)",
              "sim_sessions": "Simulator sessions (optional)", "isaaclab": "Isaac Lab", "builtins": "Bridge built-ins",
              "ur5e": "UR5e twin", "generic": "Generic scene and assets"}
 
@@ -101,12 +103,12 @@ def check_agent_guide(errors, text=None, counts=None):
         # Everything the standard groups list from startup: the bridge built-ins are catalogued too.
         "exactly N tools (standard groups listed offline)":
             (r"exactly (\d+) tools",
-             actual["host"] + actual["isaaclab"] + actual["builtins"] + actual["ur5e"] + actual["generic"]),
+             actual["host"] + actual["isaaclab"] + actual["builtins"] + actual["ur5e"] + actual["generic"] + actual["robosim"]),
         "The other N tools (bridge built-ins subtotal)":
             (r"The other (\d+) tools", actual["builtins"]),
         "there are N tools in total":
             (r"there are (\d+) tools in total",
-             sum(actual[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic"))),
+             sum(actual[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic", "robosim"))),
         "groups add N more (optional subtotal)":
             (r"groups add (\d+) more", actual["desktop_input"] + actual["sim_sessions"]),
     }
@@ -164,9 +166,9 @@ def check_skill_tool_names(errors, expected=None, files=None):
 
 README_COUNTS = (
     # The single-purpose tools registered by default, then with both optional groups.
-    (r"\*\*(\d+) single-purpose tools\*\*", lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"]),
+    (r"\*\*(\d+) single-purpose tools\*\*", lambda c: c["host"] + c["isaaclab"] + c["builtins"] + c["ur5e"] + c["generic"] + c["robosim"]),
     (r"\(\*\*(\d+)\*\* with both optional groups\)",
-     lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic",
+     lambda c: sum(c[tier] for tier in ("host", "isaaclab", "builtins", "ur5e", "generic", "robosim",
                                         "desktop_input", "sim_sessions"))),
 )
 

@@ -42,6 +42,7 @@ LOCAL_SECTIONS = (
     ("Simulator sessions (opt-in: `launch` toolset)", "TOOLS-HOST.md#optional-simulator-sessions",
      ("sim_sessions.py",)),
     ("Isaac Lab", "TOOLS-ISAACLAB.md", ("isaaclab/tools.py",)),
+    ("RoboSimStudio (opt-in: `robosim` toolset)", "ROBOSIM.md", ("robosim/tools.py",)),
 )
 CATALOG_SECTIONS = (
     ("Bridge built-ins", "TOOLS-HOST.md#kit-bridge-built-ins", "builtins.json"),

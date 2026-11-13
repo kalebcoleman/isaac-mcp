@@ -128,12 +128,13 @@ Unknown names and the five removed selection variables fail startup with migrati
 | `ros2` | off | ROS 2 transforms, graphs and occupancy maps |
 | `kit_debug` | off | Inspect Kit logs and operate its UI |
 | `workcell` | off | UR5e workcell tools |
+| `robosim` | off | RoboSimStudio real-to-sim runs in its own private environment (see [ROBOSIM.md](ROBOSIM.md)) |
 | `input` | explicit only | Desktop mouse and keyboard input |
 | `launch` | explicit only | Launch and stop simulator processes |
 | `extensions` | on | Tools from uncatalogued extension namespaces |
 
 There are **84 tools** by default before grouping; a client is shown **30 tools**.
-The `all` profile registers 117 members, **126** with both explicit-only toolsets.
+The `all` profile registers 118 members, **127** with both explicit-only toolsets.
 Toolsets are visibility controls, not isolation: use `ISAAC_MCP_READ_ONLY=1` in Kit to reject scene writes.
 Job inspection can reconcile stored metadata; code and probe tools can execute arbitrary code.
 
@@ -223,7 +224,7 @@ See the [working checklist](CHECKLIST.md#tool-surface-and-reliability) for remai
 
 ### Optional simulator sessions
 
-Select `sim_launch` explicitly to expose these local Linux tools. They launch this repository's `run.sh` and manage only
+Select the `launch` toolset explicitly to expose these local Linux tools. They launch this repository's `run.sh` and manage only
 processes they started; they do not attach to or stop unrelated simulators. This runs the configured simulator Python,
 creates files, and can affect the GPU and network. All four tools have conservative annotations.
 

@@ -1,7 +1,8 @@
 # RoboSimStudio host bridge
 
 `isaac_mcp.robosim.register_robosim_tools(server)` registers one grouped `robosim`
-tool independently of Kit. Host/server wiring is separate. RSS is never imported
+tool independently of Kit. The server calls it only when the `robosim` toolset is
+selected (off by default, for example `ISAAC_MCP_TOOLSETS=default,+robosim`). RSS is never imported
 into the MCP host: `examples/live/ctl` uses RSS's own `.venv/bin/python`.
 Tested pin: **87b5e32** of <https://github.com/robosimstudio/robosimstudio>.
 Every response identifies the checkout commit and warns about a different pin.

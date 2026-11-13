@@ -1787,6 +1787,9 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     register_sim_session_tools(server, groups=groups, env=env,
                                on_launch=lambda record: state.launched_sessions.add(record["id"]))
     register_isaaclab_tools(server, groups=groups)
+    if "robosim" in groups:
+        from .robosim import register_robosim_tools
+        register_robosim_tools(server)
     _register_gateway_tools(server, groups)
     setattr(server, _OFFLINE_ATTR, _OfflineTools(host_catalog.load_catalog()))
     _sync_offline(server, state)

@@ -39,7 +39,7 @@ The filters are visibility preferences, not a security boundary; the token and r
 | Variable | Default | Meaning |
 |---|---|---|
 | `ISAACLAB_PYTHON` | discovered | Lab interpreter. An invalid explicit path fails discovery instead of falling back. It takes priority over `isaaclab_python` in a named project's `isaac-mcp.json` ([project setting](TOOLS-ISAACLAB.md#setup-and-configuration)). |
-| `ISAAC_MCP_SIM_LAUNCHER` | unset | With `sim_launch`: [a project's own launcher](TOOLS-HOST.md#a-projects-own-launcher) for `sim__launch`. Only from here, never from a tool argument or project file. |
+| `ISAAC_MCP_SIM_LAUNCHER` | unset | With the `launch` toolset: [a project's own launcher](TOOLS-HOST.md#a-projects-own-launcher) for `sim__launch`. Only from here, never from a tool argument or project file. |
 | `ISAACLAB_ROOT` | discovered | Lab checkout. |
 | `ISAACLAB_JOBS_DIR` | `~/.local/share/isaac-mcp/jobs` | Job records, for Isaac Lab jobs and simulator jobs alike. |
 | `ISAACLAB_LOGS_DIR` | unset | Extra run directory for checkpoints and metrics. |

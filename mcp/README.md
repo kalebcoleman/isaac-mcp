@@ -73,7 +73,7 @@ started read-only. The protocol, the scheduling rules and both switches are in
 
 ## What a client is shown
 
-The default profile lists 30 tools; `all` lists 46: related single-purpose tools are offered as one tool with an `action` argument
+The default profile lists 30 tools; `all` lists 47: related single-purpose tools are offered as one tool with an `action` argument
 (`sim__prim` with `action="create"`, `"get"`, `"delete"`, ...). `action="help"` returns the full
 description of each action. Every single-purpose name (`sim__prim__create`) still works when
 called, so older prompts and scripts keep running; those names are deprecated and are no longer

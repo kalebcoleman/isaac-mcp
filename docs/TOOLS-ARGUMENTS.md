@@ -526,6 +526,32 @@ Run any Python script as a managed job: a job_id at once, a log, a hard timeout,
 - `min_free_vram_mb` (int | None, default `None`): Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.
 - `wait_for_vram_s` (float, default `0`): With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).
 
+## RoboSimStudio (opt-in: `robosim` toolset)
+
+Reference: [ROBOSIM.md](ROBOSIM.md). 1 tools.
+
+### `robosim`
+
+RSS live real-to-sim via its private Python: start a trusted scene, extract reference video frames, snapshot, compare masks, record a rollout, compare_take, report and stop. Image-space metrics only, not physics fitting. Long actions return a run to poll with status. CPU is never auto-upgraded to GPU.
+
+- `action` (Literal['status', 'start', 'scene_template', 'reference', 'snapshot', 'compare', 'rollout', 'compare_take', 'stop', 'report'], required): Action to perform.
+- `run` (str | None, default `None`): Exact run name from start; omit for status to list runs.
+- `name` (str | None, default `None`): start: short run name; letters, digits, underscores and hyphens.
+- `scene` (str | None, default `None`): start: absolute trusted Python scene file; copied into the run. Executes code, not sandboxed.
+- `device` (Literal['cpu', 'cuda:0'] | None, default `None`): Required for start: cpu or cuda:0. Later actions inherit the run's device.
+- `video` (str | None, default `None`): reference: absolute local video file; copied before extracting frames.
+- `keys` (list[str] | None, default `None`): compare/compare_take: RSS object masks, e.g. ['cube=red'] or ['cube=#d01a10~0.1'].
+- `take` (str | None, default `None`): rollout/compare_take: take basename, without extension.
+- `routine` (str | None, default `None`): rollout: routine defined by the scene; omit for RSS's default routine.
+- `camera` (str | None, default `None`): Camera name from start's RSS status; omit for the scene's first camera.
+- `at` (str, default `'0:start,end'`): reference: RSS time anchors, e.g. '0:start,1:middle,end'.
+- `every` (int, default `4`): rollout: record every N control steps.
+- `size` (str, default `'320x240'`): snapshot/compare: WIDTHxHEIGHT pixels.
+- `width` (int, default `320`): reference: contact-sheet tile width.
+- `port` (int, default `8080`): start: live viewer TCP port (RSS listens on all interfaces).
+- `wait_s` (float, default `0`): Wait at most this many seconds; poll status with run for completion.
+- `allow_concurrent_gpu` (bool, default `False`): start: knowingly permit cuda:0 despite other GPU workloads or an unavailable GPU check.
+
 ## Bridge built-ins
 
 Reference: [TOOLS-HOST.md](TOOLS-HOST.md#kit-bridge-built-ins). 8 tools.

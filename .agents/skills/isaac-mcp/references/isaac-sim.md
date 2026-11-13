@@ -28,7 +28,7 @@ processes: screen and Isaac Lab tools working says nothing about the bridge.
 - `use_bridge` lasts until the host restarts. Re-check `status` after switching.
 - Reuse the intended reachable bridge. Start an additional isolated simulator only when the
   user requested one and resource checks pass. With the
-  optional `sim_launch` group, `sim__launch` starts an isolated session (own port, ROS domain,
+  optional `launch` toolset, `sim__launch` starts an isolated session (own port, ROS domain,
   output directory) after resource checks; poll `sim__status` until `state` is `running`, then
   `use_bridge` to its port. `sim__stop` needs `expected_pid` and `confirm_discard=true`.
 
@@ -87,7 +87,7 @@ Rules of thumb:
 - `screenshot` without a selector picks the Isaac Sim / Isaac Lab window and captures it even when
   covered. `list_windows` with `{"filter": "Isaac"}` gives ids for `window_id`.
 - `start_screen_recording` / `stop_screen_recording` record a window or monitor to MP4 (no audio).
-- Optional `screen_input` tools (`window_click`, `window_drag`, `window_scroll`, `window_type`,
+- Optional `input` toolset tools (`window_click`, `window_drag`, `window_scroll`, `window_type`,
   `window_key`) act inside one window. They need `expected_width` / `expected_height` from a fresh
   screenshot, so take one first. Prefer `run_python` or a named tool over clicking UI.
 
