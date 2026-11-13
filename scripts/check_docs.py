@@ -19,7 +19,8 @@ SKILLS_DIR = ROOT / ".agents" / "skills"
 # Tools that no longer exist, by bare name. A namespaced name (sim__, assets__, isaaclab__, workcell__)
 # needs no entry here: it must be registered, or it is reported.
 RETIRED_TOOLS = frozenset({"list_bridges", "screen_info", "assets__prepare_workstation",
-                           "isaaclab__run_script", "isaaclab__runs_cancel"})
+                           "isaaclab__run_script", "isaaclab__runs_cancel", "window_input", "window_click",
+                           "window_drag", "window_scroll", "window_type", "window_key"})
 
 # Sentences that were true once and are not any more: Newton is the stated target engine.
 RETIRED_PHRASES = ("PhysX is the release target", "Newton is experimental")
