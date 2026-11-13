@@ -692,6 +692,14 @@ class _KitBadge:
                 self._update, name="twinsmith cursor badge")
         return True
 
+    def close(self):
+        """After a failure: no badge left on screen and no flag left to hold up every screenshot."""
+        self.sub = None
+        try:
+            self.window.visible = False
+        finally:
+            self.flag.unlink(missing_ok=True)
+
     def _update(self, _event=None):
         import time
 
@@ -720,8 +728,10 @@ def badge(x, y, jump=False):
             _badge_state.append(_KitBadge())
         _badge_state[0].glide_to(x, y, jump)
     except Exception as exc:  # noqa: BLE001
-        _badge_state[:] = [None]
+        failed, _badge_state[:] = (_badge_state or [None])[0], [None]
         try:
+            if failed is not None:
+                failed.close()
             import carb
 
             carb.log_warn(f"twinsmith cursor badge off: {exc}")
