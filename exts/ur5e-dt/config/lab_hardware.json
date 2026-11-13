@@ -42,9 +42,9 @@
       "source": "Preserved Vention USD metersPerUnit=0.01; convert centimetre asset coordinates to metre workcell stage."
     },
     "bench_asset_top_z_m": {
-      "value": 0.886068682789,
-      "status": "unconfirmed",
-      "source": "Preserved Vention CAD world bound maximum 88.6068682789 cm converted to metres. Assumed tabletop; verify actual top face and floor datum before lab use."
+      "value": 0.800594045970318,
+      "status": "confirmed",
+      "source": "CAD-only datum: bench/bench.usdc SHA256 34f75072eeb8667e0479cb3573b6df546e353b483712db25dfa5af42d04c9a60; default-prim-relative VentionAssembly_393251_v88_0/imported_PANEL_B2F52AEB2A0D_804849_271/Mesh_91 world bound top 80.0594045970318 cm. Not a lab floor-to-top measurement; bench_height_m remains unconfirmed."
     }
   },
   "robot": {
