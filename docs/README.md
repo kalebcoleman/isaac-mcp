@@ -79,7 +79,8 @@ away. Scripts that import `mcp` need `uv run --locked --isolated --project mcp -
 | Start | `run_ur5e_dt.py` (what `run.sh` runs) |
 | Project checks (CPU, also in CI) | `check_docs.py`, `check_assets.py`, `check_portable_paths.py`, `check_private_paths.py`, `gen_host_catalog.py`, `gen_tool_reference.py` |
 | UR5e checks (live, disposable) | `workcell_smoke.py` (requires an explicitly selected disposable bridge and lab config) |
-| Scene checks (live, disposable) | `validate_scene_tools.py` first, then `validate_scene_equivalents.py`, `_edges`, `_sensors`, `_camera_freshness`, `_joints`, `_prim_edit`, `_clear`, `_sessions`, `_reopen`; `validate_generic_scene.py`; `scene_mcp_client.py`, `smoke_mcp_surface.py`; fixtures from `make_scene_fixture.py`, `make_scene_package_fixture.py` |
+| Smoke checks (live, disposable) | `smoke.py <toolset>`; `smoke.py all --list` lists GPU/simulator requirements offline. Validators live in `scripts/smoke/`; helpers: `scene_mcp_client.py`, `smoke_mcp_surface.py`, `make_scene_fixture.py`, `make_scene_package_fixture.py` |
+| Offline surface audits | `measure_tool_list.py [KEY=VALUE ...] [--json]`, `check_names.py --audit [--json]` (name enforcement is opt-in, not yet CI) |
 | ROS 2 | `ros_env.sh` (source it), `ros2_rviz_config.py`, `ros2_tf_doctor.py`, `cmd_vel_sequence.py` |
 
 `mcp/templates/` holds bridge integration templates.

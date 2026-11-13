@@ -51,6 +51,27 @@ workstation verifier’s joint-motion or checkpoint checks. See [assets](ASSETS.
 
 ## Live checks
 
+Use `python3 scripts/smoke.py all --list` to list checks and their GPU/simulator
+requirements without connecting to anything. The entry point is
+`python3 scripts/smoke.py <toolset> --host <host> --port <port> --backend physx`
+(or `--backend newton` for an explicitly requested Newton check). It verifies the
+selected engine before each live check, refuses a mismatch with exit 2, and prints
+a results table and the path to a JSON report in a temporary directory. Use a host
+Python environment with this checkout's dependencies. No simulator is started by
+the scene runner; checks mutate an explicitly selected disposable bridge.
+
+Existing fixture and sequencing prerequisites still apply. Use repeated `--check`
+to select individual validators: clear requires the stage left by equivalents;
+reopen requires a fresh process with the saved scene and `--saved`, `--body`, and
+`--expected-z`. Sessions needs `--second-port`; prim-edit needs `--directory` for
+its existing fixture. Generic scene replaces the stage and requires
+`--discard-changes`. Workcell delegates unchanged to `workcell_smoke.py` and needs
+`--config` and `--mutate-stage`; it remains PhysX-only. Lab delegates to
+`smoke_test.py`, which starts GPU jobs rather than using the selected bridge;
+its backend/build are unavailable in the report and `--backend` is refused rather
+than claiming that the task engine was verified. Unmapped toolsets list no checks.
+The runner stops after the first failure rather than continuing on uncertain state.
+
 <a id="last-live-check"></a><a id="headless-physx-check"></a>
 On 2026-11-03, headless PhysX checks on Sim 6.2 passed the legacy workstation verifier, the 20-check twin
 smoke, and generic scene checks with the stated test setup. They do not establish all tools,
@@ -80,7 +101,7 @@ From the repository root, use an interpreter with Isaac Sim installed and an acc
     printf 'Could not create validation log.\n' >&2
     exit 1
   }
-  if OMNI_KIT_ACCEPT_EULA=YES "$ISAACSIM_PYTHON" scripts/validate_generic_scene.py > "$validation_log" 2>&1; then
+  if OMNI_KIT_ACCEPT_EULA=YES "$ISAACSIM_PYTHON" scripts/smoke/validate_generic_scene.py > "$validation_log" 2>&1; then
     validation_status=0
   else
     validation_status=$?
