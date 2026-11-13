@@ -27,12 +27,11 @@ stay available, but they need your own files.
 | Files | Source | Without them |
 |---|---|---|
 | `robot/`, `sensors/` and their materials (15 files, about 26 MB) | NVIDIA, online. `python3 scripts/fetch_ur5e_assets.py` keeps a local copy | Loaded from NVIDIA's server, unless strict mode refuses |
-| `gripper/husarion_rg2/`, `gripper/QuickChanger.usd`, `gripper/configuration/` | Your lab's files; see [notices](provenance/ASSETS.md#what-a-public-copy-can-ship). Converted from [husarion/ur_onrobot_rg2_ros](https://github.com/husarion/ur_onrobot_rg2_ros) by `tools/convert_husarion_rg2_urdf.py` and `tools/rewire_husarion_rg2_usd.py` | Quick Start skips the gripper and says so in its `gripper` result |
+| `gripper/husarion_rg2/`, `gripper/QuickChanger.usd`, `gripper/configuration/` | Your lab's files; see [notices](provenance/ASSETS.md#what-a-public-copy-can-ship). Converted from [husarion/ur_onrobot_rg2_ros](https://github.com/husarion/ur_onrobot_rg2_ros) using legacy conversion utilities (no longer shipped) | Quick Start skips the gripper and says so in its `gripper` result |
 | `workstation/vention.usd` | Your own Vention export; not redistributable | `ur5e_dt__load_workstation` and `ur5e_dt__quick_start_with_workstation` build a placeholder bench. `ur5e_dt__quick_start` has no bench either way |
 | `objects/`, `fmb_assembly*.json` | Your lab's files | `ur5e_dt__add_objects` and `ur5e_dt__assemble_objects` report what is missing |
 
-`ur5e_dt__sync_real_poses` and a real-robot `ur5e_dt__start_ros_driver` also expect your lab's hardware. `./verify.sh` checks the complete
-lab scene, so it needs all of these.
+`ur5e_dt__sync_real_poses` and a real-robot `ur5e_dt__start_ros_driver` also expect your lab's hardware.
 
 ### When something comes from online
 

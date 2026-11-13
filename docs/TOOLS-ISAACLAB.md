@@ -939,7 +939,7 @@ Limitations and not verified:
   `rl_games` wrote nothing at 3 epochs. For a short `sb3` run, pass `extra_args=["--log_interval=1000"]`.
 - `randomize_single_object` (UR5e twin, not Lab) can fail with its fixed narrow strip; not
   relevant to Lab tools but noted for completeness.
-- The npm/PyPI published install paths are not verified.
+- The PyPI published install paths are not verified.
 - The `tensorboard` extra must be installed for metrics readout; otherwise those two tools
   return an install hint.
 

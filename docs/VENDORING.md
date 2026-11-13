@@ -9,7 +9,7 @@ This document records the provenance, upstream source repositories, fork locatio
 | Component | Origin | License status | State here |
 |---|---|---|---|
 | **`exts/ur5e-dt`** | Fork of `https://github.com/inbarajaldrin/isaac-sim-mcp` at `27f6100` (`https://github.com/kalebcoleman/isaac-sim-mcp`) | MIT (`docs/provenance/isaac-sim-mcp-LICENSE`) | Developed further here; the extension is now one module per area under `exts/ur5e-dt/ur5e_dt/`. |
-| **`exts/isaac.mcp.bridge`**, **`exts/isaac.mcp.panel`**, the bridge client and server core in **`mcp/`** | First built on `https://github.com/inbarajaldrin/omni-kit-mcp` at `9d0366b`, used with its author's permission | Upstream has no LICENSE file | **Rewritten in this repository.** The bridge, its protocol, client, panel, the Kit registration script, the templates and their documentation and tests are this project's own implementation under the repository's MIT license. |
+| **`exts/isaac.mcp.bridge`**, the bridge client and server core in **`mcp/`** | First built on `https://github.com/inbarajaldrin/omni-kit-mcp` at `9d0366b`, used with its author's permission | Upstream has no LICENSE file | **Rewritten in this repository.** The bridge, its protocol, client, the Kit registration script, the templates and their documentation and tests are this project's own implementation under the repository's MIT license. |
 
 > [!NOTE]
 > Aldrin Inbaraj, a lab mate at the RISE lab, wrote both upstream projects. The UR5e workstation digital twin, its
@@ -30,7 +30,6 @@ JSON-lines message shape and the portfile location, so existing tool packages an
 `isaac-sim-mcp` (the twin's origin):
 - **Pinned Commit:** `27f6100` (*"ur5e-dt: add valid convexHull collider to the Quick-Changer"*)
 - **Vendored Path:** `exts/ur5e-dt/` (extension code only; the robot, gripper, and scene assets are not in this tree).
-- **Tools preserved:** Asset conversion utilities for the Husarion RG2 gripper were preserved under `tools/` (`convert_husarion_rg2_urdf.py`, `rewire_husarion_rg2_usd.py`).
 
 ---
 

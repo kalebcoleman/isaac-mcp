@@ -117,7 +117,6 @@ These must match in both processes:
 ## Other
 
 `ISAAC_MCP_EXTS` locates the extensions for the [Isaac Lab bridge template](../mcp/templates/isaaclab_bridge_launch.py).
-`TWIN_MCP_FROM` overrides the [npm launcher's](../npm/README.md) `uvx` source.
 
 Internal handshakes, not meant to be set by hand: `ISAAC_MCP_DEFER_START`, `ISAAC_MCP_SIM_SESSION_DIR`,
-`ISAAC_MCP_SIM_SESSION_ID`, `ISAAC_MCP_TF_DOCTOR_REEXEC`, `UR5E_DT_TF_CAPTURE_REEXEC`.
+`ISAAC_MCP_SIM_SESSION_ID`, `ISAAC_MCP_TF_DOCTOR_REEXEC`.
