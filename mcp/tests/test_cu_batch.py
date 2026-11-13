@@ -66,6 +66,17 @@ def test_failed_batch_with_screenshot_is_an_error_result_with_the_picture(batch)
     assert len(batch.shots) == 1
 
 
+def test_a_failed_capture_keeps_the_batch_failure(batch, monkeypatch):
+    def gone(**kw):
+        raise RuntimeError("window closed")
+
+    monkeypatch.setattr(desktop.screen, "capture", gone)
+    batch.disp.focus = batch.disp.root
+    result = batch.run([CLICK, {"action": "key", "key": "a"}], screenshot_after=True)
+    assert result.isError and "1 of 2 step(s) ran" in result.content[0].text
+    assert result.content[1].text == "no screenshot: window closed"
+
+
 @pytest.mark.parametrize("bad", [
     {"action": "click", "x": 1},                                 # missing y
     {"action": "click", "x": 1, "y": 2, "text": "a"},            # another action's argument
@@ -104,15 +115,21 @@ def test_computer_batch_is_reachable_and_typed_through_the_group(batch, tmp_path
             answer = await client.call_tool("computer", {
                 "action": "batch", "window_id": 101, "expected_pid": 22, "expected_width": 300,
                 "expected_height": 200, "actions": [CLICK, {"action": "key", "key": "a", "modifiers": ["ctrl"]}]})
-            return listed, answer
+            batch.disp.covered = lambda x, y: True
+            failed = await client.call_tool("computer", {
+                "action": "batch", "window_id": 101, "expected_pid": 22, "expected_width": 300,
+                "expected_height": 200, "screenshot_after": True, "actions": [CLICK]})
+            return listed, answer, failed
 
-    listed, answer = asyncio.run(run())
+    listed, answer, failed = asyncio.run(run())
+    assert failed.isError and [block.type for block in failed.content] == ["text", "image", "text"]
+    assert "0 of 1 step(s) ran" in failed.content[0].text
     assert "computer_batch" not in listed
     schema = listed["computer"].inputSchema["properties"]["actions"]
     assert schema["type"] == "array" and schema["maxItems"] == 10
     assert schema["items"]["properties"]["action"]["enum"] == ["click", "drag", "scroll", "type", "key"]
     assert not answer.isError and "batch ran all 2 step(s)" in answer.content[0].text
-    assert events(batch.disp, X.KeyPress) == [37, 38] and batch.locks == [1]
+    assert events(batch.disp, X.KeyPress) == [37, 38] and batch.locks == [1, 1]  # one per call
 
 
 # ------------------------------------------------------------------------------- Kit run_act

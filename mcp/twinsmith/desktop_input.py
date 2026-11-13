@@ -453,8 +453,11 @@ def _failed_after(window_id: int, text: str, screenshot_after: bool):
     """A failed action's answer: an error, with the window as it looks now when screenshot_after is set."""
     if not screenshot_after:
         raise RuntimeError(text)
-    shot = [block.to_image_content() if isinstance(block, Image) else TextContent(type="text", text=str(block))
-            for block in screen.capture(window_id=window_id)]
+    try:  # the failed step may have closed or resized the window; the failure text matters more
+        shot = [block.to_image_content() if isinstance(block, Image) else TextContent(type="text", text=str(block))
+                for block in screen.capture(window_id=window_id)]
+    except Exception as exc:  # noqa: BLE001
+        shot = [TextContent(type="text", text=f"no screenshot: {exc}")]
     return CallToolResult(content=[TextContent(type="text", text=text), *shot],
                           structuredContent={"result": text}, isError=True)
 
