@@ -40,7 +40,7 @@ The whole flow is data: no scene file is written by hand. Times are seconds, len
    is in it) and that cut is what RSS reads: the contact sheet and the reported `duration` cover the trimmed
    span, and the result's `trimmed` block says so. Anchors default to the start, the middle and `end_s`
    (override with `at="0:start,2:a,6:end"`). Times you give and read (anchors, `start_s`, `end_s`) stay in
-   original clip seconds. RSS cannot trim, so ffmpeg must be on `PATH` for a window; `at` alone needs none.
+   original clip seconds. RSS cannot trim, so a window needs ffmpeg: the one on `PATH`, else the one the server's imageio-ffmpeg package ships. `at` alone needs none.
 6. `compare(run=..., keys=["block=red"])` — the live render against the first anchor: IoU, centre offset,
    `width_ratio`, `height_ratio`, `area_ratio` (sim pixels / photo pixels) and `linear_scale_ratio` (RSS's own
    `size_ratio`, the square root of the area ratio). The mask for `block` covers every shape of the compound body.

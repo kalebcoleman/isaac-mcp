@@ -15,6 +15,7 @@ import time
 import pytest
 
 from twinsmith.robosim import PIN, RoboSimBridge, register_robosim_tools
+from twinsmith.robosim import bridge as bridge_module
 
 
 STUB = r'''
@@ -604,9 +605,18 @@ def test_reference_window_without_ffmpeg_says_how_to_proceed(fake, monkeypatch):
     bridge = fake[0]
     run = start(fake)["run"]
     monkeypatch.setattr(shutil, "which", lambda *args, **kwargs: None)
+    monkeypatch.setattr(bridge_module, "_bundled_ffmpeg", lambda: None)
     refused = bridge.call("reference", run=run, video=str(fake[2]), start_s=1, end_s=5, wait_s=10)["operation"]["result"]
     assert not refused["ok"] and "ffmpeg" in refused["error"] and "pass `at`" in refused["error"]
     assert complete(bridge, "reference", run, video=str(fake[2]), at="0:a,6:b")["ok"]  # `at` alone needs no ffmpeg
+
+
+def test_ffmpeg_falls_back_to_the_bundled_binary_when_none_is_on_path(monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda *args, **kwargs: None)
+    monkeypatch.setattr(bridge_module, "_bundled_ffmpeg", lambda: "/bundled/ffmpeg")
+    assert bridge_module._ffmpeg_exe() == "/bundled/ffmpeg"
+    monkeypatch.setattr(shutil, "which", lambda *args, **kwargs: "/usr/bin/ffmpeg")
+    assert bridge_module._ffmpeg_exe() == "/usr/bin/ffmpeg"
 
 
 def test_status_says_no_bridge_and_names_the_engine(fake):
