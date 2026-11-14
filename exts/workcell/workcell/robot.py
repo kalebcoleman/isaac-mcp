@@ -383,8 +383,12 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
         if role == "bota":
             bota_joint = joint
         if role in ("bota", "quick_changer"):
-            UsdPhysics.MassAPI.Apply(bodies[role]).CreateMassAttr().Set(
-                _positive(config[role]["mass_kg"], f"{role}.mass_kg"))
+            mass = _positive(config[role]["mass_kg"], f"{role}.mass_kg")
+            api = UsdPhysics.MassAPI.Apply(bodies[role])
+            before, inertia = api.GetMassAttr().Get(), api.GetDiagonalInertiaAttr().Get()
+            if before and inertia and any(inertia):   # keep the shape of an authored inertia, at the new mass
+                api.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(*(float(v) * mass / before for v in inertia)))
+            api.CreateMassAttr().Set(mass)
         previous = bodies[role]
         offset += lengths[role]
 
@@ -395,6 +399,10 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
     sensor_pose = _pose((axis * origin).tolist(), config["bota"].get("sensor_orientation_wxyz", [1, 0, 0, 0]))
     _set_world(sensor, sensor_pose * _mount_world(mounts["bota"], sources["bota"][1]))
     pad_paths = _pads(stage, root, roots["rg2"], config, reference) if pads else []
+    inertials = _inertials(stage, root, config["inertials"]) if "inertials" in config else {}
+    if inertials:
+        limitations.append("Explicit mass properties from the config's inertials replace the pack's on "
+                           + ", ".join(sorted(inertials)) + ".")
     if not pads:
         limitations.append("Black finger pads are not installed: finger_pads.present is false.")
     if sources["rg2"][1].get("fidelity", "unverified") != "verified":
@@ -409,7 +417,81 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
             "parts": parts, "limitations": limitations, "max_opening_m": 0.110,
             "stack_order": list(order), "assembly_path": str(root),
             "frame_bodies_neutralized": frame_bodies, "joints_deactivated": dropped_joints,
-            "velocity_iterations_clamped": clamped}
+            "velocity_iterations_clamped": clamped, "inertials_kg": inertials}
+
+
+INERTIAL_KEYS = {"mass_kg", "com_m", "diagonal_inertia_kgm2", "principal_axes_wxyz"}
+
+
+def check_inertials(section):
+    """Refuse malformed explicit mass properties before any stage is replaced. section: {group: {link: props}}."""
+    if not isinstance(section, dict) or not section:
+        raise ValueError("inertials must map groups of links to their mass properties")
+    seen = set()
+    for group, links in section.items():
+        if not isinstance(links, dict) or not links:
+            raise ValueError(f"inertials.{group} must map link names to mass properties")
+        for link, props in links.items():
+            if link in seen:
+                raise ValueError(f"inertials names {link} twice")
+            seen.add(link)
+            if not isinstance(props, dict) or set(props) != INERTIAL_KEYS:
+                raise ValueError(f"inertials.{group}.{link} needs exactly {sorted(INERTIAL_KEYS)}")
+            vectors = (props["com_m"], props["diagonal_inertia_kgm2"], props["principal_axes_wxyz"])
+            if not all(isinstance(vector, (list, tuple)) for vector in vectors):
+                raise ValueError(f"inertials.{group}.{link} has a malformed vector")
+            values = [props["mass_kg"], *props["com_m"], *props["diagonal_inertia_kgm2"], *props["principal_axes_wxyz"]]
+            if (len(props["com_m"]) != 3 or len(props["diagonal_inertia_kgm2"]) != 3
+                    or len(props["principal_axes_wxyz"]) != 4
+                    or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in values)):
+                raise ValueError(f"inertials.{group}.{link} has a malformed vector or a non-finite value")
+            if props["mass_kg"] <= 0 or min(props["diagonal_inertia_kgm2"]) <= 0:
+                raise ValueError(f"inertials.{group}.{link} needs a positive mass and principal moments")
+            a, b, c = sorted(props["diagonal_inertia_kgm2"])
+            if a + b < c * (1 - 1e-6):
+                raise ValueError(f"inertials.{group}.{link} principal moments break the triangle inequality")
+            if abs(math.sqrt(sum(v * v for v in props["principal_axes_wxyz"])) - 1) > 1e-6:
+                raise ValueError(f"inertials.{group}.{link} principal_axes_wxyz must be a unit quaternion")
+
+
+def check_inertial_links(section, asset_paths):
+    """Each inertial link must name exactly one rigid body across the given asset files (opened read-only), so a
+    mistyped name is refused before any stage is replaced."""
+    counts = {}
+    for path in asset_paths:
+        asset = Usd.Stage.Open(str(path), Usd.Stage.LoadAll)
+        for prim in asset.Traverse():
+            if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                counts[prim.GetName()] = counts.get(prim.GetName(), 0) + 1
+    for group, links in section.items():
+        for link in links:
+            if counts.get(link, 0) != 1:
+                raise ValueError(f"inertials.{group}.{link}: expected one rigid body of that name in the robot and "
+                                 f"gripper assets, found {counts.get(link, 0)}")
+
+
+def _inertials(stage, root, section):
+    """Author explicit mass, centre of mass and principal inertia on named bodies of the assembly, so neither
+    engine computes them from collider shapes. Every named link must exist exactly once."""
+    check_inertials(section)
+    bodies = {}
+    for prim in Usd.PrimRange(stage.GetPrimAtPath(root)):
+        if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            bodies.setdefault(prim.GetName(), []).append(prim)
+    applied = {}
+    for group, links in section.items():
+        for link, props in links.items():
+            found = bodies.get(link, [])
+            if len(found) != 1:
+                raise ValueError(f"inertials.{group}.{link}: expected one rigid body of that name, found {len(found)}")
+            api = UsdPhysics.MassAPI.Apply(found[0])
+            api.CreateMassAttr().Set(float(props["mass_kg"]))
+            api.CreateCenterOfMassAttr().Set(Gf.Vec3f(*map(float, props["com_m"])))
+            api.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(*map(float, props["diagonal_inertia_kgm2"])))
+            w, x, y, z = map(float, props["principal_axes_wxyz"])
+            api.CreatePrincipalAxesAttr().Set(Gf.Quatf(w, x, y, z))
+            applied[link] = float(props["mass_kg"])
+    return applied
 
 
 def _pads(stage, root, gripper, config, reference):
