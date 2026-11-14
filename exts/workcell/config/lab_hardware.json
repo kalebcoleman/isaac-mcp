@@ -47,6 +47,33 @@
       "source": "CAD-only datum: bench/bench.usdc SHA256 34f75072eeb8667e0479cb3573b6df546e353b483712db25dfa5af42d04c9a60; default-prim-relative VentionAssembly_393251_v88_0/imported_PANEL_B2F52AEB2A0D_804849_271/Mesh_91 world bound top 80.0594045970318 cm. Not a lab floor-to-top measurement; bench_height_m remains unconfirmed."
     }
   },
+  "bench_top": {
+    "panel_path": {
+      "value": "VentionAssembly_393251_v88_0/imported_PANEL_B2F52AEB2A0D_804849_271",
+      "status": "confirmed",
+      "source": "The bench's top panel (render mesh Mesh_91, collision box Mesh_91_collision/box in pack v2), relative to /World/Bench; the same panel bench_asset_top_z_m measures."
+    },
+    "color_rgb": {
+      "value": [0.02, 0.02, 0.02],
+      "status": "unconfirmed",
+      "source": "Kaleb (2026-11-14): the real tabletop is black. Vention sells black 1/4 in HDPE table panels; the pack's render material was a light rubber. Colour not measured."
+    },
+    "roughness": {
+      "value": 0.6,
+      "status": "unconfirmed",
+      "source": "Placeholder for a matte HDPE sheet; look only, no effect on physics."
+    },
+    "static_friction": {
+      "value": 0.3,
+      "status": "unconfirmed",
+      "source": "Placeholder for a wooden Jenga block on HDPE, equal to the block material. Measure with a tilt test: raise one end of the panel until a block starts to slide; static friction = tan(angle)."
+    },
+    "dynamic_friction": {
+      "value": 0.25,
+      "status": "unconfirmed",
+      "source": "As above: the angle at which a sliding block keeps sliding at constant speed. MuJoCo (Newton) uses one sliding coefficient per pair; PhysX uses both."
+    }
+  },
   "robot": {
     "model": {
       "value": "UR5e",
@@ -83,14 +110,14 @@
           0.005
         ],
         "orientation_wxyz": [
-          1,
           0,
           0,
-          0
+          0,
+          1
         ]
       },
       "status": "unconfirmed",
-      "source": "Provisional 5 mm candidate base plate on tabletop; measure real plate and base elevation"
+      "source": "Provisional 5 mm candidate base plate on tabletop; measure real plate and base elevation. Yaw 180 degrees about z (Kaleb, 2026-11-14): the shoulder faces the table, as on the real cell; the imported UR base_link faced away from it."
     }
   },
   "stack": {

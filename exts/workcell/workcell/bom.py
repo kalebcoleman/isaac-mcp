@@ -217,7 +217,8 @@ def _under(path, parents):
     return any(path == parent or path.startswith(parent + "/") for parent in parents)
 
 
-def audit_parts(parts, rows, stage=None, require_all=True, strict=False):
+def audit_parts(parts, rows, stage=None, require_all=True, strict=False, ignore=()):
+    """``ignore``: subtrees that are not work-cell hardware (the room around it), left out of the physical scan."""
     errors = []
     rows_by_id = {row["bom_id"]: row for row in rows}
     seen_paths = set()
@@ -262,7 +263,8 @@ def audit_parts(parts, rows, stage=None, require_all=True, strict=False):
                 errors.append(f"BOM quantity mismatch for {bom_id}: {count} mapped, {row['quantity']} expected")
     unmatched, empty, physical_paths = [], [], []
     if stage is not None:
-        physical_paths = [_prim_path(prim) for prim in _stage_prims(stage) if _is_physical(prim)]
+        physical_paths = [_prim_path(prim) for prim in _stage_prims(stage)
+                          if _is_physical(prim) and not _under(_prim_path(prim), tuple(ignore))]
         unmatched = [path for path in physical_paths if not _under(path, seen_paths)]
         empty = [path for path in sorted(seen_paths)
                  if not any(_under(item, (path,)) for item in physical_paths)]

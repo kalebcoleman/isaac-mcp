@@ -170,6 +170,17 @@ def test_audit_catches_unmapped_mesh_and_collider():
         bom.audit_parts(parts, rows, stage, strict=True)
 
 
+def test_audit_leaves_out_the_room_around_the_cell():
+    """A room (quick_start environment) is not work-cell hardware: its meshes and colliders are not audited."""
+    rows = bom.load_bom()
+    parts, stage = cell()
+    stage.add("/World/Environment/simple_room/Floor/mesh", kind="Mesh")
+    stage.add("/World/Environment/simple_room/GroundPlane/CollisionPlane", kind="Plane", apis=("PhysicsCollisionAPI",))
+    assert not bom.audit_parts(parts, rows, stage)["ok"]
+    report = bom.audit_parts(parts, rows, stage, ignore=("/World/Environment",))
+    assert report["ok"] and report["physical_prims"] == 68
+
+
 def test_audit_catches_unknown_bom_id_and_asset_mismatch():
     rows = bom.load_bom()
     parts, stage = cell()

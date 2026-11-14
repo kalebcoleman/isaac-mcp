@@ -1592,11 +1592,12 @@ No arguments.
 
 Listed as `workcell__cell(action="quick_start")`.
 
-Build a stopped workcell from an external asset pack, on PhysX or Newton (Newton uses the config's per-engine drives; mirror_real needs PhysX). Refuses unsaved stage changes unless explicitly allowed.
+Build a stopped workcell from an external asset pack, on PhysX or Newton (Newton uses the config's per-engine drives; mirror_real needs PhysX). Refuses unsaved stage changes unless explicitly allowed. Returns a summary; action=status returns the full report.
 
 - `config_path` (string, optional): Optional hardware configuration path.
 - `mode` (physics|mirror_real, default `"physics"`): Physics mode, or zero-gravity mirror mode.
 - `discard_changes` (boolean, default `false`): Allow replacement of an unsaved stage.
+- `environment` (none|simple_room, default `"none"`): A room around the cell: simple_room references NVIDIA's Simple Room from the Isaac Sim assets server (needs network), floor level with the bench feet.
 
 ### `workcell__workcell_shutdown`
 
