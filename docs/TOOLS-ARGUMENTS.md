@@ -1585,11 +1585,10 @@ Toolset `cad` is off until you select it with `+cad`. Reference: [HARDWARE.md](H
 
 ### `hardware`
 
-PCB and enclosure outputs from tools beside twinsmith; no simulator. status: versions, pins, gaps. check: KiCad ERC and DRC counts. fab: check, then KiKit JLCPCB/PCBWay files, board.step and board.glb in a new folder; never uploads or orders. render: a Blender job that uses the GPU (follow with jobs). Inputs in approved folders only.
+PCB and enclosure outputs from tools beside twinsmith; no simulator. status: versions, pins, gaps. check: KiCad ERC and DRC counts (the board's own schematic). fab: check, then KiKit JLCPCB/PCBWay files, board.step and board.glb in a new folder; never uploads or orders. render: a Blender job that uses the GPU (follow with jobs). Inputs in approved folders only.
 
 - `action` (Literal['status', 'check', 'fab', 'render'], required): Action to perform.
 - `board` (str | None, default `None`): check/fab: absolute .kicad_pcb path inside an approved folder.
-- `schematic` (str | None, default `None`): check/fab: absolute .kicad_sch path; default: the board's, renamed.
 - `vendor` (Literal['jlcpcb', 'pcbway'], default `'jlcpcb'`): fab: which fab house's file set KiKit writes. Nothing is sent to it.
 - `inputs` (list[str] | None, default `None`): render: absolute .glb, .gltf or .stl paths (GLB in metres, STL in millimetres).
 - `name` (str | None, default `None`): fab/render: new folder name under <workspace>/runs/hardware; default a timestamp.

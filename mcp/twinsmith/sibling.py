@@ -59,6 +59,11 @@ def start_job(argv, *, task, kind, cwd=None, env_pass=(), env_set=None, timeout_
 
     argv = [str(part) for part in argv]
     with jobs._launch_lock:
+        if uses_gpu:
+            blocked = jobs._budget_guard()                 # a spent GPU-hour budget is never overridden
+            if blocked is not None:
+                return {"ok": False, "code": "GPU_BUDGET", "message": blocked["error"],
+                        "hint": "The configured GPU-hour budget is spent; raise it or wait for the next period."}
         if uses_gpu and not allow_concurrent_gpu:
             for guard in (jobs._concurrency_guard, jobs._kit_bridge_guard):
                 blocked = guard()
@@ -74,7 +79,8 @@ def start_job(argv, *, task, kind, cwd=None, env_pass=(), env_set=None, timeout_
                                     cwd=cwd, start_new_session=True)
         jobs._write_job(folder, {
             "id": job_id, "job_id": job_id, "kind": kind, "task": task, "label": label, "command": argv,
-            "uses_gpu": uses_gpu, "pid": proc.pid, "pid_start": jobs._process_start(proc.pid), "timeout_s": timeout_s,
+            "uses_gpu": uses_gpu, "pid": proc.pid,
+            **({"gpu": jobs._gpu_index(environment(env_pass, env_set).get("CUDA_VISIBLE_DEVICES"))} if uses_gpu else {}), "pid_start": jobs._process_start(proc.pid), "timeout_s": timeout_s,
             "started_at": time.time(), "finished_at": None, "status": "running", "exit_code": None,
             "log_dir": str(folder.resolve()), "run_dir": str(Path(cwd or folder).resolve()),
             "stdout_log": str((folder / "stdout.log").resolve()), "stderr_log": str((folder / "stderr.log").resolve())})

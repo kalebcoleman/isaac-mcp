@@ -9,6 +9,7 @@ approved for asset import; outputs go to a new folder under ``<workspace>/runs/h
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -32,6 +33,21 @@ TEMPLATE = Path(__file__).with_name("hardware_render.py")
 PINS = {"kicad-mcp": ("v2.9.0", "9dd467c"), "blender-mcp": ("v1.0.3", "2cea8d5"), "platformio-mcp": ("v3.1.0", "29d4900")}
 EXPECTED = {"kicad-cli": "10.0.", "kikit": "1.8.1", "blender": "5.2.", "freerouting": "2.5.0", "pio": "6.2."}
 ENV_SET = {"FREEROUTING__USAGE_AND_DIAGNOSTIC_DATA__DISABLE_ANALYTICS": "true"}
+# Passed through the scrub: KiCad's own library and config locations and the locale. None of them holds a secret.
+_PASS = re.compile(r"^(KICAD\d*_(SYMBOL|FOOTPRINT|3DMODEL|TEMPLATE)_DIR|KICAD_CONFIG_HOME|XDG_CONFIG_HOME|LANG|LC_ALL)$")
+
+
+def env_pass(source=None) -> tuple:
+    return tuple(name for name in (os.environ if source is None else source) if _PASS.match(name))
+
+
+def _fingerprint(*paths) -> list:
+    """What a file is now: path, size, mtime and sha256, so a change between check and fab is caught."""
+    out = []
+    for path in paths:
+        stat = path.stat()
+        out.append((str(path), stat.st_size, stat.st_mtime_ns, hashlib.sha256(path.read_bytes()).hexdigest()))
+    return out
 EXPORT_3D = ("--subst-models", "--include-tracks", "--include-pads", "--include-zones", "--include-silkscreen",
              "--include-soldermask")
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
@@ -141,9 +157,11 @@ class Hardware:
         except FileExistsError:
             raise Refused("OUTPUT_EXISTS", f"{folder} already exists; outputs are never overwritten.") from None
 
-    def _board(self, board, schematic):
+    def _board(self, board):
+        """The board and its own root schematic beside it. No other schematic is accepted: ERC, DRC parity and the BOM
+        must all read the board's schematic, or the check gate means nothing."""
         board = self._input(board, (".kicad_pcb",), "board")
-        schematic = self._input(schematic or str(board.with_suffix(".kicad_sch")), (".kicad_sch",), "schematic")
+        schematic = self._input(str(board.with_suffix(".kicad_sch")), (".kicad_sch",), "the board's schematic")
         return board, schematic
 
     # ---------- actions ----------
@@ -176,7 +194,7 @@ class Hardware:
                                    schematic]),
                           ("drc", [cli, "pcb", "drc", "--format", "json", "--severity-all", "--schematic-parity",
                                    "--refill-zones", "-o", into / "drc.json", board])):
-            done = sibling.run(argv, cwd=into, env_set=ENV_SET, timeout_s=300)
+            done = sibling.run(argv, cwd=into, env_pass=env_pass(), env_set=ENV_SET, timeout_s=300)
             try:
                 found[key] = summarize(json.loads((into / f"{key}.json").read_text(encoding="utf-8")))
             except (OSError, ValueError):
@@ -185,33 +203,44 @@ class Hardware:
         errors = sum(report["counts"].get("error", 0) for report in found.values())
         return {"passed": errors == 0, "errors": errors, **found}
 
-    def check(self, board, schematic) -> dict:
-        board, schematic = self._board(board, schematic)
+    def check(self, board) -> dict:
+        board, schematic = self._board(board)
         cli = self._need("kicad-cli")
         with tempfile.TemporaryDirectory(prefix="twinsmith-check-") as folder:
             result = self._check(cli, board, schematic, Path(folder))
         return {"result": result, "ok": result["passed"], "versions": self._used("kicad-cli")}
 
-    def fab(self, board, schematic, vendor, name) -> dict:
+    def fab(self, board, vendor, name) -> dict:
         if vendor not in VENDORS:
             raise Refused("INVALID_VALUE", f"vendor must be one of {', '.join(VENDORS)}.")
-        board, schematic = self._board(board, schematic)
+        board, schematic = self._board(board)
         cli, kikit = self._need("kicad-cli"), self._need("kikit")
         out = self._output(name, board.stem)
+        before = _fingerprint(board, schematic)
         with tempfile.TemporaryDirectory(prefix="twinsmith-check-") as folder:
             checked = self._check(cli, board, schematic, Path(folder))
             if not checked["passed"]:
                 raise Refused("CHECK_FAILED", f"check found {checked['errors']} error(s); nothing was written.",
                               after_run=True, check=checked)
+            if _fingerprint(board, schematic) != before:
+                raise Refused("INPUT_CHANGED", "the board or schematic changed while it was being checked (saved by an "
+                              "editor?); nothing was written. Run fab again.", after_run=True)
             self._create(out)
-            (out / "checks").mkdir()
-            for report in ("erc.json", "drc.json"):
-                shutil.copyfile(Path(folder) / report, out / "checks" / report)
+            try:
+                (out / "checks").mkdir()
+                for report in ("erc.json", "drc.json"):
+                    shutil.copyfile(Path(folder) / report, out / "checks" / report)
+            except OSError as error:
+                shutil.rmtree(out, ignore_errors=True)
+                raise Refused("FAB_FAILED", f"could not write the output folder: {error}", after_run=True) from None
         steps = {"kikit": fab_argv(kikit, vendor, schematic, board, out / vendor),
                  "step": [cli, "pcb", "export", "step", *EXPORT_3D, "-o", out / "board.step", board],
                  "glb": [cli, "pcb", "export", "glb", *EXPORT_3D, "-o", out / "board.glb", board]}
         for step, argv in steps.items():
-            done = sibling.run(argv, cwd=out, env_set=ENV_SET, timeout_s=600)
+            if step == "kikit" and _fingerprint(board, schematic) != before:
+                raise Refused("INPUT_CHANGED", f"the board or schematic changed after the check; {out} holds only the "
+                              "check reports. Run fab again with a new name.", after_run=True, folder=str(out))
+            done = sibling.run(argv, cwd=out, env_pass=env_pass(), env_set=ENV_SET, timeout_s=600)
             if done["exit_code"] != 0:
                 raise Refused("FAB_FAILED", f"{step} failed (exit {done['exit_code']}); partial output kept in {out}.",
                               after_run=True, folder=str(out), stderr=done["stderr"][-800:], stdout=done["stdout"][-800:])
@@ -229,11 +258,15 @@ class Hardware:
         out = self._output(name, files[0].stem)
         self._create(out)
         image = out / "render.png"
-        job = sibling.start_job(render_argv(blender, image, width, height, samples, files), task="hardware-render",
-                                kind="render", cwd=out, uses_gpu=True, allow_concurrent_gpu=allow_concurrent_gpu,
-                                timeout_s=1800, label=f"hardware render {out.name}")
+        try:
+            job = sibling.start_job(render_argv(blender, image, width, height, samples, files), task="hardware-render",
+                                    kind="render", cwd=out, env_pass=env_pass(), uses_gpu=True,
+                                    allow_concurrent_gpu=allow_concurrent_gpu, timeout_s=1800, label=f"hardware render {out.name}")
+        except Exception as error:  # noqa: BLE001 - Popen or the jobs folder: no job, so no folder either
+            shutil.rmtree(out, ignore_errors=True)
+            raise Refused("RENDER_FAILED", f"the render job did not start: {error}") from None
         if not job["ok"]:
-            out.rmdir()
+            shutil.rmtree(out, ignore_errors=True)
             raise Refused(job["code"], job["message"], hint=job["hint"])
         return {"result": {"job_id": job["job_id"], "image": str(image), "folder": str(out),
                            "next": f'jobs(action="status", job_id="{job["job_id"]}", wait_s=30)'},
@@ -243,16 +276,16 @@ class Hardware:
         paths = self.paths()
         return {name: self.version(name, paths[name]) for name in names}
 
-    def call(self, action, *, board=None, schematic=None, vendor="jlcpcb", inputs=None, name=None, width=1600,
+    def call(self, action, *, board=None, vendor="jlcpcb", inputs=None, name=None, width=1600,
              height=1200, samples=128, allow_concurrent_gpu=False) -> dict:
         envelope = {"tool": "hardware", "action": action}
         try:
             if action == "status":
                 done = self.status()
             elif action == "check":
-                done = self.check(board, schematic)
+                done = self.check(board)
             elif action == "fab":
-                done = self.fab(board, schematic, vendor, name)
+                done = self.fab(board, vendor, name)
             elif action == "render":
                 done = self.render(inputs, name, width, height, samples, allow_concurrent_gpu)
             else:
@@ -281,7 +314,6 @@ def register_hardware_tools(server, *, hardware=None):
     async def hardware(
         action: Annotated[Literal["status", "check", "fab", "render"], Field(description="Action to perform.")],
         board: Annotated[str | None, Field(description="check/fab: absolute .kicad_pcb path inside an approved folder.")] = None,
-        schematic: Annotated[str | None, Field(description="check/fab: absolute .kicad_sch path; default: the board's, renamed.")] = None,
         vendor: Annotated[Literal["jlcpcb", "pcbway"], Field(description="fab: which fab house's file set KiKit writes. Nothing is sent to it.")] = "jlcpcb",
         inputs: Annotated[list[str] | None, Field(description="render: absolute .glb, .gltf or .stl paths (GLB in metres, STL in millimetres).")] = None,
         name: Annotated[str | None, Field(description="fab/render: new folder name under <workspace>/runs/hardware; default a timestamp.")] = None,
@@ -291,10 +323,10 @@ def register_hardware_tools(server, *, hardware=None):
         allow_concurrent_gpu: Annotated[bool, Field(description="render: knowingly start next to another GPU job or a running simulator.")] = False,
     ) -> str:
         """PCB and enclosure outputs from tools beside twinsmith; no simulator. status: versions, pins, gaps. check: KiCad
-        ERC and DRC counts. fab: check, then KiKit JLCPCB/PCBWay files, board.step and board.glb in a new folder; never
+        ERC and DRC counts (the board's own schematic). fab: check, then KiKit JLCPCB/PCBWay files, board.step and board.glb in a new folder; never
         uploads or orders. render: a Blender job that uses the GPU (follow with jobs). Inputs in approved folders only.
         """
-        result = await asyncio.to_thread(hw.call, action, board=board, schematic=schematic, vendor=vendor, inputs=inputs,
+        result = await asyncio.to_thread(hw.call, action, board=board, vendor=vendor, inputs=inputs,
                                          name=name, width=width, height=height, samples=samples,
                                          allow_concurrent_gpu=allow_concurrent_gpu)
         return json.dumps(result)

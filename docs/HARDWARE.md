@@ -62,11 +62,13 @@ Every answer is `{ok, tool, action, versions, result | error, warnings}`.
 | Action | Runs | Answer |
 |---|---|---|
 | `status` | Only `--version` probes and `git rev-parse` | The path and version of `kicad-cli`, KiKit, `freecadcmd`, `blender`, Java, Freerouting and `pio`; the beside checkouts' commits against the pins; whether KiCad's global library tables exist; what is missing, and this page |
-| `check` | `kicad-cli sch erc` and `kicad-cli pcb drc --schematic-parity --refill-zones`, JSON, in a temporary folder | Counts by severity for each, unconnected and parity counts, and the first violations, errors first. `ok` is false when there is any error. The board is not saved |
+| `check` | On the board's own schematic: `kicad-cli sch erc` and `kicad-cli pcb drc --schematic-parity --refill-zones`, JSON, in a temporary folder | Counts by severity for each, unconnected and parity counts, and the first violations, errors first. `ok` is false when there is any error. The board is not saved |
 | `fab` | `check`, then `kikit fab <vendor> --assembly --schematic <sch> --field LCSC --missingError <pcb> <folder>/<vendor>`, then `kicad-cli pcb export step` and `glb` | A new folder with the vendor's Gerber zip, BOM and CPL, `board.step`, `board.glb` and the two check reports. Refuses with `CHECK_FAILED`, and writes nothing, on any check error |
 | `render` | `blender -b --factory-startup -P hardware_render.py -- --out <folder>/render.png --size WxH --samples N <inputs>` | A `job_id`: follow it with `jobs(action="status", job_id=..., wait_s=30)` and stop it with `jobs(action="cancel")`. Uses the GPU |
 
-`board` is an absolute `.kicad_pcb` path; `schematic` defaults to the board's path with `.kicad_sch`. `vendor` is
+`board` is an absolute `.kicad_pcb` path; its schematic is always the `.kicad_sch` beside it with the same name (no other
+schematic is accepted, so ERC, the DRC parity check and the BOM read the same file). `fab` fingerprints both files before
+the check and refuses with `INPUT_CHANGED` if either changes before KiKit runs. `vendor` is
 `jlcpcb` (default) or `pcbway`. A part without an `LCSC` field fails `fab` (`--missingError`); leave a part out of
 assembly in KiCad (exclude it from the BOM and position files) rather than guessing a number.
 
@@ -75,6 +77,11 @@ STL is read in millimetres and scaled to metres. Convert a STEP file to GLB firs
 board). The template sets a floor, three area lights and a camera from the front right, uses Cycles on OptiX when a
 device answers and the CPU otherwise, and writes only the PNG. Like `isaaclab__launch`, it refuses to start next to
 another GPU job or a running simulator unless `allow_concurrent_gpu=true`.
+
+**Limits.** Only the board, its schematic and the render inputs are checked against the approved folders. Files those name
+(hierarchical sub-sheets, project library tables, 3D models embedded in `board.step` and `board.glb`, glTF buffers) are read
+from wherever they point. The child environment keeps `PATH`, `HOME`, the GPU selection, KiCad's `KICAD*_DIR` and
+`KICAD_CONFIG_HOME`, `XDG_CONFIG_HOME` and the locale; everything else, credentials included, is dropped.
 
 **Into the twin.** `board.glb` and an enclosure's STL or glTF are mesh props that `assets__import_path` already imports
 ([formats](ASSET-IMPORT.md)). STEP through Isaac Sim's CAD converter is not supported.

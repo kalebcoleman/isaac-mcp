@@ -179,7 +179,7 @@ def test_the_child_environment_is_scrubbed(bench, monkeypatch):
     for call in bench.calls("kicad-cli"):
         names = set(call["env"]) - {"PWD", "SHLVL", "_", "LC_CTYPE"}  # set by the interpreter, not passed
         assert not [name for name in names if any(word in name for word in ("TOKEN", "KEY", "SECRET"))]
-        assert names <= {"PATH", "HOME", "CUDA_VISIBLE_DEVICES", *hardware.ENV_SET}
+        assert names <= {"PATH", "HOME", "CUDA_VISIBLE_DEVICES", *hardware.ENV_SET, *hardware.env_pass()}
         assert call["env"]["FREEROUTING__USAGE_AND_DIAGNOSTIC_DATA__DISABLE_ANALYTICS"] == "true"
 
 
@@ -215,3 +215,79 @@ def test_cad_is_off_by_default_and_lists_only_hardware():
     assert "hardware" not in server.build_server({"TWINSMITH_TOOLSETS": "default"})._tool_manager._tools
     alone = server.build_server({"TWINSMITH_TOOLSETS": "minimal,+cad"})
     assert {name for name in alone._tool_manager._tools if toolsets.owner(name) == "cad"} == {"hardware"}
+
+
+def test_only_the_boards_own_schematic_is_checked(bench):
+    """A caller cannot point ERC and the BOM at another schematic: the parameter does not exist."""
+    instance = server.build_server({"TWINSMITH_TOOLSETS": "minimal,+cad"})
+    assert "schematic" not in instance._tool_manager._tools["hardware"].parameters["properties"]
+    with pytest.raises(TypeError):
+        bench.tool.call("check", board=bench.board, schematic=bench.schematic)
+    bench.tool.call("check", board=bench.board)
+    erc = next(call["argv"] for call in bench.calls("kicad-cli") if "erc" in call["argv"])
+    assert erc[-1] == bench.schematic
+
+
+def test_a_board_changed_after_its_check_is_refused(bench, monkeypatch):
+    real = bench.tool._check
+
+    def check_then_edit(*args):
+        result = real(*args)
+        Path(bench.board).write_text("(edited by another tool)")
+        return result
+
+    monkeypatch.setattr(bench.tool, "_check", check_then_edit)
+    done = bench.tool.call("fab", board=bench.board, name="changed")
+    assert done["error"]["code"] == "INPUT_CHANGED" and not (bench.tool.runs / "changed").exists()
+    assert not bench.calls("kikit")
+
+
+def test_a_failed_step_keeps_its_output_and_an_unreadable_report_is_not_a_pass(bench, tmp_path):
+    broken = tmp_path / "broken.json"
+    broken.write_text("not json")
+    bench.use(str(broken))
+    assert bench.tool.call("check", board=bench.board)["error"]["code"] == "CHECK_NOT_RUN"
+    bench.use()
+    kikit = Path(bench.kikit)
+    kikit.write_text(f"#!{sys.executable}\nimport sys\nsys.exit(2)\n")
+    done = bench.tool.call("fab", board=bench.board, name="half")
+    assert done["error"]["code"] == "FAB_FAILED" and (bench.tool.runs / "half" / "checks" / "drc.json").is_file()
+
+
+def test_a_symlink_cannot_lead_out_of_the_approved_folder(bench, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.kicad_pcb").write_text("(fixture)")
+    (outside / "x.kicad_sch").write_text("(fixture)")
+    link = Path(bench.board).parent / "link.kicad_pcb"
+    link.symlink_to(outside / "x.kicad_pcb")
+    assert bench.tool.call("check", board=str(link))["error"]["code"] == "ROOT_NOT_APPROVED"
+
+
+def test_gpu_jobs_meet_the_budget_and_the_busy_guards(tmp_path, monkeypatch):
+    monkeypatch.setenv("TWINSMITH_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setattr(jobs, "_budget_guard", lambda: {"error": "budget spent"})
+    monkeypatch.setattr(jobs, "_concurrency_guard", lambda: None)
+    monkeypatch.setattr(jobs, "_kit_bridge_guard", lambda: None)
+    argv = ["/bin/sh", "-c", "true"]
+    for allow in (False, True):          # a spent budget is never overridden
+        assert sibling.start_job(argv, task="t", kind="render", uses_gpu=True, allow_concurrent_gpu=allow)["code"] == "GPU_BUDGET"
+    monkeypatch.setattr(jobs, "_budget_guard", lambda: None)
+    monkeypatch.setattr(jobs, "_kit_bridge_guard", lambda: {"error": "a simulator is running"})
+    assert sibling.start_job(argv, task="t", kind="render", uses_gpu=True)["code"] == "GPU_BUSY"
+    started = sibling.start_job(argv, task="t", kind="render", uses_gpu=True, allow_concurrent_gpu=True)
+    assert started["ok"]
+    jobs._active[started["job_id"]].wait(10)
+    record = json.loads((jobs.jobs_dir() / started["job_id"] / "job.json").read_text())
+    assert record["uses_gpu"] is True and "gpu" in record
+
+
+def test_kicad_locations_and_the_locale_pass_the_scrub(bench, monkeypatch):
+    monkeypatch.setenv("KICAD10_SYMBOL_DIR", "/opt/kicad/symbols")
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/xdg")
+    monkeypatch.setenv("LANG", "C.UTF-8")
+    monkeypatch.setenv("HF_TOKEN", "do-not-pass")
+    bench.tool.call("check", board=bench.board)
+    env = bench.calls("kicad-cli")[-1]["env"]
+    assert env["KICAD10_SYMBOL_DIR"] == "/opt/kicad/symbols" and env["XDG_CONFIG_HOME"] == "/tmp/xdg"
+    assert env["LANG"] == "C.UTF-8" and "HF_TOKEN" not in env
