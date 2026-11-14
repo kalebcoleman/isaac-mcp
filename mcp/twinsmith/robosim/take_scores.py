@@ -30,13 +30,20 @@ def main():
     names = {int(k): v for k, v in meta["names"].items()}
     width, height = int(meta["width"]), int(meta["height"])
     keys = [C.parse_key(text) for text in request["keys"]]
+    for key, text in zip(keys, request["keys"]):
+        # RSS's own compare_take leaves these off the clip's side: they key the one still they were drawn on
+        if key.seed is not None or key.mask:
+            raise SystemExit(f"key {text!r} is a seed or a mask, which marks one still only, so it cannot follow a thing "
+                             "across a take's anchors. Use a colour key (name=colour) for compare_take and tune_push.")
     rows = []
     for anchor in request["anchors"]:
-        frame = min(max(int(anchor["frame"]), 0), len(segs) - 1)    # RSS holds a late anchor against the last frame
+        frame = max(int(anchor["frame"]), 0)
         photo_path = Path(anchor["file"])
         photo = C.load_photo(photo_path if photo_path.is_absolute() else run_dir / "ref" / photo_path)
         found = photo_masks(photo, keys)
-        masks = C.sim_masks(np.asarray(segs[frame]).astype(np.int32), names, [key.name for key in keys])
+        # as RSS: a frame past the stored segmentation has no sim mask (the video read alone is clamped)
+        masks = (C.sim_masks(np.asarray(segs[frame]).astype(np.int32), names, [key.name for key in keys])
+                 if frame < len(segs) else {key.name: None for key in keys})
         objects = {}
         for key in keys:
             photo_mask = found[key.name]

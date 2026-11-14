@@ -723,7 +723,7 @@ class RoboSimBridge:
             return reply
         rows = reply.get("anchors") or []
         if keys and rows and not any(row.get("objects") for row in rows):
-            scored = self._take_scores(path, ledger, take, keys, rows)
+            scored = self._take_scores(path, ledger, take, keys, rows, sequence)
             if not scored.get("ok"):
                 return dict(reply, ok=False, error=f"The take's masks could not be read: {scored.get('error')}")
         for row in rows:
@@ -742,7 +742,7 @@ class RoboSimBridge:
         reply["scope"] = plan.engine(ledger["device"])["scope"]
         return reply
 
-    def _take_scores(self, path, ledger, take, keys, rows):
+    def _take_scores(self, path, ledger, take, keys, rows, sequence):
         """Fill each anchor's ``objects`` from the take's segmentation and the anchor's photograph.
 
         RSS's ``compare --take`` at the pin returns only the frame each anchor was held against (its keys outline things
@@ -750,7 +750,7 @@ class RoboSimBridge:
         RSS's interpreter. Rows that already carry ``objects`` (a later RSS) are left as RSS gave them."""
         if any("frame" not in row or "file" not in row for row in rows):
             return {"ok": False, "error": "RSS's take reply has no frame or file per anchor."}
-        request = path / f"take-scores-{take}.json"
+        request = path / f"take-scores-{sequence}.json"     # one per compare, as timeline-map-N.json
         request.write_text(json.dumps({"run_dir": str(path), "take": take, "keys": list(keys),
                                        "anchors": [{"file": row["file"], "frame": row["frame"]} for row in rows]}) + "\n")
         script = Path(__file__).with_name("take_scores.py")
@@ -758,8 +758,11 @@ class RoboSimBridge:
                               argv=[str(self.root / ".venv/bin/python"), "-I", str(script), str(request)])
         scored = reply.get("anchors") if reply.get("ok") else None
         if not isinstance(scored, list) or len(scored) != len(rows):
-            stderr = Path(ledger["commands"][-1]["stderr"]).read_text(errors="replace").strip()[-500:]
-            return {"ok": False, "error": stderr or reply.get("error") or "take_scores.py gave no reading per anchor."}
+            record = ledger["commands"][-1]
+            stderr = Path(record["stderr"]).read_text(errors="replace").strip()[-500:]
+            if record.get("returncode"):     # the script's own refusal or traceback
+                return {"ok": False, "error": stderr or reply.get("error") or "take_scores.py failed."}
+            return {"ok": False, "error": "take_scores.py gave no reading per anchor." + (f" stderr: {stderr}" if stderr else "")}
         for row, found in zip(rows, scored):
             row["objects"] = found.get("objects") or {}
         return {"ok": True}
