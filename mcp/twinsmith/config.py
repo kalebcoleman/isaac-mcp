@@ -223,6 +223,8 @@ def vlm_url(value, name: str) -> str:
         raise ValueError(f"{name} is not a URL: {error}") from None
     if not host or parts.username is not None or parts.password is not None:
         raise ValueError(f"{name} needs a host and no user or password.")
+    if parts.query or parts.fragment or "?" in value or "#" in value:
+        raise ValueError(f"{name} must not have a query or fragment: a key belongs in vlm_api_key_file.")
     if parts.scheme == "https":
         return value
     if parts.scheme == "http":
@@ -238,19 +240,27 @@ def read_secret_file(path: Path, name: str) -> str:
     else, at most ``SECRET_FILE_MAX`` bytes. Error messages name the file, never its contents."""
     import stat as stat_module
 
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
     try:
-        info = path.lstat()
+        fd = os.open(path, flags)      # never a link, and a FIFO cannot block the call
     except OSError as error:
+        if error.errno == getattr(__import__("errno"), "ELOOP"):
+            raise ValueError(f"{name} {path} must be a regular file, not a link or folder.") from None
         raise ValueError(f"{name} {path} cannot be read: {error.strerror}.") from None
-    if not stat_module.S_ISREG(info.st_mode):
-        raise ValueError(f"{name} {path} must be a regular file, not a link or folder.")
-    if info.st_uid != os.getuid() or info.st_mode & 0o077:
-        raise ValueError(f"{name} {path} must be yours and readable only by you (chmod 600).")
-    if info.st_size > SECRET_FILE_MAX:
+    try:
+        info = os.fstat(fd)            # the checks are on the file that was opened
+        if not stat_module.S_ISREG(info.st_mode):
+            raise ValueError(f"{name} {path} must be a regular file, not a link or folder.")
+        if info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise ValueError(f"{name} {path} must be yours and readable only by you (chmod 600).")
+        data = os.read(fd, SECRET_FILE_MAX + 1)
+    finally:
+        os.close(fd)
+    if len(data) > SECRET_FILE_MAX:
         raise ValueError(f"{name} {path} is larger than a key ({SECRET_FILE_MAX} bytes).")
     try:
-        lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
-    except (OSError, UnicodeDecodeError):
+        lines = [line.strip() for line in data.decode().splitlines() if line.strip()]
+    except UnicodeDecodeError:
         raise ValueError(f"{name} {path} cannot be read as text.") from None
     if len(lines) != 1 or any(ord(c) < 33 for c in lines[0]):
         raise ValueError(f"{name} {path} must hold one key on one line.")

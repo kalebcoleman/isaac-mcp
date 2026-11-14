@@ -86,14 +86,19 @@ vlm_api_key_file = "~/.config/agent-secrets/nvidia_api_key"   # optional
 
 The tools then set `GAP_VLM_PROVIDER=openrouter` (upstream's OpenAI-compatible client), `GAP_VLM_BASE_URL`,
 `GAP_VLM_MODEL` and, from the key file, `GAP_VLM_API_KEY` on the `gap` and `vabar` processes. They never read these
-from the environment, and these settings override any `GAP_VLM_*` that `allow_paid` let through. With no key file, no
-`GAP_VLM_API_KEY` reaches the endpoint. `OPENROUTER_API_KEY` still passes only with `allow_paid`, so `generate` stays off.
+from the environment, and these settings override any `GAP_VLM_*` that `allow_paid` let through. The endpoint gets only
+its own key: upstream's client falls back to `OPENROUTER_API_KEY`, so with an endpoint set neither that nor
+`GAP_VLM_API_KEY` reaches a run, even with `allow_paid`. `generate`'s planner is a different client: it gets no
+endpoint, and its `OPENROUTER_API_KEY` still needs `allow_paid`.
 
-- The URL must have a host and no user or password in it. Anything else is `CONFIG_INVALID` and nothing runs.
+- The URL must have a host, and no user, password, query or fragment in it (a key goes in the key file). Anything else
+  is `CONFIG_INVALID` for `run` and `check`; `status` reports the problem instead of refusing, and the other actions
+  never read these settings.
 - The key file must be a regular file (not a link), owned by the owner and readable by no one else (`chmod 600`),
   holding one key on one line. It is read when a process starts. Answers, job records and `status` never contain the key.
 - `status` reports the URL, host and model, the key file's path and whether it is usable.
-- `validate` asks no model, so it gets no endpoint and no key.
+- `check` sees the endpoint and model, not the key, so it reports what a run will use. `validate`, `tools` and
+  `vabar list` ask no model and get neither.
 
 The owner chooses the endpoint and pays whatever it costs: a free tier's limits, or a paid API behind a local server,
 are theirs. Graph nodes send the endpoint their prompts and camera images. Only VLM nodes use it; `generate`'s planner is

@@ -401,8 +401,13 @@ def test_a_vlm_without_a_key_file_gets_no_key_even_with_allow_paid(workspace, tm
     co = gap.checkout(workspace=workspace)
     wait_for(gap.call(co, "run", sim="libero/0", graph="graph1", name="loop")["result"]["job_id"])
     (call,) = calls(co.root)
-    assert call["env"]["GAP_VLM_BASE_URL"] == "http://127.0.0.1:8000/v1" and "GAP_VLM_API_KEY" not in call["env"]
-    assert call["env"]["OPENROUTER_API_KEY"] == "or-secret-value"     # allow_paid still passes the planner's key
+    assert call["env"]["GAP_VLM_BASE_URL"] == "http://127.0.0.1:8000/v1"
+    # upstream's VLM client falls back to OPENROUTER_API_KEY, so with an endpoint set neither key reaches it
+    assert not {"GAP_VLM_API_KEY", "OPENROUTER_API_KEY"} & call["env"].keys()
+    gen = gap.call(co, "generate", instruction="stack the blocks", name="gen")     # the planner keeps its key
+    wait_for(gen["result"]["job_id"])
+    planner = calls(co.root)[-1]["env"]
+    assert planner["OPENROUTER_API_KEY"] == "or-secret-value" and "GAP_VLM_BASE_URL" not in planner
 
 
 @pytest.mark.parametrize("mode, text, problem", [(0o644, "nvapi-x\n", "chmod 600"), (0o600, "a\nb\n", "one key"),
@@ -446,9 +451,52 @@ def test_accepted_vlm_urls(url):
     assert config.vlm_url(url, "x") == url
 
 
-def test_vlm_settings_need_vlm_url(workspace, tmp_path):
+def test_a_bad_vlm_setting_blocks_run_and_check_but_status_explains_it(workspace, tmp_path):
     owner_config(tmp_path, '[planning]\nvlm_model = "m"\n')
-    assert gap.call(gap.checkout(workspace=workspace), "status")["code"] == "CONFIG_INVALID"
+    co = gap.checkout(workspace=workspace)
+    status = gap.call(co, "status")
+    assert status["ok"] and status["result"]["vlm"]["code"] == "CONFIG_INVALID" and "vlm_url" in status["result"]["vlm"]["error"]
+    assert gap.call(co, "run", sim="libero/0", graph="graph1")["code"] == "CONFIG_INVALID"
+    assert gap.call(co, "check")["code"] == "CONFIG_INVALID"
+    assert gap.call(co, "tools")["ok"] and gap.call(co, "validate", graph="graph1")["ok"]
+
+
+def test_check_sees_the_endpoint_but_not_its_key(workspace, tmp_path):
+    key_file(tmp_path)
+    owner_config(tmp_path, '[planning]\nvlm_url = "https://integrate.api.nvidia.com/v1"\nvlm_model = "m1"\n'
+                           'vlm_api_key_file = "~/.config/agent-secrets/nvidia_api_key"\n')
+    co = gap.checkout(workspace=workspace)
+    gap.call(co, "check")
+    env = calls(co.root)[-1]["env"]
+    assert env["GAP_VLM_BASE_URL"] == "https://integrate.api.nvidia.com/v1" and env["GAP_VLM_MODEL"] == "m1"
+    assert "GAP_VLM_API_KEY" not in env
+
+
+@pytest.mark.parametrize("url", ["https://gw.example/v1?api-key=SECRET", "https://gw.example/v1#x", "HTTP://10.0.0.1/v1"])
+def test_a_vlm_url_has_no_query_and_http_stays_local(url):
+    from twinsmith import config
+    with pytest.raises(ValueError):
+        config.vlm_url(url, "x")
+
+
+def test_a_fifo_key_file_is_refused_without_blocking(tmp_path):
+    import os
+    from twinsmith import config
+    fifo = tmp_path / "key"
+    os.mkfifo(fifo, 0o600)
+    with pytest.raises(ValueError, match="regular file"):
+        config.read_secret_file(fifo, "k")
+
+
+def test_a_validator_crash_is_not_a_verdict(workspace, monkeypatch):
+    co = gap.checkout(workspace=workspace)
+    crash = {"exit_code": 1, "timed_out": False, "stderr": "Traceback ...",
+             "stdout": "[error] a: FAIL something\nTraceback (most recent call last):\n  boom\n"}
+    monkeypatch.setattr(gap.sibling, "run", lambda *a, **k: dict(crash, argv=a[0]))
+    assert gap.call(co, "validate", graph="graph1")["code"] == "UPSTREAM_FAILED"
+    monkeypatch.setattr(gap.sibling, "run", lambda *a, **k: dict(crash, argv=a[0], stdout="FAIL: bad workflow.json\n"))
+    load = gap.call(co, "validate", graph="graph1")
+    assert load["ok"] and load["result"]["valid"] is False and load["result"]["verdict"] == "FAIL: bad workflow.json"
 
 
 def test_a_molmo_url_from_the_environment_passes_only_when_local(workspace, monkeypatch):

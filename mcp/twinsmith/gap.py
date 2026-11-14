@@ -89,6 +89,14 @@ def owner_vlm() -> dict | None:
         raise sibling.Refusal("CONFIG_INVALID", f"~/.config/twinsmith/config.toml: {error}") from None
 
 
+def vlm_status() -> dict | None:
+    """``vlm_report`` for ``status``, which reports a bad setting rather than refusing, so it can explain it."""
+    try:
+        return vlm_report(owner_vlm())
+    except sibling.Refusal as refusal:
+        return {"error": str(refusal), "code": refusal.code}
+
+
 def vlm_report(vlm: dict | None) -> dict | None:
     """What ``status`` shows of the endpoint: host, model and the key file's state, never the key."""
     if vlm is None:
@@ -123,14 +131,23 @@ def model_env(allowed: bool, local: dict | None, environ=None) -> tuple[list[str
         env_set = {"GAP_VLM_PROVIDER": "openrouter", "GAP_VLM_BASE_URL": local["url"]}
         if local.get("model"):
             env_set["GAP_VLM_MODEL"] = local["model"]
-        # The endpoint's own key, or none: without it no GAP_VLM_API_KEY may reach it, even one allow_paid passed.
-        env_pass = [name for name in env_pass if name != "GAP_VLM_API_KEY"]
+        # The endpoint's own key, or none. Upstream's VLM client falls back from GAP_VLM_API_KEY to OPENROUTER_API_KEY
+        # (open-robot-skills tools/vlm/tools.py), so neither may pass with an endpoint set, even with allow_paid.
+        env_pass = [name for name in env_pass if name not in ("GAP_VLM_API_KEY", "OPENROUTER_API_KEY")]
         if local.get("api_key_file"):
             try:
                 env_set["GAP_VLM_API_KEY"] = config.read_secret_file(local["api_key_file"], "planning.vlm_api_key_file")
             except ValueError as error:
                 raise sibling.Refusal("CONFIG_INVALID", f"~/.config/twinsmith/config.toml: {error}") from None
     return env_pass, env_set, warnings
+
+
+def endpoint_env(local: dict | None) -> dict:
+    """The endpoint's provider, URL and model, without its key: what ``check`` needs to report what a run will use."""
+    if not local:
+        return {}
+    return {"GAP_VLM_PROVIDER": "openrouter", "GAP_VLM_BASE_URL": local["url"],
+            **({"GAP_VLM_MODEL": local["model"]} if local.get("model") else {})}
 
 
 def no_model_warning(allowed: bool, local: dict | None) -> list[str]:
@@ -300,16 +317,17 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
         if action not in ACTIONS:
             raise sibling.Refusal("INVALID_VALUE", f"action must be one of {', '.join(ACTIONS)}.")
         allowed, scripts_allowed = owner_flags()
-        local = owner_vlm()
         if action == "status":
-            return sibling.answer("gap", action, info, result=_status(co, info, allowed, local))
+            return sibling.answer("gap", action, info, result=_status(co, info, allowed, vlm_status()))
+        # Only run asks the endpoint; check reports what it will use. Other actions never read its settings.
+        local = owner_vlm() if action in ("run", "check") else None
         if "setup" in info:
             raise sibling.Refusal("NOT_INSTALLED", info["setup"])
         if action in ("tools", "check"):
             command = argv(co, action)
             refuse_real(command)
-            done = sibling.run(command, cwd=co.root, env_pass=run_env(allowed), timeout_s=300,
-                               stdout_chars=sibling.WHOLE)
+            done = sibling.run(command, cwd=co.root, env_pass=run_env(allowed), env_set=endpoint_env(local),
+                               timeout_s=300, stdout_chars=sibling.WHOLE)
             try:
                 result = json.loads(done["stdout"])
             except ValueError:
@@ -343,7 +361,8 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
         command = argv(co, action, sim=sim, graph=graph, instruction=instruction, model=model, out=folder / "output",
                        checkpoints_off=off)
         refuse_real(command)
-        env_pass, env_set, env_warnings = model_env(allowed, local)
+        # generate's planner is not the VLM client: it keeps allow_paid's key and gets no endpoint.
+        env_pass, env_set, env_warnings = model_env(allowed, local if action == "run" else None)
         sibling.new_run_folder(folder)
         started = sibling.start_job(command, task=f"gap-{folder.name}", kind=f"gap-{action}", cwd=folder,
                                     env_pass=env_pass,
@@ -377,8 +396,14 @@ def validate(co: sibling.Checkout, info: dict, graph, scripts_allowed: bool) -> 
     done = sibling.run(command, cwd=co.root, env_pass=["HF_TOKEN", *PLAIN_ENV], timeout_s=300,
                        stdout_chars=sibling.WHOLE)
     lines = [line.strip() for line in done["stdout"].splitlines() if line.strip()]
-    verdict = next((line for line in reversed(lines) if line.startswith(("OK:", "FAIL"))), None)
-    if done["exit_code"] not in (0, 1) or verdict is None:
+    # Upstream ends with "OK: 0 errors, N warning(s)" (exit 0), "FAIL: N error(s), M warning(s)" or, for a graph it
+    # cannot load, "FAIL: <reason>" as its only line (exit 1). Anything else is a crash, not a verdict.
+    last = lines[-1] if lines else ""
+    counted = re.fullmatch(r"(OK: 0 errors|FAIL: \d+ error\(s\)), \d+ warning\(s\)", last)
+    verdict = last if (done["exit_code"] == 0 and counted and last.startswith("OK")) or (
+        done["exit_code"] == 1 and (counted and last.startswith("FAIL") or (len(lines) == 1 and last.startswith("FAIL: ")))
+    ) else None
+    if verdict is None:
         return sibling.answer("gap", "validate", info, exit_code=done["exit_code"], code="UPSTREAM_FAILED",
                               error="gap run --validate-only did not finish with a verdict.",
                               stdout=done["stdout"][-sibling.TAIL:], stderr=done["stderr"])
@@ -397,7 +422,7 @@ def _status(co, info, allowed, local=None) -> dict:
                        f"The largest GPU has {largest} MiB; Graph-as-Policy asks for 24 GB. Run it on a PC that has that.")
     return {**{key: info[key] for key in ("checkout", "environment_present") if key in info},
             **({"setup": info["setup"]} if "setup" in info else {}), "skills": skills_info(co), "gpu": gpu,
-            "keys": {key: bool(os.environ.get(key)) for key in KEYS}, "allow_paid": allowed, "vlm": vlm_report(local),
+            "keys": {key: bool(os.environ.get(key)) for key in KEYS}, "allow_paid": allowed, "vlm": local,
             "runs": str(co.workspace / "runs/gap")}
 
 
