@@ -428,3 +428,39 @@ def test_the_shipped_inertials_are_ur5e_and_the_datasheet_rg2():
     assert sum(link["mass_kg"] for link in values["inertials"]["rg2_links"].values()) == pytest.approx(0.78, abs=1e-5)
     assert values["bota"]["mass_kg"] == 0.113 and values["bota"]["sensor_origin_along_axis_m"] == 0.032
     assert raw["inertials"]["ur5e_links"]["status"] == "confirmed" and raw["inertials"]["rg2_links"]["status"] == "unconfirmed"
+
+
+def test_a_scalar_vector_is_a_value_error_not_a_type_error():
+    robot = _robot_module()
+    for key in ("com_m", "diagonal_inertia_kgm2", "principal_axes_wxyz"):
+        with pytest.raises(ValueError, match="malformed vector"):
+            robot.check_inertials({"arm": {"wrist_1_link": dict(GOOD, **{key: 0.0})}})
+
+
+def test_a_missing_link_on_a_multi_link_stage_is_refused_and_authors_nothing():
+    robot = _robot_module()
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    stage = Usd.Stage.CreateInMemory()
+    for name in ("wrist_1_link", "wrist_2_link"):
+        UsdPhysics.RigidBodyAPI.Apply(UsdGeom.Xform.Define(stage, f"/A/robot/{name}").GetPrim())
+    with pytest.raises(ValueError, match="wrist_3_link: expected one rigid body"):
+        robot._inertials(stage, "/A", {"arm": {"wrist_1_link": GOOD, "wrist_3_link": GOOD}})
+
+
+def test_preflight_link_names_are_checked_against_the_asset_files(tmp_path):
+    robot = _robot_module()
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    paths = []
+    for file, names in (("arm.usda", ("wrist_1_link", "wrist_2_link")), ("gripper.usda", ("finger", "finger"))):
+        asset = Usd.Stage.CreateNew(str(tmp_path / file))
+        for index, name in enumerate(names):
+            UsdPhysics.RigidBodyAPI.Apply(UsdGeom.Xform.Define(asset, f"/R/part{index}/{name}").GetPrim())
+        asset.Save()
+        paths.append(tmp_path / file)
+    robot.check_inertial_links({"arm": {"wrist_1_link": GOOD}}, paths)
+    with pytest.raises(ValueError, match="wrist_9_link: expected one rigid body .* found 0"):
+        robot.check_inertial_links({"arm": {"wrist_9_link": GOOD}}, paths)
+    with pytest.raises(ValueError, match="finger: expected one rigid body .* found 2"):
+        robot.check_inertial_links({"gripper": {"finger": GOOD}}, paths)

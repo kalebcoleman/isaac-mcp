@@ -95,6 +95,9 @@ def _preflight(config_path, mode):
         if not path.is_absolute() or not path.is_file():
             raise ValueError(f"asset {role} must resolve to an existing absolute file")
         assets[role] = path
+    if "inertials" in config:
+        from .robot import check_inertial_links
+        check_inertial_links(config["inertials"], [assets["robot"], assets["rg2"]])
     return config, raw, pack, assets
 
 

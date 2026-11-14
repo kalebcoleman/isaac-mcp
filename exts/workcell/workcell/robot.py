@@ -401,8 +401,8 @@ def _assemble(stage, root, sources, config, order, axis, lengths, pads):
     pad_paths = _pads(stage, root, roots["rg2"], config, reference) if pads else []
     inertials = _inertials(stage, root, config["inertials"]) if "inertials" in config else {}
     if inertials:
-        limitations[1] = ("Pack collision geometry, joint limits and drives are preserved; explicit mass properties "
-                          "from the config's inertials replace the pack's on " + ", ".join(sorted(inertials)) + ".")
+        limitations.append("Explicit mass properties from the config's inertials replace the pack's on "
+                           + ", ".join(sorted(inertials)) + ".")
     if not pads:
         limitations.append("Black finger pads are not installed: finger_pads.present is false.")
     if sources["rg2"][1].get("fidelity", "unverified") != "verified":
@@ -437,6 +437,9 @@ def check_inertials(section):
             seen.add(link)
             if not isinstance(props, dict) or set(props) != INERTIAL_KEYS:
                 raise ValueError(f"inertials.{group}.{link} needs exactly {sorted(INERTIAL_KEYS)}")
+            vectors = (props["com_m"], props["diagonal_inertia_kgm2"], props["principal_axes_wxyz"])
+            if not all(isinstance(vector, (list, tuple)) for vector in vectors):
+                raise ValueError(f"inertials.{group}.{link} has a malformed vector")
             values = [props["mass_kg"], *props["com_m"], *props["diagonal_inertia_kgm2"], *props["principal_axes_wxyz"]]
             if (len(props["com_m"]) != 3 or len(props["diagonal_inertia_kgm2"]) != 3
                     or len(props["principal_axes_wxyz"]) != 4
@@ -449,6 +452,22 @@ def check_inertials(section):
                 raise ValueError(f"inertials.{group}.{link} principal moments break the triangle inequality")
             if abs(math.sqrt(sum(v * v for v in props["principal_axes_wxyz"])) - 1) > 1e-6:
                 raise ValueError(f"inertials.{group}.{link} principal_axes_wxyz must be a unit quaternion")
+
+
+def check_inertial_links(section, asset_paths):
+    """Each inertial link must name exactly one rigid body across the given asset files (opened read-only), so a
+    mistyped name is refused before any stage is replaced."""
+    counts = {}
+    for path in asset_paths:
+        asset = Usd.Stage.Open(str(path), Usd.Stage.LoadAll)
+        for prim in asset.Traverse():
+            if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                counts[prim.GetName()] = counts.get(prim.GetName(), 0) + 1
+    for group, links in section.items():
+        for link in links:
+            if counts.get(link, 0) != 1:
+                raise ValueError(f"inertials.{group}.{link}: expected one rigid body of that name in the robot and "
+                                 f"gripper assets, found {counts.get(link, 0)}")
 
 
 def _inertials(stage, root, section):
