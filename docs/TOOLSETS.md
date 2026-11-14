@@ -27,7 +27,7 @@ rows for the server you have installed, with the current state of each.
 | `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
 | `kit_debug`: Inspect Kit logs and operate its UI | off | `sim__logs`, `sim__ui` |
 | `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__eval`, `workcell__jenga`, `workcell__perception`, `workcell__planning`, `workcell__real2sim`, `workcell__robot` |
-| `robosim`: RoboSimStudio real-to-sim runs in its own private environment | off | `robosim` |
+| `robosim`: RoboSimStudio real-to-sim runs and MuJoCo system identification, each in its own environment | off | `robosim`, `sysid` |
 | `input`: Desktop mouse and keyboard input | explicit only | `computer` |
 | `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
 | `extensions`: Tools from uncatalogued extension namespaces | on | none |
@@ -42,8 +42,8 @@ rows for the server you have installed, with the current state of each.
   catalogue. It lists nothing until such an extension connects.
 - `workcell` is the lab's UR5e work cell; see its [README](../exts/workcell/workcell/README.md). Its tools for real-to-sim,
   planning and evaluation answer that they are not implemented.
-- `robosim` is one grouped tool that runs RoboSimStudio in its own Python environment; it needs no Kit bridge. See
-  [ROBOSIM.md](ROBOSIM.md).
+- `robosim` holds two grouped tools, each running in its own Python environment and needing no Kit bridge: `robosim`
+  runs RoboSimStudio ([ROBOSIM.md](ROBOSIM.md)) and `sysid` fits model parameters with MuJoCo ([SYSID.md](SYSID.md)).
 - The status also names toolsets that are **planned** and not built yet; they list no tools.
 
 ## Choosing toolsets
@@ -125,8 +125,8 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 |---|---|--:|
 | `minimal` | `core` | 6 |
 | `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 32 |
-| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 49 |
-| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 51 |
+| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 50 |
+| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 52 |
 <!-- /generated -->
 
 | Selection | Listed tools | Characters | Estimated tokens |

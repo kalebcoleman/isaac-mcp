@@ -29,6 +29,8 @@ test = [
     "pyyaml",  # RViz config validity in test_ros2_tools.py
 ]
 scene-test = ["usd-core>=25.11,<27", "numpy"]  # numpy: occupancy-map tests
+# The synthetic recovery in test_sysid.py; the sysid tool itself runs MuJoCo in its own environment, never here.
+sysid-test = ["mujoco[sysid]==4.0.1; python_version >= '3.11'"]
 # Isaac Lab tool pack: TensorBoard event-file readout (isaaclab__metrics_*, isaaclab__tensorboard_tail).
 isaaclab = [
     "tensorboard>=2.14",

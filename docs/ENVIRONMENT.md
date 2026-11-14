@@ -54,6 +54,7 @@ A project's `twinsmith.json` is a different file, read for asset packs and the I
 | `XDG_STATE_HOME` | `~/.local/state` | host | Base of the default log directory. |
 | `DISPLAY` | `:0` | host | X11 display for the screen and desktop-input tools. Match your session. |
 | `TWINSMITH_ROBOSIM_ROOT` | `<workspace>/tools/robosimstudio` | host | The RoboSimStudio checkout the `robosim` tool runs. See [ROBOSIM.md](ROBOSIM.md). |
+| `TWINSMITH_SYSID_ROOT` | `<workspace>/tools/sysid` | host | The folder whose `.venv` (MuJoCo 4.0.1 with its `sysid` extra) the `sysid` tool runs. See [SYSID.md](SYSID.md). |
 
 Toolsets are visibility preferences, not security: the token and read-only mode are enforced by the bridge.
 

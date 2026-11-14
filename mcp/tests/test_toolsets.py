@@ -32,14 +32,14 @@ def test_each_toolset_alone_and_disabled_registers_nothing(name):
         assert all(toolsets.owner(tool) != name for tool in disabled._tool_manager._tools)
 
 
-def test_robosim_is_off_by_default_and_registers_only_its_grouped_tool():
+def test_robosim_is_off_by_default_and_registers_robosim_and_sysid():
     assert "robosim" not in toolsets.DEFAULT and "robosim" not in toolsets.PLANNED
     assert "robosim" in config.select("all")
     assert "robosim" not in {name for name in toolsets.TOOLSETS if name in server._state_for(build()).toolsets}
-    assert "robosim" not in build()._tool_manager._tools
+    assert not {"robosim", "sysid"} & set(build()._tool_manager._tools)
     alone = build("minimal,+robosim")
-    assert {name for name in alone._tool_manager._tools if toolsets.owner(name) == "robosim"} == {"robosim"}
-    assert toolsets.MEMBERS["robosim"] == {"robosim"}
+    assert {name for name in alone._tool_manager._tools if toolsets.owner(name) == "robosim"} == {"robosim", "sysid"}
+    assert toolsets.MEMBERS["robosim"] == {"robosim", "sysid"}
 
 
 def test_documented_default_and_planned_selection():
@@ -111,7 +111,7 @@ def test_live_visibility_uses_same_selection():
         toolsets.owner("sim.unknown", "sim")
 
 
-@pytest.mark.parametrize("profile,budget", [("minimal", 1670), ("default", 15900), ("all", 23350)])   # measured 1,590 / 15,134 / 22,201, plus about 5 percent
+@pytest.mark.parametrize("profile,budget", [("minimal", 1670), ("default", 15900), ("all", 24700)])   # measured 1,590 / 15,134 / 23,500, plus about 5 percent
 def test_listing_size(profile, budget):
     instance = build(profile)
     tools = asyncio.run(instance.list_tools())
@@ -366,6 +366,7 @@ def test_server_advertises_list_changed_for_the_tool():
 def test_workcell_and_robosim_register_without_a_bridge_or_checkout(tmp_path, monkeypatch):
     monkeypatch.setenv("TWINSMITH_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("TWINSMITH_ROBOSIM_ROOT", str(tmp_path / "no-checkout"))
+    monkeypatch.delenv("TWINSMITH_SYSID_ROOT", raising=False)
     instance, _ = offline_build("minimal")
     result = change(instance, "enable", ["workcell", "robosim"])
     assert {"robosim", "workcell__cell", "workcell__jenga"} <= set(result["tools_available"])
@@ -375,6 +376,8 @@ def test_workcell_and_robosim_register_without_a_bridge_or_checkout(tmp_path, mo
     assert "not available" in text and "no Isaac Sim bridge could be reached" in text
     answer = asyncio.run(instance.call_tool("robosim", {"action": "status"}))
     assert "missing or unreadable" in str(answer) and "never installs" in str(answer)
+    answer = asyncio.run(instance.call_tool("sysid", {"action": "status"}))
+    assert "ENVIRONMENT_MISSING" in str(answer) and "never installs" in str(answer)
 
 
 def test_enable_also_reads_the_live_bridge_tools(monkeypatch):

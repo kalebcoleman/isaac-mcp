@@ -61,7 +61,7 @@ Toolsets control what is listed, not what is allowed: the bridge token and `TWIN
 | `ros2` | off | 3 | ROS 2 transforms, graphs and occupancy maps |
 | `kit_debug` | off | 2 | Inspect Kit logs and operate its UI |
 | `workcell` | off | 7 | UR5e workcell tools |
-| `robosim` | off | 1 | RoboSimStudio real-to-sim runs in its own private environment |
+| `robosim` | off | 2 | RoboSimStudio real-to-sim runs and MuJoCo system identification, each in its own environment |
 | `input` | explicit only | 1 | Desktop mouse and keyboard input |
 | `launch` | explicit only | 1 | Launch and stop simulator processes |
 | `extensions` | on | 0 | Tools from uncatalogued extension namespaces |

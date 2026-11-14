@@ -4,8 +4,11 @@
 tool independently of Kit. **It needs no Isaac Sim or Kit bridge.** The server calls it only when the `robosim` toolset is
 selected (off by default, for example `TWINSMITH_TOOLSETS=default,+robosim`, or
 `toolsets(action="enable", names=["robosim"])`). RSS is never imported
-into the MCP host: `examples/live/ctl` uses RSS's own `.venv/bin/python`.
-Tested pin: **87b5e32** of <https://github.com/robosimstudio/robosimstudio>.
+into the MCP host: every command is `python -m robosimstudio_real2sim_agent` run by RSS's own `.venv/bin/python`
+(the module entry point; `examples/live/ctl` is a one-line wrapper around it).
+Tested pin: **ba3650c** of <https://github.com/robosimstudio/robosimstudio>. The default T template pushed on `cpu`
+(`rollout` with `routine="push"`, 6 s) gave the same result at this pin as at the previous one, `87b5e32`: solver `SolverMuJoCo`, pusher tracking error 2 mm, block end
+`[0.0000007, 0.0881]` m.
 Every response identifies the checkout commit and warns about a different pin.
 Missing installations give setup guidance; the bridge never installs anything.
 
@@ -22,7 +25,8 @@ never moves (this was the `cuda:0` failure before this change). Every run's stat
 `REPORT.md` say which device; the push result (`push_applied.solver`) names the solver class that stepped
 the scene (`SolverMuJoCo` on both devices for the template). The first action on `cuda:0` can take minutes
 while Warp compiles its kernels (`start` says so in `gpu_note`; later runs reuse the cache). This tool **compares images; it does
-not fit mass or friction**, and the report says so.
+not fit mass or friction**, and the report says so. Fitting parameters to recorded trajectories is the job of
+[`sysid`](SYSID.md), in the same toolset.
 
 ## A worked sequence
 
@@ -133,7 +137,7 @@ owned servers; an in-flight worker cannot resume after its host exits.
 
 ## How things move in RSS, and the push
 
-What RSS supports (pin 87b5e32; paths are in the checkout):
+What RSS supports (pin ba3650c; paths are in the checkout):
 
 - **Writes to `sim.state.body_q` / `body_qd` do nothing.** They are outputs: the solver rebuilds them
   from `joint_q` and `joint_qd` each step (checked on CPU: a `body_q` write followed by `sim.run(1)` left

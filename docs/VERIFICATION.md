@@ -59,7 +59,7 @@ port. The runner verifies the engine before each check, prints a results table, 
 | `code` | `test_run_python`, `test_sim_reload`, `test_tool_packages` | none registered; `run_python` returns a value and a file round-trips | | yes |
 | `kit_debug` | `test_sim_ui`, `test_scene_advanced` | none registered; tail the Kit log | | yes |
 | `workcell` | `test_workcell_*`, `test_lab_hardware_config` | `smoke.py workcell --port 8766 --config <absolute-config> --mutate-stage` (delegates to `scripts/workcell_smoke.py`; PhysX only) | Stopped-stage authoring and BOM validation, not dynamics or renders | yes |
-| `robosim` | `test_robosim_bridge` | none registered | | no |
+| `robosim` | `test_robosim_bridge`, `test_sysid` (its synthetic recovery needs the `sysid-test` extra) | none registered | | no |
 | `input`, `launch` | `test_desktop_input`, `test_sim_sessions`, `test_launch_script_newton` | manual, on request only | | yes for `launch` |
 | BrickSim | `test_sim_compat`, `test_sim_versions`, the external-bridge cases in `test_sim_sessions` | the launch line in [BRICKSIM.md](BRICKSIM.md) on an Isaac Sim 5.1 BrickSim environment, then `status`, `sim__stage(action="info")` and one body-state read | `status` reports app version 5.1.0 and the tools answer. Not yet verified live since the toolsets change | yes |
 
