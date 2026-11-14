@@ -185,7 +185,7 @@ under `<workspace>/runs/robosim/`. See [ROBOSIM.md](ROBOSIM.md).
 
 | Source | Tools | Needs |
 |---|---|---|
-| A window on the desktop | `screenshot`, `screen_recording` | An X11 display. A window is read by its id, so it works when covered or when the screen is locked. |
+| A window on the desktop | `screenshot`, `screen_recording` | An X11 display. A window is read by its id, so it works when the screen is locked, and when covered if the window manager composites (`doctor` says). |
 | Acting on a window | `computer` (opt-in `input` toolset); `sim__ui` for Isaac Sim's own UI | `computer`: an unlocked X11 desktop. `sim__ui`: a running windowed Isaac Sim; works when locked. See [computer use](TOOLS-HOST.md#computer-use-workflow). |
 | A camera in the scene | `sim__camera`; `camera=` on `sim__simulation` runs and replays | A running simulator. Works headless. |
 | An Isaac Lab task | `isaaclab__launch` with `record`, or `play` with `--video` | An Isaac Lab install. Works headless. |
