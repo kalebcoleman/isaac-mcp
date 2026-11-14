@@ -45,7 +45,6 @@ from pathlib import Path
 from typing import Any
 
 from . import install as _install
-from twinsmith import legacy
 
 _LAUNCHER = Path(__file__).with_name("launcher.py")
 _EVAL_RUNNER = Path(__file__).with_name("eval_runner.py")
@@ -1435,9 +1434,8 @@ def _script_artifacts(log_path: Path) -> list[str]:
         return found
     for line in text.splitlines():
         line = _ANSI_RE.sub("", line).strip()
-        prefix = next((p for p in (_ARTIFACT_PREFIX, legacy.OLD_ARTIFACT_MARKER) if line.startswith(p)), None)
-        if prefix:
-            value = line[len(prefix):].strip()
+        if line.startswith(_ARTIFACT_PREFIX):
+            value = line[len(_ARTIFACT_PREFIX):].strip()
             if value and value not in found:
                 found.append(value)
                 if len(found) >= _ARTIFACT_LIMIT:
@@ -1461,10 +1459,9 @@ def _progress(log_path: Path) -> dict[str, Any] | None:
         return None
     for line in reversed(text.splitlines()):
         line = _ANSI_RE.sub("", line).strip()
-        prefix = next((p for p in (_PROGRESS_PREFIX, legacy.OLD_PROGRESS_MARKER) if line.startswith(p)), None)
-        if prefix is None:
+        if not line.startswith(_PROGRESS_PREFIX):
             continue
-        parts = line[len(prefix):].strip().split(None, 1)
+        parts = line[len(_PROGRESS_PREFIX):].strip().split(None, 1)
         if not parts:
             return None
         token, note = parts[0], (parts[1] if len(parts) > 1 else "")

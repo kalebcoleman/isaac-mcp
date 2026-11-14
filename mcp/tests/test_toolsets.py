@@ -61,14 +61,12 @@ def test_profiles_and_guards():
             config.select(value)
 
 
-@pytest.mark.parametrize("variable", config.LEGACY)
-def test_legacy_settings_fail_with_replacement(variable):
+@pytest.mark.parametrize("suffix", ["LOCAL_TOOLS", "NAMESPACE", "BUILTINS", "SCENE_TOOLS", "GROUP_TOOLS", "TOOLSETS"])
+def test_old_selection_settings_stop_the_server(suffix):
+    variable = config.OLD_PREFIXES[0] + suffix
     with pytest.raises(ValueError) as error:
         server.build_server({variable: "all,screen_input,sim_launch"})
-    assert variable in str(error.value)
-    assert config.replacement(variable, "all,screen_input,sim_launch") in str(error.value)
-    local = next(name for name in config.LEGACY if name.endswith("LOCAL_TOOLS"))
-    assert config.replacement(local, "all,screen_input,sim_launch") == "TWINSMITH_TOOLSETS=all,+input,+launch"
+    assert variable in str(error.value) and "TWINSMITH_TOOLSETS" in str(error.value)
 
 
 def test_five_source_precedence_and_backend(tmp_path):

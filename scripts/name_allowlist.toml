@@ -2,30 +2,58 @@
 # other hit, on an entry that matches nothing, and on an entry whose "remove_by" version has been reached.
 # "pattern" is a name from check_names.py's PATTERNS, or "*" for all of them; "literal" limits an entry to one spelling.
 
-# --- The table of old names, and the tests of it
+# --- The refusal of old settings (0.3 honoured them for one release; nothing reads them now), and its tests
 
 [[allow]]
 pattern = "*"
-path = "mcp/twinsmith/legacy.py"
-reason = "The alias table: the one place in the code where the old names are written."
+path = "mcp/twinsmith/config.py"
+reason = "Names the isaac-mcp settings and config files so that a server which finds one refuses to start instead of ignoring it."
 
 [[allow]]
 pattern = "*"
-path = "mcp/tests/test_legacy_names.py"
-reason = "Tests of the alias table; they must spell the old names they exercise."
+path = "exts/twinsmith.bridge/twinsmith_bridge/knobs.py"
+reason = "The Kit bridge's copy of the same refusal rule: an old ISAAC_MCP_READ_ONLY must not leave a writable simulator silently."
+
+[[allow]]
+pattern = "isaac-mcp"
+path = "exts/twinsmith.bridge/twinsmith_bridge/bridge.py"
+literal = "isaac-mcp"
+reason = "The bridge's refusal message names the old project so the user knows which settings it means."
+
+[[allow]]
+pattern = "*"
+path = "mcp/tests/test_old_names.py"
+reason = "Tests that old settings are refused, the permanent alias works and the installer cleans up the old id."
 
 [[allow]]
 pattern = "*"
 path = "docs/MIGRATING.md"
 reason = "The migration page lists every old name next to its new one."
 
+[[allow]]
+pattern = "isaac.mcp"
+path = "scripts/install.py"
+literal = "isaac.mcp.bridge"
+reason = "install.py --remove still cleans up a registration of the old bridge id left in a Kit user.config.json."
+
+[[allow]]
+pattern = "isaac-mcp"
+path = "mcp/twinsmith/asset_packs.py"
+reason = "The old pack format's build-description file, isaac-mcp-pack.json, is left out when an old pack on disk is converted."
+
 # --- ISAAC_MCP_ASSET_ROOT is a permanent alias of TWINSMITH_ASSET_ROOT: no warning, no removal date
+
+[[allow]]
+pattern = "ISAAC_MCP"
+path = "mcp/twinsmith/pack_manifest.py"
+literal = "ISAAC_MCP_ASSET_ROOT"
+reason = "Permanent alias, read where the host resolves the asset root."
 
 [[allow]]
 pattern = "ISAAC_MCP"
 path = "exts/workcell/workcell/asset_pack.py"
 literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Permanent alias, read here because this loader runs in Kit and must work without the host's table."
+reason = "Permanent alias, read here because this loader runs in Kit and cannot import the host's resolver."
 
 [[allow]]
 pattern = "ISAAC_MCP"

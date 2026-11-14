@@ -14,7 +14,7 @@ from twinsmith import pack_manifest as pm
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "assets.py"
-SETTINGS = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_WORKSPACE", "TWINSMITH_PROJECT", "TWINSMITH_USD_PYTHON", *pm.REMOVED_ENVIRONMENT)
+SETTINGS = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_WORKSPACE", "TWINSMITH_PROJECT", "TWINSMITH_USD_PYTHON")
 
 
 def sha(data: bytes) -> str:
@@ -25,7 +25,6 @@ def sha(data: bytes) -> str:
 def cli(tmp_path, monkeypatch):
     for name in SETTINGS:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(pm, "_announced", set())
     home = tmp_path / "home@host"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
@@ -70,7 +69,7 @@ def test_where_reports_the_root_and_how_it_was_found(cli, capsys, root):
     code, out, _ = run(cli, capsys, "where", "--json")
     data = json.loads(out)
     assert code == 0 and data["asset_root"] == str(root.resolve()) and data["source"] == "environment"
-    assert data["selected_pack"] is None and data["removed_environment"] == []
+    assert data["selected_pack"] is None and "removed_environment" not in data
     code, out, _ = run(cli, capsys, "where")
     assert code == 0 and "asset root" in out and str(root.resolve()) in out
 
@@ -83,16 +82,13 @@ def test_where_says_which_setting_to_make_when_there_is_no_root(cli, capsys, tmp
     assert code == 2 and "TWINSMITH_ASSET_ROOT" in err
 
 
-def test_where_names_the_project_pack_and_a_removed_variable_once(cli, capsys, root, tmp_path, monkeypatch):
+def test_where_names_the_project_pack(cli, capsys, root, tmp_path, monkeypatch):
     project = tmp_path / "proj"
     project.mkdir()
     (project / "twinsmith.json").write_text(json.dumps({"pack": "bricksim/v1"}))
     monkeypatch.setenv("TWINSMITH_PROJECT", str(project))
-    removed = next(iter(pm.REMOVED_ENVIRONMENT))
-    monkeypatch.setenv(removed, "/old")
     code, out, _ = run(cli, capsys, "where")
-    assert code == 0 and "bricksim/v1" in out
-    assert out.count(f"{removed} is no longer read") == 1 and "TWINSMITH_ASSET_ROOT" in out
+    assert code == 0 and "bricksim/v1" in out and "warning" not in out
 
 
 def test_where_with_a_bad_project_file_is_a_clean_error(cli, capsys, root, tmp_path, monkeypatch):
