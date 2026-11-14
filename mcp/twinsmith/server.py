@@ -995,9 +995,11 @@ def _job_call(canonical: str, params: Dict[str, Any], state: _BridgeState) -> An
             raise
         return {"status": "error", "code": "INVALID_VALUE" if "wait_s" in str(error) else "NOT_FOUND", "message": str(error)}
     if isinstance(asked, (int, float)) and not isinstance(asked, bool) and asked > wait and isinstance(result, dict):
-        result = {**result, "wait_s_used": wait,
-                  "note": f"wait_s {asked:g} is more than the {JOB_WAIT_MAX_S:g} s a call may wait; waited "
-                          f"{wait:g} s. Call again to keep waiting."}
+        # its own key: the job's own note (a cut result, why it failed) stays as it is
+        result = {**result, "wait_s_used": wait}
+        if result.get("state") == "running":
+            result["wait_note"] = (f"wait_s {asked:g} is more than the {JOB_WAIT_MAX_S:g} s a call may wait; waited "
+                                   f"{wait:g} s. Call again to keep waiting.")
     spec = result.get("result", {}).get("encode") if isinstance(result, dict) and isinstance(result.get("result"), dict) else None
     if isinstance(spec, dict) and {"folder", "pattern", "frames", "output", "fps"} <= set(spec):   # a replay's frames
         result = {**result, "result": _encode_replay(result["result"], state, job_id)}
