@@ -125,8 +125,7 @@ flowchart LR
 - Regroup every tool into off-by-default groups and delete the three work-cell stubs
   ([plan](plans/02-toolset-groups.md)).
 - Decide the seven shorter tool names from the rename in the same pass.
-- Done: the old setting and tool names were removed by #113 (merged 2026-11-13); a leftover old setting now stops the
-  server at startup and names its replacement ([MIGRATING.md](MIGRATING.md)).
+- Done: twinsmith is the only name; the earlier names and their compatibility layer are gone (#113 and its follow-ups).
 
 **Exit criteria.**
 - A fresh install lists only `core`; `status` names every other group and how to turn it on.
@@ -313,7 +312,6 @@ The plan was drafted from a survey dated 2026-11-13. Where it and the code diffe
 | Fit with `sysid` on RoboSimStudio's CPU runs | RoboSimStudio's own project file notes MuJoCo 3.15 in its lock; the system identification module arrives with MuJoCo 4.0.1. `sysid` needs its own environment. |
 | Extend `doctor` | `doctor` arrived with #108 and checks desktop readiness only. The versions of wrapped tools belong in `status`. |
 | Toolsets are off by default (owner's rule) | Eight toolsets are on by default today. Plan 02 changes that. |
-| No aliases (owner's rule) | #113 removed `legacy.py` and the old setting names, except one permanent alias for the asset-root setting. Single-purpose tool names stay callable behind each grouped tool. |
 
 Confirmed as the survey said, on 2026-11-13: RoboSimStudio `main` is `4e52e1a`, 13 commits past the pin, and requires
 `newton[sim]>=1.7,<1.8` and `coacd==1.0.11`; Newton `v1.8.0` was released on 2026-11-11; Graph-as-Policy's `gap run` has a
