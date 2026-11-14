@@ -974,17 +974,16 @@ def adopt_folder(root: Path, pack_id: str, version: str, source: Path, *, source
     return dict(written, dry_run=False, notes=notes, **extra)
 
 
-# The pins and the build description of the old pack format (isaac-mcp, before 0.3.0). Packs in that format are
-# still on lab machines' disks, so the converter keeps leaving these two files out of the new version.
-OLD_FORMAT_FILES = ("SHA256SUMS", "isaac-mcp-pack.json")
+# The pins file of the old pack format (before pack.yaml). Packs in that format may still be on lab machines' disks,
+# so the converter leaves it out of the new version.
+OLD_FORMAT_FILES = ("SHA256SUMS",)
 
 
 def convert_old(old_folder: Path, *, pack_id: str | None = None, version: str = "v1", source_note, license_,
                 redistributable=None, dry_run=False, notes: list | None = None) -> dict:
     """Convert an old-format pack ``<store>/<pack>/`` into ``<store>/<pack>/<version>/`` with a ``pack.yaml``.
 
-    Hashes come from the files themselves, not from the old ``SHA256SUMS``, which is not copied (nor is
-    the old build-description file). The old files stay where they are; nothing reads them once the new version exists.
+    Hashes come from the files themselves, not from the old ``SHA256SUMS``, which is not copied. The old files stay where they are; nothing reads them once the new version exists.
     """
     notes = [] if notes is None else notes
     old_folder = Path(old_folder)
