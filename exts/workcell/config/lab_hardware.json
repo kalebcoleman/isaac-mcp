@@ -74,6 +74,28 @@
       "source": "As above: the angle at which a sliding block keeps sliding at constant speed. MuJoCo (Newton) uses one sliding coefficient per pair; PhysX uses both."
     }
   },
+  "contact": {
+    "default_static_friction": {
+      "value": 0.5,
+      "status": "unconfirmed",
+      "source": "For every collider with no material of its own (arm, gripper links, bench frame): PhysX's default, so such parts behave the same on Newton, where an unbound collider otherwise gets mu 1.0 (isaacsim.physics.newton newton_config.py:99). Not measured."
+    },
+    "default_dynamic_friction": {
+      "value": 0.5,
+      "status": "unconfirmed",
+      "source": "As above."
+    },
+    "combine_mode": {
+      "value": "max",
+      "status": "confirmed",
+      "source": "MuJoCo (Newton) combines two geoms' friction by max (newton solvers/mujoco/kernels.py:162); PhysX is set to max on every material so each pair gets the same friction on both engines."
+    },
+    "newton_friction": {
+      "value": "static",
+      "status": "unconfirmed",
+      "source": "Newton reads one coefficient, dynamicFriction (newton import_usd.py:3982); the work cell sets it to the static value on Newton because Jenga depends mostly on when a block starts to slide. Sliding then runs about 0.05 grippier than on PhysX."
+    }
+  },
   "robot": {
     "model": {
       "value": "UR5e",

@@ -213,6 +213,10 @@ def test_black_pads_follow_finger_frames_and_export(cell):
         shader = UsdShade.Shader(material.GetPrim().GetChild("surface"))
         assert list(shader.GetInput("diffuseColor").Get()) == [0, 0, 0]
         assert UsdPhysics.MaterialAPI(material).GetStaticFrictionAttr().Get() == pytest.approx(0.8)
+        shapes = [p for p in Usd.PrimRange(prim) if p.IsA(UsdGeom.Gprim)]
+        assert shapes and all(p.HasAPI(UsdPhysics.CollisionAPI) for p in shapes)   # the pad, not the bare link, touches
+        assert all(UsdPhysics.MeshCollisionAPI(p).GetApproximationAttr().Get() == "convexHull"
+                   for p in shapes if p.IsA(UsdGeom.Mesh))
     reopened = Usd.Stage.Open(stage.Flatten())
     assert reopened.GetPrimAtPath(report["bota_sensor_path"])
     before = stage.GetSessionLayer().ExportToString()

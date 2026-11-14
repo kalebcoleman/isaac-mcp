@@ -290,6 +290,9 @@ def test_prepare_writes_per_degree_gains_and_both_armatures(monkeypatch):
         drive.CreateDampingAttr(0.4)
     box = stage.DefinePrim("/World/Bench/box", "Cube")
     UsdPhysics.CollisionAPI.Apply(box)
+    wood = UsdPhysics.MaterialAPI.Apply(stage.DefinePrim("/World/Wood", "Material"))
+    wood.CreateStaticFrictionAttr(0.3)
+    wood.CreateDynamicFrictionAttr(0.25)
     seen = []
     support = types.ModuleType("sim_tools.newton_support")
     support.scene_settings = lambda prim, rate, tower: {"newton:timeStepsPerSecond": rate}
@@ -302,8 +305,10 @@ def test_prepare_writes_per_degree_gains_and_both_armatures(monkeypatch):
     package.__path__ = []
     monkeypatch.setitem(sys.modules, "sim_tools", package)
     monkeypatch.setitem(sys.modules, "sim_tools.newton_support", support)
-    report = cell.prepare(stage, {"newton": newton_section(stiffness_nm_per_rad=25000, damping_nms_per_rad=300)},
+    report = cell.prepare(stage, {"newton": newton_section(stiffness_nm_per_rad=25000, damping_nms_per_rad=300),
+                                  "contact": {"newton_friction": "static"}},
                           "/World/RobotAssembly", timeline=None)
+    assert wood.GetDynamicFrictionAttr().Get() == pytest.approx(0.3) and report["materials_with_static_mu"] == 1
     joint = stage.GetPrimAtPath("/World/RobotAssembly/robot/joints/elbow_joint")
     assert joint.GetAttribute("drive:angular:physics:stiffness").Get() == pytest.approx(25000 * 3.141592653589793 / 180)
     assert joint.GetAttribute("drive:angular:physics:damping").Get() == pytest.approx(300 * 3.141592653589793 / 180)

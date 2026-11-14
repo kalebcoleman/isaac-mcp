@@ -80,6 +80,8 @@ def _preflight(config_path, mode):
         raise ValueError("invalid jenga tower position")
     if "bench_top" in config:
         check_bench_top(config["bench_top"])
+    if "contact" in config:
+        check_contact(config["contact"])
     tower.realize(config)
     _bom_rows(config, config_path)
     pack = asset_pack.resolve_pack(config)
@@ -91,6 +93,49 @@ def _preflight(config_path, mode):
             raise ValueError(f"asset {role} must resolve to an existing absolute file")
         assets[role] = path
     return config, raw, pack, assets
+
+
+def contact_materials(stage, contact, root="/World"):
+    """Same contact on both engines: bind a default material to every collider without one (Newton would give it
+    mu 1.0, PhysX 0.5), make every physics material combine by the configured mode (MuJoCo's rule is max) and
+    not bounce. Returns counts. Newton's single coefficient is set in newton_cell.prepare."""
+    from pxr import Sdf, Usd, UsdPhysics, UsdShade
+
+    default = UsdShade.Material.Define(stage, f"{root}/CellDefaultContactMaterial")
+    api = UsdPhysics.MaterialAPI.Apply(default.GetPrim())
+    api.CreateStaticFrictionAttr().Set(float(contact["default_static_friction"]))
+    api.CreateDynamicFrictionAttr().Set(float(contact["default_dynamic_friction"]))
+    bound = 0
+    for prim in Usd.PrimRange(stage.GetPrimAtPath(root)):
+        if prim.HasAPI(UsdPhysics.CollisionAPI):
+            material, _ = UsdShade.MaterialBindingAPI(prim).ComputeBoundMaterial(materialPurpose="physics")
+            if not material or not material.GetPrim().HasAPI(UsdPhysics.MaterialAPI):
+                UsdShade.MaterialBindingAPI.Apply(prim).Bind(default, materialPurpose="physics")
+                bound += 1
+    materials = [prim for prim in Usd.PrimRange(stage.GetPrimAtPath(root)) if prim.HasAPI(UsdPhysics.MaterialAPI)]
+    for prim in materials:
+        UsdPhysics.MaterialAPI(prim).CreateRestitutionAttr().Set(0.0)
+        prim.AddAppliedSchema("PhysxMaterialAPI")
+        prim.CreateAttribute("physxMaterial:frictionCombineMode", Sdf.ValueTypeNames.Token).Set(contact["combine_mode"])
+        prim.CreateAttribute("physxMaterial:restitutionCombineMode", Sdf.ValueTypeNames.Token).Set("min")
+    return {"default_bound_to": bound, "materials": len(materials), "combine_mode": contact["combine_mode"]}
+
+
+CONTACT_KEYS = {"default_static_friction", "default_dynamic_friction", "combine_mode", "newton_friction"}
+
+
+def check_contact(contact):
+    if not isinstance(contact, dict) or set(contact) != CONTACT_KEYS:
+        raise ValueError(f"contact needs exactly {sorted(CONTACT_KEYS)}")
+    values = (contact["default_static_friction"], contact["default_dynamic_friction"])
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0 for v in values):
+        raise ValueError("contact default friction must be finite numbers >= 0")
+    if values[1] > values[0]:
+        raise ValueError("contact.default_dynamic_friction must not exceed default_static_friction")
+    if contact["combine_mode"] not in ("average", "min", "multiply", "max"):
+        raise ValueError("contact.combine_mode must be average, min, multiply or max")
+    if contact["newton_friction"] not in ("static", "dynamic"):
+        raise ValueError("contact.newton_friction must be static or dynamic")
 
 
 BENCH_TOP_KEYS = {"panel_path", "color_rgb", "roughness", "static_friction", "dynamic_friction"}
@@ -252,6 +297,8 @@ def _replace_tower(stage, config, assets, rows, parts, profile=None, seed=None, 
                 raise RuntimeError("Could not replace Jenga tower")
             _tag_parts(stage, updated)
             audit = _finish_scene(stage, config, assets, updated, rows, engine)
+            if "contact" in config:
+                contact_materials(stage, config["contact"])
             if stage.GetCompositionErrors():
                 raise RuntimeError("Replacement tower has USD composition errors")
     except Exception:
@@ -349,6 +396,7 @@ class Workcell:
             audit = _finish_scene(stage, config, assets, parts, rows, engine)
             top_report = bench_top(stage, config["bench_top"]) if "bench_top" in config else None
             room_report = rooms.place(stage, environment, room_url) if room_url else None
+            contact_report = contact_materials(stage, config["contact"]) if "contact" in config else None
             newton_report = None
             if engine == "newton":
                 from . import newton_cell
@@ -364,6 +412,7 @@ class Workcell:
                             "bom_audit": audit, **({"newton": newton_report} if newton_report else {}),
                             **({"bench_top": top_report} if top_report else {}),
                             **({"environment": room_report} if room_report else {}),
+                            **({"contact": contact_report} if contact_report else {}),
                             "limitations": [line for line in robot_report["limitations"]
                                             if not (engine == "newton" and "drives are preserved" in line)]
                             + camera_report["limitations"] + block_report["limitations"]

@@ -439,6 +439,11 @@ def _pads(stage, root, gripper, config, reference):
                for prim in Usd.PrimRange(pad)):
             raise ValueError("Pad assets must be collision/visual geometry, not nested rigid bodies")
         _set_world(pad, _pose(mount["position_m"], mount["orientation_wxyz"]) * _world(parent))
+        for prim in Usd.PrimRange(pad):
+            if prim.IsA(UsdGeom.Gprim):   # part of the finger body, not nested; a mesh as a convex hull (both engines)
+                UsdPhysics.CollisionAPI.Apply(prim)
+                if prim.IsA(UsdGeom.Mesh):
+                    UsdPhysics.MeshCollisionAPI.Apply(prim).CreateApproximationAttr().Set("convexHull")
         binding = UsdShade.MaterialBindingAPI.Apply(pad)
         binding.Bind(material, UsdShade.Tokens.strongerThanDescendants)
         binding.Bind(material, UsdShade.Tokens.strongerThanDescendants, "physics")

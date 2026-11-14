@@ -317,3 +317,44 @@ def test_articulated_props_nested_instances_emissive_meshes_and_the_floor_holder
     assert "GroundPlane" not in report["deactivated_for_overlap"] and "Table" in report["deactivated_for_overlap"]
     assert stage.GetPrimAtPath(f"{base}/GroundPlane").IsActive()
     assert stage.GetPrimAtPath("/World/Light").IsActive()      # the cell's own lights are never touched
+
+
+CONTACT = {"default_static_friction": 0.5, "default_dynamic_friction": 0.5, "combine_mode": "max",
+           "newton_friction": "static"}
+
+
+def test_every_collider_gets_a_material_that_combines_like_mujoco_and_does_not_bounce():
+    pytest.importorskip("pxr.Usd")
+    from pxr import Usd, UsdGeom, UsdPhysics, UsdShade
+
+    scene = load("scene")
+    stage = Usd.Stage.CreateInMemory()
+    bare = UsdGeom.Cube.Define(stage, "/World/Robot/link").GetPrim()
+    UsdPhysics.CollisionAPI.Apply(bare)
+    wood = UsdShade.Material.Define(stage, "/World/Wood")
+    UsdPhysics.MaterialAPI.Apply(wood.GetPrim()).CreateStaticFrictionAttr(0.3)
+    block = UsdGeom.Cube.Define(stage, "/World/Block").GetPrim()
+    UsdPhysics.CollisionAPI.Apply(block)
+    UsdShade.MaterialBindingAPI.Apply(block).Bind(wood, materialPurpose="physics")
+    report = scene.contact_materials(stage, CONTACT)
+    assert report["default_bound_to"] == 1 and report["materials"] == 2
+    bound, _ = UsdShade.MaterialBindingAPI(bare).ComputeBoundMaterial(materialPurpose="physics")
+    assert bound.GetPath() == "/World/CellDefaultContactMaterial"
+    kept, _ = UsdShade.MaterialBindingAPI(block).ComputeBoundMaterial(materialPurpose="physics")
+    assert kept.GetPath() == "/World/Wood"
+    for material in ("/World/Wood", "/World/CellDefaultContactMaterial"):
+        prim = stage.GetPrimAtPath(material)
+        assert prim.GetAttribute("physxMaterial:frictionCombineMode").Get() == "max"
+        assert "PhysxMaterialAPI" in prim.GetMetadata("apiSchemas").GetAddedOrExplicitItems()   # hidden by usd-core
+        assert UsdPhysics.MaterialAPI(prim).GetRestitutionAttr().Get() == 0.0
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"combine_mode": "sum"}, "combine_mode"), ({"newton_friction": "mean"}, "newton_friction"),
+    ({"default_dynamic_friction": 0.6}, "must not exceed"), ({"default_static_friction": True}, "finite"),
+])
+def test_a_malformed_contact_section_is_refused(change, message):
+    scene = load("scene")
+    scene.check_contact(CONTACT)
+    with pytest.raises(ValueError, match=message):
+        scene.check_contact(dict(CONTACT, **change))
