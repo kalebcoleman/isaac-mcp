@@ -16,15 +16,23 @@ import re
 import shlex
 import shutil
 import stat
+import sys
 import tempfile
 import time
 import uuid
 from .scene_contracts import DISABLED
 
 # A Python that has twinsmith, spelled so it works in the user's shell whichever process (the MCP server or Kit)
-# prints it: install.sh puts the host in mcp/.venv and removes any uv tool, so "$(uv tool dir)" names nothing.
-HELPER_PYTHON = (f"uv run --locked --isolated --project {shlex.quote(str(Path(__file__).resolve().parents[1]))} "
-                 "--python 3.12 python")
+# prints it: install.sh puts the host in mcp/.venv and removes any uv tool, so "$(uv tool dir)" names nothing. Kit
+# and a checkout install import twinsmith from <repo>/mcp, a uv project; an installed wheel has no project beside it,
+# and there the server's own interpreter is the Python that has twinsmith.
+def helper_python(project: Path, interpreter: str) -> str:
+    if (project / "pyproject.toml").is_file():
+        return f"uv run --locked --isolated --project {shlex.quote(str(project))} --python 3.12 python"
+    return shlex.quote(interpreter)
+
+
+HELPER_PYTHON = helper_python(Path(__file__).resolve().parents[1], sys.executable)
 
 MAX_FILE = 64 * 1024**2
 MAX_BYTES = 256 * 1024**2

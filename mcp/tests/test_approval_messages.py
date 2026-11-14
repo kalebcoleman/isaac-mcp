@@ -330,3 +330,11 @@ def test_the_printed_python_exists_after_install_sh(monkeypatch):
     project = Path(words[words.index("--project") + 1])
     assert words[:2] == ["uv", "run"] and (project / "pyproject.toml").is_file() and (project / "twinsmith").is_dir()
     assert words[words.index("twinsmith.project_assets") - 1] == "-m"
+
+
+def test_an_installed_wheel_prints_the_servers_own_python(tmp_path):
+    """A wheel has no uv project beside the package, so the command names the interpreter that has twinsmith."""
+    site = tmp_path / "lib/python3.12/site-packages"
+    site.mkdir(parents=True)
+    assert a.helper_python(site, "/opt/tools/twin smith/bin/python") == "'/opt/tools/twin smith/bin/python'"
+    assert a.helper_python(Path(a.__file__).resolve().parents[1], "/x").startswith("uv run --locked --isolated --project ")
