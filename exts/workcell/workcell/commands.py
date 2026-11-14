@@ -60,6 +60,9 @@ class Commands:
         report = self.workcell.status()
         return {"state": report.get("state"), "robot": report.get("robot")}
 
+    def _cmd_robot_wrench(self):
+        return self.workcell.read_wrench()
+
     def _cmd_perception_status(self):
         report = self.workcell.status()
         return {"state": report.get("state"), "cameras": report.get("cameras")}

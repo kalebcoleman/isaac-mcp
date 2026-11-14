@@ -12,7 +12,7 @@ ROLES = ("robot", "bench", "base_plate", "bota", "quick_changer", "rg2", "finger
 # What a Newton build has not shown yet. PhysX is the work cell's qualified engine; see the README's Newton section.
 NEWTON_LIMITATIONS = [
     "Newton: the arm's drives are the config's newton.drives (per engine), not the pack's PhysX gains; tracking differs.",
-    "Newton: the Bota force/torque read and the cameras are not qualified on this engine.",
+    "Newton: the cameras are not qualified on this engine; the Bota force/torque read passes the static gravity check.",
 ]
 
 
@@ -255,6 +255,23 @@ def _replace_tower(stage, config, assets, rows, parts, profile=None, seed=None, 
     return report, updated, audit
 
 
+def bodies_below(stage, start):
+    """Rigid-body names reached from ``start`` through joints, start included: what the start body carries."""
+    from pxr import Usd, UsdPhysics
+
+    joints = [UsdPhysics.Joint(prim) for prim in Usd.PrimRange(stage.GetPseudoRoot()) if prim.IsA(UsdPhysics.Joint)]
+    found, frontier = {str(start)}, [str(start)]
+    while frontier:
+        parent = frontier.pop()
+        for joint in joints:
+            if [str(p) for p in joint.GetBody0Rel().GetTargets()] == [parent]:
+                for child in joint.GetBody1Rel().GetTargets():
+                    if str(child) not in found:
+                        found.add(str(child))
+                        frontier.append(str(child))
+    return [stage.GetPrimAtPath(path).GetName() for path in sorted(found)]
+
+
 class Workcell:
     def __init__(self):
         self._report = {"state": "idle"}
@@ -370,6 +387,36 @@ class Workcell:
             self._report["newton"] = newton_cell.prepare(stage, config, self._report["robot"]["assembly_path"],
                                                          omni.timeline.get_timeline_interface())
         return copy.deepcopy(report)
+
+    def read_wrench(self):
+        """The Bota reading now, plus the engine's mass of every body below the sensor (bota and everything its
+        mount chain carries), so a caller can compare the static force with that weight."""
+        if self._runtime is None or self._report.get("state") != "ready":
+            raise RuntimeError("Build the workcell before reading its sensor")
+        import omni.usd
+        from sim_tools import physics
+        from .physics_compat import selected_engine
+        from . import sensors
+
+        stage, config, _, _ = self._runtime
+        if omni.usd.get_context().get_stage() != stage:
+            raise RuntimeError("Workcell stage changed; quick_start is required")
+        robot = self._report["robot"]
+        engine = selected_engine()
+        view = physics.view_for(robot["articulation_root"], articulation=True)
+        reading = sensors.read_bota_wrench(stage, view, robot, config,
+                                           physics_time_s=physics.manager().get_simulation_time(), backend=engine)
+        below = bodies_below(stage, robot["bota_body_path"])
+        names = view.shared_metatype.link_indices
+        masses = sensors._numpy(view.get_masses()).reshape(-1)
+        links = {name: float(masses[names[name]]) for name in below if name in names}
+        total = sum(links.values())
+        reading["load_below_sensor"] = {"links_kg": links, "missing": sorted(set(below) - set(links)),
+                                        "mass_kg": total, "weight_n": total * 9.81,
+                                        "note": "Engine masses. At rest the force magnitude should equal weight_n; "
+                                                "it includes the whole modelled Bota body, which a real Rokubi "
+                                                "measures only partly and tares."}
+        return reading
 
     def shutdown(self):
         self._runtime = None

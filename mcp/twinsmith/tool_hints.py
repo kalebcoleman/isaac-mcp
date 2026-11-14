@@ -33,6 +33,7 @@ CATALOG_HINTS = {
     "workcell.workcell_shutdown": _SAME_AGAIN,
     "workcell.workcell_status": _READ,
     "workcell.robot_status": _READ,
+    "workcell.robot_wrench": _READ,
     "workcell.perception_status": _READ,
     "workcell.jenga_status": _READ,
     "workcell.jenga_build": _DESTROYS,

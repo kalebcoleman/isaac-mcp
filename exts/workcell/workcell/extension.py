@@ -22,6 +22,7 @@ MCP_TOOL_REGISTRY = {
     "workcell_status": {"description": "Read the current workcell build report.", "parameters": {}},
     "workcell_shutdown": {"description": "Release workcell state without clearing the stage.", "parameters": {}},
     "robot_status": {"description": "Read robot build details from the workcell report.", "parameters": {}},
+    "robot_wrench": {"description": "Read the simulated Bota F/T sensor (its mount joint's reaction, sensor frame, N and N m) on PhysX or Newton, with the engine's mass of everything below the sensor and its weight. Needs an initialized, paused or playing simulation; not gravity-compensated or hardware-calibrated.", "parameters": {}},
     "perception_status": {"description": "Read camera build details; this does not capture sensor data.", "parameters": {}},
     "jenga_status": {"description": "Read Jenga build details from the workcell report.", "parameters": {}},
     "jenga_build": {

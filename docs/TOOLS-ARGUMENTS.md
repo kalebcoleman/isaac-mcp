@@ -1553,7 +1553,7 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 
 ## `workcell`: UR5e workcell tools
 
-Toolset `workcell` is off until you select it with `+workcell`. Reference: [README.md](../exts/workcell/workcell/README.md). 7 tools, listed as 4: `workcell__cell` (quick_start, status, shutdown), `workcell__jenga` (build, status), `workcell__perception` (status), `workcell__robot` (status).
+Toolset `workcell` is off until you select it with `+workcell`. Reference: [README.md](../exts/workcell/workcell/README.md). 8 tools, listed as 4: `workcell__cell` (quick_start, status, shutdown), `workcell__jenga` (build, status), `workcell__perception` (status), `workcell__robot` (status, wrench).
 
 ### `workcell__jenga_build`
 
@@ -1585,6 +1585,14 @@ No arguments.
 Listed as `workcell__robot(action="status")`.
 
 Read robot build details from the workcell report.
+
+No arguments.
+
+### `workcell__robot_wrench`
+
+Listed as `workcell__robot(action="wrench")`.
+
+Read the simulated Bota F/T sensor (its mount joint's reaction, sensor frame, N and N m) on PhysX or Newton, with the engine's mass of everything below the sensor and its weight. Needs an initialized, paused or playing simulation; not gravity-compensated or hardware-calibrated.
 
 No arguments.
 

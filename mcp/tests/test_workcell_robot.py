@@ -345,6 +345,30 @@ def test_bota_measured_wrench_origin_and_axes(cell, rotated):
     assert sensors.read_bota_wrench(stage, view, report, config, **args)["status"] == "unavailable"
 
 
+class WarpLike:
+    """What Isaac Sim 6.x tensor views return: an array object with .numpy(), flat on Newton."""
+
+    def __init__(self, values):
+        self.values = values
+
+    def numpy(self):
+        return self.values
+
+
+def test_bota_wrench_reads_a_warp_frontend_on_newton_and_refuses_an_unknown_engine(cell):
+    stage, pack, config = cell
+    config["bota"]["measurement"] = "incoming_joint_wrench"
+    report = robot.build_robot(stage, pack, config)
+    view = Articulation(report)
+    flat = view.wrench.reshape(-1).copy()
+    view.get_link_incoming_joint_force = lambda: WarpLike(flat)
+    result = sensors.read_bota_wrench(stage, view, report, config, physics_time_s=0.5, backend="newton")
+    assert result["status"] == "measured" and result["backend"] == "newton"
+    assert result["force_n"] == pytest.approx([0, 10, 0], abs=1e-6)
+    refused = sensors.read_bota_wrench(stage, view, report, config, physics_time_s=0.5, backend="mujoco")
+    assert refused["status"] == "unsupported" and refused["measurement"] is None
+
+
 class Contacts:
     sensor_paths = ["/left", "/right"]
 
@@ -365,7 +389,7 @@ def test_finger_measurement_is_explicit_and_never_fabricated():
     assert result["measurement"] == [[1, 2, 3], [0, 0, 0]]
     assert result["quantity"] == "whole_finger_net_contact_force"
     assert sensors.read_finger_contacts(None, config, **args)["status"] == "unavailable"
-    assert sensors.read_finger_contacts(Contacts(), config, **{**args, "backend": "newton"})["status"] == "unsupported"
+    assert sensors.read_finger_contacts(Contacts(), config, **{**args, "backend": "mujoco"})["status"] == "unsupported"
     config["finger_force_sensors"]["body_paths"].reverse()
     assert sensors.read_finger_contacts(Contacts(), config, **args)["measurement"] is None
 

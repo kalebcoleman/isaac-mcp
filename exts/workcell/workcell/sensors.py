@@ -1,4 +1,4 @@
-"""Read live PhysX NumPy tensor samples; never manufacture missing measurements.
+"""Read live tensor samples (PhysX or Newton); never manufacture missing measurements.
 
 Call after a completed physics step, with its observed simulation timestamp.
 These functions do not initialize, step, publish ROS, subtract gravity/bias or
@@ -22,9 +22,21 @@ def _unavailable(reason, status="unavailable"):
     return {"status": status, "reason": reason, "measurement": None}
 
 
+ENGINES = ("physx", "newton")
+
+
+def _numpy(values):
+    """The view's array as NumPy, whatever frontend this build returns (warp on Isaac Sim 6.x, torch, NumPy)."""
+    if hasattr(values, "detach"):
+        values = values.detach().cpu()
+    if hasattr(values, "numpy"):
+        values = values.numpy()
+    return np.asarray(values, dtype=float)
+
+
 def _view_ready(view, backend):
-    if backend != "physx":
-        return _unavailable("Only PhysX sensor sampling is supported", "unsupported")
+    if backend not in ENGINES:
+        return _unavailable(f"Sensor sampling supports {', '.join(ENGINES)}, not {backend!r}", "unsupported")
     try:
         ready = view is not None and view.check()
     except Exception:
@@ -37,8 +49,9 @@ def _view_ready(view, backend):
 def read_bota_wrench(stage, view, report, config, *, physics_time_s, backend):
     """Read Bota's own incoming fixed-joint reaction, in the configured sensor frame.
 
-    view is a native NumPy ArticulationView for report.articulation_root, not the
-    Isaac Core wrapper. Explicitly set bota.measurement='incoming_joint_wrench'.
+    view is a native tensor ArticulationView for report.articulation_root (any frontend),
+    not the Isaac Core wrapper. On Newton the solver must compute link incoming joint
+    forces (newton_cell.prepare turns that on before Play). Explicitly set bota.measurement='incoming_joint_wrench'.
     The sensor must remain in the articulation (no fixed-link merge). Values are
     [Fx,Fy,Fz,Tx,Ty,Tz], N and N m, exerted on the Bota child by its parent.
     This measures a simulated joint reaction including gravity/inertial effects,
@@ -71,9 +84,9 @@ def read_bota_wrench(stage, view, report, config, *, physics_time_s, backend):
         joint_in_body = Gf.Matrix4d().SetRotate(Gf.Quatd(joint.GetLocalRot1Attr().Get()))
         joint_in_body.SetTranslateOnly(Gf.Vec3d(joint.GetLocalPos1Attr().Get()))
         to_sensor = joint_in_body * sensor_in_body.GetInverse()
-        values = view.get_link_incoming_joint_force()
-        if not isinstance(values, np.ndarray):
-            return _unavailable("Use a NumPy-frontend tensor view", "unsupported")
+        values = _numpy(view.get_link_incoming_joint_force())
+        if values.size == view.max_links * 6:
+            values = values.reshape(1, view.max_links, 6)
         if values.shape != (1, view.max_links, 6) or not np.isfinite(values).all():
             return _unavailable("PHYSICS_STATE_INVALID: invalid incoming joint wrench array")
         wrench = values[0, names[body.GetName()]]
@@ -116,9 +129,7 @@ def read_finger_contacts(view, config, *, physics_time_s, physics_dt_s, backend)
         paths = settings.get("body_paths", [])
         if len(paths) != 2 or len(set(paths)) != 2 or list(view.sensor_paths) != paths:
             return _unavailable("Contact view must target exactly the two configured finger bodies")
-        values = view.get_net_contact_forces(dt=physics_dt_s)
-        if not isinstance(values, np.ndarray):
-            return _unavailable("Use a NumPy-frontend contact view", "unsupported")
+        values = _numpy(view.get_net_contact_forces(dt=physics_dt_s)).reshape(-1, 3)
         if values.shape != (2, 3) or not np.isfinite(values).all():
             return _unavailable("PHYSICS_STATE_INVALID: invalid net contact force array")
         return {"status": "measured", "measurement": values.tolist(), "force_n": values.tolist(),

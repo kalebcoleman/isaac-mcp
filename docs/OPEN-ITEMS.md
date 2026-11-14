@@ -66,7 +66,9 @@ Still open:
 - [ ] Per-engine friction profiles in `lab_hardware.json` (unconfirmed; they start equal to the PhysX values).
 - [ ] Measured finger width at open, mid and closed on both engines. The RG2 knuckle drives (1 N m) are slow. Of a -20 degree
   target, they reached -17.7 degrees on PhysX after 360 steps, and -15.2 and -15.5 degrees on Newton after 0.72 s.
-- [ ] The static check at rest (flange wrench equals the weight below the sensor) on both engines.
+- [x] The static check at rest (flange wrench equals the weight below the sensor) on both engines: `scripts/workcell_static_wrench.py`
+  passes on PhysX and Newton in two poses (2026-11-13, pack v2: 15.009 N against 15.009 N; torques agree across engines). It
+  checks the modelled masses, not the real ones: those still need weighing.
 - [ ] Renders (cell, wrist, overhead) on Newton.
 
 ## Real-to-sim with RoboSimStudio

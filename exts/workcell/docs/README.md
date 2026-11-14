@@ -10,7 +10,7 @@ workcell integration provides four grouped tools and seven actions:
 | Group | Actions |
 | --- | --- |
 | `workcell__cell` | `quick_start`, `status`, `shutdown` |
-| `workcell__robot` | `status` |
+| `workcell__robot` | `status`, `wrench` |
 | `workcell__perception` | `status` |
 | `workcell__jenga` | `build`, `status` |
 

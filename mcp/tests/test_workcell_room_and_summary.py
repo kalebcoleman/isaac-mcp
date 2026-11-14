@@ -246,3 +246,30 @@ def test_a_malformed_bench_top_is_refused_before_the_stage_is_touched(change, me
     del without["roughness"]
     with pytest.raises(ValueError, match="needs exactly"):
         scene.check_bench_top(without)
+
+
+def test_bodies_below_the_sensor_follow_the_joint_chain_downward():
+    pytest.importorskip("pxr.Usd")
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    scene = load("scene")
+    stage = Usd.Stage.CreateInMemory()
+    for name in ("wrist", "bota", "changer", "gripper", "finger"):
+        UsdGeom.Xform.Define(stage, f"/R/{name}")
+    for parent, child in (("wrist", "bota"), ("bota", "changer"), ("changer", "gripper"), ("gripper", "finger")):
+        joint = UsdPhysics.FixedJoint.Define(stage, f"/R/joints/{child}")
+        joint.CreateBody0Rel().SetTargets([f"/R/{parent}"])
+        joint.CreateBody1Rel().SetTargets([f"/R/{child}"])
+    assert sorted(scene.bodies_below(stage, "/R/bota")) == ["bota", "changer", "finger", "gripper"]
+    assert scene.bodies_below(stage, "/R/finger") == ["finger"]
+
+
+def test_the_static_wrench_check_passes_only_within_tolerance():
+    spec = importlib.util.spec_from_file_location("static_wrench", ROOT / "scripts/workcell_static_wrench.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    reading = {"status": "measured", "force_n": [0.0, 0.0, 15.0], "torque_nm": [0, 0, 0],
+               "load_below_sensor": {"weight_n": 15.009, "mass_kg": 1.53}}
+    assert module.check(reading, 0.01, 0.02)["pass"]
+    assert not module.check(dict(reading, force_n=[0.0, 0.0, 16.0]), 0.01, 0.02)["pass"]
+    assert not module.check({"status": "unavailable", "reason": "not initialized"}, 0.01, 0.02)["pass"]
