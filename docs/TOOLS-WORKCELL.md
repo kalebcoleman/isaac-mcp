@@ -16,7 +16,7 @@ force capture, motion planning, real-hardware control or evaluation implementati
 
 Use the `build` action of the `workcell__jenga` group
 with `profile="measured_pending", seed=42` (single-purpose alias
-`workcell__jenga_build`) to rebuild
+`workcell__jenga(action="build")`) to rebuild
 the tower in the current workcell. This is destructive: it replaces the old tower,
 not the rest of the workcell. Stop the timeline first. Omitted `profile` and `seed`
 use `jenga.variation_profile` and `jenga.variation_seed` from the hardware configuration.

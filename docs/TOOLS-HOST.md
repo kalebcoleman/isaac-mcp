@@ -211,7 +211,7 @@ configured simulator Python, creates files, and can affect the GPU and network. 
 Example sequence: `sim__session` with `{"action":"launch"}` (port and ROS domain both chosen), or
 `{"action":"launch","port":18766,"ros_domain":42}`; then `{"action":"status","session_id":"<id returned by launch>"}` until
 `state` is `running`; select that port with `use_bridge` and verify its PID before operating the scene. If necessary, identify
-its window with `windows(action="list")` by PID. Stopping needs `confirm_discard=true`; without it the error includes the exact
+its window with `windows(action="list")` by PID. Stopping needs the session's `expected_pid` and `confirm_discard=true`; without it the error includes the exact
 retry call, and `force=true` sends SIGKILL if a normal shutdown fails. It always refuses an external bridge, because this server
 did not start it. `physics_backend="newton"` refuses before starting anything when the interpreter's Isaac Sim has no Newton
 adapter, such as 5.1; a launch never falls back to another engine.

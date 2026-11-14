@@ -17,7 +17,7 @@ MCP client ──stdio──► twinsmith (host process)
 ```
 
 Bridge tools appear in MCP as `<namespace>__<tool>` (dots are not allowed in MCP names), so
-`workcell.workcell_status` is called as `workcell__workcell_status`. The host and the bridge are separate
+`workcell.workcell_status` is called as `workcell__cell(action="status")`. The host and the bridge are separate
 processes: screen and Isaac Lab tools working says nothing about the bridge.
 
 ## Choosing the bridge
@@ -51,9 +51,9 @@ result = {
 ```
 
 Check a prim and its world transform. USD prim paths are case-sensitive: the supplied twin
-uses `/World/UR5e`. For imported robots, discover the actual path with `sim__stage__tree` or
-`sim__prim__find` using the current stage identity; substitute that path below rather than
-assuming that name applies. Prefer `sim__prim__get` when a named read is sufficient:
+uses `/World/UR5e`. For imported robots, discover the actual path with `sim__stage(action="tree")` or
+`sim__prim(action="find")` using the current stage identity; substitute that path below rather than
+assuming that name applies. Prefer `sim__prim(action="get")` when a named read is sufficient:
 
 ```python
 stage = omni.usd.get_context().get_stage()
@@ -85,8 +85,8 @@ Rules of thumb:
 
 ## Seeing the simulator
 
-- `screenshot` without a selector picks the Isaac Sim / Isaac Lab window and captures it even when
-  covered. `windows(action="list", filter="Isaac")` gives ids for `window_id`.
+- `screenshot` without a selector picks the Isaac Sim / Isaac Lab window. A covered window is still
+  captured when a compositing window manager runs; without one the covered part is black (`doctor` says which). `windows(action="list", filter="Isaac")` gives ids for `window_id`.
 - `screen_recording` (`start`, `stop`, `status`) records a window or monitor to MP4 (no audio).
 - The optional `input` toolset's `computer` (`click`, `drag`, `scroll`, `type`, `key`, `batch`) acts inside one window. It needs
   `expected_width` / `expected_height` from a fresh screenshot, so take one first. Pass the screenshot's printed `coord_space`
@@ -108,9 +108,9 @@ The work cell uses external pack assets. `workcell__cell(action="quick_start")` 
 ## Typical safe sequence
 
 1. `refresh_tools` → bridge listing → `use_bridge` if needed → `status`.
-2. For generic work, `sim__stage__info` and keep its `session_id` / `stage_id`. Otherwise read
+2. For generic work, `sim__stage(action="info")` and keep its `session_id` / `stage_id`. Otherwise read
    with `run_python`.
-3. Read: `sim__stage__tree` / `sim__prim__get` or `run_python`, plus `screenshot`.
+3. Read: `sim__stage(action="tree")` / `sim__prim(action="get")` or `run_python`, plus `screenshot`.
 4. Change: one named tool (`sim__*`, `assets__*`, `workcell__*`) or one small `run_python` edit.
 5. Verify: read the changed prim back, `screenshot` again.
 6. Report what changed, with the PID, port and (for generic tools) the session/stage IDs.
@@ -120,8 +120,8 @@ The work cell uses external pack assets. `workcell__cell(action="quick_start")` 
 Lessons from the TurtleBot3/Nav2 lab.
 
 - Your shell must use the simulator's DDS settings or `ros2 topic list` stays empty while Kit
-  publishes: `sim__stage__info` returns them under `ros` with the exact shell line to run
-  (`sim__graph__build` repeats it for ROS graphs).
+  publishes: `sim__stage(action="info")` returns them under `ros` with the exact shell line to run
+  (`sim__graph(action="build")` repeats it for ROS graphs).
 - `source scripts/ros_env.sh [install] [--overlay <nav2 env>]` (after `export ROS_DOMAIN_ID=<sim's>`)
   sources ROS, then `config/ros_dds.env`, then stops the `ros2` daemon. A daemon started with other
   DDS settings makes `ros2 topic list` / `node list` empty while data flows; otherwise use
