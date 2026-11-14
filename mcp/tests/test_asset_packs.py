@@ -399,6 +399,36 @@ def test_build_records_the_collision_counts_of_an_unchanged_split(env, tmp_path)
     assert all("collision" not in r for r in verifies(env, "split", "v2").manifest["files"])
 
 
+def test_a_collision_summary_is_used_only_for_its_own_unchanged_files(tmp_path):
+    from twinsmith import mesh_worker
+
+    def folder(name, report=None, **files):
+        here = tmp_path / name
+        for rel, data in (files or {"a.usda": "a", "a_collision.usdc": "c"}).items():
+            put(here, rel, data)
+        hashes = {p.name: sha(p.read_bytes()) for p in here.iterdir()}
+        body = dict(sha256=hashes, collision={"for": "a.usda", "method": "box", "boxes": 2, "meshes": 2})
+        put(here, mesh_worker.REPORT, json.dumps(report(body) if report else body))
+        return here
+
+    assert mesh_worker.collision_record(folder("ok") / "a.usda") == dict(method="box", boxes=2, meshes=2)
+    assert mesh_worker.collision_record(folder("other") / "a_collision.usdc") is None          # describes a.usda only
+    gone = folder("gone")
+    (gone / "a_collision.usdc").unlink()
+    assert mesh_worker.collision_record(gone / "a.usda") is None
+    for name, edit in [("method", lambda r: r["collision"].update(method="mesh") or r),
+                       ("count", lambda r: r["collision"].update(boxes=-1) or r),
+                       ("type", lambda r: r["collision"].update(meshes="2") or r),
+                       ("nested", lambda r: r["sha256"].update({"../a.usda": "0" * 64}) or r)]:
+        assert mesh_worker.collision_record(folder(name, edit) / "a.usda") is None, name
+    linked = folder("linked")
+    (linked / "real.json").write_text((linked / mesh_worker.REPORT).read_text())
+    (linked / mesh_worker.REPORT).unlink()
+    (linked / mesh_worker.REPORT).symlink_to(linked / "real.json")
+    assert mesh_worker.collision_record(linked / "a.usda") is None
+    assert mesh_worker.collision_record(put(tmp_path / "bare", "a.usda", "a")) is None        # no report
+
+
 def test_files_with_no_record_need_a_source_and_a_license(env, tmp_path):
     scene = put(tmp_path / "project", "scene.usda", usda())
     with pytest.raises(packs.PackError) as caught:

@@ -22,7 +22,8 @@ if __package__ in (None, ""):                         # run as a file (a job): i
 
 REPORT = "mesh_report.json"
 NEEDS = ("pxr", "trimesh", "coacd", "fast_simplification", "numpy")
-SUMMARY_KEYS = ("method", "max_hulls", "threshold", "meshes", "boxes", "hulls", "triangles", "source_triangles")
+SUMMARY_KEYS = ("method", "max_hulls", "threshold", "meshes", "boxes", "hulls", "triangles", "source_triangles", "thickened")
+METHODS = ("box", "convex", "coacd", "auto")
 MAX_REPORT_BYTES = 4 << 20
 
 
@@ -53,7 +54,10 @@ def collision_record(path: Path) -> dict | None:
                 return None
     except (OSError, ValueError, TypeError, AttributeError):
         return None
-    return {k: summary[k] for k in SUMMARY_KEYS if k in summary}
+    out = {k: summary[k] for k in SUMMARY_KEYS if k in summary}
+    numbers_ok = all(type(v) is int and v >= 0 for k, v in out.items() if k not in ("method", "threshold"))
+    threshold_ok = isinstance(out.get("threshold", 0), (int, float)) and not isinstance(out.get("threshold"), bool)
+    return out if out.get("method") in METHODS and numbers_ok and threshold_ok else None
 
 
 def missing_modules() -> list[str]:

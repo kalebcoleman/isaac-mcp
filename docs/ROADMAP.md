@@ -161,7 +161,8 @@ it will load on Newton before a simulator is started.
   of `v1` reproduces `v2`'s three bench files byte for byte and counts 385 meshes, 385 boxes, 0 hull triangles and 1,628,132
   replaced triangles. Building a `v3` from it records the counts; that is the owner's call.
 - On a CPU (2026-11-14), `v2`'s composed bench has the same 2,157 rendered (non-guide) prims as `v1`, with identical
-  non-physics values and schemas and the same units, and a test keeps that true for every split. A rendered image next
+  non-physics values and schemas and the same units. A test checks the same for the test asset, with `box` and `auto`. Both
+  bench results are recorded outside the repository, in `<workspace>/runs/assets-phase1-20261114`. A rendered image next
   to `v1` is still to be taken on a GPU.
 
 ### Phase 2: the work cell on Newton

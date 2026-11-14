@@ -154,18 +154,21 @@ def _quad(stage, path, z=0.0):
 
 
 def test_split_of_a_flat_root_mesh_keeps_its_box_inside_the_default_prim(tmp_path):
-    from pxr import Usd
+    from pxr import Usd, UsdGeom
 
     src = tmp_path / "plate.usda"
     stage = Usd.Stage.CreateNew(str(src))
+    UsdGeom.SetStageMetersPerUnit(stage, 1.0)
     stage.SetDefaultPrim(_quad(stage, "/plate").GetPrim())
     stage.GetRootLayer().Save()
     out = tmp_path / "out"
     out.mkdir()
     result = mesh_usd.split(src, out, collision=dict(method="coacd"))     # flat: every method falls back to the box
-    assert result["shapes"]["boxes"] == 1 and result["shapes"]["hulls"] == 0
+    assert result["shapes"]["boxes"] == 1 and result["shapes"]["hulls"] == 0 and result["shapes"]["thickened"] == 1
     composed = Usd.Stage.Open(result["output"])
-    assert composed.GetPrimAtPath("/plate/plate_collision/box")
+    box = composed.GetPrimAtPath("/plate/plate_collision/box")
+    # in metres, the plate's box gets the minimum thickness, so it keeps a volume and a mass
+    assert min(box.GetAttribute("xformOp:scale").Get()) == pytest.approx(mesh_usd.MIN_HALF_THICKNESS_M)
 
 
 def test_non_mesh_colliders_need_prims_named(tmp_path):
