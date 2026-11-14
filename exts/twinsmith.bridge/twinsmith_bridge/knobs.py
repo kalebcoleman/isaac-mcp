@@ -9,20 +9,6 @@ from typing import Any, Optional
 
 SETTINGS_SUBTREE = "/persistent/exts/twinsmith.bridge"
 
-# Variables of isaac-mcp (before 0.3.0) that nothing reads now. The bridge refuses to listen when one is set, as the
-# host does (mcp/twinsmith/config.py, which has the same rule): an old ISAAC_MCP_READ_ONLY=1 must not leave a
-# writable simulator without a word. ISAAC_MCP_ASSET_ROOT is a permanent alias of TWINSMITH_ASSET_ROOT, not one of them.
-OLD_PREFIXES = ("ISAAC_MCP_", "UR5E_DT_")
-OLD_VARIABLES = ("ISAAC_SIM_PORT", "ISAAC_SIM_PYTHON", "ISAACLAB_JOBS_DIR")
-ASSET_ROOT_ALIAS = "ISAAC_MCP_ASSET_ROOT"
-
-
-def old_settings(environ=None) -> list:
-    """The isaac-mcp variables that are set, sorted."""
-    environ = os.environ if environ is None else environ
-    return sorted(name for name, value in environ.items() if str(value).strip() and name != ASSET_ROOT_ALIAS
-                  and (name.startswith(OLD_PREFIXES) or name in OLD_VARIABLES))
-
 
 class Knob:
     def __init__(self, env: str, leaf: str, default: Any = None):

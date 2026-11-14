@@ -47,11 +47,10 @@ LOCAL_MODULES = ("server.py", "screen.py", "desktop_input.py", "sim_sessions.py"
 CATALOGS_BY_NAME = ("builtins.json", "sim.json", "assets.json", "workcell.json")
 # Where each toolset's behaviour is described, relative to docs/.
 REFERENCE = {
-    "core": "TOOLS-HOST.md", "code": "TOOLS-HOST.md", "screen": "TOOLS-HOST.md",
+    "core": "TOOLS-HOST.md", "screen": "TOOLS-HOST.md",
     "input": "TOOLS-HOST.md#optional-desktop-input", "launch": "TOOLS-HOST.md#optional-simulator-sessions",
-    "scene": "TOOLS-SCENE.md", "physics": "TOOLS-SCENE.md", "sensors": "TOOLS-SCENE.md",
-    "ros2": "TOOLS-SCENE.md", "kit_debug": "TOOLS-SCENE.md", "assets": "ASSET-IMPORT.md",
-    "lab": "TOOLS-ISAACLAB.md", "robosim": "ROBOSIM.md", "cad": "HARDWARE.md",
+    "sim": "TOOLS-SCENE.md", "ros2": "TOOLS-SCENE.md", "assets": "ASSET-IMPORT.md",
+    "lab": "TOOLS-ISAACLAB.md", "real2sim": "ROBOSIM.md", "cad": "HARDWARE.md",
     "workcell": "../exts/workcell/workcell/README.md",
 }
 
@@ -229,8 +228,8 @@ def render_toolsets_full():
 def render_profiles():
     rows = ["| Profile | Toolsets | Listed tools |", "|---|---|--:|"]
     extra = frozenset(toolsets.PROFILES["all"] | {"input", "launch"})
-    for label, names in (("`minimal`", toolsets.PROFILES["minimal"]), ("`default`", toolsets.PROFILES["default"]),
-                         ("`all`", toolsets.PROFILES["all"]), ("`all,+input,+launch`", extra)):
+    for label, names in (("`default`", toolsets.PROFILES["default"]), ("`all`", toolsets.PROFILES["all"]),
+                         ("`all,+input,+launch`", extra)):
         shown = ", ".join(f"`{n}`" for n in toolsets.TOOLSETS if n in names)
         rows.append(f"| {label} | {shown} | {_listed_count(names)} |")
     return "\n".join(rows)

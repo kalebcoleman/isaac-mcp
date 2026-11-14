@@ -165,7 +165,7 @@ def test_render_refused_by_the_gpu_guard_leaves_no_folder(bench, monkeypatch):
 
 
 def test_no_parameter_reaches_an_upload_order_port_or_free_arguments():
-    instance = server.build_server({"TWINSMITH_TOOLSETS": "minimal,+cad"})
+    instance = server.build_server({"TWINSMITH_TOOLSETS": "default,+cad"})
     names = set(instance._tool_manager._tools["hardware"].parameters["properties"])
     assert not names & {"extra_args", "args", "upload", "order", "port"}
     assert not set(inspect.signature(hardware.Hardware.call).parameters) & {"extra_args", "args", "upload", "order", "port"}
@@ -213,13 +213,13 @@ def test_a_job_started_beside_is_followed_by_the_jobs_folder(tmp_path, monkeypat
 def test_cad_is_off_by_default_and_lists_only_hardware():
     assert "cad" not in toolsets.DEFAULT and toolsets.MEMBERS["cad"] == {"hardware"}
     assert "hardware" not in server.build_server({"TWINSMITH_TOOLSETS": "default"})._tool_manager._tools
-    alone = server.build_server({"TWINSMITH_TOOLSETS": "minimal,+cad"})
+    alone = server.build_server({"TWINSMITH_TOOLSETS": "default,+cad"})
     assert {name for name in alone._tool_manager._tools if toolsets.owner(name) == "cad"} == {"hardware"}
 
 
 def test_only_the_boards_own_schematic_is_checked(bench):
     """A caller cannot point ERC and the BOM at another schematic: the parameter does not exist."""
-    instance = server.build_server({"TWINSMITH_TOOLSETS": "minimal,+cad"})
+    instance = server.build_server({"TWINSMITH_TOOLSETS": "default,+cad"})
     assert "schematic" not in instance._tool_manager._tools["hardware"].parameters["properties"]
     with pytest.raises(TypeError):
         bench.tool.call("check", board=bench.board, schematic=bench.schematic)

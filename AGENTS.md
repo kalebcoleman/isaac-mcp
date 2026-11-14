@@ -14,7 +14,7 @@ Start here if you are an AI agent working in or with this repository. It is a ma
   upgrade their Isaac Sim or Isaac Lab environment. If `find` shows nothing, stop and ask where Isaac Sim is installed
   (`ISAACSIM_PATH` or `TWINSMITH_SIM_PYTHON`) instead of installing one.
 - **The physics engine.** Newton is the default; PhysX is opt-in. The statement (500 Hz step rate, raised contact buffers), how to choose an engine and the known limits are in
-  [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md#target-engine). **The UR5e work cell is PhysX-only: on a Newton session it refuses; start a PhysX session for it** ([open item](docs/OPEN-ITEMS.md#work-cell-on-newton)). Cautions that stay: verify the selected
+  [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md#target-engine). **The UR5e work cell builds on both engines: PhysX keeps the pack's drives, Newton uses the per-engine drives and solver settings in its config; its force/torque read and cameras are not qualified on Newton, and `mirror_real` is refused there** ([work cell on Newton](docs/OPEN-ITEMS.md#work-cell-on-newton)). Cautions that stay: verify the selected
   engine (`status` reports it); never switch an open scene's engine; never fall back silently in either direction (a request for
   Newton must not become PhysX, and a request for PhysX must not become Newton); a CPU device does not identify the solver; Lab
   results do not qualify the work cell. Isaac Sim 5.1 and Isaac Lab 2.x are PhysX only. Do not claim a Newton result without a recorded
@@ -33,7 +33,7 @@ Start here if you are an AI agent working in or with this repository. It is a ma
   `session_id` and `stage_id`, and which toolsets are on and off. With nothing running it says so and names the next call. Do not
   repeat it before each call or after a context reset: a scene tool that meets a changed stage answers `STALE_TARGET` with the new
   IDs. A listed tool does not prove a running or compatible simulator.
-- Native ROS camera and LiDAR render handles can make `sim__stage__save` refuse with `SAVE_UNSUPPORTED`: inspect its `properties`
+- Native ROS camera and LiDAR render handles can make `sim__stage(action="save")` refuse with `SAVE_UNSUPPORTED`: inspect its `properties`
   and `retry_with`, and retry with `reset_camera_render_handles=true` only when normalizing the exported copy is intended. Pause
   before saving and verify the copy in a fresh process ([scene reference](docs/TOOLS-SCENE.md#saved-lidar-scenes-and-scan)).
 - A `PHYSICS_STATE_INVALID` result from a physics read or step reports invalid observed runtime data: inspect its backend, path
@@ -50,27 +50,24 @@ Toolsets control what is listed, not what is allowed: the bridge token and `TWIN
 <!-- generated:toolsets-compact -->
 | Toolset | Default | Tools | What it holds |
 |---|---|--:|---|
-| `core` | on | 6 | Connection, discovery, help and job tracking |
-| `scene` | on | 6 | Create and edit scenes and primitives |
-| `physics` | on | 4 | Physics, joints, arms and simulation |
-| `sensors` | on | 3 | Cameras, LiDAR and viewport framing |
-| `assets` | on | 3 | Import and manage robot and scene assets |
-| `code` | on | 5 | Execute code and scripts, transfer files |
-| `screen` | on | 5 | Capture, record and arrange desktop windows |
-| `lab` | off | 4 | Isaac Lab training and evaluation |
+| `core` | on | 6 | Connection, discovery, help, jobs and toolsets |
+| `screen` | off | 5 | Capture, record and arrange desktop windows |
+| `sim` | off | 19 | Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim |
+| `assets` | off | 5 | Import and manage robot and scene assets |
+| `real2sim` | off | 1 | RoboSimStudio real-to-sim runs in its own private environment |
+| `lab` | off | 5 | Isaac Lab jobs and script jobs |
 | `ros2` | off | 3 | ROS 2 transforms, graphs and occupancy maps |
-| `kit_debug` | off | 2 | Inspect Kit logs and operate its UI |
-| `workcell` | off | 7 | UR5e workcell tools |
-| `robosim` | off | 1 | RoboSimStudio real-to-sim runs in its own private environment |
-| `cad` | off | 1 | PCB checks, fab files and renders from tools beside twinsmith |
+| `workcell` | off | 4 | UR5e workcell tools |
+| `cad` | off | 1 | PCB checks, fab files and renders |
 | `input` | explicit only | 1 | Desktop mouse and keyboard input |
 | `launch` | explicit only | 1 | Launch and stop simulator processes |
-| `extensions` | on | 0 | Tools from uncatalogued extension namespaces |
+| `extensions` | off | 0 | Tools from uncatalogued extension namespaces |
 <!-- /generated -->
 
 The counts are listed tools (a grouped tool with an `action` argument counts once) and are generated from the code. The sizes of
-each profile are in [docs/TOOLSETS.md](docs/TOOLSETS.md#size-of-the-tool-list). Use `TWINSMITH_TOOLSETS=default,+lab` to add one,
-`twinsmith --toolsets minimal` to start small. `core` is always on; `all` excludes `input` and `launch`.
+each toolset are in [docs/TOOLSETS.md](docs/TOOLSETS.md#size-of-the-tool-list). Only `core` is on by default: scene work needs
+`sim` (`TWINSMITH_TOOLSETS=default,+sim,+assets`, or `toolsets(action="enable", names=["sim"])` at run time). `core` is always on;
+`all` excludes `input` and `launch`.
 
 Every registered tool is in the generated [TOOLS-ARGUMENTS.md](docs/TOOLS-ARGUMENTS.md), grouped by toolset, and the pages
 [TOOLS-HOST](docs/TOOLS-HOST.md), [TOOLS-SCENE](docs/TOOLS-SCENE.md), [TOOLS-ISAACLAB](docs/TOOLS-ISAACLAB.md),
@@ -78,8 +75,8 @@ Every registered tool is in the generated [TOOLS-ARGUMENTS.md](docs/TOOLS-ARGUME
 builds a stopped scene; joint tools take the articulation root, not the robot's parent Xform (`sim__ros2__tf_setup` reports it). See
 the [scene workflow](docs/TOOLS-SCENE.md#a-typical-session).
 
-After reopening a scene, its sensors and prims are not pack-owned: pass `adopt=true` to `sim__lidar__read` or
-`sim__camera__capture`, and `allow_foreign=true` to `sim__prim__delete`, which deactivates rather than removes
+After reopening a scene, its sensors and prims are not pack-owned: pass `adopt=true` to `sim__lidar(action="read")` or
+`sim__camera(action="capture")`, and `allow_foreign=true` to `sim__prim(action="delete")`, which deactivates rather than removes
 ([reopened scenes](docs/TOOLS-SCENE.md#reopened-scenes)). Camera capture defaults to a fresh bounded renderer CPU readback; with
 `wait_for_render=false` it writes the last validated image and reports its age, an unseeded camera returns `NOT_READY`, and cached
 pixels can predate Stop, reset or scene edits.
@@ -88,7 +85,7 @@ pixels can predate Stop, reset or scene edits.
 
 1. Call `status` first, once; it answers with or without a bridge. `refresh_tools` re-reads a bridge's tools after Kit starts or
    changes. From the checkout, `python3 mcp/twinsmith/client.py --list-bridges` lists advertised PID, host and port (exit 2 with `[]`
-   if none). From elsewhere use `"$(uv tool dir)/twinsmith/bin/python" -m twinsmith.client --list-bridges`.
+   if none). From elsewhere use `<repo>/mcp/.venv/bin/python -m twinsmith.client --list-bridges`.
 2. Without the MCP tools, confirm the intended bridge with `python3 mcp/twinsmith/client.py status --host <host> --port <port>`; use
    `use_bridge` when needed. Pinned port variables override discovery, and an ambiguous unpinned selection is refused.
 3. If none exists and the requested work needs one, `./run.sh --headless` starts a bridge and the work cell on port 8766 by default.

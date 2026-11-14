@@ -52,7 +52,7 @@ def test_jenga_registry_catalog_group_and_hints_agree():
                     if isinstance(node, ast.Assign)
                     and any(isinstance(target, ast.Name) and target.id == "MCP_TOOL_REGISTRY"
                             for target in node.targets))
-    assert len(registry) == 10
+    assert len(registry) == 7
     schema = registry["jenga_build"]["parameters"]
     assert {name: field["type"] for name, field in schema.items()} == {
         "profile": "string", "seed": "integer"}
@@ -60,7 +60,7 @@ def test_jenga_registry_catalog_group_and_hints_agree():
     catalog = json.loads((ROOT / "mcp/twinsmith/catalogs/workcell.json").read_text())
     assert catalog["tools"]["workcell.jenga_build"]["parameters"] == schema
     groups = {name: group for name, group in GROUPS.items() if name.startswith("workcell__")}
-    assert len(groups) == 7
+    assert len(groups) == 4
     assert groups["workcell__jenga"][1] == {
         "build": "workcell__jenga_build", "status": "workcell__jenga_status"}
     assert CATALOG_HINTS["workcell.jenga_build"]["destructiveHint"] is True

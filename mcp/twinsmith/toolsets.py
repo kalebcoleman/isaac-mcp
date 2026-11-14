@@ -13,46 +13,32 @@ class Toolset:
 
 
 TOOLSETS = {
-    "core": Toolset("Connection, discovery, help and job tracking", True),
-    "scene": Toolset("Create and edit scenes and primitives", True),
-    "physics": Toolset("Physics, joints, arms and simulation", True),
-    "sensors": Toolset("Cameras, LiDAR and viewport framing", True),
-    "assets": Toolset("Import and manage robot and scene assets", True),
-    "code": Toolset("Execute code and scripts, transfer files", True),
-    "screen": Toolset("Capture, record and arrange desktop windows", True),
-    "lab": Toolset("Isaac Lab training and evaluation"),
+    "core": Toolset("Connection, discovery, help, jobs and toolsets", True),
+    "screen": Toolset("Capture, record and arrange desktop windows"),
+    "sim": Toolset("Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim"),
+    "assets": Toolset("Import and manage robot and scene assets"),
+    "real2sim": Toolset("RoboSimStudio real-to-sim runs in its own private environment"),
+    "lab": Toolset("Isaac Lab jobs and script jobs"),
     "ros2": Toolset("ROS 2 transforms, graphs and occupancy maps"),
-    "kit_debug": Toolset("Inspect Kit logs and operate its UI"),
     "workcell": Toolset("UR5e workcell tools"),
-    "robosim": Toolset("RoboSimStudio real-to-sim runs in its own private environment"),
-    "cad": Toolset("PCB checks, fab files and renders from tools beside twinsmith"),
+    "cad": Toolset("PCB checks, fab files and renders"),
     "input": Toolset("Desktop mouse and keyboard input", explicit_only=True),
     "launch": Toolset("Launch and stop simulator processes", explicit_only=True),
-    "extensions": Toolset("Tools from uncatalogued extension namespaces", True),
-}
-
-PLANNED = {
-    "backend": "Select and inspect physics backends",
-    "params": "Inspect and tune runtime parameters",
-    "compare": "Compare simulation results",
-    "planning": "Plan robot actions",
-    "real2sim": "Synchronize real and simulated systems",
-    "eval": "Evaluate robot task performance",
+    "extensions": Toolset("Tools from uncatalogued extension namespaces"),
 }
 
 _ROOTS = {
     "core": "status help refresh_tools use_bridge jobs toolsets",
-    "scene": "sim__quick_start sim__stage sim__prim sim__timeline__control sim__light sim__material",
-    "physics": "sim__physics sim__joints sim__arm sim__simulation",
-    "sensors": "sim__camera sim__lidar sim__viewport__frame",
-    "assets": "assets__import_path assets__library assets__pack",
-    "code": "run_python files reload_tools sim__controller run_script",
     "screen": "screenshot screen_recording windows join_videos doctor",
+    "sim": ("sim__quick_start sim__stage sim__prim sim__timeline__control sim__light sim__material "
+            "sim__physics sim__joints sim__arm sim__simulation sim__camera sim__lidar sim__viewport__frame "
+            "run_python files reload_tools sim__controller sim__ui sim__logs"),
+    "assets": "assets__import_path assets__library assets__pack assets__mesh assets__validate",
+    "real2sim": "robosim",
+    "lab": "run_script",
     "ros2": "sim__ros2__tf_setup sim__graph sim__map__occupancy",
-    "kit_debug": "sim__ui sim__logs",
     "input": "computer",
     "launch": "sim__session",
-    "robosim": "robosim",
     "cad": "hardware",
 }
 
@@ -67,8 +53,7 @@ if sum(map(len, MEMBERS.values())) != len(_OWNERS):
 
 DEFAULT = frozenset(name for name, spec in TOOLSETS.items() if spec.default)
 PROFILES = {"default": DEFAULT,
-            "all": frozenset(name for name, spec in TOOLSETS.items() if not spec.explicit_only),
-            "minimal": frozenset({"core"})}
+            "all": frozenset(name for name, spec in TOOLSETS.items() if not spec.explicit_only)}
 
 
 def owner(name: str, namespace: str | None = None,
@@ -89,9 +74,6 @@ def owner(name: str, namespace: str | None = None,
 STARTUP = "Add +name to tools.toolsets in ~/.config/twinsmith/config.toml or set TWINSMITH_TOOLSETS, then restart the MCP server."
 EXPLICIT = ("Explicit-only toolsets ({names}) cannot be enabled at run time: the user adds them at startup "
             "(+name in TWINSMITH_TOOLSETS, tools.toolsets in config.toml, or --toolsets).")
-# Kept for callers that only need the startup route.
-ENABLE = STARTUP
-
 _UNGROUPED = {"lab": ("isaaclab__checkpoint_register",)}
 
 
@@ -137,4 +119,4 @@ def describe(enabled, runtime_enable: bool = True) -> dict:
     return {"on": [name for name in TOOLSETS if name in enabled],
             "off": {name: TOOLSETS[name].summary for name in off},
             "tools": {name: listed_count(name) for name in TOOLSETS},
-            "planned": list(PLANNED), "can_enable": can, "runtime_enable": runtime_enable, "enable": enable}
+            "can_enable": can, "runtime_enable": runtime_enable, "enable": enable}

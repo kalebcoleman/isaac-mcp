@@ -26,12 +26,3 @@ class Commands:
 
     def _cmd_jenga_build(self, profile=None, seed=None):
         return self.workcell.build_jenga(profile=profile, seed=seed)
-
-    def _cmd_real2sim_status(self):
-        return {"status": "not_implemented", "message": "Real-to-simulation synchronization is not implemented."}
-
-    def _cmd_planning_status(self):
-        return {"status": "not_implemented", "message": "Planning is not implemented."}
-
-    def _cmd_eval_status(self):
-        return {"status": "not_implemented", "message": "Evaluation is not implemented."}

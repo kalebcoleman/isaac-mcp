@@ -21,7 +21,8 @@ Machine-readable data:
 
 ## Pack-backed Workcell API
 
-The integration exposes seven grouped tools with ten actions through `twinsmith.bridge`:
+The integration exposes four grouped tools with seven actions through `twinsmith.bridge`, in the `workcell` toolset (off by
+default: add `+workcell`):
 
 | Group | Actions | Purpose |
 | --- | --- | --- |
@@ -29,9 +30,6 @@ The integration exposes seven grouped tools with ten actions through `twinsmith.
 | `workcell__robot` | `status` | Read the robot build report |
 | `workcell__perception` | `status` | Read camera configuration, not captured sensor data |
 | `workcell__jenga` | `build`, `status` | Replace the tower on a stopped timeline or read its build report |
-| `workcell__real2sim` | `status` | Report synchronization as not implemented |
-| `workcell__planning` | `status` | Report planning as not implemented |
-| `workcell__eval` | `status` | Report evaluation as not implemented |
 
 `quick_start` accepts `config_path`, `mode` (`physics` or `mirror_real`) and
 `discard_changes`. Physics mode uses gravity; mirror mode uses zero gravity, not a
@@ -111,7 +109,7 @@ No purchase, order or financial action is performed by this documentation or its
 The pack is external to the repository:
 
 - Pack ID and version: `ur5e-jenga-workcell/v1`
-- Default root: `<workspace>/assets` (the transitional `<workspace>/isaac-mcp-assets` is found if `assets/` is absent);
+- Default root: `<workspace>/assets`;
   `<workspace>` is `TWINSMITH_WORKSPACE`, else the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace`
 - Pack directory: `<workspace>/assets/ur5e-jenga-workcell/v1`
 - Override: set `TWINSMITH_ASSET_ROOT` to a different asset root; the loader appends the
@@ -162,8 +160,8 @@ previous checkout or a path in the configuration.
    `<root>/ur5e-jenga-workcell/v1/<asset_id>/<asset_id>.usdc` (or `.usda`).
 5. Hash the final bytes with SHA-256 and record the source hash, license and
    `redistributable` flag in `pack.yaml`.
-6. Run the dependency closure check. Each file should report one layer, no external asset
-   references and no unresolved references. A dependency failure blocks the pack; it is not
+6. Run the dependency closure check. Each file should report one layer (the `v2` bench: its file and the two layers it
+   sublayers), no external asset references and no unresolved references. A dependency failure blocks the pack; it is not
    worked around with a fallback path.
 7. Load the pack through `AssetPack.asset` and `resolve_pack`, then run the BOM audit and the
    PhysX smoke before claiming runtime qualification or making any old-store report.
@@ -171,6 +169,40 @@ previous checkout or a path in the configuration.
 The BOM audit checks structural manifest fields and, when given a pack root, the actual file
 hashes. It also requires every non-`materials` pack asset to have a BOM row and every BOM
 asset to exist in the pack.
+
+## Pack v2
+
+`v2` is built from `v1` by `scripts/workcell_pack_v2.py` (CPU only; run it from `mcp/` with
+`uv run --locked --isolated --python 3.12 --extra scene-test python ../scripts/workcell_pack_v2.py`). `v1` is only read, and
+`v2` is written by the pack library's staged, verified writer. Each changed file's record names the `v1` file and hash it came
+from. The changes:
+
+- **Bench.** `bench/bench.usda` composes `bench_render.usdc` (the original meshes) and `bench_collision.usdc` (one oriented box
+  per mesh, purpose `guide`), made with `assets__mesh` split. The work cell keeps a bench's own collision layer, so the 385
+  triangle-mesh colliders (1.63 M triangles) that overflow Newton are no longer created.
+- **RG2.** The gripper has no articulation root of its own and joins the arm's articulation through its mount joint. The
+  massless `gripper_center` body and its fixed joint are a plain frame. The two loop-closing joints, excluded from the
+  articulation, are removed together with the zero-force drives of the passive joints. Each finger's inner joints follow
+  its driven knuckle through `NewtonMimicAPI`, which PhysX (Isaac Sim 6.2) and Newton 1.6 both read. The ratios are solved
+  from the asset's own joint frames over the knuckle's limits: inner finger -0.9897 and inner knuckle +0.9919 times the
+  driven joint, with a worst closure gap of 0.037 mm for the linear fit. `pack.yaml` records them under `mimic`. PhysX
+  accepts a mimic only on revolute joints with finite limits, so each follower's limits are its leader's range mapped
+  through the ratio, plus 5 degrees.
+- **UR5e.** The disabled `robot_gripper_joint` (no second body) is removed. **The drive gains are unchanged.** They are stiff
+  enough for PhysX with gravity on, and `assets__validate` warns (`DRIVE_GAIN`) that they are too stiff for a 500 Hz explicit
+  solver; the gains Newton needs are a per-engine setting for Phase 2, not a pack edit.
+
+`assets__validate` passes on the bench and the RG2, and gives only the six `DRIVE_GAIN` warnings on the UR5e.
+
+**Live on PhysX (2026-11-14, Isaac Sim 6.2.0, headless, RTX PRO 6000 Blackwell, physics at 600 Hz).**
+- `scripts/workcell_smoke.py` passes. The arm and gripper form one articulation, and nothing is patched at build time.
+- Twelve DOFs: six arm joints, two driven knuckles and four mimic followers. Every value stays finite.
+- With gravity on, the arm drifts at most 0.0002 degrees over 960 steps.
+- Both knuckles were commanded to -20 degrees and reached -17.7 degrees after 360 steps, held back by the 1 N m drive.
+- The four mimic followers matched their ratio to within 0.001 degrees.
+- Kit logged no warnings or errors.
+- The 54-block tower settled by at most 0.95 mm over 2 s.
+- Not tested: Newton, grasp contact and cameras.
 
 ## Physical fidelity
 
@@ -193,12 +225,10 @@ The current candidate contains:
   every RG2, Quick Changer and Bota vertex through the camera finds none inside the colour
   frustum plus a 3 degree margin (3.7 degrees clear of the edge). A render of the previous
   75 mm / 6 degree pose still showed the finger tips at the bottom edge of the frame.
-- The assembly builder drops two pack leftovers that PhysX warned about: the geometry-free
-  `gripper_center` rigid body becomes a plain frame (no mass, no inertia, no joint), and the
-  UR5e asset's disabled `robot_gripper_joint`, whose world anchor never matched the wrist, is
-  deactivated. The RG2's authored 16 solver velocity iterations are capped at the 4 that TGS
-  supports. These edits live in the session layer; the pack is untouched. The RG2 stays the
-  standard 110 mm gripper.
+- Pack leftovers that PhysX warned about are fixed in `v2` itself: the geometry-free `gripper_center` body is a plain
+  frame, the UR5e's disabled `robot_gripper_joint` is gone, and the RG2's own articulation settings (16 velocity
+  iterations) went with its articulation root. The assembly builder still patches them in the session layer when it loads
+  `v1`. The RG2 stays the standard 110 mm gripper.
 - A plain Jenga block proxy without measured chamfers.
 
 This is not a high-fidelity-qualified model. Flattening preserves mesh and articulation
@@ -254,11 +284,53 @@ optional USD stage. It checks that:
 The audit walks the stage instead of trusting a manually curated list. A mesh anywhere
 outside a mapped part, or a report part whose prim is missing, fails the audit.
 
-## PhysX authoring/BOM smoke
+## Newton
 
-The work cell is qualified on PhysX only: start a PhysX session (`run.sh --physics-backend physx`); a Newton session refuses it
-(see [Work cell on Newton](../../../docs/OPEN-ITEMS.md#work-cell-on-newton)). Run the smoke only against an explicitly selected bridge and
-configuration:
+The cell builds on the session's engine and never switches it. On PhysX it keeps the pack's drives. On Newton (MuJoCo-Warp
+integrates a drive's stiffness explicitly, so the pack's 9400 N m per degree diverges at 500 Hz) `newton_cell.prepare` authors,
+on the stage and never in the pack:
+
+- the config's `newton.drives` for the six arm joints. Each joint gets stiffness and damping in SI per radian, written in USD's
+  per-degree units, and an armature of 0.1 kg m² on both `newton:armature` and `physxJoint:armature`. The gains keep
+  `dt² k / armature` at or below 2, against an explicit-spring limit of at least 4:
+
+  | Joints | Stiffness (N m/rad) | Damping (N m s/rad) |
+  |---|--:|--:|
+  | Shoulder pan | 25,000 | 300 |
+  | Shoulder lift | 50,000 | 600 |
+  | Elbow | 25,000 | 250 |
+  | Wrists | 5,000 | 50 |
+
+  Their maximum forces are the pack's 150 and 28 N m. The report's `stability` lists the margin per joint.
+- the tower's settings at `newton.physics_hz` (500 Hz): an elliptic friction cone, 100 iterations, `impratio` 10 and a 4 mm
+  contact gap on every collider;
+- contact buffers sized for the bodies in the scene.
+
+On Newton the build also refuses, before replacing the stage:
+- a `newton` section that does not name all six arm joints with positive gains;
+- `mirror_real` (gravity off on the robot);
+- an RG2 with its own articulation root.
+
+It also refuses a bench without its own collision layer, as in pack `v1`.
+
+**Live on Newton (2026-11-14, Isaac Sim 6.2.0, Newton 1.6.1 / MuJoCo-Warp, headless, RTX PRO 6000 Blackwell, 500 Hz, pack
+`v2`).**
+- `scripts/workcell_smoke.py` passes: 70 bodies, contact buffers of 2240 and 17920 with no warnings, 455 colliders with the gap.
+- At the presentation pose `[0, -80, 100, -110, -90, 0]` degrees, with gravity on, every joint holds within 0.05 degrees, creeping
+  about 0.0002 degrees per second.
+- A 0.05 rad step on each joint in turn settles within 0.2 s to the same offset, with no oscillation.
+- The RG2 fingers move (they were locked on Newton with `v1`), and the four mimic followers stay within 0.003 degrees of their
+  ratios.
+- After a 1.2 s settle the 54-block tower drifts at most 0.54 mm (median 0.23 mm) over 11 s.
+- No physics warnings in Kit's log.
+- Commanding every joint at once from the zero pose (arm stretched out) drove the arm into the cell, so start from a pose
+  inside the workspace.
+- Not qualified on Newton: the Bota force/torque read, the cameras and `mirror_real`.
+
+## Authoring/BOM smoke
+
+The cell builds on the session's engine (`run.sh --physics-backend physx|newton`). Run the smoke only against an explicitly
+selected bridge and configuration:
 
 ```bash
 python3 <repo>/scripts/workcell_smoke.py --host 127.0.0.1 --port <port> \

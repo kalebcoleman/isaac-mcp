@@ -196,8 +196,7 @@ The host connection and `sim__stage(action="info")` do not require a robot or wo
 [a private asset pack](../exts/workcell/workcell/README.md#private-asset-pack) (`ur5e-jenga-workcell/v1`) that you supply. The
 repository ships **no assets**, `install.sh` installs packages, not assets, and nothing is ever downloaded for you.
 
-Every pack lives in one **asset root**: `TWINSMITH_ASSET_ROOT`, else `<workspace>/assets` (a folder named
-`isaac-mcp-assets` there still works, with a warning). See [asset packs](ASSET-PACKS.md) for the format and the tools.
+Every pack lives in one **asset root**: `TWINSMITH_ASSET_ROOT`, else `<workspace>/assets`. See [asset packs](ASSET-PACKS.md) for the format and the tools.
 Copy the pack folder onto the machine, then check it:
 
 ```bash
@@ -225,6 +224,7 @@ connection and generic scene work require neither.
 | `twinsmith` not found | Add the uv tool bin directory to PATH, or use its absolute executable path in the client; keep the editable checkout available |
 | Interpreter missing | Run `python3 scripts/env.py find`, select a compatible `TWINSMITH_SIM_PYTHON`, or install in the new checkout; do not overwrite an unrelated environment |
 | `uv pip check` fails | Record exact versions and conflicts. Use a new isolated locked environment for comparison; do not infer a native failure's cause from metadata alone |
+| Only `status`, `help` and the other `core` tools are listed | Only `core` is on by default. Add `+sim` (and `+assets`, `+screen` as needed) to `[tools] toolsets` or `TWINSMITH_TOOLSETS` and restart the server, or call `toolsets(action="enable", names=["sim"])`; see [toolsets](TOOLSETS.md#choosing-toolsets) |
 | Tools are listed but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, the [toolsets](TOOLSETS.md) and the selected endpoint |
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |
@@ -331,8 +331,7 @@ macOS paths: a Windows install, for example one under `C:` and reached from WSL 
 ```
 
 `<workspace>` can be any folder you own. The default is `~/robotics-workspace`, or whatever
-`TWINSMITH_WORKSPACE` says. An existing `~/isaac-workspace` is still used while the new folder does not exist
-([migrating](MIGRATING.md#workspace-folder)). It must not be inside the checkout; `init` refuses that.
+`TWINSMITH_WORKSPACE` says. It must not be inside the checkout; `init` refuses that.
 
 ### Agent rules for every project
 
@@ -369,8 +368,8 @@ To see at the start of every session whether a bridge is up, add a Claude Code h
    ```
 
    It creates `assets`, `envs`, `projects`, `runs`, `tools` and a short README under
-   the workspace (`$TWINSMITH_WORKSPACE`, else `~/robotics-workspace`). On an existing old workspace it moves and renames
-   nothing: an existing `isaac-mcp-assets` is left as it is and reported. Use `--workspace DIR` to name the folder explicitly.
+   the workspace (`$TWINSMITH_WORKSPACE`, else `~/robotics-workspace`). Existing files are never
+   overwritten. Use `--workspace DIR` to name the folder explicitly.
 
 3. **Make the choice permanent.** Add the export to your shell profile (for example
    `~/.bashrc`) and to the environment of your MCP client config
@@ -385,8 +384,7 @@ To see at the start of every session whether a bridge is up, add a Claude Code h
    `<repo>/.venv`, which is found automatically. If you already have Isaac Sim, see
    [I already have Isaac Sim installed](#i-already-have-isaac-sim-installed).
 
-5. **Add your assets and check.** The asset root is `TWINSMITH_ASSET_ROOT`, else `<workspace>/assets`, else
-   `<workspace>/isaac-mcp-assets` (an old workspace may have it; found with a warning that the name is transitional). Fill it with `scripts/assets.py adopt` or by copying a pack folder
+5. **Add your assets and check.** The asset root is `TWINSMITH_ASSET_ROOT`, else `<workspace>/assets`. Fill it with `scripts/assets.py adopt` or by copying a pack folder
    in (see [ASSET-PACKS.md](ASSET-PACKS.md)).
 
    ```bash
@@ -464,7 +462,7 @@ list; the version only filters. `run.sh` asks for any Isaac Sim 6.x
    `/isaac-sim`.
 
 The asset root is found in this order (see [ASSET-PACKS.md](ASSET-PACKS.md#the-asset-root-and-how-it-is-found)):
-`TWINSMITH_ASSET_ROOT`, then `<workspace>/assets`, then `<workspace>/isaac-mcp-assets` (with a warning), else an error
+`TWINSMITH_ASSET_ROOT`, then `<workspace>/assets`, else an error
 that names the setting.
 
 ### What is not auto-detected

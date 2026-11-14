@@ -14,7 +14,7 @@ Arguments are shown as `name` (type, required) or `name` (type, default). Generi
 arguments they do not declare, so a misspelled name is an error rather than being ignored. A live
 bridge's own metadata takes precedence over these snapshots once discovered.
 
-## `core`: Connection, discovery, help and job tracking
+## `core`: Connection, discovery, help, jobs and toolsets
 
 Toolset `core` is on by default. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 10 tools, listed as 6: `help`, `jobs` (status, cancel, list, tail, lab_status), `refresh_tools`, `status`, `toolsets`, `use_bridge`.
 
@@ -104,9 +104,398 @@ Switch this MCP server to another running Kit bridge on this machine.
 
 - `port` (int, required): Bridge TCP port from --list-bridges or status.
 
-## `scene`: Create and edit scenes and primitives
+## `screen`: Capture, record and arrange desktop windows
 
-Toolset `scene` is on by default. Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 22 tools, listed as 6: `sim__light` (create, modify), `sim__material` (create, apply), `sim__prim` (get, find, bounds, measure, create, create_many, set_transform, set_attribute, clone, delete, revert), `sim__quick_start`, `sim__stage` (info, tree, open, save, clear_owned), `sim__timeline__control`.
+Toolset `screen` is off until you select it with `+screen`. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 11 tools, listed as 5: `doctor`, `join_videos`, `screen_recording` (start, stop, status), `screenshot`, `windows` (info, list, raise, move, tile).
+
+### `doctor`
+
+Check whether desktop input (computer) and Isaac Sim UI control (sim__ui) can work here, and what to fix.
+
+No arguments.
+
+### `join_videos`
+
+Join 2-8 finished clips into one new MP4 with the bundled ffmpeg, or (mode=sheet) make a matched PNG contact sheet of the same moments of 1-8 clips plus an `attachment` descriptor for t3_attachment_prepare_upload, or (mode=frames) turn saved image frames into an MP4: video for a headless simulator. Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...). Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour. Sheets do not upload.
+
+- `inputs` (list[str] | None, default `None`): Concat/hstack/vstack: 2-8 clips. Sheet: 1-8. Absolute paths under home, or file names in ~/Videos/twinsmith. Or give job_id. Frames: one folder, one glob pattern such as /out/replay-*.png, or the image files in order.
+- `mode` (str, default `'concat'`): concat (one after another), hstack (side by side), vstack (top to bottom), sheet (a PNG contact sheet: one row per video, one column per time), or frames (image frames to one MP4).
+- `output` (str | None, default `None`): New file name in ~/Videos/twinsmith (.mp4), or ~/Pictures/twinsmith (.png, sheet), or an absolute path under home. Default joined-<time>.mp4 / sheet-<time>.png.
+- `max_width` (int, default `1920`): Output width cap in pixels.
+- `fps` (int | None, default `None`): Output rate, at most 60. Default: the fastest input; 30 for frames.
+- `shortest` (bool, default `False`): hstack/vstack: end with the shortest clip instead of freezing it on its last frame.
+- `times` (list[float] | None, default `None`): sheet: seconds to sample in every clip, up to 12. Default 0.5, 1, 2, 4, 6, 9. A time past a clip's end is an error.
+- `job_id` (str | None, default `None`): sheet: use the videos of this Isaac Lab job (isaaclab__runs_status video_paths) instead of inputs.
+- `label` (str | None, default `None`): frames: one line drawn on every frame, e.g. the run's name.
+
+### `list_windows`
+
+Listed as `windows(action="list")`.
+
+List visible windows with id, title, class and PID. Top-level windows, with size. Use it first to get the window_id other window tools need.
+
+- `filter` (str | None, default `None`): Keep windows whose title or WM class contains this.
+
+### `move_window`
+
+Listed as `windows(action="move")`.
+
+Move and resize one window. E.g. to place Isaac Sim and RViz before a recording. Get its id from list_windows; for several windows use tile_windows. Un-maximizes it first, and returns the geometry applied and whether the window manager clamped it.
+
+- `x` (int, required): Left edge in pixels, from the screen's top-left.
+- `y` (int, required): Top edge in pixels, from the screen's top-left.
+- `width` (int, required): Width in pixels.
+- `height` (int, required): Height in pixels.
+- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
+- `window_id` (int | None, default `None`): Window id from list_windows.
+- `expected_pid` (int | None, default `None`): Refuse unless the window belongs to this PID, from list_windows.
+- `frame` (bool, default `False`): true: place the outer frame with its title bar. Default: the client area that captures record.
+
+### `raise_window`
+
+Listed as `windows(action="raise")`.
+
+Activate a window and give it focus. Get its id from list_windows first.
+
+- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
+- `window_id` (int | None, default `None`): Window id from list_windows.
+- `expected_pid` (int | None, default `None`): Refuse unless the window belongs to this PID, from list_windows.
+
+### `screen_info`
+
+Listed as `windows(action="info")`.
+
+Report the display, monitors and recording state. Also the X11 display and capture directories.
+
+No arguments.
+
+### `screen_recording_status`
+
+Listed as `screen_recording(action="status")`.
+
+Show whether a desktop recording is running and for how long.
+
+No arguments.
+
+### `screenshot`
+
+Capture the screen, a monitor or a window to see the result of your work. Returns the image and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise the primary monitor. A window capture works when another window covers it if the window manager composites (GNOME, KDE); doctor reports whether it does.
+
+- `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
+- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
+- `window_id` (int | None, default `None`): Window id from list_windows.
+- `max_width` (int, default `1600`): Inline image width cap in pixels, 320-3840. The saved PNG stays full size.
+- `label` (str | None, default `None`): Short name added to the saved file, e.g. 'push_done'. Letters, digits, - and _ only; other characters become _; max 40.
+- `region` (list[int] | None, default `None`): Zoom: [x, y, width, height] of the window to crop, in the space coord_space names; returned enlarged.
+- `coord_space` (str, default `'window'`): window (default) or a coord_space token from an earlier screenshot, for region.
+
+### `start_screen_recording`
+
+Listed as `screen_recording(action="start")`.
+
+Start a desktop MP4 recording; one at a time, no audio. Stop it with stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window if one is open; a window recording works on a locked screen, or covered with a compositor. The recording ends if this MCP server process exits, so keep one client connected from start to stop. Details: docs/TOOLS-HOST.md. UR5e work cell render: workcell__start_recording; to combine clips, join_videos.
+
+- `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
+- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
+- `window_id` (int | None, default `None`): Window id from list_windows.
+- `fps` (int, default `15`): Frames per second, clamped to 1-30. Frames repeat if capture falls behind.
+- `max_width` (int | None, default `None`): Output width cap in pixels; never scales up. Default 1920.
+- `max_seconds` (int, default `600`): Stops by itself after this long, clamped to 5-3600 seconds.
+- `full_screen` (bool | None, default `None`): true: letterbox into the primary monitor's shape. Default: the native capture size.
+- `window_ids` (list[int] | None, default `None`): 2-6 window ids from list_windows, recorded in sync into one video.
+- `layout` (str, default `'side_by_side'`): With window_ids: side_by_side, top_bottom or grid.
+- `wait_for_window` (float, default `0`): With window: seconds (max 600) to wait for a match. Returns at once, so launch the app next.
+- `stop_on_log_marker` (str | None, default `None`): End when this text is added to the selected bridge's Kit log or stop_log_file.
+- `stop_log_file` (str | None, default `None`): A .log file in Kit's log folder or under ~/.local/share/twinsmith, for stop_on_log_marker.
+
+### `stop_screen_recording`
+
+Listed as `screen_recording(action="stop")`.
+
+Stop the desktop recording and report the MP4 path. Also its duration and size.
+
+No arguments.
+
+### `tile_windows`
+
+Listed as `windows(action="tile")`.
+
+Tile 2-6 windows over a monitor's work area. E.g. Isaac Sim left and RViz 2 right for a demo. Get ids from list_windows. Reports each window's final geometry and whether the window manager clamped it; then record them with start_screen_recording(window_ids=...).
+
+- `window_ids` (list[int], required): 2-6 window ids from list_windows.
+- `layout` (str, default `'left_right'`): left_right (one row), top_bottom (one column) or grid.
+- `monitor` (int | None, default `None`): 1-based index from screen_info. Default: the monitor holding the first window.
+- `gap` (int, default `0`): Pixels between tiles.
+
+## `sim`: Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim
+
+Toolset `sim` is off until you select it with `+sim`. Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 58 tools, listed as 19: `files` (put, get, stat), `reload_tools`, `run_python`, `sim__arm` (ik, fk), `sim__camera` (list, create, capture), `sim__controller` (create, update), `sim__joints` (inspect, state, command, move, drive, gains, teleport), `sim__lidar` (create, read), `sim__light` (create, modify), `sim__logs` (tail, mark, summary), `sim__material` (create, apply), `sim__physics` (inspect, body_state, contacts, raycast, configure, apply), `sim__prim` (get, find, bounds, measure, create, create_many, set_transform, set_attribute, clone, delete, revert), `sim__quick_start`, `sim__simulation` (step, run, replay), `sim__stage` (info, tree, open, save, clear_owned), `sim__timeline__control`, `sim__ui` (find, act), `sim__viewport__frame`.
+
+### `get_file`
+
+Listed as `files(action="get")`.
+
+Read a file from the simulator's machine. Returned base64-encoded (content_b64); the pull half of put_file.
+
+- `path` (string, required): Path on the bridge's box (~ expands).
+
+### `put_file`
+
+Listed as `files(action="put")`.
+
+Write a file on the simulator's machine (base64 content). Ships code and assets without scp. Writing a .py clears the folder's bytecode cache. The content travels in one message: for code and tool-sized assets, not gigabytes.
+
+- `path` (string, required): Destination path on the bridge's box (~ expands).
+- `content_b64` (string, required): File content, base64-encoded.
+- `mkdirs` (boolean, optional): Create missing parent directories (default true).
+
+### `reload_tools`
+
+Hot-reload one of a project's own tool packages: unregister it, import it again and register its tools. Follow with refresh_tools so the new schemas are seen.
+
+- `module` (string, required): The package's module name, as given in TWINSMITH_TOOL_MODULES.
+
+### `run_python`
+
+Execute Python code on the Kit main thread with full access to the Omniverse APIs (omni, carb, pxr preloaded; assign to `result` to return a value). Top-level `await` works (e.g. `await omni.kit.app.get_app().next_update_async()` to let frames run between steps). Set persistent=True with a session_id to keep variables between calls. Opening a stage (including save-as) resets every session; the next call says so. For work longer than a few seconds pass background=true: it returns a job_id at once for job_status / job_cancel, instead of polling with more calls.
+
+- `code` (string, required): Python code to execute on Kit's main thread
+- `session_id` (string, optional): Session identifier for persistent execution. Use the same ID across calls to share state. Defaults to 'default'.
+- `persistent` (boolean, optional): If true, variables persist across calls with the same session_id. The reply lists only the names this call added or rebound (session_vars) and the total (session_var_count).
+- `background` (boolean, optional): Run as a job and return its job_id at once. The code must await (e.g. `await omni.kit.app.get_app().next_update_async()` in its loop) and must not pump the app itself. A `job` object is preloaded: job.report(fraction, text) sets progress, job.checkpoint() raises once job_cancel was called. Follow with job_status(job_id, wait_s=30); `result` and prints come back there.
+- `label` (string, optional): With background: a short name shown by job_status.
+
+### `sim__arm__fk`
+
+Listed as `sim__arm(action="fk")`.
+
+Forward kinematics: where a link would be. Where a link (the hand) would be for given joint values, from the robot's own USD joints, in the world and base frames. Joints you leave out use their current values when the simulation runs, else zero. Commands nothing; pair it with sim__arm__ik. Works stopped or running; when running it first checks its model against physics. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Articulation root, as for sim__joints__state.
+- `link` (string, required): The link: its name (such as panda_hand) or absolute path.
+- `joints` (object, optional): Optional {joint name: value}: radians for revolute, stage units for prismatic, e.g. sim__arm__ik's joint_targets.
+- `offset` (array, optional): Optional [x, y, z] in the link's frame, stage units: place this point (a fingertip) instead of the link's origin.
+- `base_link` (string, optional): Chain start: a link name or path. Default: the articulation root's body.
+
+### `sim__arm__ik`
+
+Listed as `sim__arm(action="ik")`.
+
+Inverse kinematics for a link target. For any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solves only unless move=true; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Articulation root, as for sim__joints__state.
+- `link` (string, required): The link to place: its name (such as panda_hand) or absolute path.
+- `position` (array, required): Target [x, y, z] in stage units, in the world frame unless frame=base.
+- `orientation` (array, optional): Optional target orientation [w, x, y, z]. Omit to place the link by position only.
+- `base_link` (string, optional): Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world).
+- `offset` (array, optional): Optional [x, y, z] in the link's frame, stage units: place this point (a fingertip) instead of the link's origin.
+- `frame` (string, default `"world"`): world (default) or base: the frame position and orientation are given in.
+- `move` (boolean, optional): Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.
+- `speed` (number, optional): With move=true: go to position in a straight line at this speed (stage units per second), holding orientation, in this one call. Stops short at a point it cannot reach. The result's path says where the point really ended.
+- `position_tolerance` (number, default `0.001`): Metres of position error that counts as reached.
+- `orientation_tolerance` (number, default `0.01`): Radians of orientation error that counts as reached.
+
+### `sim__body__state`
+
+Listed as `sim__physics(action="body_state")`.
+
+Read a rigid body's world pose while running. Initialized pose on the selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input. render_pose compares the poses the renderer draws from (Fabric, USD) with the physics pose; a `warnings` entry means pictures and recordings do not show where the body is. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, optional): Absolute rigid body path; prim and prim_path are aliases. Supply one.
+- `paths` (array, optional): Instead of path: up to 64 bodies read at one instant, returned as bodies.
+- `prim` (string, optional): Alias for path.
+- `prim_path` (string, optional): Alias for path.
+- `include_dynamics` (boolean, default `false`): Include measured world COM linear/angular velocity and runtime mass, including kg conversion.
+
+### `sim__camera__capture`
+
+Listed as `sim__camera(action="capture")`.
+
+Capture an RTX camera image to a PNG. Camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true. The result has a physics_render field. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Camera from sim__camera__create or sim__quick_start, or any other Camera with adopt=true.
+- `filename` (string, required): New simple basename ending .png.
+- `adopt` (boolean, default `false`): If this exact prim is a Camera with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; the prim itself is not edited and stays non-owned.
+- `wait_for_render` (boolean, default `true`): True: wait up to five seconds for render completions and a new owned CPU transfer. False: reuse the last validated tool acquisition, possibly from before Stop/reset or scene edits; NOT_READY until a true capture seeds it. Ordinary Play never refreshes this cache. PNG I/O still occurs. No implicit physics advance or atomic sensor/physics guarantee.
+
+### `sim__camera__create`
+
+Listed as `sim__camera(action="create")`.
+
+Create a persistent RTX camera on a stopped timeline. To watch something: path=/World/Cam, position=[3,-3,2], target=[0,0,0.5] aims it. On a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X). USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): New camera path; its parent prim (e.g. a robot link) must exist.
+- `width` (integer, default `640`): Image width 64..1024.
+- `height` (integer, default `480`): Image height 64..1024.
+- `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
+- `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
+- `frame` (string, default `"local"`): Pose frame: local or world.
+- `target` (array, optional): World point [x, y, z] to aim the camera at, instead of orientation or rotate_xyz.
+- `rotate_xyz` (array, optional): Orientation as USD rotateXYZ Euler angles in degrees (X, then Y, then Z), instead of the orientation quaternion. With frame=local it is authored as translate + rotateXYZ ops.
+- `focal_length` (number, optional): Focal length in mm (0.1..1000); default USD 50.
+- `horizontal_aperture` (number, optional): Horizontal aperture in mm (0.1..1000); default USD 20.955. The vertical aperture follows width/height.
+- `clipping_range` (array, default `[0.01, 1000.0]`): [near, far] clipping distances in metres.
+
+### `sim__camera__list`
+
+Listed as `sim__camera(action="list")`.
+
+List Camera prims. Under root with focal length and aperture (mm), clipping range (stage units and metres), projection, world pose and whether each is the active viewport camera. Bounded by limit and a 10,000-prim visit cap; truncated says which. No viewport (headless) reports viewport_available=false instead of guessing. Authored USD, not a rendered image. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `root` (string, default `"/"`): Absolute subtree root.
+- `limit` (integer, default `100`): Maximum cameras 1..100.
+
+### `sim__controller__create`
+
+Listed as `sim__controller(action="create")`.
+
+OPT-IN CODE EXECUTION: create a script controller. Creates an OnPlaybackTick -> ScriptNode controller using inline Python. Requires TWINSMITH_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Path for the new graph, not in use yet.
+- `code` (string, required): Trusted setup(db)/compute(db) script, <=16384 characters.
+
+### `sim__controller__update`
+
+Listed as `sim__controller(action="update")`.
+
+OPT-IN CODE EXECUTION: replace a controller's code. Replaces inline code of this pack's controller and requests recompilation while stopped. Same explicit script enable required. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Pack controller path.
+- `code` (string, required): Trusted replacement script <=16384 characters.
+
+### `sim__joints__command`
+
+Listed as `sim__joints(action="command")`.
+
+Command joint position or velocity targets. On an initialized articulation, by name (targets) or in DOF order (positions), and/or velocity targets, on the selected PhysX or qualified Newton backend. Radians for revolute, stage units for prismatic. Out-of-limit values are refused unless clamp=true, which reports what it clamped; unknown names list the valid ones. Returns applied targets and previous values, not achieved poses: compare sim__joints__state. Runtime only and lost on Stop; sim__joints__drive authors USD targets. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Exact initialized articulation root path.
+- `positions` (array, optional): One finite position per DOF, in sim.joints.state order. Give this or targets, not both.
+- `targets` (object, optional): {dof name: position}; names come from sim__joints__state. An unknown name is refused with the valid ones.
+- `velocities` (object, optional): {dof name: velocity target}, rad/s for revolute and stage units/s for prismatic. A velocity drive needs damping (a wheel usually stiffness 0), so check the response.
+- `clamp` (boolean, default `false`): Use the runtime limit for an out-of-limit value and report it, instead of refusing.
+
+### `sim__joints__drive`
+
+Listed as `sim__joints(action="drive")`.
+
+Set one joint's USD drive target and gains. One revolute/prismatic joint, in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Revolute or prismatic joint prim, e.g. /World/UR5e/joints/elbow_joint; sim__joints__inspect lists them.
+- `target` (number, required): Radians for angular joint, stage units for prismatic.
+- `stiffness` (number, required): Nonnegative USD drive stiffness. Too low and a gravity-loaded joint settles short of its target.
+- `damping` (number, required): Nonnegative USD drive damping.
+- `max_force` (number, default `1000`): Positive force/torque cap.
+
+### `sim__joints__gains`
+
+Listed as `sim__joints(action="gains")`.
+
+Read or set runtime drive gains. An initialized articulation's stiffness, damping and max_effort (the drive's torque/force cap) for named dofs or every DOF. These are PhysX/Newton runtime values, not USD: they are lost on Stop and never saved; sim__joints__drive authors USD gains. Omit every value to only read. Returns each DOF's values before and after. Needs a playing or paused timeline and a valid tensor view. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Exact initialized articulation root path.
+- `dofs` (array, default `[]`): DOF names; empty applies to every DOF. An unknown name is refused with the valid ones.
+- `stiffness` (number, optional): Nonnegative position-drive stiffness (torque per radian, or force per stage unit).
+- `damping` (number, optional): Nonnegative position-drive damping (torque per rad/s, or force per stage unit/s).
+- `max_effort` (number, optional): Positive drive cap in torque (revolute) or force (prismatic).
+
+### `sim__joints__inspect`
+
+Listed as `sim__joints(action="inspect")`.
+
+Read authored joint limits and drives. Bounded, for an articulation, reporting USD degrees versus stage units. No runtime-state claim. The path may be the articulation root (a joint such as <robot>/root_joint, or the link carrying the articulation API): the joints are then the ones reached through its rigid bodies. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Subtree, articulation root (joint or link), or the robot prim.
+- `limit` (integer, default `200`): Visited prim cap 1..200.
+
+### `sim__joints__move`
+
+Listed as `sim__joints(action="move")`.
+
+Step a paused simulation until joints settle. Steps a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then reports settled and each joint's error. From stopped, sim__timeline__control action=initialize briefly plays then pauses. A joint held by contact or a weak drive reports settled=false: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only; never pumps the app loop. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Exact initialized articulation root path.
+- `targets` (object, required): {dof name: position}, radians or stage units. An unknown name is refused with the valid ones.
+- `max_steps` (integer, default `600`): Physics steps to try, 1..600.
+- `tolerance` (number, default `0.01`): Per-joint position error that counts as settled, >0 (radians or stage units).
+- `clamp` (boolean, default `false`): Use the runtime limit for an out-of-limit target and report it, instead of refusing.
+
+### `sim__joints__state`
+
+Listed as `sim__joints(action="state")`.
+
+Read joint positions and velocities while running. While playing or paused, initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Stopped gives PHYSICS_NOT_READY: sim__timeline__control action=initialize briefly plays then pauses. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Exact articulation root path, e.g. /World/UR5e/root_joint: robot.articulation_root from sim__quick_start, or sim__physics__inspect.
+
+### `sim__joints__teleport`
+
+Listed as `sim__joints(action="teleport")`.
+
+Set joint positions directly (a state reset). Not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are {dof name: value}, radians for revolute and stage units for prismatic. Needs an initialized (playing or paused) articulation and returns each joint's value before and after. Out-of-limit values are refused. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Exact initialized articulation root path.
+- `positions` (object, required): {dof name: position}. Unknown names are refused with the valid ones.
+
+### `sim__lidar__create`
+
+Listed as `sim__lidar(action="create")`.
+
+Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path, rates and ros2_scan_graph: pass that to sim__graph__build to publish /scan. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Path for the new LiDAR, not in use yet; its parent prim (e.g. a robot link) must exist.
+- `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
+- `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
+- `frame` (string, default `"local"`): Pose frame: local or world.
+- `rotate_xyz` (array, optional): Orientation as USD rotateXYZ Euler angles in degrees, instead of the orientation quaternion.
+- `config` (string, default `""`): NVIDIA lidar config name, e.g. Example_Rotary_2D, Example_Rotary, OS1, RPLIDAR_S2E. Empty: local generic LiDAR.
+- `variant` (string, default `""`): Config variant, e.g. OS1_REV6_32ch10hz1024res (an invalid one lists the valid ones).
+- `tick_rate` (number, optional): Sensor tick rate in Hz (0..240]; default: the config's scan rate (10 Hz for Example_Rotary_2D). A rate other than the scan rate yields partial scans.
+
+### `sim__lidar__read`
+
+Listed as `sim__lidar(action="read")`.
+
+Read LiDAR return points. CPU Cartesian points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. For a LiDAR from an opened file, pass adopt=true. The result has a physics_render field. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Pack-created LiDAR path, or an existing OmniLidar with adopt=true.
+- `limit` (integer, default `64`): Maximum returned points 1..256.
+- `adopt` (boolean, default `false`): If this exact prim is an OmniLidar with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; settings a read needs are overridden in the session layer only and reported as session_overrides. The prim stays non-owned.
+- `wait_for_render` (boolean, default `false`): Wait up to five seconds for one render; acquisition requires Play. False reads the latest completed scan, possibly stale. No implicit physics advance or atomic sensor/physics guarantee.
 
 ### `sim__light__create`
 
@@ -136,6 +525,39 @@ Set a pack-owned light's intensity and color. Both required, on a stopped timeli
 - `intensity` (number, required): USD light intensity.
 - `color` (array, required): RGB linear color 0..1.
 
+### `sim__logs__mark`
+
+Listed as `sim__logs(action="mark")`.
+
+Mark the current end of Kit's log. A cursor: byte offset plus file identity (device, inode, size, mtime). Pass it to sim__logs__tail or sim__logs__summary to read only what happens next; rotation or truncation is reported instead of unrelated lines. Reads the log path only; installs no log callback. Needs no session_id or stage_id.
+
+- `session_id` (string, optional): Not needed; accepted and ignored.
+- `stage_id` (string, optional): Not needed; accepted and ignored.
+
+### `sim__logs__summary`
+
+Listed as `sim__logs(action="summary")`.
+
+Count log lines by level and channel. Since a sim__logs__mark cursor (or the retained 1 MiB window when omitted), with the first and last error. Reads at most 1 MiB per call; `truncated` and `next_cursor` say whether more remains. Same file parser and secret redaction as sim__logs__tail; installs no log callback. Needs no session_id or stage_id.
+
+- `session_id` (string, optional): Not needed; accepted and ignored.
+- `stage_id` (string, optional): Not needed; accepted and ignored.
+- `cursor` (object, optional): Cursor from sim__logs__mark or a previous next_cursor; omit for the retained 1 MiB window.
+
+### `sim__logs__tail`
+
+Listed as `sim__logs(action="tail")`.
+
+Read a bounded tail of the Kit log. Of the selected Kit log file, never arbitrary files. Default: last 1 MiB, warnings/errors and [sim-tools] lines in `lines`. With min_level, channel, contains or cursor: parsed `entries` (timestamp, level, channel, message capped at 2 KB), `next_cursor` and `truncated`; a cursor comes from sim__logs__mark or a previous next_cursor. Reads at most 1 MiB per call and never installs a log callback. Redacts obvious secrets. Also returns recent scene_events. Needs no session_id or stage_id.
+
+- `session_id` (string, optional): Not needed; accepted and ignored.
+- `stage_id` (string, optional): Not needed; accepted and ignored.
+- `limit` (integer, default `50`): Maximum entries or lines 1..100.
+- `min_level` (debug|info|warning|error|fatal, default `"warning"`): Lowest level to return, e.g. warning.
+- `channel` (string, default `""`): Case-insensitive substring of the log channel, e.g. omni.physx (<=64 characters).
+- `contains` (string, default `""`): Case-insensitive substring of the message (<=128 characters).
+- `cursor` (object, optional): Cursor from sim__logs__mark or a previous next_cursor; reads only lines after it and detects rotation/truncation.
+
 ### `sim__material__apply`
 
 Listed as `sim__material(action="apply")`.
@@ -164,6 +586,72 @@ Create a preview-surface or physics material. A UsdPreviewSurface or physics mat
 - `static_friction` (number, default `0.5`): Physics material static friction 0..10.
 - `dynamic_friction` (number, default `0.5`): Physics material dynamic friction 0..10.
 - `restitution` (number, default `0`): Physics material restitution 0..1.
+
+### `sim__physics__apply`
+
+Listed as `sim__physics(action="apply")`.
+
+Add or remove colliders and rigid bodies, set mass. Add or remove a collider, rigid body and kinematic state, or set mass / density, on any prim; session layer only, and undo with sim__prim__revert. collider can set an approximation (convexHull, convexDecomposition, boundingSphere, boundingCube, meshSimplification, none). Refuses a rigid body under an existing rigid-body ancestor, a joint or articulation root as a body, both mass and density, and any change while the timeline is active. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): Absolute prim path.
+- `collider` (boolean, optional): Add (true) or remove (false) UsdPhysics CollisionAPI.
+- `approximation` (convexHull|convexDecomposition|boundingSphere|boundingCube|meshSimplification|none, default `""`): Collider approximation, with collider=true; empty keeps the current one.
+- `rigid_body` (boolean, optional): Add (true) or remove (false) UsdPhysics RigidBodyAPI.
+- `kinematic` (boolean, optional): Kinematic flag (physics:kinematicEnabled); needs a rigid body on this prim.
+- `mass` (number, optional): Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density.
+- `density` (number, optional): Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.
+- `impulse` (array, optional): A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing. On Newton it is applied as impulse/(dt/substeps) force in the next step's first substep.
+- `at` (array, optional): With impulse: the world point [x, y, z] to push at. Default: the body's centre.
+
+### `sim__physics__configure`
+
+Listed as `sim__physics(action="configure")`.
+
+Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. On Newton it also sizes the solver's contact and constraint buffers, reported as newton_buffers, and without dt steps at 500 Hz. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `path` (string, required): PhysicsScene prim path.
+- `gravity` (array, default `[0, 0, -9.81]`): Acceleration vector in stage units/s^2.
+- `dt` (number, optional): Physics timestep seconds, 1/1000..1/10. Default 1/60 on PhysX and 1/500 on Newton, the rate this project's Newton scenes use.
+- `nconmax` (integer, optional): Newton only: MuJoCo-Warp contact buffer per world. Default: sized from the rigid-body count. Refused on PhysX.
+- `njmax` (integer, optional): Newton only: constraint rows per world; same rules as nconmax.
+
+### `sim__physics__contacts`
+
+Listed as `sim__physics(action="contacts")`.
+
+Read current contact pairs: PhysX impulses, or on Newton the last step's summed world-frame force in N on collider_a (impulse is null). For up to 32 bodies from the last delivered contact report. Subscribes on first use or Play. Only colliders with PhysxContactReportAPI report; others are listed with the fix, and none reporting refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED only if forces are unavailable. No app update is pumped. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `paths` (array, required): 1..32 absolute rigid-body or collider paths.
+
+### `sim__physics__inspect`
+
+Listed as `sim__physics(action="inspect")`.
+
+Report authored collision, body, mass and joints. A bounded report that includes articulations. Does not assert initialized or stable physics. On Newton it adds a newton section (configured buffers, active contacts and constraints against capacity, overflow flags) and warnings CONTACT_BUFFER_FULL, CONSTRAINT_BUFFER_FULL, NEWTON_SOLVER_OVERFLOW, NEWTON_SOLVER_NOT_CONVERGED. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `root` (string, default `"/"`): Absolute subtree path.
+- `limit` (integer, default `100`): Maximum visited nodes 1..200.
+
+### `sim__physics__raycast`
+
+Listed as `sim__physics(action="raycast")`.
+
+Cast one ray into the PhysX scene. Hits with position, normal, distance, collider and rigid-body paths. all=false returns the closest; all=true returns up to 32 sorted by distance. max_distance 0..100 stage units; direction is normalised and the result says so; scene_ready=false before physics initialises. Newton refuses RAYCAST_UNSUPPORTED. No app update is pumped. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `origin` (array, required): Ray origin [x, y, z] in world stage units.
+- `direction` (array, required): Ray direction [x, y, z]; normalised before use.
+- `max_distance` (number, default `100`): Maximum distance in stage units, >0 and <=100.
+- `all` (boolean, default `false`): Return every hit up to 32 instead of only the closest.
 
 ### `sim__prim__bounds`
 
@@ -318,6 +806,43 @@ One call that builds a working scene, needing no IDs: a ground plane, physics sc
 - `play` (boolean, default `false`): Start the timeline after building.
 - `discard_changes` (boolean, default `false`): Replace a stage with unsaved edits (they are lost).
 
+### `sim__simulation__run`
+
+Listed as `sim__simulation(action="run")`.
+
+Run your own controller in the physics loop as a job. Each step gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. Steps exactly from a pause (mode=step), or follows a playing timeline (mode=play). Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `body` (string, required): Rigid body the controller acts on, e.g. a drone's base link.
+- `controller` (string, required): tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (twinsmith.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}; state has position, linear_velocity, mass, dt, time_s and params. Kit must have been launched with TWINSMITH_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs.
+- `duration_s` (number, required): Simulated seconds to run, up to 3600. The controller can end sooner with done=true.
+- `params` (object, optional): Passed to the controller as state['params'] each step, e.g. gains or a target.
+- `frame` (world|body, default `"world"`): Frame of the returned force and torque, applied at the centre of mass: world (default) or body.
+- `log` (array, optional): Fields to log: position, orientation, linear_velocity, angular_velocity, force, torque. Default: all. Numbers the controller returns under log become columns too.
+- `log_every` (integer, default `1`): Log one row every this many physics steps, 1..10000.
+- `filename` (string, optional): New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.
+- `mode` (step|play, default `"step"`): step (default): exact steps from a paused timeline, repeatable and as fast as the machine allows. play: the timeline plays and the controller runs in the engine's pre-step callback, so ROS publishers and action graphs tick too; it keeps playing afterwards.
+- `steps_per_frame` (integer, optional): Physics steps between app frames, 1..120. Default: about real time at 60 frames per second. With camera, fps sets it.
+- `articulation` (string, optional): Articulation root of a jointed robot (often <robot>/root_joint). The state then has joints {names, positions, velocities}, and the controller may return joint_efforts, joint_targets or joint_velocity_targets as {joint name: value} (N m or N, rad or stage units).
+- `observe` (array, optional): Up to 8 more rigid bodies whose state the controller gets under observed[path]. It may push them too, with wrenches: {path: {force, torque}}.
+- `camera` (string, optional): Record this camera while it runs (from sim__camera__create): one frame per app frame, and job_status then gives video_path. Works headless and on a locked screen.
+- `adopt` (boolean, optional): Record a camera that came with an opened scene (see sim__camera__capture adopt).
+- `fps` (number, default `30`): With camera: video frames per simulated second, 1..60.
+- `label` (string, optional): Short name for the job, shown by job_status and drawn on the video (<=80 characters).
+
+### `sim__simulation__step`
+
+Listed as `sim__simulation(action="step")`.
+
+Advance exact physics steps while paused. 1..120 steps on PhysX or qualified Newton, PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Returns measured time delta, poses for observe_prims, DOFs for observe_joints. A failure after stepping reports the clock and phase. No retry or rollback. On Newton it first refuses STEP_DT_SOURCES_DISAGREE if the scene's timestep differs from Newton's, and adds a newton section. Requires session_id and stage_id from sim__stage__info.
+
+- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
+- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
+- `steps` (integer, required): Number of physics steps 1..120.
+- `observe_prims` (array, default `[]`): Up to 16 rigid body paths.
+- `observe_joints` (array, default `[]`): Up to 8 articulation paths.
+
 ### `sim__stage__clear_owned`
 
 Listed as `sim__stage(action="clear_owned")`.
@@ -383,249 +908,6 @@ Play, pause, stop, initialize or reset. initialize briefly plays a stopped timel
 - `action` (string, required): play, pause, stop, initialize (briefly play then pause; physics may advance), or reset (cancel jobs, stop, back to the authored start).
 - `resume` (boolean, optional): Continue a timeline a script or the GUI paused, without the stop that would end it. Physics then writes where the script set it. With action=play.
 
-## `physics`: Physics, joints, arms and simulation
-
-Toolset `physics` is on by default. Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 18 tools, listed as 4: `sim__arm` (ik, fk), `sim__joints` (inspect, state, command, move, drive, gains, teleport), `sim__physics` (inspect, body_state, contacts, raycast, configure, apply), `sim__simulation` (step, run, replay).
-
-### `sim__arm__fk`
-
-Listed as `sim__arm(action="fk")`.
-
-Forward kinematics: where a link would be. Where a link (the hand) would be for given joint values, from the robot's own USD joints, in the world and base frames. Joints you leave out use their current values when the simulation runs, else zero. Commands nothing; pair it with sim__arm__ik. Works stopped or running; when running it first checks its model against physics. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Articulation root, as for sim__joints__state.
-- `link` (string, required): The link: its name (such as panda_hand) or absolute path.
-- `joints` (object, optional): Optional {joint name: value}: radians for revolute, stage units for prismatic, e.g. sim__arm__ik's joint_targets.
-- `offset` (array, optional): Optional [x, y, z] in the link's frame, stage units: place this point (a fingertip) instead of the link's origin.
-- `base_link` (string, optional): Chain start: a link name or path. Default: the articulation root's body.
-
-### `sim__arm__ik`
-
-Listed as `sim__arm(action="ik")`.
-
-Inverse kinematics for a link target. For any robot with revolute or prismatic joints, read from its own USD joints (no per-robot file): the joint values that put a link at a target position and optional orientation, nearest the current pose. Solves only unless move=true; no collision check or path. Needs a playing or paused timeline. Refuses if its model disagrees with physics. Mimic joints are treated as independent. Returns joint_targets for sim__joints__move and the errors; reached=false means out of reach or limits. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Articulation root, as for sim__joints__state.
-- `link` (string, required): The link to place: its name (such as panda_hand) or absolute path.
-- `position` (array, required): Target [x, y, z] in stage units, in the world frame unless frame=base.
-- `orientation` (array, optional): Optional target orientation [w, x, y, z]. Omit to place the link by position only.
-- `base_link` (string, optional): Chain start: a link name or path. Default: the body the articulation hangs from (the root body, or the one fixed to the world).
-- `offset` (array, optional): Optional [x, y, z] in the link's frame, stage units: place this point (a fingertip) instead of the link's origin.
-- `frame` (string, default `"world"`): world (default) or base: the frame position and orientation are given in.
-- `move` (boolean, optional): Also command the solved joint values (needs a playing timeline), so one call moves the arm; nothing is commanded when reached is false. Default false: solve only.
-- `speed` (number, optional): With move=true: go to position in a straight line at this speed (stage units per second), holding orientation, in this one call. Stops short at a point it cannot reach. The result's path says where the point really ended.
-- `position_tolerance` (number, default `0.001`): Metres of position error that counts as reached.
-- `orientation_tolerance` (number, default `0.01`): Radians of orientation error that counts as reached.
-
-### `sim__body__state`
-
-Listed as `sim__physics(action="body_state")`.
-
-Read a rigid body's world pose while running. Initialized pose on the selected PhysX or qualified Newton backend; fails when stopped/uninitialized or not a body. Position in stage units, quaternion [w,x,y,z]. Optional runtime velocities/mass from tensor API; no authored-USD fallback. PHYSICS_STATE_INVALID identifies invalid observed data, not bad caller input. render_pose compares the poses the renderer draws from (Fabric, USD) with the physics pose; a `warnings` entry means pictures and recordings do not show where the body is. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, optional): Absolute rigid body path; prim and prim_path are aliases. Supply one.
-- `paths` (array, optional): Instead of path: up to 64 bodies read at one instant, returned as bodies.
-- `prim` (string, optional): Alias for path.
-- `prim_path` (string, optional): Alias for path.
-- `include_dynamics` (boolean, default `false`): Include measured world COM linear/angular velocity and runtime mass, including kg conversion.
-
-### `sim__joints__command`
-
-Listed as `sim__joints(action="command")`.
-
-Command joint position or velocity targets. On an initialized articulation, by name (targets) or in DOF order (positions), and/or velocity targets, on the selected PhysX or qualified Newton backend. Radians for revolute, stage units for prismatic. Out-of-limit values are refused unless clamp=true, which reports what it clamped; unknown names list the valid ones. Returns applied targets and previous values, not achieved poses: compare sim__joints__state. Runtime only and lost on Stop; sim__joints__drive authors USD targets. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Exact initialized articulation root path.
-- `positions` (array, optional): One finite position per DOF, in sim.joints.state order. Give this or targets, not both.
-- `targets` (object, optional): {dof name: position}; names come from sim__joints__state. An unknown name is refused with the valid ones.
-- `velocities` (object, optional): {dof name: velocity target}, rad/s for revolute and stage units/s for prismatic. A velocity drive needs damping (a wheel usually stiffness 0), so check the response.
-- `clamp` (boolean, default `false`): Use the runtime limit for an out-of-limit value and report it, instead of refusing.
-
-### `sim__joints__drive`
-
-Listed as `sim__joints(action="drive")`.
-
-Set one joint's USD drive target and gains. One revolute/prismatic joint, in session layer; stopped timeline only. Angular target radians; gains use USD degrees-based convention. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Revolute or prismatic joint prim, e.g. /World/UR5e/joints/elbow_joint; sim__joints__inspect lists them.
-- `target` (number, required): Radians for angular joint, stage units for prismatic.
-- `stiffness` (number, required): Nonnegative USD drive stiffness. Too low and a gravity-loaded joint settles short of its target.
-- `damping` (number, required): Nonnegative USD drive damping.
-- `max_force` (number, default `1000`): Positive force/torque cap.
-
-### `sim__joints__gains`
-
-Listed as `sim__joints(action="gains")`.
-
-Read or set runtime drive gains. An initialized articulation's stiffness, damping and max_effort (the drive's torque/force cap) for named dofs or every DOF. These are PhysX/Newton runtime values, not USD: they are lost on Stop and never saved; sim__joints__drive authors USD gains. Omit every value to only read. Returns each DOF's values before and after. Needs a playing or paused timeline and a valid tensor view. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Exact initialized articulation root path.
-- `dofs` (array, default `[]`): DOF names; empty applies to every DOF. An unknown name is refused with the valid ones.
-- `stiffness` (number, optional): Nonnegative position-drive stiffness (torque per radian, or force per stage unit).
-- `damping` (number, optional): Nonnegative position-drive damping (torque per rad/s, or force per stage unit/s).
-- `max_effort` (number, optional): Positive drive cap in torque (revolute) or force (prismatic).
-
-### `sim__joints__inspect`
-
-Listed as `sim__joints(action="inspect")`.
-
-Read authored joint limits and drives. Bounded, for an articulation, reporting USD degrees versus stage units. No runtime-state claim. The path may be the articulation root (a joint such as <robot>/root_joint, or the link carrying the articulation API): the joints are then the ones reached through its rigid bodies. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Subtree, articulation root (joint or link), or the robot prim.
-- `limit` (integer, default `200`): Visited prim cap 1..200.
-
-### `sim__joints__move`
-
-Listed as `sim__joints(action="move")`.
-
-Step a paused simulation until joints settle. Steps a PAUSED, initialized simulation until named joint targets are within tolerance or max_steps is used, then reports settled and each joint's error. From stopped, sim__timeline__control action=initialize briefly plays then pauses. A joint held by contact or a weak drive reports settled=false: clear the path, raise gains with sim__joints__gains, or retry with more steps. Runtime only; never pumps the app loop. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Exact initialized articulation root path.
-- `targets` (object, required): {dof name: position}, radians or stage units. An unknown name is refused with the valid ones.
-- `max_steps` (integer, default `600`): Physics steps to try, 1..600.
-- `tolerance` (number, default `0.01`): Per-joint position error that counts as settled, >0 (radians or stage units).
-- `clamp` (boolean, default `false`): Use the runtime limit for an out-of-limit target and report it, instead of refusing.
-
-### `sim__joints__state`
-
-Listed as `sim__joints(action="state")`.
-
-Read joint positions and velocities while running. While playing or paused, initialized articulation DOF positions/velocities on selected PhysX or qualified Newton tensor API. Stopped gives PHYSICS_NOT_READY: sim__timeline__control action=initialize briefly plays then pauses. Angular radians, linear stage units; no authored-target fallback. PHYSICS_STATE_INVALID identifies invalid runtime joint data. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Exact articulation root path, e.g. /World/UR5e/root_joint: robot.articulation_root from sim__quick_start, or sim__physics__inspect.
-
-### `sim__joints__teleport`
-
-Listed as `sim__joints(action="teleport")`.
-
-Set joint positions directly (a state reset). Not motion: physics response, contacts and drive limits are bypassed, and drive targets are left unchanged so the next steps can pull the joints back. Positions are {dof name: value}, radians for revolute and stage units for prismatic. Needs an initialized (playing or paused) articulation and returns each joint's value before and after. Out-of-limit values are refused. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Exact initialized articulation root path.
-- `positions` (object, required): {dof name: position}. Unknown names are refused with the valid ones.
-
-### `sim__physics__apply`
-
-Listed as `sim__physics(action="apply")`.
-
-Add or remove colliders and rigid bodies, set mass. Add or remove a collider, rigid body and kinematic state, or set mass / density, on any prim; session layer only, and undo with sim__prim__revert. collider can set an approximation (convexHull, convexDecomposition, boundingSphere, boundingCube, meshSimplification, none). Refuses a rigid body under an existing rigid-body ancestor, a joint or articulation root as a body, both mass and density, and any change while the timeline is active. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Absolute prim path.
-- `collider` (boolean, optional): Add (true) or remove (false) UsdPhysics CollisionAPI.
-- `approximation` (convexHull|convexDecomposition|boundingSphere|boundingCube|meshSimplification|none, default `""`): Collider approximation, with collider=true; empty keeps the current one.
-- `rigid_body` (boolean, optional): Add (true) or remove (false) UsdPhysics RigidBodyAPI.
-- `kinematic` (boolean, optional): Kinematic flag (physics:kinematicEnabled); needs a rigid body on this prim.
-- `mass` (number, optional): Rigid-body mass in kilograms (stage mass units), through PhysicsMassAPI. Refused together with density.
-- `density` (number, optional): Rigid-body density in kg/m^3; the collider's volume sets the mass. Refused together with mass.
-- `impulse` (array, optional): A one-off push [x, y, z] in N s on a rigid body in the running simulation (play or pause), for poking something. Edits nothing, and is the only option here that works while playing. On Newton it is applied as impulse/(dt/substeps) force in the next step's first substep.
-- `at` (array, optional): With impulse: the world point [x, y, z] to push at. Default: the body's centre.
-
-### `sim__physics__configure`
-
-Listed as `sim__physics(action="configure")`.
-
-Set PhysicsScene gravity and time step. For an explicitly selected scene, while stopped. No implicit scene creation or GPU/backend switch. On Newton it also sizes the solver's contact and constraint buffers, reported as newton_buffers, and without dt steps at 500 Hz. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): PhysicsScene prim path.
-- `gravity` (array, default `[0, 0, -9.81]`): Acceleration vector in stage units/s^2.
-- `dt` (number, optional): Physics timestep seconds, 1/1000..1/10. Default 1/60 on PhysX and 1/500 on Newton, the rate this project's Newton scenes use.
-- `nconmax` (integer, optional): Newton only: MuJoCo-Warp contact buffer per world. Default: sized from the rigid-body count. Refused on PhysX.
-- `njmax` (integer, optional): Newton only: constraint rows per world; same rules as nconmax.
-
-### `sim__physics__contacts`
-
-Listed as `sim__physics(action="contacts")`.
-
-Read current contact pairs: PhysX impulses, or on Newton the last step's summed world-frame force in N on collider_a (impulse is null). For up to 32 bodies from the last delivered contact report. Subscribes on first use or Play. Only colliders with PhysxContactReportAPI report; others are listed with the fix, and none reporting refuses CONTACT_REPORT_DISABLED. Needs a playing or paused initialized timeline. Newton refuses CONTACT_QUERY_UNSUPPORTED only if forces are unavailable. No app update is pumped. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `paths` (array, required): 1..32 absolute rigid-body or collider paths.
-
-### `sim__physics__inspect`
-
-Listed as `sim__physics(action="inspect")`.
-
-Report authored collision, body, mass and joints. A bounded report that includes articulations. Does not assert initialized or stable physics. On Newton it adds a newton section (configured buffers, active contacts and constraints against capacity, overflow flags) and warnings CONTACT_BUFFER_FULL, CONSTRAINT_BUFFER_FULL, NEWTON_SOLVER_OVERFLOW, NEWTON_SOLVER_NOT_CONVERGED. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `root` (string, default `"/"`): Absolute subtree path.
-- `limit` (integer, default `100`): Maximum visited nodes 1..200.
-
-### `sim__physics__raycast`
-
-Listed as `sim__physics(action="raycast")`.
-
-Cast one ray into the PhysX scene. Hits with position, normal, distance, collider and rigid-body paths. all=false returns the closest; all=true returns up to 32 sorted by distance. max_distance 0..100 stage units; direction is normalised and the result says so; scene_ready=false before physics initialises. Newton refuses RAYCAST_UNSUPPORTED. No app update is pumped. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `origin` (array, required): Ray origin [x, y, z] in world stage units.
-- `direction` (array, required): Ray direction [x, y, z]; normalised before use.
-- `max_distance` (number, default `100`): Maximum distance in stage units, >0 and <=100.
-- `all` (boolean, default `false`): Return every hit up to 32 instead of only the closest.
-
-### `sim__simulation__run`
-
-Listed as `sim__simulation(action="run")`.
-
-Run your own controller in the physics loop as a job. Each step gets the body's state {step, time_s, dt, position, orientation_wxyz, linear_velocity, angular_velocity, mass, params} and returns {force, torque} for that step; with articulation also joints, and joint_efforts or joint_targets back. Steps exactly from a pause (mode=step), or follows a playing timeline (mode=play). Returns job_id: job_status(job_id, wait_s=30), job_cancel. Writes a CSV log; with camera a video. module:function is OPT-IN CODE EXECUTION in Kit; tcp:// runs none. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `body` (string, required): Rigid body the controller acts on, e.g. a drone's base link.
-- `controller` (string, required): tcp://127.0.0.1:<port>: your own process, one JSON line per step each way (twinsmith.controller_server.serve is a ready-made server; start it with run_script). Or /abs/file.py:function or package.module:function, loaded into Kit: def f(state) returning {'force': [x, y, z]}; state has position, linear_velocity, mass, dt, time_s and params. Kit must have been launched with TWINSMITH_ENABLE_SCENE_SCRIPTS=1; if not, the call says so and nothing runs.
-- `duration_s` (number, required): Simulated seconds to run, up to 3600. The controller can end sooner with done=true.
-- `params` (object, optional): Passed to the controller as state['params'] each step, e.g. gains or a target.
-- `frame` (world|body, default `"world"`): Frame of the returned force and torque, applied at the centre of mass: world (default) or body.
-- `log` (array, optional): Fields to log: position, orientation, linear_velocity, angular_velocity, force, torque. Default: all. Numbers the controller returns under log become columns too.
-- `log_every` (integer, default `1`): Log one row every this many physics steps, 1..10000.
-- `filename` (string, optional): New CSV name in the output folder, e.g. hover.csv. Default run-<time>.csv. Never overwrites.
-- `mode` (step|play, default `"step"`): step (default): exact steps from a paused timeline, repeatable and as fast as the machine allows. play: the timeline plays and the controller runs in the engine's pre-step callback, so ROS publishers and action graphs tick too; it keeps playing afterwards.
-- `steps_per_frame` (integer, optional): Physics steps between app frames, 1..120. Default: about real time at 60 frames per second. With camera, fps sets it.
-- `articulation` (string, optional): Articulation root of a jointed robot (often <robot>/root_joint). The state then has joints {names, positions, velocities}, and the controller may return joint_efforts, joint_targets or joint_velocity_targets as {joint name: value} (N m or N, rad or stage units).
-- `observe` (array, optional): Up to 8 more rigid bodies whose state the controller gets under observed[path]. It may push them too, with wrenches: {path: {force, torque}}.
-- `camera` (string, optional): Record this camera while it runs (from sim__camera__create): one frame per app frame, and job_status then gives video_path. Works headless and on a locked screen.
-- `adopt` (boolean, optional): Record a camera that came with an opened scene (see sim__camera__capture adopt).
-- `fps` (number, default `30`): With camera: video frames per simulated second, 1..60.
-- `label` (string, optional): Short name for the job, shown by job_status and drawn on the video (<=80 characters).
-
-### `sim__simulation__step`
-
-Listed as `sim__simulation(action="step")`.
-
-Advance exact physics steps while paused. 1..120 steps on PhysX or qualified Newton, PAUSED and initialized: from a stopped timeline, call sim__timeline__control action=initialize (physics may advance). No app-update pumping or engine fallback. Returns measured time delta, poses for observe_prims, DOFs for observe_joints. A failure after stepping reports the clock and phase. No retry or rollback. On Newton it first refuses STEP_DT_SOURCES_DISAGREE if the scene's timestep differs from Newton's, and adds a newton section. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `steps` (integer, required): Number of physics steps 1..120.
-- `observe_prims` (array, default `[]`): Up to 16 rigid body paths.
-- `observe_joints` (array, default `[]`): Up to 8 articulation paths.
-
 ### `sim__trajectory__replay`
 
 Listed as `sim__simulation(action="replay")`.
@@ -645,83 +927,40 @@ Replay a saved trajectory into a labelled video. As a job: moves prims through t
 - `end_s` (number, optional): End at this trajectory time. Default: its last sample.
 - `filename` (string, optional): New video name, e.g. hover.mp4. Default replay-<time>.mp4. Frames are saved beside it as <name>-00001.png.
 
-## `sensors`: Cameras, LiDAR and viewport framing
+### `sim__ui__act`
 
-Toolset `sensors` is on by default. Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 6 tools, listed as 3: `sim__camera` (list, create, capture), `sim__lidar` (create, read), `sim__viewport__frame`.
+Listed as `sim__ui(action="act")`.
 
-### `sim__camera__capture`
+Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (the X11 computer tool does not). screenshot_after=true returns the window after the action; or check with sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.
 
-Listed as `sim__camera(action="capture")`.
+- `action` (click|double_click|right_click|move|drag|scroll|type|keypress|menu|tab|close|wait, optional): What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab). Omit it with actions.
+- `ref` (string, optional): Widget ref from sim__ui__find (its centre is used). For type/keypress it is clicked first to focus it.
+- `x` (integer, optional): X in Isaac Sim window pixels (when no ref).
+- `y` (integer, optional): Y in Isaac Sim window pixels (when no ref).
+- `end_x` (integer, optional): Drag end X in window pixels.
+- `end_y` (integer, optional): Drag end Y in window pixels.
+- `text` (string, optional): Text for action=type (1..500 characters, no newlines; send enter with keypress).
+- `keys` (array, optional): For action=keypress: one key plus optional modifiers, e.g. ["ctrl", "s"], ["enter"], ["shift", "tab"].
+- `window` (string, optional): Window or tab title for tab and close, e.g. 'Console'.
+- `menu` (string, optional): For action=menu: a menu path, e.g. 'Create/Mesh/Cube' (a menu an extension adds exists only once it has loaded), or a top-level menu such as 'Layouts' (opened to list its items, then closed again).
+- `scroll_x` (integer, default `0`): Horizontal wheel steps for action=scroll (-20..20).
+- `scroll_y` (integer, default `0`): Vertical wheel steps for action=scroll (-20..20; negative scrolls down).
+- `frames` (integer, default `3`): Frames to wait after the action so the UI updates (0..600).
+- `actions` (array, optional): Batch of up to 10 steps, each an object with action (not sub_action) and that action's arguments. E.g. [{"action": "click", "ref": "..."}, {"action": "type", "text": "2"}]. Steps run in order and stop at the first failure; they replace the top-level action fields, and frames is then each step's default wait.
+- `coord_space` (string, default `"window"`): window (Isaac Sim window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image).
+- `screenshot_after` (boolean, default `false`): Also return a screenshot of the Isaac Sim window after the action(s).
+- `find_after` (string, optional): Also return up to 10 widgets matching this text after the action(s), compactly (same matching as sim__ui__find query).
 
-Capture an RTX camera image to a PNG. Camera RGB into an owned CPU buffer and a new PNG in configured output root. Default waits up to five seconds for new render completions AND a matching renderer CPU transfer; no stale annotator fallback. Returns dimensions/hash. No implicit Play or atomic physics-frame synchronization. For a camera from an opened file, pass adopt=true. The result has a physics_render field. Requires session_id and stage_id from sim__stage__info.
+### `sim__ui__find`
 
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Camera from sim__camera__create or sim__quick_start, or any other Camera with adopt=true.
-- `filename` (string, required): New simple basename ending .png.
-- `adopt` (boolean, default `false`): If this exact prim is a Camera with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; the prim itself is not edited and stays non-owned.
-- `wait_for_render` (boolean, default `true`): True: wait up to five seconds for render completions and a new owned CPU transfer. False: reuse the last validated tool acquisition, possibly from before Stop/reset or scene edits; NOT_READY until a true capture seeds it. Ordinary Play never refreshes this cache. PNG I/O still occurs. No implicit physics advance or atomic sensor/physics guarantee.
+Listed as `sim__ui(action="find")`.
 
-### `sim__camera__create`
+Find Isaac Sim UI widgets. Lists Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree views, and labels when a query is given) with their text, tooltip, current value, a ref, and their centre in pixels of the Isaac Sim window (the same pixels as screenshot(window_id=<Isaac Sim window>)), plus the visible Kit windows. Works while the desktop is locked or used remotely. Use the ref with sim__ui__act instead of guessing coordinates.
 
-Listed as `sim__camera(action="create")`.
-
-Create a persistent RTX camera on a stopped timeline. To watch something: path=/World/Cam, position=[3,-3,2], target=[0,0,0.5] aims it. On a robot link: path=/robot/base_footprint/Camera_1, position=[0.1,0,0.2] (local), rotate_xyz=[90,0,-90] (looks along the parent's +X). USD axes: -Z forward, +Y up. Clipping is in metres (default 0.01..1000), converted to stage units. Returns optics, FOV and the local/world pose. Needs rendered frames; width/height capped at 1024. A USD camera has no tick rate; set ROS rates on the camera helper. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): New camera path; its parent prim (e.g. a robot link) must exist.
-- `width` (integer, default `640`): Image width 64..1024.
-- `height` (integer, default `480`): Image height 64..1024.
-- `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
-- `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
-- `frame` (string, default `"local"`): Pose frame: local or world.
-- `target` (array, optional): World point [x, y, z] to aim the camera at, instead of orientation or rotate_xyz.
-- `rotate_xyz` (array, optional): Orientation as USD rotateXYZ Euler angles in degrees (X, then Y, then Z), instead of the orientation quaternion. With frame=local it is authored as translate + rotateXYZ ops.
-- `focal_length` (number, optional): Focal length in mm (0.1..1000); default USD 50.
-- `horizontal_aperture` (number, optional): Horizontal aperture in mm (0.1..1000); default USD 20.955. The vertical aperture follows width/height.
-- `clipping_range` (array, default `[0.01, 1000.0]`): [near, far] clipping distances in metres.
-
-### `sim__camera__list`
-
-Listed as `sim__camera(action="list")`.
-
-List Camera prims. Under root with focal length and aperture (mm), clipping range (stage units and metres), projection, world pose and whether each is the active viewport camera. Bounded by limit and a 10,000-prim visit cap; truncated says which. No viewport (headless) reports viewport_available=false instead of guessing. Authored USD, not a rendered image. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `root` (string, default `"/"`): Absolute subtree root.
-- `limit` (integer, default `100`): Maximum cameras 1..100.
-
-### `sim__lidar__create`
-
-Listed as `sim__lidar(action="create")`.
-
-Create an RTX LiDAR (OmniLidar) while stopped: NVIDIA's named config (e.g. config=Example_Rotary_2D at /robot/base_scan/Lidar2D) or, without config, a local generic LiDAR. An unknown config lists the valid ones. Returns prim type, sensor path, rates and ros2_scan_graph: pass that to sim__graph__build to publish /scan. At most eight sensors; delete an exact owned sensor path to release resources. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Path for the new LiDAR, not in use yet; its parent prim (e.g. a robot link) must exist.
-- `position` (array, default `[0, 0, 0]`): Three finite coordinates in stage units.
-- `orientation` (array, default `[1, 0, 0, 0]`): Unit quaternion [w,x,y,z].
-- `frame` (string, default `"local"`): Pose frame: local or world.
-- `rotate_xyz` (array, optional): Orientation as USD rotateXYZ Euler angles in degrees, instead of the orientation quaternion.
-- `config` (string, default `""`): NVIDIA lidar config name, e.g. Example_Rotary_2D, Example_Rotary, OS1, RPLIDAR_S2E. Empty: local generic LiDAR.
-- `variant` (string, default `""`): Config variant, e.g. OS1_REV6_32ch10hz1024res (an invalid one lists the valid ones).
-- `tick_rate` (number, optional): Sensor tick rate in Hz (0..240]; default: the config's scan rate (10 Hz for Example_Rotary_2D). A rate other than the scan rate yields partial scans.
-
-### `sim__lidar__read`
-
-Listed as `sim__lidar(action="read")`.
-
-Read LiDAR return points. CPU Cartesian points in sensor coordinates with sensor-to-world transform, filter invalid ranges, cap at 256 samples. Requires initialized sensor and rendered simulation frames. For a LiDAR from an opened file, pass adopt=true. The result has a physics_render field. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Pack-created LiDAR path, or an existing OmniLidar with adopt=true.
-- `limit` (integer, default `64`): Maximum returned points 1..256.
-- `adopt` (boolean, default `false`): If this exact prim is an OmniLidar with no render resources in this session (e.g. from an opened file), create them here. They count toward the eight sensors and are released on stage change; settings a read needs are overridden in the session layer only and reported as session_overrides. The prim stays non-owned.
-- `wait_for_render` (boolean, default `false`): Wait up to five seconds for one render; acquisition requires Play. False reads the latest completed scan, possibly stale. No implicit physics advance or atomic sensor/physics guarantee.
+- `query` (string, default `""`): Case-insensitive text to match in a widget's name, text, tooltip, identifier or type, e.g. 'play' or 'Add'. Empty lists interactive widgets only.
+- `window` (string, default `""`): Only windows whose title contains this, e.g. 'Stage'.
+- `limit` (integer, default `40`): Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).
+- `zoom_ref` (string, optional): Zoom on this widget ref instead of listing: returns an enlarged crop of the Isaac Sim window around it, with its own coord_space token.
 
 ### `sim__viewport__frame`
 
@@ -737,9 +976,17 @@ Point the active viewport camera, e.g. before a screenshot. path alone frames a 
 - `layout` (clean|default, optional): clean: hide the app's panels, menus, grid and selection outline for a recording. default: put them back. Alone, it leaves the camera where it is.
 - `caption` (string, optional): One line (<=120 characters) drawn over the bottom of the viewport, e.g. the run's name, for screenshots and screen recordings; an empty string removes it. Needs a viewport window.
 
+### `stat_file`
+
+Listed as `files(action="stat")`.
+
+Check a file's existence, size and sha256 on the bridge's box. Skips unchanged pushes and verifies assets.
+
+- `path` (string, required): Path on the bridge's box (~ expands).
+
 ## `assets`: Import and manage robot and scene assets
 
-Toolset `assets` is on by default. Reference: [ASSET-IMPORT.md](ASSET-IMPORT.md). 11 tools, listed as 3: `assets__import_path`, `assets__library` (roots, scan, search, info), `assets__pack` (list, doctor, dependencies, adopt, pin, build).
+Toolset `assets` is off until you select it with `+assets`. Reference: [ASSET-IMPORT.md](ASSET-IMPORT.md). 16 tools, listed as 5: `assets__import_path`, `assets__library` (roots, scan, search, info), `assets__mesh` (inspect, decimate, hulls, split), `assets__pack` (list, doctor, dependencies, adopt, pin, build), `assets__validate`.
 
 ### `assets__dependencies`
 
@@ -784,6 +1031,59 @@ Inspect a USER-TRUSTED project on the selected Kit. Takes a snapshot of it. Nati
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root_id` (string, required): Approved trusted project root ID.
 - `relative_path` (string, required): Relative path of the USD file within that root.
+
+### `assets__mesh_decimate`
+
+Listed as `assets__mesh(action="decimate")`.
+
+Write a copy of a USD file whose render meshes are decimated (quadric) into a new folder, as a job. For render cost; it does not fix a collider overflow (use split). The source is never changed. Normals and texture coordinates of a decimated mesh are blocked because they no longer match its faces.
+
+- `source_path` (string, optional): Absolute USD file under an approved root or the asset root; or give pack and asset_id.
+- `pack` (string, optional): "<pack id>/<version>" holding asset_id. Default: the project file's pack.
+- `asset_id` (string, optional): Asset id of a file in pack, e.g. bench.
+- `prims` (array, optional): Only meshes at or under these prim paths.
+- `output` (string, required): New absolute folder under an approved root, outside the asset root.
+- `target_tris` (integer, optional): About this many triangles in all, shared by mesh size. Give this or ratio.
+- `ratio` (number, optional): Keep this fraction of each mesh's triangles, above 0 and at most 1. Give this or target_tris.
+
+### `assets__mesh_hulls`
+
+Listed as `assets__mesh(action="hulls")`.
+
+Write a collision layer for a USD file into a new folder, as a job: for each mesh, <parent>/<mesh>_collision with an oriented box or convex hulls (purpose guide, CollisionAPI, convexHull approximation), in the mesh parent's frame so rigid bodies and joints are untouched. Shapes go to the meshes under prims; else to the file's mesh colliders; else, when no mesh is a collider, to every mesh. Sublayer it over the asset, or use split for the composed result.
+
+- `source_path` (string, optional): Absolute USD file under an approved root or the asset root; or give pack and asset_id.
+- `pack` (string, optional): "<pack id>/<version>" holding asset_id. Default: the project file's pack.
+- `asset_id` (string, optional): Asset id of a file in pack, e.g. bench.
+- `prims` (array, optional): Only meshes at or under these prim paths.
+- `output` (string, required): New absolute folder under an approved root, outside the asset root.
+- `method` (string, default `"box"`): box (oriented box per mesh), convex (one hull), coacd (decomposition) or auto (box unless over twice the hull's volume, then coacd).
+- `max_hulls` (integer, default `16`): coacd/auto: most convex pieces per mesh, 1 to 256.
+- `threshold` (number, default `0.05`): coacd/auto: concavity, 0.01 to 1; lower is finer and slower.
+
+### `assets__mesh_inspect`
+
+Listed as `assets__mesh(action="inspect")`.
+
+Report every mesh of a USD file: triangles, bounds, closed or not, whether it is a collider and its approximation, and totals including the triangles in triangle-mesh colliders (what overflows Newton). Read-only; parses USD in a subprocess of this server's interpreter (the mesh extra). Native USD parsing is not sandboxed.
+
+- `source_path` (string, optional): Absolute USD file under an approved root or the asset root; or give pack and asset_id.
+- `pack` (string, optional): "<pack id>/<version>" holding asset_id. Default: the project file's pack.
+- `asset_id` (string, optional): Asset id of a file in pack, e.g. bench.
+- `prims` (array, optional): Only meshes at or under these prim paths.
+
+### `assets__mesh_split`
+
+Listed as `assets__mesh(action="split")`.
+
+Write a USD asset as a render layer and a collision layer plus the file that composes them, into a new folder, as a job: <stem>_render (the source; the replaced meshes lose their collision schemas, other colliders stay), <stem>_collision.usdc (explicit shapes, purpose guide) and <stem>.usda (sublayers both, keeps the units, up axis and default prim). Point an asset at <stem>.usda; make it a pack version with assets__pack action=build. The source is never changed.
+
+- `source_path` (string, optional): Absolute USD file under an approved root or the asset root; or give pack and asset_id.
+- `pack` (string, optional): "<pack id>/<version>" holding asset_id. Default: the project file's pack.
+- `asset_id` (string, optional): Asset id of a file in pack, e.g. bench.
+- `prims` (array, optional): Only meshes at or under these prim paths.
+- `output` (string, required): New absolute folder under an approved root, outside the asset root.
+- `collision` (object, optional): Collision shape options: method, max_hulls, threshold (as for hulls).
 
 ### `assets__pack_adopt`
 
@@ -871,218 +1171,57 @@ Fresh filename search across approved project/library roots. No network discover
 - `query` (string, default `""`): Case-insensitive filename substring <=128 characters.
 - `limit` (integer, default `50`): Maximum results 1..100.
 
-## `code`: Execute code and scripts, transfer files
-
-Toolset `code` is on by default. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 8 tools, listed as 5: `files` (put, get, stat), `reload_tools`, `run_python`, `run_script`, `sim__controller` (create, update).
-
-### `get_file`
-
-Listed as `files(action="get")`.
-
-Read a file from the simulator's machine. Returned base64-encoded (content_b64); the pull half of put_file.
-
-- `path` (string, required): Path on the bridge's box (~ expands).
-
-### `put_file`
-
-Listed as `files(action="put")`.
-
-Write a file on the simulator's machine (base64 content). Ships code and assets without scp. Writing a .py clears the folder's bytecode cache. The content travels in one message: for code and tool-sized assets, not gigabytes.
-
-- `path` (string, required): Destination path on the bridge's box (~ expands).
-- `content_b64` (string, required): File content, base64-encoded.
-- `mkdirs` (boolean, optional): Create missing parent directories (default true).
-
-### `reload_tools`
-
-Hot-reload one of a project's own tool packages: unregister it, import it again and register its tools. Follow with refresh_tools so the new schemas are seen.
-
-- `module` (string, required): The package's module name, as given in TWINSMITH_TOOL_MODULES.
-
-### `run_python`
-
-Execute Python code on the Kit main thread with full access to the Omniverse APIs (omni, carb, pxr preloaded; assign to `result` to return a value). Top-level `await` works (e.g. `await omni.kit.app.get_app().next_update_async()` to let frames run between steps). Set persistent=True with a session_id to keep variables between calls. Opening a stage (including save-as) resets every session; the next call says so. For work longer than a few seconds pass background=true: it returns a job_id at once for job_status / job_cancel, instead of polling with more calls.
-
-- `code` (string, required): Python code to execute on Kit's main thread
-- `session_id` (string, optional): Session identifier for persistent execution. Use the same ID across calls to share state. Defaults to 'default'.
-- `persistent` (boolean, optional): If true, variables persist across calls with the same session_id. The reply lists only the names this call added or rebound (session_vars) and the total (session_var_count).
-- `background` (boolean, optional): Run as a job and return its job_id at once. The code must await (e.g. `await omni.kit.app.get_app().next_update_async()` in its loop) and must not pump the app itself. A `job` object is preloaded: job.report(fraction, text) sets progress, job.checkpoint() raises once job_cancel was called. Follow with job_status(job_id, wait_s=30); `result` and prints come back there.
-- `label` (string, optional): With background: a short name shown by job_status.
-
-### `run_script`
-
-Run any Python script as a managed job: a job_id at once, a log, a hard timeout, progress and cancel. Needs no simulator and no Isaac Lab: a controller server, a data conversion, a plot, a sweep step.
-
-- `script` (str, required): Path to an existing .py file. It runs as `<python> <script> <args...>` with no shell.
-- `args` (list[str] | None, default `None`): Command-line arguments for the script.
-- `env` (dict[str, str] | None, default `None`): Extra environment variables; the same rules as the env argument of isaaclab__train (PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value).
-- `python_paths` (list[str] | None, default `None`): Absolute folders put first on PYTHONPATH: the import roots of an uninstalled project, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way; the install's own path stays.
-- `python` (str | None, default `None`): Interpreter. Default: python3 on PATH. Or pass install to use an Isaac Lab environment.
-- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.
-- `cwd` (str | None, default `None`): Working directory. Default: the script's folder.
-- `label` (str | None, default `None`): Short name, used in the job_id and runs_list.
-- `timeout_s` (float, default `600`): Hard wall limit in seconds; the whole process group is killed at expiry.
-- `single_instance_key` (str | None, default `None`): Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.
-- `uses_gpu` (bool, default `False`): true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget). Default false: it starts at once and does not block GPU jobs.
-- `min_free_vram_mb` (int | None, default `None`): Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.
-- `wait_for_vram_s` (float, default `0`): With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).
-
-### `sim__controller__create`
-
-Listed as `sim__controller(action="create")`.
-
-OPT-IN CODE EXECUTION: create a script controller. Creates an OnPlaybackTick -> ScriptNode controller using inline Python. Requires TWINSMITH_ENABLE_SCENE_SCRIPTS=1 in Kit launch; NOT a sandbox. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Path for the new graph, not in use yet.
-- `code` (string, required): Trusted setup(db)/compute(db) script, <=16384 characters.
-
-### `sim__controller__update`
-
-Listed as `sim__controller(action="update")`.
-
-OPT-IN CODE EXECUTION: replace a controller's code. Replaces inline code of this pack's controller and requests recompilation while stopped. Same explicit script enable required. Requires session_id and stage_id from sim__stage__info.
-
-- `session_id` (string, required): Exact session_id from sim__stage__info (call it first; process incarnation).
-- `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
-- `path` (string, required): Pack controller path.
-- `code` (string, required): Trusted replacement script <=16384 characters.
-
-### `stat_file`
-
-Listed as `files(action="stat")`.
-
-Check a file's existence, size and sha256 on the bridge's box. Skips unchanged pushes and verifies assets.
-
-- `path` (string, required): Path on the bridge's box (~ expands).
-
-## `screen`: Capture, record and arrange desktop windows
-
-Toolset `screen` is on by default. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 11 tools, listed as 5: `doctor`, `join_videos`, `screen_recording` (start, stop, status), `screenshot`, `windows` (info, list, raise, move, tile).
-
-### `doctor`
-
-Check whether desktop input (computer) and Isaac Sim UI control (sim__ui) can work here, and what to fix.
-
-No arguments.
-
-### `join_videos`
-
-Join 2-8 finished clips into one new MP4 with the bundled ffmpeg, or (mode=sheet) make a matched PNG contact sheet of the same moments of 1-8 clips plus an `attachment` descriptor for t3_attachment_prepare_upload, or (mode=frames) turn saved image frames into an MP4: video for a headless simulator. Never overwrites. For a synced side-by-side demo prefer start_screen_recording(window_ids=...). Audio is dropped; encoding is bounded to 15 minutes and the result to 1 hour. Sheets do not upload.
-
-- `inputs` (list[str] | None, default `None`): Concat/hstack/vstack: 2-8 clips. Sheet: 1-8. Absolute paths under home, or file names in ~/Videos/twinsmith. Or give job_id. Frames: one folder, one glob pattern such as /out/replay-*.png, or the image files in order.
-- `mode` (str, default `'concat'`): concat (one after another), hstack (side by side), vstack (top to bottom), sheet (a PNG contact sheet: one row per video, one column per time), or frames (image frames to one MP4).
-- `output` (str | None, default `None`): New file name in ~/Videos/twinsmith (.mp4), or ~/Pictures/twinsmith (.png, sheet), or an absolute path under home. Default joined-<time>.mp4 / sheet-<time>.png.
-- `max_width` (int, default `1920`): Output width cap in pixels.
-- `fps` (int | None, default `None`): Output rate, at most 60. Default: the fastest input; 30 for frames.
-- `shortest` (bool, default `False`): hstack/vstack: end with the shortest clip instead of freezing it on its last frame.
-- `times` (list[float] | None, default `None`): sheet: seconds to sample in every clip, up to 12. Default 0.5, 1, 2, 4, 6, 9. A time past a clip's end is an error.
-- `job_id` (str | None, default `None`): sheet: use the videos of this Isaac Lab job (isaaclab__runs_status video_paths) instead of inputs.
-- `label` (str | None, default `None`): frames: one line drawn on every frame, e.g. the run's name.
-
-### `list_windows`
-
-Listed as `windows(action="list")`.
-
-List visible windows with id, title, class and PID. Top-level windows, with size. Use it first to get the window_id other window tools need.
-
-- `filter` (str | None, default `None`): Keep windows whose title or WM class contains this.
-
-### `move_window`
-
-Listed as `windows(action="move")`.
-
-Move and resize one window. E.g. to place Isaac Sim and RViz before a recording. Get its id from list_windows; for several windows use tile_windows. Un-maximizes it first, and returns the geometry applied and whether the window manager clamped it.
-
-- `x` (int, required): Left edge in pixels, from the screen's top-left.
-- `y` (int, required): Top edge in pixels, from the screen's top-left.
-- `width` (int, required): Width in pixels.
-- `height` (int, required): Height in pixels.
-- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
-- `window_id` (int | None, default `None`): Window id from list_windows.
-- `expected_pid` (int | None, default `None`): Refuse unless the window belongs to this PID, from list_windows.
-- `frame` (bool, default `False`): true: place the outer frame with its title bar. Default: the client area that captures record.
-
-### `raise_window`
-
-Listed as `windows(action="raise")`.
-
-Activate a window and give it focus. Get its id from list_windows first.
-
-- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
-- `window_id` (int | None, default `None`): Window id from list_windows.
-- `expected_pid` (int | None, default `None`): Refuse unless the window belongs to this PID, from list_windows.
-
-### `screen_info`
-
-Listed as `windows(action="info")`.
-
-Report the display, monitors and recording state. Also the X11 display and capture directories.
-
-No arguments.
-
-### `screen_recording_status`
-
-Listed as `screen_recording(action="status")`.
-
-Show whether a desktop recording is running and for how long.
-
-No arguments.
-
-### `screenshot`
-
-Capture the screen, a monitor or a window to see the result of your work. Returns the image and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise the primary monitor. A window capture works even when another window covers it.
-
-- `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
-- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
-- `window_id` (int | None, default `None`): Window id from list_windows.
-- `max_width` (int, default `1600`): Inline image width cap in pixels, 320-3840. The saved PNG stays full size.
-- `label` (str | None, default `None`): Short name added to the saved file, e.g. 'push_done'. Letters, digits, - and _ only; other characters become _; max 40.
-- `region` (list[int] | None, default `None`): Zoom: [x, y, width, height] of the window to crop, in the space coord_space names; returned enlarged.
-- `coord_space` (str, default `'window'`): window (default) or a coord_space token from an earlier screenshot, for region.
-
-### `start_screen_recording`
-
-Listed as `screen_recording(action="start")`.
-
-Start a desktop MP4 recording; one at a time, no audio. E.g. for a demo. Stop it with stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window if one is open; a window recording works when covered or on a locked screen. The recording ends if this MCP server process exits, so keep one client connected from start to stop. Details: docs/TOOLS-HOST.md. UR5e work cell render: workcell__start_recording; to combine clips, join_videos.
-
-- `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
-- `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
-- `window_id` (int | None, default `None`): Window id from list_windows.
-- `fps` (int, default `15`): Frames per second, clamped to 1-30. Frames repeat if capture falls behind.
-- `max_width` (int | None, default `None`): Output width cap in pixels; never scales up. Default 1920.
-- `max_seconds` (int, default `600`): Stops by itself after this long, clamped to 5-3600 seconds.
-- `full_screen` (bool | None, default `None`): true: letterbox into the primary monitor's shape. Default: the native capture size.
-- `window_ids` (list[int] | None, default `None`): 2-6 window ids from list_windows, recorded in sync into one video.
-- `layout` (str, default `'side_by_side'`): With window_ids: side_by_side, top_bottom or grid.
-- `wait_for_window` (float, default `0`): With window: seconds (max 600) to wait for a match. Returns at once, so launch the app next.
-- `stop_on_log_marker` (str | None, default `None`): End when this text is added to the selected bridge's Kit log or stop_log_file.
-- `stop_log_file` (str | None, default `None`): A .log file in Kit's log folder or under ~/.local/share/twinsmith, for stop_on_log_marker.
-
-### `stop_screen_recording`
-
-Listed as `screen_recording(action="stop")`.
-
-Stop the desktop recording and report the MP4 path. Also its duration and size.
-
-No arguments.
-
-### `tile_windows`
-
-Listed as `windows(action="tile")`.
-
-Tile 2-6 windows over a monitor's work area. E.g. Isaac Sim left and RViz 2 right for a demo. Get ids from list_windows. Reports each window's final geometry and whether the window manager clamped it; then record them with start_screen_recording(window_ids=...).
-
-- `window_ids` (list[int], required): 2-6 window ids from list_windows.
-- `layout` (str, default `'left_right'`): left_right (one row), top_bottom (one column) or grid.
-- `monitor` (int | None, default `None`): 1-based index from screen_info. Default: the monitor holding the first window.
-- `gap` (int, default `0`): Pixels between tiles.
-
-## `lab`: Isaac Lab training and evaluation
-
-Toolset `lab` is off until you select it with `+lab`. Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 12 tools, listed as 4: `isaaclab__checkpoint_register`, `isaaclab__inspect` (install, envs, preflight, checkpoints), `isaaclab__launch` (train, eval, play, record, env_check), `isaaclab__metrics` (summary, curve).
+### `assets__validate`
+
+Check from the file alone whether a USD asset loads on Newton or PhysX: units, triangle-mesh colliders over budget, rendered collision shapes, zero-force drives, nested articulations, massless moving bodies, drive gains too stiff for 500 Hz, invalid mimic joints. File only: colliders a scene adds at build time are not seen. Returns ok and each check's level, prim, detail and fix; on physx the Newton-only rules are info. Read-only, in a subprocess (the mesh extra).
+
+- `source_path` (string, optional): Absolute USD file under an approved root or the asset root; or give pack and asset_id.
+- `pack` (string, optional): "<pack id>/<version>" holding asset_id. Default: the project file's pack.
+- `asset_id` (string, optional): Asset id of a file in pack, e.g. bench.
+- `engine` (string, default `"newton"`): newton or physx.
+- `triangle_budget` (integer, default `200000`): Triangle-mesh collider triangles allowed.
+- `kit` (boolean, default `false`): Also run Isaac Sim's Asset Validator: not available yet, refused.
+
+## `real2sim`: RoboSimStudio real-to-sim runs in its own private environment
+
+Toolset `real2sim` is off until you select it with `+real2sim`. Reference: [ROBOSIM.md](ROBOSIM.md). 1 tools, listed as 1: `robosim`.
+
+### `robosim`
+
+RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a scene from plain-data template (frozen until update_scene), reference a clip, compare, tune_push, rollout, compare_take, report, stop. Compares images; no mass or friction fitting. Scene code is not sandboxed; cuda:0 uses the GPU. Long actions: poll status.
+
+- `action` (Literal['status', 'start', 'scene_template', 'update_scene', 'reference', 'snapshot', 'compare', 'rollout', 'tune_push', 'compare_take', 'stop', 'report'], required): Action to perform.
+- `run` (str | None, default `None`): Exact run name from start. status: omit for a compact list. scene_template: write the file there.
+- `name` (str | None, default `None`): start: short run name; letters, digits, underscores and hyphens.
+- `scene` (str | None, default `None`): start/update_scene, advanced: absolute trusted scene .py (runs code, not sandboxed). Else use template.
+- `device` (Literal['cpu', 'cuda:0'] | None, default `None`): start (required): cpu is plain MuJoCo, cuda:0 is Newton MuJoCo-Warp. Runs inherit it.
+- `video` (str | None, default `None`): reference: absolute local video file; copied before extracting frames.
+- `keys` (list[str] | None, default `None`): compare/compare_take: RSS object masks, e.g. ['block=red'] or ['block=#d01a10~0.1'].
+- `take` (str | None, default `None`): rollout/compare_take: take name. tune_push: base name; trials are NAME-1, NAME-2.
+- `routine` (str | None, default `None`): rollout: 'push' (default in the template) or 'settle', or a routine your scene defines.
+- `camera` (str | None, default `None`): Camera name from start's RSS status; omit for the scene's first camera.
+- `at` (str | None, default `None`): reference: RSS anchors in clip seconds, e.g. '0:start,3:middle,6:end'; default from start_s/end_s.
+- `shape` (Literal['box', 'tee', 'jenga'], default `'tee'`): scene_template: tee, box or jenga, unless template gives a shape.
+- `push` (dict | None, default `None`): rollout/tune_push: {'waypoints': [[s, x, y], ...] pusher path in m, 'object_velocity': [vx, vy, wz]}.
+- `duration_s` (float | None, default `None`): rollout: simulated seconds; default the last waypoint time. Not with steps.
+- `steps` (int | None, default `None`): rollout: control steps instead of duration_s.
+- `record_fps` (float, default `10.0`): rollout: frames per simulated second to record (nearest whole step stride).
+- `start_s` (float | None, default `None`): reference: clip window start; compare_take: clip window start (default: reference's).
+- `end_s` (float | None, default `None`): reference/compare_take: clip window end in seconds.
+- `sim_start_s` (float | None, default `None`): compare_take: simulated time matching start_s; default 0.
+- `sim_end_s` (float | None, default `None`): compare_take: simulated time matching end_s; default same length as the clip window.
+- `size` (str, default `'320x240'`): snapshot/compare: WIDTHxHEIGHT pixels.
+- `width` (int, default `320`): reference: contact-sheet tile width.
+- `port` (int | None, default `None`): start: viewer port; omit to pick a free one. RSS listens on all interfaces.
+- `wait_s` (float, default `0`): Wait at most this many seconds; poll status with run for completion.
+- `allow_concurrent_gpu` (bool, default `False`): start: knowingly permit cuda:0 despite other GPU workloads or an unavailable GPU check.
+- `template` (dict | None, default `None`): start/update_scene/scene_template: plain data {shape, size, position [x,y], yaw, color, camera, push}.
+- `all` (bool, default `False`): status without run: every run in full, not live servers and the 5 newest.
+- `max_trials` (int | None, default `None`): tune_push: most rollouts to try (default 6, at most 12).
+
+## `lab`: Isaac Lab jobs and script jobs
+
+Toolset `lab` is off until you select it with `+lab`. Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 13 tools, listed as 5: `isaaclab__checkpoint_register`, `isaaclab__inspect` (install, envs, preflight, checkpoints), `isaaclab__launch` (train, eval, play, record, env_check), `isaaclab__metrics` (summary, curve), `run_script`.
 
 ### `isaaclab__checkpoint_register`
 
@@ -1292,6 +1431,24 @@ Start a training job; returns its job_id at once. Follow it with isaaclab__runs_
 - `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.
 - `label` (str | None, default `None`): Short name for the job, shown in runs_list and runs_status, e.g. 'candidate run'.
 
+### `run_script`
+
+Run any Python script as a managed job: a job_id at once, a log, a hard timeout, progress and cancel. Needs no simulator and no Isaac Lab: a controller server, a data conversion, a plot, a sweep step.
+
+- `script` (str, required): Path to an existing .py file. It runs as `<python> <script> <args...>` with no shell.
+- `args` (list[str] | None, default `None`): Command-line arguments for the script.
+- `env` (dict[str, str] | None, default `None`): Extra environment variables; the same rules as the env argument of isaaclab__train (PYTHONPATH, PATH and LD_LIBRARY_PATH are added in front of the install's own value).
+- `python_paths` (list[str] | None, default `None`): Absolute folders put first on PYTHONPATH: the import roots of an uninstalled project, e.g. its src folder. Also ISAACLAB_TASK_PATH. A PYTHONPATH in env is added the same way; the install's own path stays.
+- `python` (str | None, default `None`): Interpreter. Default: python3 on PATH. Or pass install to use an Isaac Lab environment.
+- `install` (str | None, default `None`): Which Isaac Lab / Sim install runs this call, without restarting the server: a known install's name or version (e.g. lab-2.3.2, 2.3, 3.0.0; isaaclab__install_info lists known_installs) or an absolute path to a venv, its bin/python, or a Lab checkout with a .venv. Default: the configured ISAACLAB_PYTHON (Isaac Lab 3.0.0 here), or the project file's isaaclab_install when TWINSMITH_PROJECT names one. The default is never changed.
+- `cwd` (str | None, default `None`): Working directory. Default: the script's folder.
+- `label` (str | None, default `None`): Short name, used in the job_id and runs_list.
+- `timeout_s` (float, default `600`): Hard wall limit in seconds; the whole process group is killed at expiry.
+- `single_instance_key` (str | None, default `None`): Refuse to start while a running job has the same key, so a double-queued sweep cannot run twice.
+- `uses_gpu` (bool, default `False`): true: the script uses the GPU, so the GPU guards apply (one GPU job at a time, none beside a running Isaac Sim, the GPU-hour budget). Default false: it starts at once and does not block GPU jobs.
+- `min_free_vram_mb` (int | None, default `None`): Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.
+- `wait_for_vram_s` (float, default `0`): With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).
+
 ## `ros2`: ROS 2 transforms, graphs and occupancy maps
 
 Toolset `ros2` is off until you select it with `+ros2`. Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 6 tools, listed as 3: `sim__graph` (node_types, build, inspect, show), `sim__map__occupancy`, `sim__ros2__tf_setup`.
@@ -1381,91 +1538,11 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 - `joint_states_topic` (string, default `"joint_states"`): Joint state topic.
 - `clock` (auto|publish|skip, default `"auto"`): auto: reuse an existing /clock, else publish one shared clock for all robots (two clocks make RViz reset constantly); publish: always keep the tool's clock; skip: never create one.
 
-## `kit_debug`: Inspect Kit logs and operate its UI
-
-Toolset `kit_debug` is off until you select it with `+kit_debug`. Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 5 tools, listed as 2: `sim__logs` (tail, mark, summary), `sim__ui` (find, act).
-
-### `sim__logs__mark`
-
-Listed as `sim__logs(action="mark")`.
-
-Mark the current end of Kit's log. A cursor: byte offset plus file identity (device, inode, size, mtime). Pass it to sim__logs__tail or sim__logs__summary to read only what happens next; rotation or truncation is reported instead of unrelated lines. Reads the log path only; installs no log callback. Needs no session_id or stage_id.
-
-- `session_id` (string, optional): Not needed; accepted and ignored.
-- `stage_id` (string, optional): Not needed; accepted and ignored.
-
-### `sim__logs__summary`
-
-Listed as `sim__logs(action="summary")`.
-
-Count log lines by level and channel. Since a sim__logs__mark cursor (or the retained 1 MiB window when omitted), with the first and last error. Reads at most 1 MiB per call; `truncated` and `next_cursor` say whether more remains. Same file parser and secret redaction as sim__logs__tail; installs no log callback. Needs no session_id or stage_id.
-
-- `session_id` (string, optional): Not needed; accepted and ignored.
-- `stage_id` (string, optional): Not needed; accepted and ignored.
-- `cursor` (object, optional): Cursor from sim__logs__mark or a previous next_cursor; omit for the retained 1 MiB window.
-
-### `sim__logs__tail`
-
-Listed as `sim__logs(action="tail")`.
-
-Read a bounded tail of the Kit log. Of the selected Kit log file, never arbitrary files. Default: last 1 MiB, warnings/errors and [sim-tools] lines in `lines`. With min_level, channel, contains or cursor: parsed `entries` (timestamp, level, channel, message capped at 2 KB), `next_cursor` and `truncated`; a cursor comes from sim__logs__mark or a previous next_cursor. Reads at most 1 MiB per call and never installs a log callback. Redacts obvious secrets. Also returns recent scene_events. Needs no session_id or stage_id.
-
-- `session_id` (string, optional): Not needed; accepted and ignored.
-- `stage_id` (string, optional): Not needed; accepted and ignored.
-- `limit` (integer, default `50`): Maximum entries or lines 1..100.
-- `min_level` (debug|info|warning|error|fatal, default `"warning"`): Lowest level to return, e.g. warning.
-- `channel` (string, default `""`): Case-insensitive substring of the log channel, e.g. omni.physx (<=64 characters).
-- `contains` (string, default `""`): Case-insensitive substring of the message (<=128 characters).
-- `cursor` (object, optional): Cursor from sim__logs__mark or a previous next_cursor; reads only lines after it and detects rotation/truncation.
-
-### `sim__ui__act`
-
-Listed as `sim__ui(action="act")`.
-
-Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (the X11 computer tool does not). screenshot_after=true returns the window after the action; or check with sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.
-
-- `action` (click|double_click|right_click|move|drag|scroll|type|keypress|menu|tab|close|wait, optional): What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab). Omit it with actions.
-- `ref` (string, optional): Widget ref from sim__ui__find (its centre is used). For type/keypress it is clicked first to focus it.
-- `x` (integer, optional): X in Isaac Sim window pixels (when no ref).
-- `y` (integer, optional): Y in Isaac Sim window pixels (when no ref).
-- `end_x` (integer, optional): Drag end X in window pixels.
-- `end_y` (integer, optional): Drag end Y in window pixels.
-- `text` (string, optional): Text for action=type (1..500 characters, no newlines; send enter with keypress).
-- `keys` (array, optional): For action=keypress: one key plus optional modifiers, e.g. ["ctrl", "s"], ["enter"], ["shift", "tab"].
-- `window` (string, optional): Window or tab title for tab and close, e.g. 'Console'.
-- `menu` (string, optional): For action=menu: a menu path, e.g. 'Create/Mesh/Cube' (a menu an extension adds exists only once it has loaded), or a top-level menu such as 'Layouts' (opened to list its items, then closed again).
-- `scroll_x` (integer, default `0`): Horizontal wheel steps for action=scroll (-20..20).
-- `scroll_y` (integer, default `0`): Vertical wheel steps for action=scroll (-20..20; negative scrolls down).
-- `frames` (integer, default `3`): Frames to wait after the action so the UI updates (0..600).
-- `actions` (array, optional): Batch of up to 10 steps, each an object with action (not sub_action) and that action's arguments. E.g. [{"action": "click", "ref": "..."}, {"action": "type", "text": "2"}]. Steps run in order and stop at the first failure; they replace the top-level action fields, and frames is then each step's default wait.
-- `coord_space` (string, default `"window"`): window (Isaac Sim window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image).
-- `screenshot_after` (boolean, default `false`): Also return a screenshot of the Isaac Sim window after the action(s).
-- `find_after` (string, optional): Also return up to 10 widgets matching this text after the action(s), compactly (same matching as sim__ui__find query).
-
-### `sim__ui__find`
-
-Listed as `sim__ui(action="find")`.
-
-Find Isaac Sim UI widgets. Lists Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree views, and labels when a query is given) with their text, tooltip, current value, a ref, and their centre in pixels of the Isaac Sim window (the same pixels as screenshot(window_id=<Isaac Sim window>)), plus the visible Kit windows. Works while the desktop is locked or used remotely. Use the ref with sim__ui__act instead of guessing coordinates.
-
-- `query` (string, default `""`): Case-insensitive text to match in a widget's name, text, tooltip, identifier or type, e.g. 'play' or 'Add'. Empty lists interactive widgets only.
-- `window` (string, default `""`): Only windows whose title contains this, e.g. 'Stage'.
-- `limit` (integer, default `40`): Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).
-- `zoom_ref` (string, optional): Zoom on this widget ref instead of listing: returns an enlarged crop of the Isaac Sim window around it, with its own coord_space token.
-
 <a id="ur5e-twin-workcell__"></a>
 
 ## `workcell`: UR5e workcell tools
 
-Toolset `workcell` is off until you select it with `+workcell`. Reference: [README.md](../exts/workcell/workcell/README.md). 10 tools, listed as 7: `workcell__cell` (quick_start, status, shutdown), `workcell__eval` (status), `workcell__jenga` (build, status), `workcell__perception` (status), `workcell__planning` (status), `workcell__real2sim` (status), `workcell__robot` (status).
-
-### `workcell__eval_status`
-
-Listed as `workcell__eval(action="status")`.
-
-Report the evaluation interface availability; no evaluation is implemented.
-
-No arguments.
+Toolset `workcell` is off until you select it with `+workcell`. Reference: [README.md](../exts/workcell/workcell/README.md). 7 tools, listed as 4: `workcell__cell` (quick_start, status, shutdown), `workcell__jenga` (build, status), `workcell__perception` (status), `workcell__robot` (status).
 
 ### `workcell__jenga_build`
 
@@ -1492,22 +1569,6 @@ Read camera build details; this does not capture sensor data.
 
 No arguments.
 
-### `workcell__planning_status`
-
-Listed as `workcell__planning(action="status")`.
-
-Report the planning interface availability; no planner is implemented.
-
-No arguments.
-
-### `workcell__real2sim_status`
-
-Listed as `workcell__real2sim(action="status")`.
-
-Report the real-to-simulation interface availability; no synchronization is implemented.
-
-No arguments.
-
 ### `workcell__robot_status`
 
 Listed as `workcell__robot(action="status")`.
@@ -1520,7 +1581,7 @@ No arguments.
 
 Listed as `workcell__cell(action="quick_start")`.
 
-Build a stopped workcell from an external asset pack; qualified on PhysX only, so a Newton session refuses it. Refuses unsaved stage changes unless explicitly allowed.
+Build a stopped workcell from an external asset pack, on PhysX or Newton (Newton uses the config's per-engine drives; mirror_real needs PhysX). Refuses unsaved stage changes unless explicitly allowed.
 
 - `config_path` (string, optional): Optional hardware configuration path.
 - `mode` (physics|mirror_real, default `"physics"`): Physics mode, or zero-gravity mirror mode.
@@ -1542,44 +1603,7 @@ Read the current workcell build report.
 
 No arguments.
 
-## `robosim`: RoboSimStudio real-to-sim runs in its own private environment
-
-Toolset `robosim` is off until you select it with `+robosim`. Reference: [ROBOSIM.md](ROBOSIM.md). 1 tools, listed as 1: `robosim`.
-
-### `robosim`
-
-RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a scene from plain-data template (frozen until update_scene), reference a clip, compare, tune_push, rollout, compare_take, report, stop. Compares images; no mass or friction fitting. Scene code is not sandboxed; cuda:0 uses the GPU. Long actions: poll status.
-
-- `action` (Literal['status', 'start', 'scene_template', 'update_scene', 'reference', 'snapshot', 'compare', 'rollout', 'tune_push', 'compare_take', 'stop', 'report'], required): Action to perform.
-- `run` (str | None, default `None`): Exact run name from start. status: omit for a compact list. scene_template: write the file there.
-- `name` (str | None, default `None`): start: short run name; letters, digits, underscores and hyphens.
-- `scene` (str | None, default `None`): start/update_scene, advanced: absolute trusted scene .py (runs code, not sandboxed). Else use template.
-- `device` (Literal['cpu', 'cuda:0'] | None, default `None`): start (required): cpu is plain MuJoCo, cuda:0 is Newton MuJoCo-Warp. Runs inherit it.
-- `video` (str | None, default `None`): reference: absolute local video file; copied before extracting frames.
-- `keys` (list[str] | None, default `None`): compare/compare_take: RSS object masks, e.g. ['block=red'] or ['block=#d01a10~0.1'].
-- `take` (str | None, default `None`): rollout/compare_take: take name. tune_push: base name; trials are NAME-1, NAME-2.
-- `routine` (str | None, default `None`): rollout: 'push' (default in the template) or 'settle', or a routine your scene defines.
-- `camera` (str | None, default `None`): Camera name from start's RSS status; omit for the scene's first camera.
-- `at` (str | None, default `None`): reference: RSS anchors in clip seconds, e.g. '0:start,3:middle,6:end'; default from start_s/end_s.
-- `shape` (Literal['box', 'tee', 'jenga'], default `'tee'`): scene_template: tee, box or jenga, unless template gives a shape.
-- `push` (dict | None, default `None`): rollout/tune_push: {'waypoints': [[s, x, y], ...] pusher path in m, 'object_velocity': [vx, vy, wz]}.
-- `duration_s` (float | None, default `None`): rollout: simulated seconds; default the last waypoint time. Not with steps.
-- `steps` (int | None, default `None`): rollout: control steps instead of duration_s.
-- `record_fps` (float, default `10.0`): rollout: frames per simulated second to record (nearest whole step stride).
-- `start_s` (float | None, default `None`): reference: clip window start; compare_take: clip window start (default: reference's).
-- `end_s` (float | None, default `None`): reference/compare_take: clip window end in seconds.
-- `sim_start_s` (float | None, default `None`): compare_take: simulated time matching start_s; default 0.
-- `sim_end_s` (float | None, default `None`): compare_take: simulated time matching end_s; default same length as the clip window.
-- `size` (str, default `'320x240'`): snapshot/compare: WIDTHxHEIGHT pixels.
-- `width` (int, default `320`): reference: contact-sheet tile width.
-- `port` (int | None, default `None`): start: viewer port; omit to pick a free one. RSS listens on all interfaces.
-- `wait_s` (float, default `0`): Wait at most this many seconds; poll status with run for completion.
-- `allow_concurrent_gpu` (bool, default `False`): start: knowingly permit cuda:0 despite other GPU workloads or an unavailable GPU check.
-- `template` (dict | None, default `None`): start/update_scene/scene_template: plain data {shape, size, position [x,y], yaw, color, camera, push}.
-- `all` (bool, default `False`): status without run: every run in full, not live servers and the 5 newest.
-- `max_trials` (int | None, default `None`): tune_push: most rollouts to try (default 6, at most 12).
-
-## `cad`: PCB checks, fab files and renders from tools beside twinsmith
+## `cad`: PCB checks, fab files and renders
 
 Toolset `cad` is off until you select it with `+cad`. Reference: [HARDWARE.md](HARDWARE.md). 1 tools, listed as 1: `hardware`.
 

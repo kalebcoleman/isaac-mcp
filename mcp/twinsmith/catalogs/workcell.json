@@ -3,7 +3,7 @@
   "namespace": "workcell",
   "tools": {
     "workcell.workcell_quick_start": {
-      "description": "Build a stopped workcell from an external asset pack; qualified on PhysX only, so a Newton session refuses it. Refuses unsaved stage changes unless explicitly allowed.",
+      "description": "Build a stopped workcell from an external asset pack, on PhysX or Newton (Newton uses the config's per-engine drives; mirror_real needs PhysX). Refuses unsaved stage changes unless explicitly allowed.",
       "parameters": {
         "config_path": {
           "type": "string",
@@ -126,27 +126,6 @@
           "description": "Optional integer seed; omitted uses the configured variation_seed. A selected profile requires a seed."
         }
       ],
-      "namespace": "workcell",
-      "owner_id": "workcell"
-    },
-    "workcell.real2sim_status": {
-      "description": "Report the real-to-simulation interface availability; no synchronization is implemented.",
-      "parameters": {},
-      "fields": [],
-      "namespace": "workcell",
-      "owner_id": "workcell"
-    },
-    "workcell.planning_status": {
-      "description": "Report the planning interface availability; no planner is implemented.",
-      "parameters": {},
-      "fields": [],
-      "namespace": "workcell",
-      "owner_id": "workcell"
-    },
-    "workcell.eval_status": {
-      "description": "Report the evaluation interface availability; no evaluation is implemented.",
-      "parameters": {},
-      "fields": [],
       "namespace": "workcell",
       "owner_id": "workcell"
     }
