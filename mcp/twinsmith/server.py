@@ -62,7 +62,7 @@ SERVER_INSTRUCTIONS = (
     "Call status first, once: it identifies the bridge, running work and stage IDs, and lists enabled and "
     "disabled toolsets. The twinsmith://toolsets resource reports the same selection. "
     "Use help(task=...) to find a tool; a needed toolset that is off can be turned on with "
-    "toolsets(action=\"enable\", names=[...]), except input and launch. Prefer listed tools over custom code. Confirm the intended simulator "
+    "toolsets(action=\"enable\", names=[...]), except computer, which only the user selects at startup. Prefer listed tools over custom code. Confirm the intended simulator "
     "before changing a scene; do not start extra GPU work or stop unrelated processes without authorization. "
     "Tool visibility is not a security boundary. Respect bridge authentication and read-only refusals.")
 
@@ -319,7 +319,8 @@ def discover_and_register_tools(server: FastMCP) -> List[str]:
     try:
         tools = {name: meta for name, meta in result["tools"].items() if _visible(name, meta, state)}
     except ValueError as error:
-        raise RuntimeError(str(error)) from error
+        raise RuntimeError(f"{error}: this bridge serves a tool this server does not know. Run the MCP server and Kit "
+                           "from the same twinsmith checkout, and restart Kit after updating it.") from error
     names = {}
     for canonical, meta in tools.items():
         if "fields" not in meta:
@@ -1986,9 +1987,9 @@ def _register_gateway_tools(server: FastMCP, groups: Iterable[str], state: Optio
 
     @mcp.tool(name="toolsets", annotations=IDEMPOTENT_WRITE)
     async def toolsets_tool(action: Annotated[Literal["list", "enable", "disable"], Field(description="list: what is on or off. enable/disable: turn toolsets on or off for this server process.")],
-                            names: Annotated[list[str] | None, Field(description="Toolset names for enable or disable, e.g. [\"lab\"]. Take them from list or status.")] = None,
+                            names: Annotated[list[str] | None, Field(description="Toolset names for enable or disable, e.g. [\"sim\"]. Take them from list or status.")] = None,
                             ctx: Context = None) -> Any:  # type: ignore[assignment]
-        """Toolsets: groups of tools that are on or off. list shows which are on, off with their tool counts, and which you can enable now; enable registers a toolset's tools (the tool list changes and the result names the new tools); disable removes them. Lasts for this server process only. input and launch cannot be enabled at run time; the user sets them at startup."""
+        """Toolsets: groups of tools that are on or off. list shows which are on, off with their tool counts, and which you can enable now; enable registers a toolset's tools (the tool list changes and the result names the new tools); disable removes them. Lasts for this server process only. computer cannot be enabled at run time; the user selects it at startup."""
         return await _change_toolsets(server, action, names, ctx)
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE, description=(

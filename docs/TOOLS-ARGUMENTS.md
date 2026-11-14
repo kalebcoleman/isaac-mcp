@@ -95,10 +95,10 @@ Where am I, in one call: the bridge that answered (pid, port, app, readiness), e
 
 ### `toolsets`
 
-Toolsets: groups of tools that are on or off. list shows which are on, off with their tool counts, and which you can enable now; enable registers a toolset's tools (the tool list changes and the result names the new tools); disable removes them. Lasts for this server process only. input and launch cannot be enabled at run time; the user sets them at startup.
+Toolsets: groups of tools that are on or off. list shows which are on, off with their tool counts, and which you can enable now; enable registers a toolset's tools (the tool list changes and the result names the new tools); disable removes them. Lasts for this server process only. computer cannot be enabled at run time; the user selects it at startup.
 
 - `action` (Literal['list', 'enable', 'disable'], required): list: what is on or off. enable/disable: turn toolsets on or off for this server process.
-- `names` (list[str] | None, default `None`): Toolset names for enable or disable, e.g. ["lab"]. Take them from list or status.
+- `names` (list[str] | None, default `None`): Toolset names for enable or disable, e.g. ["sim"]. Take them from list or status.
 
 ### `use_bridge`
 
