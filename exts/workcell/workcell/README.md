@@ -194,8 +194,17 @@ from. The changes:
   enough for PhysX with gravity on, and `assets__validate` warns (`DRIVE_GAIN`) that they are too stiff for a 500 Hz explicit
   solver; the gains Newton needs are a per-engine setting for Phase 2, not a pack edit.
 
-`assets__validate` passes on the bench and the RG2, and gives only the six `DRIVE_GAIN` warnings on the UR5e. `v2` has not
-yet been run live on PhysX or Newton.
+`assets__validate` passes on the bench and the RG2, and gives only the six `DRIVE_GAIN` warnings on the UR5e.
+
+**Live on PhysX (2026-11-14, Isaac Sim 6.2.0, headless, RTX PRO 6000 Blackwell, physics at 600 Hz).**
+- `scripts/workcell_smoke.py` passes. The arm and gripper form one articulation, and nothing is patched at build time.
+- Twelve DOFs: six arm joints, two driven knuckles and four mimic followers. Every value stays finite.
+- With gravity on, the arm drifts at most 0.0002 degrees over 960 steps.
+- Both knuckles were commanded to -20 degrees and reached -17.7 degrees after 360 steps, held back by the 1 N m drive.
+- The four mimic followers matched their ratio to within 0.001 degrees.
+- Kit logged no warnings or errors.
+- The 54-block tower settled by at most 0.95 mm over 2 s.
+- Not tested: Newton, grasp contact and cameras.
 
 ## Physical fidelity
 

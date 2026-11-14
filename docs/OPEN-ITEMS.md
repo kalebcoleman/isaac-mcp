@@ -52,7 +52,11 @@ What works, once the scene is adapted in the session layer:
   convex hulls per bench mesh avoid it. `assets__mesh action=split` now writes a bench with a separate box or hull collision
   layer, the work cell keeps such a layer, and `assets__validate` checks for this and the faults below from the file. Pack
   `ur5e-jenga-workcell/v2` (built 2026-11-13, see the work cell README) has that layer, the RG2 in the arm's articulation
-  with mimic-coupled fingers, and no zero-force drives. It has not been run live on PhysX or Newton yet.
+  with mimic-coupled fingers, and no zero-force drives. Live on PhysX (2026-11-14) it passes the smoke test:
+  - the arm holds with gravity on;
+  - the fingers move, with the mimic followers within 0.001 degrees of their ratios;
+  - the tower settles under 1 mm.
+  The Newton run (with the refusal bypassed) is still to do; the arm's per-engine gains block it.
 - [x] The RG2's passive joints author a drive with `maxForce` 0, which MuJoCo rejects ("actfrcrange[0] should be smaller than
   actfrcrange[1]"); removing those drives avoids it.
 - [x] One articulation for the arm and gripper (the RG2 mount joint included in the arm, the RG2 articulation root removed)
