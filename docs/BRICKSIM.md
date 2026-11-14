@@ -18,7 +18,7 @@ Use `.venv/bin/bricksim`, not `uv run`, so that nothing in its environment is ch
 `demos/demo_assembly.py` builds its scene and then waits, paused, for Play. A plain `sim__timeline__control action=play` refuses with `TIMELINE_ALREADY_ACTIVE`, and its suggested stop would end the demo. Continue it with:
 
 ```
-sim__stage__info
+sim__stage action=info
 sim__timeline__control action=play resume=true
 ```
 
@@ -26,7 +26,7 @@ The arm then builds the structure by itself: all four bricks onto the baseplate,
 
 ## Toolsets to enable next to BrickSim
 
-The default toolsets are enough: `scene` (stage, prims), `physics` (body state, contacts, raycast, joints, arm), `sensors` (cameras), `code` (`run_python`) and `screen` (screenshots and recordings). Nothing needs turning on. Add `lab` only to train a project task (see below), and leave `workcell` off. Choose them with [toolsets](TOOLSETS.md#choosing-toolsets).
+Turn on `sim` (stage, prims, body state, contacts, raycast, joints, arm, cameras, `run_python`) and `screen` (screenshots and recordings): `TWINSMITH_TOOLSETS=default,+sim,+screen`. Add `lab` only to train a project task (see below), and leave `workcell` off. Choose them with [toolsets](TOOLSETS.md#choosing-toolsets).
 
 ## Which tools work on bricks
 
@@ -34,16 +34,16 @@ Bricks are under `/World/managed/Parts/Part_N`, and the arm is `/World/Robot`.
 
 | Tool | Result |
 |---|---|
-| `sim__stage__tree root=/World/managed depth=3`, `sim__prim__find`, `sim__prim__get`, `sim__prim__bounds` | Work |
-| `sim__body__state` on a brick | Works, while the timeline runs |
-| `sim__physics__contacts paths=[...]` | Works: names the brick's colliders and what they touch |
-| `sim__physics__raycast` | Works |
-| `sim__joints__state`, `sim__arm__fk` on `/World/Robot` | Work; the FK self-check agreed with physics to 2e-7 m |
-| `sim__camera__list`, `screenshot`, `screen_recording` | Work |
+| `sim__stage action=tree root=/World/managed depth=3`, `sim__prim` actions `find`, `get` and `bounds` | Work |
+| `sim__physics action=body_state` on a brick | Works, while the timeline runs |
+| `sim__physics action=contacts paths=[...]` | Works: names the brick's colliders and what they touch |
+| `sim__physics action=raycast` | Works |
+| `sim__joints action=state`, `sim__arm action=fk` on `/World/Robot` | Work; the FK self-check agreed with physics to 2e-7 m |
+| `sim__camera action=list`, `screenshot`, `screen_recording` | Work |
 | `sim__viewport__frame path=/World/LegoWorkspace` | Refused: that mesh is not a framing target. Give `eye` and `target` |
-| `sim__arm__ik move=true`, `sim__joints__command` | Do not use while a demo runs: its own controller is commanding the arm |
+| `sim__arm action=ik move=true`, `sim__joints action=command` | Do not use while a demo runs: its own controller is commanding the arm |
 
-These tools see rigid bodies and physics contacts. `sim__physics__contacts` does not report which bricks are connected by studs, because that is BrickSim's own model and not a physics contact. Read it from its Python API with `run_python`, which runs code inside Kit: `bricksim.core.get_assembled_connections()` and `are_parts_connected()`. A tester with no other help got each brick's position and the connection graph this way.
+These tools see rigid bodies and physics contacts. `sim__physics action=contacts` does not report which bricks are connected by studs, because that is BrickSim's own model and not a physics contact. Read it from its Python API with `run_python`, which runs code inside Kit: `bricksim.core.get_assembled_connections()` and `are_parts_connected()`. A tester with no other help got each brick's position and the connection graph this way.
 
 ## Training a project task
 

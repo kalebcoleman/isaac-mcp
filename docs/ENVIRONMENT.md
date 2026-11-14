@@ -53,9 +53,12 @@ A project's `twinsmith.json` is a different file, read for asset packs and the I
 | `TWINSMITH_LOG_DIR` | `$XDG_STATE_HOME/twinsmith`, else `~/.local/state/twinsmith` | host | Directory of the `server-<pid>.log` files (1 MB x 3, private). |
 | `XDG_STATE_HOME` | `~/.local/state` | host | Base of the default log directory. |
 | `DISPLAY` | `:0` | host | X11 display for the screen and desktop-input tools. Match your session. |
+| `TWINSMITH_KIKIT` | `<workspace>/tools/kikit/.venv/bin/kikit` | host | The KiKit command `hardware` runs for `fab`. See [HARDWARE.md](HARDWARE.md). |
+| `TWINSMITH_BLENDER` | `blender` on `PATH` | host | The Blender `hardware` runs for `render`. See [HARDWARE.md](HARDWARE.md). |
 | `TWINSMITH_ROBOSIM_ROOT` | `<workspace>/tools/robosimstudio` | host | The RoboSimStudio checkout the `robosim` tool runs. See [ROBOSIM.md](ROBOSIM.md). |
 | `TWINSMITH_GAP_ROOT` | `<workspace>/tools/graph-as-policy` | host | The Graph-as-Policy checkout the `gap` tool runs; the skill library is the `open-robot-skills` folder beside it. See [PLANNING-EVAL.md](PLANNING-EVAL.md). |
 | `TWINSMITH_VABAR_ROOT` | `<workspace>/tools/vabar` | host | The VABAR checkout the `vabar` tool runs. See [PLANNING-EVAL.md](PLANNING-EVAL.md). |
+| `TWINSMITH_SYSID_ROOT` | `<workspace>/tools/sysid` | host | The folder whose `.venv` (MuJoCo 4.0.1 with its `sysid` extra) the `sysid` tool runs. See [SYSID.md](SYSID.md). |
 
 Toolsets are visibility preferences, not security: the token and read-only mode are enforced by the bridge.
 
@@ -116,11 +119,11 @@ These must be the same for the host and for Kit: each reads its own environment.
 
 | Variable | Default | Read by | Meaning |
 |---|---|---|---|
-| `TWINSMITH_ASSET_ROOT` | `<workspace>/assets`, else `<workspace>/isaac-mcp-assets` (transitional, with a warning) | host, Kit | The one [asset root](ASSET-PACKS.md#the-asset-root-and-how-it-is-found): packs are `<pack id>/<version>/pack.yaml` under it. With nothing found, the error names this setting. `ISAAC_MCP_ASSET_ROOT` is a permanent alias of it: it needs no change and prints no warning. |
+| `TWINSMITH_ASSET_ROOT` | `<workspace>/assets` | host, Kit | The one [asset root](ASSET-PACKS.md#the-asset-root-and-how-it-is-found): packs are `<pack id>/<version>/pack.yaml` under it. With nothing found, the error names this setting. |
 | `TWINSMITH_ASSET_CONFIG` | unset | host, Kit | The [trusted-project approval file](TOOLS-SCENE.md#one-time-approval). No file means no approved roots. |
 | `TWINSMITH_STAGING` | `~/.cache/twinsmith/staging` | host, Kit | With no approval file: the private folder the host copies import snapshots into and Kit reads them from. |
 | `TWINSMITH_USD_PYTHON` | unset | host | A Python with `usd-core` for USD dependency checks on the host; without it they use the selected Kit. |
-| `TWINSMITH_WORKSPACE` | the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace` (the old `<home>/isaac-workspace` only while the new folder is absent); `scripts/env.py init` uses `<home>/robotics-workspace` | host, Kit, installer | The [workspace folder](LINUX-SETUP.md#one-workspace-folder); `<workspace>/assets` is where the asset root is looked for. |
+| `TWINSMITH_WORKSPACE` | the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace`; `scripts/env.py init` uses `<home>/robotics-workspace` | host, Kit, installer | The [workspace folder](LINUX-SETUP.md#one-workspace-folder); `<workspace>/assets` is where the asset root is looked for. |
 | `TWINSMITH_PROJECT` | walk up from the working directory | host, Kit | A project directory or its `twinsmith.json`; its `"pack"` key (`"<id>/<version>"`) is the default pack for `doctor` and `pin`. Only a project named here can set `isaaclab_python` and `isaaclab_root`. |
 
 ## Set by the code, read by the code
@@ -134,6 +137,4 @@ Handshakes between the server's own processes. They are not meant to be set by h
 | `TWINSMITH_TF_DOCTOR_REEXEC` | unset | `scripts/ros2_tf_doctor.py` | Stops the doctor re-running itself in a second environment more than once. |
 
 A managed session's Kit also receives `TWINSMITH_SIM_SESSION_ID` and `TWINSMITH_SIM_SESSION_DIR` from the host; no code reads
-them, they identify the process to a person. Variables that were removed with the toolsets and with the old asset model are refused with the replacement, not read; see [MIGRATING.md](MIGRATING.md#settings-that-were-already-removed).
-
-Every variable above had another name before 0.3.0. [MIGRATING.md](MIGRATING.md#environment-variables) lists them; the old names still work in 0.3.x and print one warning each.
+them, they identify the process to a person.

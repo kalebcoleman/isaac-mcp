@@ -158,7 +158,7 @@ def test_input_toolset_is_read_when_called(desk):
 ])
 def test_bridge_down_or_stale(desk, error, reason):
     FakeClient.answer = error
-    report = _doctor(_state("kit_debug"))[1]()
+    report = _doctor(_state("sim"))[1]()
     assert report["bridge"]["reachable"] is False and reason in report["bridge"]["reason"]
     assert report["ready"]["sim__ui"] is False and reason in report["next"]
 
@@ -168,7 +168,7 @@ def test_bridge_up_with_readiness(desk, monkeypatch):
                          "headless": False}
     monkeypatch.setattr(screen, "_bridge_pid", lambda port: 4242 if port == 8766 else None)
     monkeypatch.setattr(screen, "window_for_pid", lambda pid: {"id": 77, "pid": pid, "title": "Isaac Sim 6.0"})
-    report = _doctor(_state("input", "kit_debug"))[1]()
+    report = _doctor(_state("input", "sim"))[1]()
     assert FakeClient.calls == [((None, 8766, screen.BRIDGE_PROBE_S), "sim.ui.find", {"readiness": True, "limit": 0})]
     assert screen.BRIDGE_PROBE_S <= 5
     assert report["bridge"] == {"port": 8766, "reachable": True, "ui_test_enabled": False, "dpi_scale": 1.5,
@@ -178,11 +178,11 @@ def test_bridge_up_with_readiness(desk, monkeypatch):
     assert report["next"] == "computer and sim__ui are ready"
 
 
-def test_sim_ui_needs_kit_debug(desk):
+def test_sim_ui_needs_sim(desk):
     FakeClient.answer = {"ui_test_enabled": True, "dpi_scale": 1.0, "main_window": {}, "headless": False}
     report = _doctor(_state("input"))[1]()
     assert report["ready"]["sim__ui"] is False
-    assert 'toolsets(action="enable", names=["kit_debug"])' in report["next"]
+    assert 'toolsets(action="enable", names=["sim"])' in report["next"]
 
 
 @pytest.mark.parametrize("answer,expect", [
@@ -193,7 +193,7 @@ def test_sim_ui_needs_kit_debug(desk):
 ])
 def test_older_or_failing_kit_reports_unknown(desk, answer, expect):
     FakeClient.answer = answer
-    report = _doctor(_state("kit_debug"))[1]()
+    report = _doctor(_state("sim"))[1]()
     assert report["bridge"]["reachable"] is True and report["bridge"]["readiness"] == "unknown"
     assert expect in report["bridge"]["reason"] and report["ready"]["sim__ui"] is False
 
@@ -203,7 +203,7 @@ def test_older_or_failing_kit_reports_unknown(desk, answer, expect):
     {"ui_test_enabled": False, "dpi_scale": 1.0, "main_window": {"width": 0, "height": 0}, "headless": True}])
 def test_headless_kit_blocks_sim_ui(desk, answer):
     FakeClient.answer = answer
-    report = _doctor(_state("kit_debug"))[1]()
+    report = _doctor(_state("sim"))[1]()
     assert report["bridge"]["headless"] is True and "headless" in report["next"]
 
 
@@ -265,11 +265,11 @@ def test_notes_say_what_works_with_a_limit(desk, monkeypatch):
 
 def test_the_first_sim_ui_call_enabling_ui_test_is_a_note_not_a_blocker(desk):
     FakeClient.answer = {"ui_test_enabled": False, "dpi_scale": 1.0, "main_window": {}, "headless": False}
-    report = _doctor(_state("kit_debug"))[1]()
+    report = _doctor(_state("sim"))[1]()
     assert report["ready"]["sim__ui"] is True and "the first sim__ui call turns it on" in report["notes"][0]
 
 
 def test_a_bridge_error_is_said_once_and_whole(desk):
     message = "AUTH_REQUIRED: this bridge needs its token. A client on the same account reads it from the token file."
     FakeClient.answer = {"status": "error", "code": "AUTH_REQUIRED", "message": message}
-    assert _doctor(_state("kit_debug"))[1]()["bridge"]["reason"] == message
+    assert _doctor(_state("sim"))[1]()["bridge"]["reason"] == message

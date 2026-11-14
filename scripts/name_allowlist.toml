@@ -2,57 +2,6 @@
 # other hit, on an entry that matches nothing, and on an entry whose "remove_by" version has been reached.
 # "pattern" is a name from check_names.py's PATTERNS, or "*" for all of them; "literal" limits an entry to one spelling.
 
-# --- The table of old names, and the tests of it
-
-[[allow]]
-pattern = "*"
-path = "mcp/twinsmith/legacy.py"
-reason = "The alias table: the one place in the code where the old names are written."
-
-[[allow]]
-pattern = "*"
-path = "mcp/tests/test_legacy_names.py"
-reason = "Tests of the alias table; they must spell the old names they exercise."
-
-[[allow]]
-pattern = "*"
-path = "docs/MIGRATING.md"
-reason = "The migration page lists every old name next to its new one."
-
-# --- ISAAC_MCP_ASSET_ROOT is a permanent alias of TWINSMITH_ASSET_ROOT: no warning, no removal date
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "exts/workcell/workcell/asset_pack.py"
-literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Permanent alias, read here because this loader runs in Kit and must work without the host's table."
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "docs/ASSET-PACKS.md"
-literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Documents the permanent alias."
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "docs/ENVIRONMENT.md"
-literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Documents the permanent alias."
-
-# --- Folder names that exist on users' disks
-
-[[allow]]
-pattern = "isaac-mcp"
-path = "*"
-literal = "isaac-mcp-assets"
-reason = "The transitional asset-root folder name is still recognised (with a warning); it is a folder on users' disks."
-
-[[allow]]
-pattern = "isaac-mcp"
-path = "exts/workcell/workcell/cameras.py"
-literal = "isaac-mcp-salvage"
-reason = "A folder on a lab machine that a pack must never be loaded from; the check keeps refusing its name."
-
 # --- Upstream project names, licences and provenance
 
 [[allow]]

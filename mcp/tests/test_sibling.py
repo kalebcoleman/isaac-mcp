@@ -1,5 +1,7 @@
 """Pinned sibling checkouts: no upstream tool, network or GPU needed."""
 
+import json
+
 import pytest
 
 from twinsmith import sibling
@@ -58,8 +60,9 @@ def test_environment_is_scrubbed(monkeypatch):
 def test_run_captures_and_times_out(tmp_path):
     root = tmp_path / "tools/thing"
     fake_checkout(root)
-    done = sibling.run([root / ".venv/bin/python", "hello"], cwd=tmp_path)
-    assert done["exit_code"] == 0 and '"hello"' in done["stdout"]
+    done = sibling.run([root / ".venv/bin/python", "hello"], cwd=tmp_path, stdout_chars=sibling.WHOLE)
+    assert done["exit_code"] == 0 and json.loads(done["stdout"])["argv"][1:] == ["hello"]
+    assert len(sibling.run([root / ".venv/bin/python", "hello"], cwd=tmp_path, stdout_chars=10)["stdout"]) == 10
     slow = sibling.run(["sleep", "5"], cwd=tmp_path, timeout_s=0.2)
     assert slow["timed_out"] and slow["exit_code"] is None
 
@@ -68,29 +71,15 @@ def test_start_job_is_a_job_the_jobs_tool_follows(tmp_path, monkeypatch):
     monkeypatch.setenv("ROS_DOMAIN_ID", "7")
     root = tmp_path / "tools/thing"
     fake_checkout(root)
-    started = sibling.start_job([root / ".venv/bin/python", "go"], kind="thing-run", label="thing-one", cwd=tmp_path,
-                                env={"EXTRA": "1"}, timeout_s=60)
-    assert set(started) == {"job_id", "log_dir"}
+    started = sibling.start_job([root / ".venv/bin/python", "go"], task="thing-one", kind="thing-run", cwd=tmp_path,
+                                env_set={"EXTRA": "1"}, timeout_s=60)
+    assert started["ok"] and set(started) == {"ok", "job_id", "log_dir", "command"}
     status = wait_for(started["job_id"])
     assert status["state"] == "succeeded" and status["exit_code"] == 0
     record = jobs._read_job(jobs.jobs_dir() / started["job_id"])
     assert record["kind"] == "thing-run" and record["command"] == [str(root / ".venv/bin/python"), "go"]
     (call,) = calls(root)
-    assert call["env"]["EXTRA"] == "1" and call["env"]["PYTHONUNBUFFERED"] == "1" and "ROS_DOMAIN_ID" not in call["env"]
-
-
-def test_start_job_respects_the_gpu_guard(tmp_path, monkeypatch):
-    root = tmp_path / "tools/thing"
-    fake_checkout(root)
-    monkeypatch.setattr(jobs, "_concurrency_guard", lambda: {"error": "another job is running", "running_job_id": "x"})
-    refused = sibling.start_job([root / ".venv/bin/python"], kind="k", label="l", cwd=tmp_path, timeout_s=60)
-    assert refused["error"] == "another job is running" and "allow_concurrent_gpu" in refused["hint"]
-    assert calls(root) == [] and not any(jobs.jobs_dir().iterdir())
-    allowed = sibling.start_job([root / ".venv/bin/python"], kind="k", label="l", cwd=tmp_path, timeout_s=60,
-                                allow_concurrent_gpu=True)
-    assert wait_for(allowed["job_id"])["state"] == "succeeded"
-    cpu = sibling.start_job([root / ".venv/bin/python"], kind="k", label="m", cwd=tmp_path, timeout_s=60, uses_gpu=False)
-    assert "job_id" in cpu
+    assert call["env"]["EXTRA"] == "1" and "ROS_DOMAIN_ID" not in call["env"]
 
 
 def test_answer_envelope():

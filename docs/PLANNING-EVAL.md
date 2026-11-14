@@ -110,7 +110,7 @@ budget. Nothing is stopped to make room.
 
 Every answer has the same envelope: `{ok, tool, action, commit, pin, pin_match, exit_code, result | error, warnings}`,
 with `code` on a refusal (`REAL_ROBOT_REFUSED`, `PAID_NOT_ALLOWED`, `NOT_INSTALLED`, `PATH_NOT_ALLOWED`, `NOT_FOUND`,
-`ALREADY_EXISTS`, `INVALID_VALUE`, `GUARD_REFUSED`, `UPSTREAM_FAILED`). A checkout at another commit still runs, with a
+`ALREADY_EXISTS`, `INVALID_VALUE`, `GPU_BUSY`, `GPU_BUDGET`, `UPSTREAM_FAILED`). A checkout at another commit still runs, with a
 warning that it differs from the tested pin.
 
 ## What has been verified

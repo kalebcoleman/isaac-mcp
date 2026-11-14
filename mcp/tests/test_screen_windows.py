@@ -364,7 +364,7 @@ def test_monitor_captures_warn_when_locked_and_window_captures_do_not(monkeypatc
     monkeypatch.setattr(screen, "_match_window", lambda *a, **k: window)
     monkeypatch.setattr(screen, "_grab_window_image", lambda win: screen.PILImage.new("RGB", (4, 2)))
     server = FastMCP("t")
-    screen.register_screen_tools(server)
+    screen.register_screen_tools(server, groups={"screen"})
     shot = server._tool_manager._tools["screenshot"].fn
     assert "screen is locked" in shot(monitor=1)[1]
     assert "screen is locked" not in shot(window_id=7)[1]

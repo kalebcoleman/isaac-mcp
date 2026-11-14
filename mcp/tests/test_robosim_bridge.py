@@ -6,7 +6,6 @@ import json
 import math
 import os
 from pathlib import Path
-import shlex
 import shutil
 import subprocess
 import sys
@@ -25,7 +24,7 @@ run = pathlib.Path(args[args.index("--run-dir") + 1])
 if "robosimstudio_real2sim_agent.serve" in args:
     while True:
         time.sleep(0.1)
-args = args[2:]
+args = args[args.index("--run-dir") + 2:]
 action = args[0]
 with (run / "calls.jsonl").open("a") as output:
     output.write(json.dumps({"args": args, "cwd": os.getcwd(), "env": {
@@ -166,13 +165,12 @@ print(json.dumps(reply))
 def fake(tmp_path, monkeypatch):
     root = tmp_path / "rss"
     python = root / ".venv/bin/python"
-    ctl = root / "examples/live/ctl"
+    module = root / "robosimstudio_real2sim_agent/__main__.py"
     python.parent.mkdir(parents=True)
-    ctl.parent.mkdir(parents=True)
+    module.parent.mkdir(parents=True)
     python.write_text(f"#!{sys.executable}\n" + STUB)
     python.chmod(0o755)
-    ctl.write_text(f'#!/bin/sh\nexec {shlex.quote(str(python))} "$@"\n')
-    ctl.chmod(0o755)
+    module.write_text("")
     original_run = subprocess.run
     gpu_calls = []
 
@@ -244,10 +242,15 @@ def test_missing_venv(fake):
     assert "private environment missing" in bridge.call("status")["error"]
 
 
-@pytest.mark.parametrize("executable", [".venv/bin/python", "examples/live/ctl"])
-def test_unexecutable_install(fake, executable):
+def test_unexecutable_install(fake):
     bridge = fake[0]
-    (bridge.root / executable).chmod(0o644)
+    (bridge.root / ".venv/bin/python").chmod(0o644)
+    assert "private environment missing" in bridge.call("status")["error"]
+
+
+def test_missing_module(fake):
+    bridge = fake[0]
+    (bridge.root / "robosimstudio_real2sim_agent/__main__.py").unlink()
     assert "private environment missing" in bridge.call("status")["error"]
 
 
@@ -342,8 +345,10 @@ def test_complete_workflow_and_containment(fake):
         assert call["env"]["XDG_CACHE_HOME"] == str(bridge.root / ".cache")
         assert call["env"]["WARP_CACHE_PATH"] == str(bridge.root / ".cache/warp")
     assert not gpu_calls
-    assert sorted(str(file.relative_to(bridge.root)) for file in bridge.root.rglob("*") if file.is_file()) == [".venv/bin/python", "examples/live/ctl"]
+    assert sorted(str(file.relative_to(bridge.root)) for file in bridge.root.rglob("*") if file.is_file()) == [".venv/bin/python", "robosimstudio_real2sim_agent/__main__.py"]
     assert all("wall_s" in command and "finished_at" in command for command in ledger["commands"])
+    assert all(command["argv"][:3] == [str(bridge.root / ".venv/bin/python"), "-m", "robosimstudio_real2sim_agent"]
+               for command in ledger["commands"])
 
 
 def test_async_poll_and_busy(fake):
@@ -1286,10 +1291,6 @@ def test_the_workspace_follows_the_shared_rule(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setattr(pack_manifest, "checkout_root", lambda: None)
     monkeypatch.delenv("TWINSMITH_WORKSPACE", raising=False)
-    assert RoboSimBridge().workspace == tmp_path / "home" / "robotics-workspace"
-    (tmp_path / "home" / "isaac-workspace").mkdir(parents=True)
-    assert RoboSimBridge().workspace == tmp_path / "home" / "isaac-workspace"      # only while the new folder is absent
-    (tmp_path / "home" / "robotics-workspace").mkdir()
     assert RoboSimBridge().workspace == tmp_path / "home" / "robotics-workspace"
     monkeypatch.setenv("TWINSMITH_WORKSPACE", str(tmp_path / "chosen"))
     assert RoboSimBridge().workspace == (tmp_path / "chosen").resolve()

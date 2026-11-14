@@ -27,6 +27,8 @@ over both.
 | [Host and bridge](TOOLS-HOST.md) | Gateway, desktop, opt-in input and sessions, bridge built-ins |
 | [Isaac Lab](TOOLS-ISAACLAB.md) | `isaaclab__*`: discovery, jobs, guards, metrics |
 | [RoboSimStudio](ROBOSIM.md) | The `robosim` tool: real-to-sim runs in RoboSimStudio's own environment |
+| [System identification](SYSID.md) | The `sysid` tool: fit damping, friction, gains and mass to recorded trajectories with MuJoCo |
+| [Hardware](HARDWARE.md) | The `hardware` tool (`cad`): KiCad checks, fab files and renders from tools beside twinsmith |
 | [Planning and evaluation](PLANNING-EVAL.md) | The `gap` and `vabar` tools: Graph-as-Policy skill graphs in simulation and VABAR benchmark runs, from pinned checkouts |
 | [Work cell](../exts/workcell/workcell/README.md) | The lab's UR5e Jenga work cell: BOM, private pack, tools. [Jenga variation contract](TOOLS-WORKCELL.md) |
 | [BrickSim](BRICKSIM.md) | LEGO bricks with these tools: the bridge next to BrickSim, which tools work on bricks, its RL task |
@@ -44,7 +46,7 @@ over both.
 
 | Page | Use it for |
 |---|---|
-| [How it works](ARCHITECTURE.md) | The whole system with a diagram: client, host server, bridge, Kit extensions, Isaac Lab jobs, asset packs, RoboSimStudio, where each setting is read |
+| [How it works](ARCHITECTURE.md) | The whole system with a diagram: client, host server, bridge, Kit extensions, Isaac Lab jobs, asset packs, RoboSimStudio, where each setting is read. Its last section is the [target layout](ARCHITECTURE.md#target-layout-planned): groups, process boundaries, version pins, safety boundaries |
 | [Host package readme](../mcp/README.md) | The server package, install, layout |
 | [Tool authoring](../mcp/docs/tool-authoring.md) | Your own tool package: arguments, errors, flags, reloading, Kit surprises |
 | [Bridge protocol](../mcp/docs/protocol.md) | Messages, finding a bridge, the token, scheduling, read-only mode, jobs, access from another machine |
@@ -54,6 +56,8 @@ over both.
 
 | Page | Use it for |
 |---|---|
+| [Roadmap](ROADMAP.md) | The phases from cleanup to the real-to-sim-to-real Jenga loop, each with goal, scope, exit criteria and dependencies; the pull request queue; decisions needed |
+| [Plans](plans/README.md) | One specification per upcoming pull request, ready to hand to an agent |
 | [Open items](OPEN-ITEMS.md) | Unfinished work by topic, including the Newton qualification list |
 | [Publishing](PUBLISHING.md) | PyPI release steps |
 | [Vendoring](VENDORING.md) · [Third-party notices](../THIRD-PARTY-NOTICES.md) | Licenses and origins |
@@ -79,7 +83,7 @@ away. Scripts that import `mcp` need `uv run --locked --isolated --project mcp -
 | Find and prepare | `env.py` (find an install, create a workspace), `assets.py` (asset packs), `install.py` (register the bridge in a Kit app), `check_machine.sh` (6.2 preflight; can use the GPU) |
 | Start | `run_kit.py` (what `run.sh` runs) |
 | Project checks (CPU, also in CI) | `check_docs.py`, `check_assets.py`, `check_portable_paths.py`, `check_private_paths.py`, `gen_host_catalog.py`, `gen_tool_reference.py` (also rewrites the generated count blocks) |
-| Work-cell check (live, disposable) | `workcell_smoke.py` (requires an explicitly selected disposable bridge and lab config; PhysX only) |
+| Work-cell check (live, disposable) | `workcell_smoke.py` (requires an explicitly selected disposable bridge and lab config; PhysX or Newton) |
 | Smoke checks (live, disposable) | `smoke.py <toolset>`; `smoke.py --list` lists GPU/simulator requirements offline. Validators live in `scripts/smoke/`; helpers: `scene_mcp_client.py`, `smoke_mcp_surface.py`, `make_scene_fixture.py`, `make_scene_package_fixture.py` |
 | Offline surface audits | `measure_tool_list.py [KEY=VALUE ...] [--json]`, `check_names.py --audit [--json]` (name enforcement is opt-in, not yet CI) |
 | ROS 2 | `ros_env.sh` (source it), `ros2_rviz_config.py`, `ros2_tf_doctor.py`, `cmd_vel_sequence.py` |

@@ -5,38 +5,9 @@ persistent form into a Kit app's user configuration. Stdlib only; ``carb`` is im
 """
 
 import os
-import sys
 from typing import Any, Optional
 
 SETTINGS_SUBTREE = "/persistent/exts/twinsmith.bridge"
-
-_LEGACY = None
-
-
-def legacy_module():
-    """``mcp/twinsmith/legacy.py``, loaded by its path (it is standard library only): the one file that holds the
-    old names and the table of old variable names. None when this extension is not inside a checkout."""
-    global _LEGACY
-    if _LEGACY is None:
-        import importlib.util
-
-        path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "mcp",
-                                             "twinsmith", "legacy.py"))
-        spec = importlib.util.spec_from_file_location("twinsmith_legacy", path) if os.path.isfile(path) else None
-        if spec is None:
-            _LEGACY = False
-        else:
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[spec.name] = module
-            spec.loader.exec_module(module)
-            _LEGACY = module
-    return _LEGACY or None
-
-
-def apply_legacy_aliases() -> list:
-    """Make the old variable names work for one release, as the host does (see legacy.py)."""
-    module = legacy_module()
-    return module.apply() if module else []
 
 
 class Knob:

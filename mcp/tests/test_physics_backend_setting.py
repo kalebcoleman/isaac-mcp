@@ -198,7 +198,7 @@ def test_without_a_toml_reader_the_physics_setting_is_still_read_and_anything_od
     """A Python before 3.11 with no tomli (run.sh's own python3 may be one) reads only [sim] physics_backend."""
     monkeypatch.setattr(config, "tomllib", None)
     default = config.DEFAULT_PHYSICS_BACKEND
-    world["user"].write_text('[tools]\ntoolsets = ["minimal"]\n\n[sim]  # engine\nphysics_backend = "%s"  # for new sessions\n' % OTHER[default])
+    world["user"].write_text('[tools]\ntoolsets = ["default"]\n\n[sim]  # engine\nphysics_backend = "%s"  # for new sessions\n' % OTHER[default])
     assert config.resolve_physics_backend({}) == (OTHER[default], "user file")
     write(world["project_file"], default)
     assert config.resolve_physics_backend({}) == (default, "project file")
@@ -206,7 +206,7 @@ def test_without_a_toml_reader_the_physics_setting_is_still_read_and_anything_od
     with pytest.raises(ValueError, match="Cannot read physics_backend .* without a TOML reader"):
         config.resolve_physics_backend({})
     assert config.resolve_physics_backend({"TWINSMITH_PHYSICS_BACKEND": default}) == (default, "environment")   # the way out
-    world["project_file"].write_text('[tools]\ntoolsets = ["minimal"]\n')           # no physics setting: not an error
+    world["project_file"].write_text('[tools]\ntoolsets = ["default"]\n')           # no physics setting: not an error
     assert config.resolve_physics_backend({}) == (OTHER[default], "user file")
     with pytest.raises(ValueError, match="needs Python 3.11 or the tomli package"):
         config.resolve({}, cwd=world["project"], home=world["home"])                # the full configuration needs a reader

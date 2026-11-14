@@ -104,7 +104,8 @@ def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=No
         env = {"VABAR_OPEN_ROBOT_SKILLS": str(gap.skills(gap.checkout(workspace=co.workspace)).root)}
         env_pass = ["HF_TOKEN", *gap.paid_env(allowed)]
         if action == "list":
-            done = sibling.run(argv(co, action), cwd=co.root, env_pass=env_pass, env=env, timeout_s=300)
+            done = sibling.run(argv(co, action), cwd=co.root, env_pass=env_pass, env_set=env, timeout_s=300,
+                               stdout_chars=sibling.WHOLE)
             tasks = [line.strip() for line in done["stdout"].splitlines() if _TASK.fullmatch(line.strip())]
             if done["exit_code"] != 0:
                 return sibling.answer("vabar", action, info, exit_code=done["exit_code"], error="vabar list failed.",
@@ -137,15 +138,16 @@ def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=No
         if folder.exists():
             raise sibling.Refusal("ALREADY_EXISTS", f"{folder} exists; choose another name.")
         folder.mkdir(parents=True)
-        started = sibling.start_job(command, kind=f"vabar-{action}", label=f"vabar-{folder.name}", cwd=folder,
-                                    env_pass=env_pass, env=env, timeout_s=timeout_s, allow_concurrent_gpu=allow_concurrent_gpu)
-        if "error" in started:
+        started = sibling.start_job(command, task=f"vabar-{folder.name}", kind=f"vabar-{action}", cwd=folder,
+                                    env_pass=env_pass, env_set={**env, "PYTHONUNBUFFERED": "1"}, timeout_s=timeout_s,
+                                    uses_gpu=True, allow_concurrent_gpu=allow_concurrent_gpu)
+        if not started["ok"]:
             folder.rmdir()
-            return sibling.answer("vabar", action, info, **started, code="GUARD_REFUSED")
+            return sibling.answer("vabar", action, info, error=started["message"], code=started["code"], hint=started["hint"])
         warnings = [] if allowed or solve != "graph" else [
             "Paid model calls are off: graphs whose nodes ask a VLM fail. The owner allows them with [planning] allow_paid."]
         return sibling.answer("vabar", action, info, warnings=warnings, result={
-            **started, "run": folder.name, "command": command,
+            "job_id": started["job_id"], "log_dir": started["log_dir"], "run": folder.name, "command": command,
             "next": f'jobs(action="status", job_id="{started["job_id"]}"), then vabar(action="results", run="{folder.name}")'})
     except sibling.Refusal as refusal:
         return sibling.answer("vabar", action, info, error=str(refusal), code=refusal.code)

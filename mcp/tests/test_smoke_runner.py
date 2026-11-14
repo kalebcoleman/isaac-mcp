@@ -66,7 +66,7 @@ def test_backend_mismatch_refuses_before_checks(tmp_path, monkeypatch, capsys, a
 
     monkeypatch.setattr(module, "execute", forbidden)
     monkeypatch.setenv("TWINSMITH_HOST", "original")
-    assert module.main(["scene", "--host", "test-host", "--backend", requested,
+    assert module.main(["sim", "--host", "test-host", "--backend", requested,
                         "--output-dir", str(tmp_path)], client_factory=Client) == 2
     assert calls == ["status", "sim.stage.info"]
     assert "refusing to run" in capsys.readouterr().out
@@ -98,7 +98,8 @@ def test_success_records_actual_backend(tmp_path, monkeypatch):
 
     executed = []
     monkeypatch.setattr(module, "execute", lambda name, *args: executed.append(name))
-    assert module.main(["physics", "--backend", "newton", "--output-dir", str(tmp_path)], Client) == 0
+    assert module.main(["sim", "--backend", "newton", "--output-dir", str(tmp_path), "--check", "validate_scene_joints",
+                        "--check", "validate_scene_edges", "--check", "newton_checks"], Client) == 0
     rows = json.loads((tmp_path / "results.json").read_text())["checks"]
     assert executed == ["validate_scene_joints", "validate_scene_tools", "validate_scene_equivalents",
                         "validate_scene_edges", "newton_checks"]  # edges works on the stage the others leave
@@ -198,7 +199,7 @@ def test_each_independent_check_starts_stopped_but_a_prerequisite_pair_is_not_re
                         "--check", "validate_scene_clear", "--check", "validate_scene_prim_edit"], lambda **k: bridge) == 0
     assert ran == ["validate_scene_prim_edit", "validate_scene_tools", "validate_scene_equivalents", "validate_scene_clear"]
     assert bridge.stops == 4 and bridge.new_stages == 2  # each stopped; new stage for prim_edit and for the head of the suite
-    assert toolsets["validate_scene_tools"] == "all" and toolsets["validate_scene_equivalents"] == "default,+kit_debug"
+    assert toolsets["validate_scene_tools"] == "all" and toolsets["validate_scene_equivalents"] == "default,+sim,+assets"
     assert "TWINSMITH_TOOLSETS" not in module.os.environ
 
 
@@ -213,7 +214,7 @@ def test_a_failure_is_reported_with_its_leaf_exception_and_the_run_continues(tmp
             raise SystemExit("needs the fixture")
 
     monkeypatch.setattr(module, "execute", execute)
-    code = module.main(["scene", "--output-dir", str(tmp_path), "--discard-changes", "--directory", "d",
+    code = module.main(["sim", "--output-dir", str(tmp_path), "--discard-changes", "--directory", "d",
                         "--check", "validate_scene_tools", "--check", "validate_scene_clear", "--check", "validate_scene_prim_edit"],
                        lambda **k: _Bridge())
     rows = {row["check"]: row for row in json.loads((tmp_path / "results.json").read_text())["checks"]}
@@ -230,7 +231,7 @@ def test_a_failure_is_reported_with_its_leaf_exception_and_the_run_continues(tmp
 def test_reopen_without_a_saved_session_is_reported_with_the_command_not_skipped(tmp_path, monkeypatch):
     module, ran = runner(), []
     monkeypatch.setattr(module, "execute", lambda name, *a: ran.append(name))
-    assert module.main(["scene", "--output-dir", str(tmp_path), "--check", "validate_scene_reopen", "--port", "8792",
+    assert module.main(["sim", "--output-dir", str(tmp_path), "--check", "validate_scene_reopen", "--port", "8792",
                         "--backend", "physx"], lambda **k: _Bridge()) == 0
     row = json.loads((tmp_path / "results.json").read_text())["checks"][0]
     assert ran == [] and row["status"] == "needs_setup"

@@ -287,7 +287,7 @@ def test_red_row_finds_red_and_nothing_else():
 
 
 def test_the_registered_check_is_newton_only_and_skipped_with_a_note_on_physx(tmp_path, monkeypatch):
-    assert "newton_checks" in smoke.TOOLSETS["physics"] and smoke.NEWTON_ONLY == ("newton_checks",)
+    assert "newton_checks" in smoke.TOOLSETS["sim"] and smoke.NEWTON_ONLY == ("newton_checks",)
 
     class Client:
         port = 8766
@@ -306,7 +306,8 @@ def test_the_registered_check_is_newton_only_and_skipped_with_a_note_on_physx(tm
 
     executed = []
     monkeypatch.setattr(smoke, "execute", lambda name, *args: executed.append(name))
-    assert smoke.main(["physics", "--output-dir", str(tmp_path)], Client) == 0
+    assert smoke.main(["sim", "--output-dir", str(tmp_path), "--check", "validate_scene_joints", "--check", "newton_checks"],
+                      Client) == 0
     rows = {row["check"]: row for row in json.loads((tmp_path / "results.json").read_text())["checks"]}
     assert "newton_checks" not in executed and rows["newton_checks"]["status"] == "skipped"
     assert "Newton-only" in rows["newton_checks"]["note"] and rows["newton_checks"]["backend"] == "physx"

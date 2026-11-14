@@ -126,12 +126,13 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
         if action in ("tools", "check"):
             command = argv(co, action)
             refuse_real(command)
-            done = sibling.run(command, cwd=co.root, env_pass=["HF_TOKEN", *paid_env(allowed)], timeout_s=300)
+            done = sibling.run(command, cwd=co.root, env_pass=["HF_TOKEN", *paid_env(allowed)], timeout_s=300,
+                               stdout_chars=sibling.WHOLE)
             try:
                 result = json.loads(done["stdout"])
             except ValueError:
                 return sibling.answer("gap", action, info, exit_code=done["exit_code"], error="gap did not print JSON.",
-                                      code="UPSTREAM_FAILED", stdout=done["stdout"][-sibling.TAIL_CHARS:], stderr=done["stderr"])
+                                      code="UPSTREAM_FAILED", stdout=done["stdout"][-sibling.TAIL:], stderr=done["stderr"])
             return sibling.answer("gap", action, info, exit_code=done["exit_code"], result=result)
         if action == "generate":
             if not allowed:
@@ -155,16 +156,17 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
         command = argv(co, action, sim=sim, graph=graph, instruction=instruction, model=model, out=folder / "output")
         refuse_real(command)
         folder.mkdir(parents=True)
-        started = sibling.start_job(command, kind=f"gap-{action}", label=f"gap-{folder.name}", cwd=folder,
-                                    env_pass=["HF_TOKEN", *paid_env(allowed)], env={"MUJOCO_GL": "egl"},
-                                    timeout_s=timeout_s, uses_gpu=action == "run", allow_concurrent_gpu=allow_concurrent_gpu)
-        if "error" in started:
+        started = sibling.start_job(command, task=f"gap-{folder.name}", kind=f"gap-{action}", cwd=folder,
+                                    env_pass=["HF_TOKEN", *paid_env(allowed)],
+                                    env_set={"MUJOCO_GL": "egl", "PYTHONUNBUFFERED": "1"}, timeout_s=timeout_s,
+                                    uses_gpu=action == "run", allow_concurrent_gpu=allow_concurrent_gpu)
+        if not started["ok"]:
             folder.rmdir()
-            return sibling.answer("gap", action, info, **started, code="GUARD_REFUSED")
+            return sibling.answer("gap", action, info, error=started["message"], code=started["code"], hint=started["hint"])
         warnings = [] if allowed or action == "generate" else [
             "Paid model calls are off: OPENROUTER_API_KEY and GAP_VLM_* were not passed, so graph nodes that ask a VLM fail."]
         return sibling.answer("gap", action, info, warnings=warnings,
-                              result={**started, "run": folder.name, "output": str(folder / "output"), "command": command})
+                              result={"job_id": started["job_id"], "log_dir": started["log_dir"], "run": folder.name, "output": str(folder / "output"), "command": command})
     except sibling.Refusal as refusal:
         return sibling.answer("gap", action, info, error=str(refusal), code=refusal.code)
 

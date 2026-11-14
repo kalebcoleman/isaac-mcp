@@ -15,12 +15,10 @@ import traceback
 SCRIPTS = Path(__file__).resolve().parent
 TOOLSETS = {
     "core": ["validate_scene_sessions"],
-    "scene": ["validate_scene_tools", "validate_scene_prim_edit", "validate_scene_clear",
-              "validate_scene_reopen", "validate_generic_scene"],
-    "physics": ["validate_scene_joints", "validate_scene_edges", "validate_scene_equivalents", "newton_checks"],
-    "sensors": ["validate_scene_sensors", "validate_scene_camera_freshness"],
-    "ros2": [], "assets": [], "lab": ["smoke_test"], "screen": [], "code": [],
-    "kit_debug": [], "workcell": ["workcell_smoke"],
+    "sim": ["validate_scene_tools", "validate_scene_prim_edit", "validate_scene_clear", "validate_scene_reopen",
+            "validate_generic_scene", "validate_scene_joints", "validate_scene_edges", "validate_scene_equivalents",
+            "newton_checks", "validate_scene_sensors", "validate_scene_camera_freshness"],
+    "ros2": [], "assets": [], "lab": ["smoke_test"], "screen": [], "workcell": ["workcell_smoke"],
 }
 
 
@@ -30,12 +28,11 @@ NEWTON_ONLY = ("newton_checks",)
 # The TWINSMITH_TOOLSETS value each check's MCP server is started with, so a check never relies on the
 # default selection: the smallest selection that lists every tool the check calls (a test compares this
 # table with the tool names in each check's source). Lab and workcell run their own processes.
-DEFAULT_TOOLSETS = "default"
+DEFAULT_TOOLSETS = "default,+sim,+assets"
 CHECK_TOOLSETS = {
     "validate_scene_tools": "all",                      # checks the listing against the whole registry
-    "validate_scene_equivalents": "default,+kit_debug",  # sim__logs
     "smoke_test": "default,+lab",
-    "workcell_smoke": "default,+workcell",
+    "workcell_smoke": "default,+sim,+workcell",
 }
 
 # These checks work on one shared stage, each on what the earlier ones leave (their docstrings say "after
@@ -151,7 +148,7 @@ def reopen_setup(args):
     check = f" --backend {args.backend}" if args.backend else ""
     return ("needs a session opened with a saved file. Save a scene with a rigid body (sim__stage action=save), "
             f"start a simulator ./run.sh --headless{launch} --port {port}, open that file in it "
-            "(sim__stage action=open path=<saved.usda>), then run: python3 scripts/smoke.py scene "
+            "(sim__stage action=open path=<saved.usda>), then run: python3 scripts/smoke.py sim "
             f"{check.strip()} --port {port} --check validate_scene_reopen "
             "--saved <saved.usda> --body </World/Body> --expected-z <rest height in metres>")
 

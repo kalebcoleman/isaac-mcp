@@ -47,12 +47,11 @@ packs and checks that they give the same verdict and message.
 
 One rule resolves it, for the host, the CLI and Kit alike (Kit, which cannot import the host module, repeats it in `exts/workcell/workcell/asset_pack.py`). In order:
 
-1. `TWINSMITH_ASSET_ROOT`, an absolute path (its old name, `ISAAC_MCP_ASSET_ROOT`, is a permanent alias of it).
+1. `TWINSMITH_ASSET_ROOT`, an absolute path.
 2. `<workspace>/assets`, if that folder exists.
-3. `<workspace>/isaac-mcp-assets`, if it exists. The result warns that this name is transitional.
-4. Otherwise an error that names the setting.
+3. Otherwise an error that names the setting.
 
-`<workspace>` is `TWINSMITH_WORKSPACE`, else the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace`. Only while that last folder does not exist and the old `<home>/isaac-workspace` does, the old folder is used (the transition; see [Workspace folder](MIGRATING.md#workspace-folder)).
+`<workspace>` is `TWINSMITH_WORKSPACE`, else the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace`.
 Set `TWINSMITH_ASSET_ROOT` in the MCP server's `env` **and** in the environment of any Kit you start yourself: each reads
 its own settings. `assets__pack action=list` reports what the host resolved, and warns when a connected Kit uses another root.
 
@@ -127,6 +126,61 @@ take down the server), else the selected Kit through `assets__dependencies`. URD
 host. A URDF pack is checked with the same rules as a build: `package://` is looked for inside the pack only (a `package.xml`
 naming it, a folder of that name, or the folder itself), and nothing outside is searched.
 
+## Preparing meshes and checking an asset
+
+Two more host tools read a USD file under an approved root or the asset root, or a pack's file by `asset_id`. They need the
+optional `mesh` extra in the server's environment. Without it, they answer `MESH_EXTRA_MISSING` with the command to add it:
+
+```bash
+UV_PROJECT_ENVIRONMENT=<repo>/mcp/.venv uv sync --project <repo>/mcp --locked --extra isaaclab --extra mesh --no-dev
+```
+
+The work runs in a subprocess of the server's interpreter, so `pxr`, trimesh and CoACD never load in the server itself.
+
+**`assets__validate`** answers whether an asset will load on Newton or on PhysX, from the file alone. It returns `ok`, and
+for every rule its level, the prim, a detail and a fix. On `engine="physx"` the Newton-only rules are `info`.
+
+| Id | Level on Newton | Rule | Evidence |
+|---|---|---|---|
+| `UNITS` | error | `metersPerUnit` and `upAxis` are authored | Import contract |
+| `TRI_COLLIDER` | error | Triangle-mesh colliders hold at most `triangle_budget` triangles (200,000) | The bench's 1.63 M collider triangles needed 7.5 M triangle pairs against Newton's 1 M |
+| `TRI_DYNAMIC` | warning | No triangle-mesh collider sits on a moving rigid body (also a warning on PhysX) | PhysX does not simulate triangle meshes on dynamic bodies |
+| `COLLIDER_RENDERED` | warning | A collision-only shape has purpose `guide` | The split contract below |
+| `DRIVE_ZERO_FORCE` | error | No joint drive has `maxForce` 0 | MuJoCo: "actfrcrange[0] should be smaller than actfrcrange[1]" |
+| `NESTED_ARTICULATION` | error | No articulation root lies inside another or is jointed into one | Newton's importer mis-lists the bodies |
+| `MASS_MIN` | error | Every moving body has colliders, or an authored mass and inertia above MuJoCo's `mjMINVAL` | "mass and inertia of moving bodies must be larger than mjMINVAL" |
+| `DRIVE_GAIN` | warning | `dt² k / I < 4 + 2 dt c / I` at 500 Hz: `k`, `c` in SI per radian or metre; `I` the driven body's largest inertia (else 0.01) plus the joint's armature (else Isaac Sim's 0.1). MuJoCo-Warp integrates stiffness explicitly and damping implicitly | 9400 N m per degree went non-finite |
+| `MIMIC` | error (both engines) | A mimic joint and its leader are in the articulation, not excluded loop joints; it names one leader; revolute ones have finite limits | PhysX 6.2 rejects such a mimic; Newton skips one on a loop joint |
+
+An excluded loop joint with no mimic is valid on both engines (Newton makes it a MuJoCo connect or weld). The rules read
+the file: colliders a scene adds while it is built, as the work cell does for the `v1` bench, are not seen.
+
+`kit=true`, which would add Isaac Sim's own Asset Validator, is refused for now: it has not been confirmed in Isaac Sim 6.2.
+
+**`assets__mesh`** prepares meshes. `inspect` reports every mesh's triangles, bounds, whether it is closed, and its collider
+approximation, and answers directly. The other actions write a **new** folder under an approved root, never inside the asset
+root. They run as a job: wait with `jobs(action="lab_status", job_id=..., wait_s=60)`, and the result is in
+`mesh_report.json` in that folder.
+
+- `decimate`: a copy whose render meshes are decimated. This lowers render cost; it does not fix a collider overflow.
+- `hulls`: a collision layer only. Each mesh gets `<parent>/<mesh>_collision` holding an oriented `box`, one `convex` hull,
+  `coacd` pieces, or `auto` (the box unless it is more than twice the hull's volume, then CoACD). The shapes have purpose
+  `guide` and `CollisionAPI`, and are in the mesh parent's frame, so bodies and joints are untouched.
+- `split`: the asset as two layers and the file that composes them:
+
+```text
+bench/
+  bench.usda             sublayers the two below; keeps units, up axis and default prim. Point the asset at this file.
+  bench_collision.usdc   the explicit collision shapes
+  bench_render.usdc      the source's root layer; the replaced meshes lose their collision schemas, other colliders stay
+```
+
+Which meshes get shapes: those under `prims`. Without `prims`, the file's mesh colliders get them, or every mesh when none of
+them is a collider; the bench is the second case, because the work cell adds its colliders at build time. A work-cell bench
+that brings its own collision layer keeps it, and one without gets triangle-mesh colliders as before. Paths are written
+relative, through the USD API, so a home folder with `@` in its name (as on some university logins) still resolves. To make
+the result a pack version, run `assets__pack action=build` on `<output>/bench.usda`.
+
 ## Converting an old pack
 
 The old model kept flat folders `<store>/<pack>/` with a `SHA256SUMS` and, for builds, a build-description file. Nothing reads
@@ -162,7 +216,7 @@ loaders. Do not copy a version that is not `redistributable` to a place you do n
 
 ## Settings that no longer exist
 
-The settings of the old asset model are not read. If one is set, the host says once which setting replaces it; the names and their replacements are in [MIGRATING.md](MIGRATING.md#settings-that-were-already-removed). The old default pack, the NVIDIA download fallback, `scripts/fetch_ur5e_assets.py`, `migrate`, `SHA256SUMS` pins and the old build-description file were removed with them.
+The settings of the old asset model are not read. The old default pack, the NVIDIA download fallback, `scripts/fetch_ur5e_assets.py`, `migrate` and `SHA256SUMS` pins were removed with them.
 
 ## Provenance
 

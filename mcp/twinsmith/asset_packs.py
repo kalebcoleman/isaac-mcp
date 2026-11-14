@@ -20,7 +20,7 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from . import asset_formats, legacy, material_refs, mjcf_refs, pack_manifest, urdf_refs
+from . import asset_formats, material_refs, mjcf_refs, pack_manifest, urdf_refs
 from .pack_manifest import MANIFEST_NAME
 
 
@@ -974,15 +974,16 @@ def adopt_folder(root: Path, pack_id: str, version: str, source: Path, *, source
     return dict(written, dry_run=False, notes=notes, **extra)
 
 
-OLD_FORMAT_FILES = ("SHA256SUMS", legacy.OLD_PACK_FILE)
+# The pins file of the old pack format (before pack.yaml). Packs in that format may still be on lab machines' disks,
+# so the converter leaves it out of the new version.
+OLD_FORMAT_FILES = ("SHA256SUMS",)
 
 
 def convert_old(old_folder: Path, *, pack_id: str | None = None, version: str = "v1", source_note, license_,
                 redistributable=None, dry_run=False, notes: list | None = None) -> dict:
     """Convert an old-format pack ``<store>/<pack>/`` into ``<store>/<pack>/<version>/`` with a ``pack.yaml``.
 
-    Hashes come from the files themselves, not from the old ``SHA256SUMS``, which is not copied (nor is
-    the old build-description file). The old files stay where they are; nothing reads them once the new version exists.
+    Hashes come from the files themselves, not from the old ``SHA256SUMS``, which is not copied. The old files stay where they are; nothing reads them once the new version exists.
     """
     notes = [] if notes is None else notes
     old_folder = Path(old_folder)

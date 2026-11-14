@@ -19,13 +19,13 @@ import threading
 import time
 import uuid
 
-from twinsmith import legacy, sibling
+from twinsmith import sibling
 
 from . import plan
 from . import template as scene_template_module
 from .template import FRAME, PARAMETERS, SHAPES, SIZE_MEANING
 
-PIN = "87b5e32"
+PIN = "ba3650c"
 REPOSITORY = "https://github.com/robosimstudio/robosimstudio"
 ACTIONS = ("status", "start", "scene_template", "update_scene", "reference", "snapshot", "compare",
            "rollout", "tune_push", "compare_take", "stop", "report")
@@ -93,8 +93,8 @@ class RoboSimBridge:
         info = self.checkout.info()
         info.pop("setup", None)
         commit = info["rss_commit"] = info.pop("commit")
-        ctl = self.root / "examples/live/ctl"
-        if not info["environment_present"] or not ctl.is_file() or not os.access(ctl, os.X_OK) or not commit:
+        agent = self.root / "robosimstudio_real2sim_agent/__main__.py"
+        if not info["environment_present"] or not agent.is_file() or not commit:
             info.update(ok=False, error=f"RSS checkout/private environment missing or unreadable. Clone {REPOSITORY} "
                         f"at commit {PIN} into {self.root}, then provision its own .venv/bin/python. "
                         "The bridge never installs RSS or changes its environment.")
@@ -105,7 +105,7 @@ class RoboSimBridge:
         if path.is_symlink() or path.resolve().parent != self.runs.resolve():
             raise ValueError("Run must be a direct, non-symlink bridge run folder.")
         ledger = json.loads((path / "run.json").read_text())
-        if ledger.get("bridge") not in ("twinsmith-robosim-v1", legacy.OLD_ROBOSIM_LEDGER_ID) or ledger.get("run") != run:
+        if ledger.get("bridge") != "twinsmith-robosim-v1" or ledger.get("run") != run:
             raise ValueError("Not a bridge-owned RSS run.")
         if ledger["checkout"] != str(self.root):
             raise ValueError("Run belongs to another RSS checkout; set TWINSMITH_ROBOSIM_ROOT accordingly.")
@@ -164,7 +164,7 @@ class RoboSimBridge:
         return bool(server and _identity(server["pid"]) == server)
 
     def _command(self, path, ledger, args, timeout=630):
-        argv = [str(self.root / "examples/live/ctl"), "--run-dir", str(path), *args, "--json"]
+        argv = [str(self.root / ".venv/bin/python"), "-m", "robosimstudio_real2sim_agent", "--run-dir", str(path), *args, "--json"]
         record = {"argv": argv, "started_at": _now()}
         ledger["commands"].append(record)
         number = len(ledger["commands"])

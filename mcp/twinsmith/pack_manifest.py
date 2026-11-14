@@ -15,15 +15,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-
-from . import legacy
-
-LOG = logging.getLogger(__name__)
 
 ROOT_ENV = "TWINSMITH_ASSET_ROOT"
 WORKSPACE_ENV = "TWINSMITH_WORKSPACE"
@@ -32,18 +27,11 @@ PROJECT_FILE = "twinsmith.json"
 MANIFEST_NAME = "pack.yaml"
 OLD_PINS_FILE = "SHA256SUMS"
 STANDARD_DIR = "assets"
-TRANSITIONAL_DIR = "isaac-mcp-assets"
 HOME_WORKSPACE_NAME = "robotics-workspace"
-TRANSITIONAL_WORKSPACE_NAME = "isaac-workspace"
-WORKSPACE_MARKERS = ("envs", STANDARD_DIR, TRANSITIONAL_DIR)
+WORKSPACE_MARKERS = ("envs", STANDARD_DIR)
 MAX_REPORTED = 200
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
-
-# Environment variables the old model read. They are not read any more; if one is set the host says
-# once what replaces it, instead of ignoring it silently.
-REMOVED_ENVIRONMENT = {name: text.format(root=ROOT_ENV) for name, text in legacy.REMOVED_ASSET_SETTINGS.items()}
-_announced: set[str] = set()
 
 
 class ManifestError(ValueError):
@@ -57,28 +45,6 @@ class RootError(ValueError):
 
 
 # ---------------------------------------------------------------------------
-# Removed settings
-# ---------------------------------------------------------------------------
-
-
-def removed_environment(environ=None) -> list[str]:
-    """One sentence for each removed variable that is set in *environ* (default: the process)."""
-    environ = os.environ if environ is None else environ
-    return [f"{name} is no longer read. {text}" for name, text in REMOVED_ENVIRONMENT.items()
-            if str(environ.get(name, "")).strip()]
-
-
-def announce_removed_environment(environ=None) -> list[str]:
-    """Like :func:`removed_environment`, and logs each sentence once per process (stderr, never stdout)."""
-    messages = removed_environment(environ)
-    for message in messages:
-        if message not in _announced:
-            _announced.add(message)
-            LOG.warning(message)
-    return messages
-
-
-# ---------------------------------------------------------------------------
 # Asset root
 # ---------------------------------------------------------------------------
 
@@ -86,7 +52,7 @@ def announce_removed_environment(environ=None) -> list[str]:
 @dataclass(frozen=True)
 class AssetRoot:
     path: Path
-    source: str  # "environment", "workspace" or "transitional"
+    source: str  # "environment" or "workspace"
     warnings: tuple = field(default_factory=tuple)
 
     @property
@@ -101,16 +67,13 @@ def checkout_root() -> Path | None:
 
 
 def home_workspace(home=None) -> Path:
-    """The workspace folder in a home folder: ``<home>/robotics-workspace``, or, only while that folder does
-    not exist and ``<home>/isaac-workspace`` does, the old folder (the transition from the old name)."""
+    """The workspace folder in a home folder: ``<home>/robotics-workspace``."""
     home = Path(home).expanduser() if home is not None else Path.home()
-    standard = home / HOME_WORKSPACE_NAME
-    old = home / TRANSITIONAL_WORKSPACE_NAME
-    return old if not standard.exists() and old.exists() else standard
+    return home / HOME_WORKSPACE_NAME
 
 
 def looks_like_workspace(folder: Path) -> bool:
-    """A folder that holds ``envs/``, ``assets/`` or the transitional asset folder. A git worktree of the
+    """A folder that holds ``envs/`` or ``assets/``. A git worktree of the
     checkout usually sits in a folder that holds none of them, and that folder is not the workspace."""
     return any((folder / name).is_dir() for name in WORKSPACE_MARKERS)
 
@@ -133,29 +96,22 @@ def resolve_asset_root(environ=None, workspace=None) -> AssetRoot:
 
     1. ``$TWINSMITH_ASSET_ROOT``.
     2. ``<workspace>/assets`` if that folder exists.
-    3. ``<workspace>/isaac-mcp-assets`` if it exists (the name is transitional: the result says so).
 
     ``<workspace>`` is :func:`workspace_dir`. If none of these exists this raises :class:`RootError`
     naming the setting.
     """
     environ = os.environ if environ is None else environ
-    warnings = list(announce_removed_environment(environ))
-    configured = str(environ.get(ROOT_ENV) or environ.get(legacy.ASSET_ROOT_ALIAS) or "").strip()   # the alias is permanent
+    configured = str(environ.get(ROOT_ENV) or "").strip()
     if configured:
         path = Path(configured).expanduser()
         if not path.is_absolute():
             raise RootError(f"{ROOT_ENV} must be an absolute path, not {configured!r}.")
-        return AssetRoot(path.resolve(), "environment", tuple(warnings))
+        return AssetRoot(path.resolve(), "environment")
     base = Path(workspace).expanduser().resolve() if workspace is not None else workspace_dir(environ)
     standard = base / STANDARD_DIR
     if standard.is_dir():
-        return AssetRoot(standard, "workspace", tuple(warnings))
-    transitional = base / TRANSITIONAL_DIR
-    if transitional.is_dir():
-        warnings.append(f"Using {transitional}: the name isaac-mcp-assets is transitional. Rename it to "
-                        f"{STANDARD_DIR}/ or set {ROOT_ENV} to it.")
-        return AssetRoot(transitional, "transitional", tuple(warnings))
-    raise RootError(f"No asset root: neither {standard} nor {transitional} exists. Set {ROOT_ENV} to the folder "
+        return AssetRoot(standard, "workspace")
+    raise RootError(f"No asset root: {standard} does not exist. Set {ROOT_ENV} to the folder "
                     f"that holds your packs (<pack id>/<version>/pack.yaml), or create {standard} "
                     f"(the workspace is {WORKSPACE_ENV}, else the folder holding the checkout if it has envs/ or assets/, else "
                     f"<home>/{HOME_WORKSPACE_NAME}).")
@@ -173,15 +129,15 @@ def project_file() -> Path | None:
     if override:
         path = Path(override).expanduser()
         if path.is_dir():
-            path = legacy.choose_file(path / PROJECT_FILE, path / legacy.OLD_PROJECT_JSON) or path / PROJECT_FILE
+            path = path / PROJECT_FILE
         return path.resolve() if path.is_file() else None
     try:
         here = Path.cwd().resolve()
     except OSError:
         return None
     for directory in (here, *here.parents):
-        candidate = legacy.choose_file(directory / PROJECT_FILE, directory / legacy.OLD_PROJECT_JSON)
-        if candidate is not None:
+        candidate = directory / PROJECT_FILE
+        if candidate.is_file():
             return candidate
     return None
 

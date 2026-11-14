@@ -17,7 +17,8 @@ Kit Process (Isaac Sim 6.2.0.0)
                           ├── sim__* / assets__*  generic scene tools, from the sim-tools extension
                           ├── refresh_tools     rediscover tools; can wait for a starting Kit
                           ├── isaaclab__*       Isaac Lab jobs, run on the host
-                          └── screenshot / screen_recording / windows / join_videos
+                          ├── screenshot / screen_recording / windows / join_videos / doctor
+                          └── computer          desktop input (toolset `input`, opt-in)
 ```
 
 Inside Kit, `exts/workcell` registers on the `twinsmith.bridge` singleton alongside other packs. The launcher sets
@@ -32,7 +33,7 @@ in-flight call must drain before the work cell can re-register.
 The host MCP server is installed automatically when running `./install.sh` from the repository root:
 
 ```bash
-./install.sh --no-sim           # Host only, editable via uv tool; installs no Sim or Lab, records a Sim it finds
+./install.sh --no-sim           # Host only, editable (uv sync into mcp/.venv); installs no Sim or Lab, records a Sim it finds
 # Optional, only to register these clients:
 ./install.sh --no-sim --claude  # Also writes Claude Code and Claude Desktop configs
 ```
@@ -58,8 +59,8 @@ unrelated file or symlink already occupies that path. Direct `uv tool install` d
 The tools a client is shown are the tools of the enabled [toolsets](TOOLSETS.md); `status` and `twinsmith toolsets` report which
 are on. Every tool and its arguments are in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md), one section per toolset. In short:
 
-- **Scene and assets** (`scene`, `physics`, `sensors`, `assets`, and optionally `ros2` and `kit_debug`): the generic `sim__*` and
-  `assets__*` tools are catalogue-listed by default. `assets__library` (roots, scan, search) executes on the host; the others
+- **Scene and assets** (`sim`, `assets`, and optionally `ros2`; off by default like every toolset but `core`): the generic
+  `sim__*` and `assets__*` tools are catalogue-listed once their toolset is on. `assets__library` (roots, scan, search) executes on the host; the others
   require `sim-tools` in the selected Kit. See [scene tools](TOOLS-SCENE.md) for trusted-root configuration and runtime
   prerequisites. The work cell's robot, sensor and bench files are packs in the asset root, which the host and Kit each resolve
   themselves: set `TWINSMITH_ASSET_ROOT` in the **Kit** environment too, or Kit looks in `<workspace>/assets`. See
@@ -69,12 +70,15 @@ are on. Every tool and its arguments are in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS
   once connected. See its [README](../exts/workcell/workcell/README.md).
 - **Bridge discovery** (`core`): `use_bridge` points the host at a different bridge port at runtime; `refresh_tools` forces
   rediscovery, and `refresh_tools(wait_s=120)` waits (up to 180 s) for a Kit that is still starting.
-- **Desktop and window capture** (`screen`): `screenshot`, `screen_recording`, `windows` and `join_videos`. Window capture reads
-  that window's buffer directly, so overlapping windows do not obscure it. Captures are written to `~/Pictures/twinsmith/` and
+- **Desktop and window capture** (`screen`): `doctor`, `screenshot`, `screen_recording`, `windows` and `join_videos`. Window
+  capture reads that window's own pixels, so with a compositing window manager (GNOME, KDE) a covered window is still captured;
+  without one the covered part is black, and `doctor` says so. Captures are written to `~/Pictures/twinsmith/` and
   `~/Videos/twinsmith/`; recordings contain no audio.
-- **Isaac Lab and script jobs** (`lab`, and `run_script` in `code`): see the [Isaac Lab reference](TOOLS-ISAACLAB.md).
-- **Optional** (`input`, `launch`, `robosim`, `planning`, `eval`): desktop input, managed simulator sessions, RoboSimStudio,
-  Graph-as-Policy and VABAR ([planning and evaluation](PLANNING-EVAL.md)).
+- **Isaac Lab and script jobs** (`lab`, which holds `run_script` too): see the [Isaac Lab reference](TOOLS-ISAACLAB.md).
+- **Opt-in only** (`input`, `launch`): desktop input (`computer`) and managed simulator sessions (`sim__session`). Neither is
+  part of any profile, not even `all`; name them (`+input`, `+launch`). `real2sim` (RoboSimStudio, the `robosim` tool) is off
+  by default like `lab`; see [ROBOSIM.md](ROBOSIM.md). So are `planning` (Graph-as-Policy, the `gap` tool) and `eval` (VABAR,
+  the `vabar` tool); see [planning and evaluation](PLANNING-EVAL.md).
 
 See the [host and bridge reference](TOOLS-HOST.md) for behaviour and limits.
 
@@ -82,8 +86,8 @@ See the [host and bridge reference](TOOLS-HOST.md) for behaviour and limits.
 
 Use the available tools to inspect and operate the user's authorized simulator
 before asking the user to repeat terminal or UI steps. `windows(action="list")` identifies
-the window and PID; `screenshot(window_id=...)` captures that window even when
-covered. Check the capture directory before writing if workspace rules restrict
+the window and PID; `screenshot(window_id=...)` captures that window, even when
+covered if a compositing window manager runs (`doctor` reports it). Check the capture directory before writing if workspace rules restrict
 where files may be created. Screen tools are host-side and can work even when
 the simulator bridge is disconnected. Optional X11 mouse and keyboard controls can be enabled
 explicitly with `TWINSMITH_TOOLSETS=default,+input`; see the targeting rules and shared-desktop
@@ -177,7 +181,7 @@ Replace `<repo>` with your checkout (suggested: `<workspace>/twinsmith`; see
 [One workspace folder](LINUX-SETUP.md#one-workspace-folder)) and `<home>` with your home directory. Optional environment
 variables for any client below:
 
-- `TWINSMITH_WORKSPACE=<workspace>` makes `<workspace>/assets` (else `<workspace>/isaac-mcp-assets`) the asset root; without it the workspace is the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace`.
+- `TWINSMITH_WORKSPACE=<workspace>` makes `<workspace>/assets` the asset root; without it the workspace is the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace`.
 - `TWINSMITH_SIM_ROOT=<repo>` tells managed `sim__session` launches which checkout holds `run.sh`;
   set it when the host is installed outside the checkout.
 - `TWINSMITH_SIM_PYTHON=<env>/bin/python` pins the Sim interpreter that `run.sh` uses.
@@ -295,12 +299,12 @@ register no tools, listed or hidden; desktop input and process launch need `+inp
 boundary: anything reaching the bridge socket directly is unaffected by host registration choices.
 
 **A simulator that cannot be changed.** Start Kit with `TWINSMITH_READ_ONLY=1`. The bridge then runs only the
-tools registered as read-only (stage and prim reads, joint and body state, logs, `status`, `job_status`, `get_file`,
-`stat_file`, and other tools annotated read-only) and refuses every other with the code `READ_ONLY` before the tool
-is called: `run_python`, `put_file`, every scene edit and every other work-cell tool. Read-only protects the simulator, not
-the disk: `get_file` still reads any file your account can read. This is enforced inside Kit, so it does not
+tools registered as read-only (stage and prim reads, joint and body state, logs, `status`, `jobs(action="status")`,
+`files(action="get")`, `files(action="stat")` and other tools annotated read-only) and refuses every other with the code `READ_ONLY` before the tool
+is called: `run_python`, `files(action="put")`, every scene edit and every other work-cell tool. Read-only protects the simulator, not
+the disk: `files(action="get")` still reads any file your account can read. This is enforced inside Kit, so it does not
 depend on the client, on which tools a host lists, or on who dials the socket. `status` and the bridge listing report
-`read_only`. Toolsets are not a read-only host mode: even `minimal` includes job cancellation.
+`read_only`. Toolsets are not a read-only host mode: even `default` (`core` alone) includes job cancellation.
 
 **Who may connect.** The bridge requires a token on every connection. It writes a random one to a file only your
 account can read, and clients on that account (this server, the CLI, your scripts) read it from there, so nothing
@@ -387,7 +391,7 @@ noticed before anything is sent. What is retried depends on whether the request 
 |---|---|
 | `bridge not reachable at HOST:PORT (connection refused): nothing is listening there. Start Kit with ./run.sh --headless ...` | The port is closed: Kit is not running or listens elsewhere. The tool was not sent. `refresh_tools(wait_s=120)` waits for a Kit that is starting. |
 | `bridge at HOST:PORT did not accept a connection within Ns ... Nothing was sent, so no tool ran` | Kit is starting or its main thread is busy. Safe to retry. |
-| `the connection to the bridge broke after 'TOOL' was sent ... it may already have run in Kit ... It was NOT sent again` | Kit exited, restarted or the link broke after the request went out. The tool may have run, or still be running. Check first (`sim__stage__info` for a scene tool, `isaaclab__runs_status` / `isaaclab__runs_list` for a Lab job, `sim__logs__tail`), then repeat only if it did not happen. If Kit restarted, select it again with `use_bridge` and call `refresh_tools`. The error is a `ConnectionError` subclass (`BridgeDispatchUncertain`). |
+| `the connection to the bridge broke after 'TOOL' was sent ... it may already have run in Kit ... It was NOT sent again` | Kit exited, restarted or the link broke after the request went out. The tool may have run, or still be running. Check first (`sim__stage(action="info")` for a scene tool, `jobs(action="lab_status")` / `jobs(action="list")` for a Lab job, `sim__logs(action="tail")`), then repeat only if it did not happen. If Kit restarted, select it again with `use_bridge` and call `refresh_tools`. The error is a `ConnectionError` subclass (`BridgeDispatchUncertain`). |
 | `no response for 'TOOL' within Ns (the tool may still be executing on Kit's main thread)` | The request was sent and no reply came within the timeout. The tool may be running or may have run; check before repeating a non-idempotent call. |
 
 Not done, deliberately: automatic reconnect with backoff beyond the single pre-send retry. After a Kit restart the tool list can

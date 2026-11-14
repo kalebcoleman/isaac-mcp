@@ -1,30 +1,108 @@
-"""Pinned sibling checkouts: find one, run its command line, or start it as a job.
+"""Run a tool that lives beside twinsmith: a bounded subprocess or a job, with a scrubbed environment.
 
-A wrapped tool (RoboSimStudio, Graph-as-Policy, VABAR) is a git checkout under ``<workspace>/tools/<name>`` with its own
-``.venv``. The host never installs, updates or imports it. It reads the checkout's commit, runs its command line with an
-environment that carries only what the wrapper names, and follows long runs as jobs in the shared jobs folder, so
-``jobs`` waits for and cancels them like any other.
+The child sees only ``PATH``, ``HOME``, the GPU selection variables and the names a caller passes in
+``env_pass`` or sets in ``env_set``: no credentials, nothing named ``ROS_*``, no Python or virtual
+environment of this server. A job is a record in the shared jobs folder, so ``jobs`` follows and
+cancels it like an Isaac Lab job.
+
+A pinned sibling (RoboSimStudio, Graph-as-Policy, VABAR) is a git checkout under
+``<workspace>/tools/<name>`` with its own ``.venv``: ``Checkout`` finds it and reports its commit
+against the tested pin. The host never installs, updates or imports one.
 """
 
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import re
 import subprocess
 import threading
+import time
+from pathlib import Path
 
 from . import pack_manifest
 
-GPU_VARIABLES = ("CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES", "NVIDIA_DRIVER_CAPABILITIES", "CUDA_HOME",
-                 "LD_LIBRARY_PATH")
-STDOUT_LIMIT = 1 << 20
-TAIL_CHARS = 4000
+KEEP = ("PATH", "HOME")
+GPU = ("CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES", "NVIDIA_DRIVER_CAPABILITIES")
+TAIL = 4000
+WHOLE = 1 << 20                     # stdout_chars for a caller that parses the output
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}")
 
 
+def environment(env_pass=(), env_set=None, source=None) -> dict:
+    """The child's environment: ``KEEP``, ``GPU`` and ``env_pass`` copied from *source*, then *env_set*.
+    Nothing named ``ROS_*`` passes: a sibling never joins a ROS graph."""
+    source = os.environ if source is None else source
+    env = {name: source[name] for name in (*KEEP, *GPU, *env_pass) if name in source}
+    env.update(env_set or {})
+    return {name: value for name, value in env.items() if not name.startswith("ROS_")}
+
+
+def commit(folder) -> str | None:
+    """The checked-out commit of a git folder, or None."""
+    try:
+        done = subprocess.run(["git", "-C", str(folder), "rev-parse", "HEAD"], capture_output=True, text=True,
+                              timeout=5, env=environment())
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.strip() or None if done.returncode == 0 else None
+
+
+def run(argv, *, cwd=None, env_pass=(), env_set=None, timeout_s=120.0, stdout_chars=TAIL) -> dict:
+    """Run *argv* (no shell) and return its exit code and the tails of its output: the last *stdout_chars* of
+    stdout (``WHOLE`` for output the caller parses) and the last ``TAIL`` of stderr."""
+    argv = [str(part) for part in argv]
+    try:
+        done = subprocess.run(argv, cwd=cwd, env=environment(env_pass, env_set), stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, errors="replace", timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        return {"argv": argv, "exit_code": None, "timed_out": True, "stdout": "", "stderr": ""}
+    except OSError as error:
+        return {"argv": argv, "exit_code": None, "timed_out": False, "stdout": "", "stderr": str(error)}
+    return {"argv": argv, "exit_code": done.returncode, "timed_out": False,
+            "stdout": done.stdout[-stdout_chars:], "stderr": done.stderr[-TAIL:]}
+
+
+def start_job(argv, *, task, kind, cwd=None, env_pass=(), env_set=None, timeout_s=None, uses_gpu=False,
+              allow_concurrent_gpu=False, label=None) -> dict:
+    """Start *argv* as a job. A GPU job refuses next to another GPU job or a Kit bridge unless
+    *allow_concurrent_gpu*, as ``isaaclab__launch`` does."""
+    from .isaaclab import jobs
+
+    argv = [str(part) for part in argv]
+    with jobs._launch_lock:
+        if uses_gpu:
+            blocked = jobs._budget_guard()                 # a spent GPU-hour budget is never overridden
+            if blocked is not None:
+                return {"ok": False, "code": "GPU_BUDGET", "message": blocked["error"],
+                        "hint": "The configured GPU-hour budget is spent; raise it or wait for the next period."}
+        if uses_gpu and not allow_concurrent_gpu:
+            for guard in (jobs._concurrency_guard, jobs._kit_bridge_guard):
+                blocked = guard()
+                if blocked is not None:
+                    return {"ok": False, "code": "GPU_BUSY", "message": blocked["error"],
+                            "hint": "Wait for it, or pass allow_concurrent_gpu=true to start anyway."}
+        job_id = jobs._job_id(task)
+        folder = jobs.jobs_dir() / job_id
+        folder.mkdir(parents=True)
+        with open(folder / "stdout.log", "wb") as out, open(folder / "stderr.log", "wb") as err:
+            proc = subprocess.Popen(jobs._exit_recording(argv, folder, timeout_s), stdout=out, stderr=err,
+                                    stdin=subprocess.DEVNULL, env=environment(env_pass, env_set),
+                                    cwd=cwd, start_new_session=True)
+        jobs._write_job(folder, {
+            "id": job_id, "job_id": job_id, "kind": kind, "task": task, "label": label, "command": argv,
+            "uses_gpu": uses_gpu, "pid": proc.pid,
+            **({"gpu": jobs._gpu_index(environment(env_pass, env_set).get("CUDA_VISIBLE_DEVICES"))} if uses_gpu else {}), "pid_start": jobs._process_start(proc.pid), "timeout_s": timeout_s,
+            "started_at": time.time(), "finished_at": None, "status": "running", "exit_code": None,
+            "log_dir": str(folder.resolve()), "run_dir": str(Path(cwd or folder).resolve()),
+            "stdout_log": str((folder / "stdout.log").resolve()), "stderr_log": str((folder / "stderr.log").resolve())})
+        with jobs._jobs_lock:
+            jobs._active[job_id] = proc
+        threading.Thread(target=jobs._watcher, args=(folder, job_id, proc, timeout_s), daemon=True).start()
+    return {"ok": True, "job_id": job_id, "log_dir": str(folder.resolve()), "command": argv}
+
+
 class Refusal(ValueError):
-    """A request the wrapper will not run, with a stable code for the answer."""
+    """A request a wrapper will not run, with a stable code for the answer."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -43,25 +121,17 @@ class Checkout:
     def bin(self, program: str = "python") -> Path:
         return self.root / ".venv/bin" / program
 
-    def commit(self) -> str | None:
-        try:
-            result = subprocess.run(["git", "-C", str(self.root), "rev-parse", "HEAD"],
-                                    capture_output=True, text=True, timeout=5)
-        except (OSError, subprocess.SubprocessError):
-            return None
-        return (result.stdout.strip() or None) if result.returncode == 0 else None
-
     def info(self, program: str = "python") -> dict:
         """``{checkout, commit, pin, pin_match, environment_present, warnings}``, plus ``setup`` when it is not usable."""
-        commit = self.commit()
+        found = commit(self.root)
         executable = self.bin(program)
         present = executable.is_file() and os.access(executable, os.X_OK)
-        info = {"checkout": str(self.root), "commit": commit, "pin": self.pin,
-                "pin_match": bool(commit and commit.startswith(self.pin)), "environment_present": present,
+        info = {"checkout": str(self.root), "commit": found, "pin": self.pin,
+                "pin_match": bool(found and found.startswith(self.pin)), "environment_present": present,
                 "warnings": []}
         if not info["pin_match"]:
-            info["warnings"].append(f"{self.name} checkout commit {commit or 'unknown'} differs from tested pin {self.pin}.")
-        if not commit or not present:
+            info["warnings"].append(f"{self.name} checkout commit {found or 'unknown'} differs from tested pin {self.pin}.")
+        if not found or not present:
             info["setup"] = (f"The owner sets this up; twinsmith never installs it. Clone {self.repository} into {self.root}, "
                              f"check out {self.pin}, and create its own environment so that {executable} exists"
                              + (f" (or point {self.env_var} at an existing checkout)." if self.env_var else "."))
@@ -70,8 +140,6 @@ class Checkout:
 
 def run_name(value, prefix: str) -> str:
     """A run folder name: the caller's (letters, digits, underscores, hyphens), else ``<prefix>-<timestamp>``."""
-    import time
-
     if value is None:
         return f"{prefix}-{time.strftime('%Y%m%d-%H%M%S')}"
     if not isinstance(value, str) or not _NAME.fullmatch(value):
@@ -79,73 +147,8 @@ def run_name(value, prefix: str) -> str:
     return value
 
 
-def environment(env_pass=(), env=None) -> dict:
-    """``PATH``, ``HOME``, the GPU variables and the names in ``env_pass`` from this process, then ``env``.
-    Nothing named ``ROS_*`` passes: a wrapped tool never joins a ROS graph."""
-    child = {key: os.environ[key] for key in ("PATH", "HOME", *GPU_VARIABLES, *env_pass) if key in os.environ}
-    child.update(env or {})
-    return {key: value for key, value in child.items() if not key.startswith("ROS_")}
-
-
-def _tail(text) -> str:
-    if isinstance(text, bytes):
-        text = text.decode(errors="replace")
-    return (text or "")[-TAIL_CHARS:]
-
-
-def run(argv, *, cwd, env_pass=(), env=None, timeout_s: float = 120) -> dict:
-    """Run to completion: ``{exit_code, stdout, stderr}``; stdout up to 1 MiB, the stderr's tail, ``timed_out`` if it was."""
-    argv = [str(item) for item in argv]
-    try:
-        result = subprocess.run(argv, cwd=str(cwd), env=environment(env_pass, env), stdin=subprocess.DEVNULL,
-                                capture_output=True, text=True, errors="replace", timeout=timeout_s)
-    except subprocess.TimeoutExpired as exc:
-        return {"exit_code": None, "timed_out": True, "stdout": _tail(exc.stdout), "stderr": _tail(exc.stderr)}
-    return {"exit_code": result.returncode, "stdout": result.stdout[:STDOUT_LIMIT], "stderr": _tail(result.stderr)}
-
-
-def start_job(argv, *, kind: str, label: str, cwd, env_pass=(), env=None, timeout_s: float,
-              uses_gpu: bool = True, allow_concurrent_gpu: bool = False) -> dict:
-    """Start ``argv`` as a job in the shared jobs folder: ``{job_id, log_dir}``, or the guard's refusal (``error``).
-
-    A GPU job is guarded as an Isaac Lab launch is: no second GPU job and no job beside a running Kit unless
-    ``allow_concurrent_gpu``, and never past a configured GPU-hour budget."""
-    from .isaaclab import jobs
-
-    argv = [str(item) for item in argv]
-    with jobs._launch_lock:
-        if uses_gpu and not allow_concurrent_gpu:
-            blocked = jobs._concurrency_guard() or jobs._kit_bridge_guard()
-            if blocked is not None:
-                return {**blocked, "hint": 'Wait for it, stop it with jobs(action="cancel") if it is yours, or knowingly '
-                                           "pass allow_concurrent_gpu=true. Nothing was stopped."}
-        blocked = jobs._budget_guard() if uses_gpu else None
-        if blocked is not None:
-            return blocked
-        job_id = jobs._job_id(label)
-        folder = jobs.jobs_dir() / job_id
-        folder.mkdir(parents=True)
-        child = environment(env_pass, {"PYTHONUNBUFFERED": "1", **(env or {})})
-        stdout, stderr = folder / "stdout.log", folder / "stderr.log"
-        with stdout.open("wb") as out, stderr.open("wb") as err:
-            process = subprocess.Popen(jobs._exit_recording(argv, folder, timeout_s), stdout=out, stderr=err,
-                                       stdin=subprocess.DEVNULL, env=child, cwd=str(cwd), start_new_session=True)
-        jobs._write_job(folder, {
-            "id": job_id, "job_id": job_id, "kind": kind, "task": label, "label": label,
-            "gpu": jobs._gpu_index(child.get("CUDA_VISIBLE_DEVICES")), "command": argv, "cwd": str(cwd),
-            "pid": process.pid, "pid_start": jobs._process_start(process.pid), "timeout_s": timeout_s,
-            "uses_gpu": uses_gpu, "started_at": jobs._now(), "finished_at": None, "status": "running", "exit_code": None,
-            "log_dir": str(folder.resolve()), "run_dir": str(folder.resolve()),
-            "stdout_log": str(stdout.resolve()), "stderr_log": str(stderr.resolve()),
-        })
-        with jobs._jobs_lock:
-            jobs._active[job_id] = process
-        threading.Thread(target=jobs._watcher, args=(folder, job_id, process, timeout_s), daemon=True).start()
-    return {"job_id": job_id, "log_dir": str(folder.resolve())}
-
-
 def answer(tool: str, action: str, info: dict, *, warnings=(), **fields) -> dict:
-    """The result envelope every wrapper returns: ``{ok, tool, action, commit, pin, pin_match, exit_code,
+    """The result envelope a checkout wrapper returns: ``{ok, tool, action, commit, pin, pin_match, exit_code,
     result | error, warnings}``."""
     return {"ok": "error" not in fields, "tool": tool, "action": action, "commit": info["commit"], "pin": info["pin"],
             "pin_match": info["pin_match"], "exit_code": fields.pop("exit_code", None), **fields,

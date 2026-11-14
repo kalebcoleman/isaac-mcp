@@ -30,7 +30,13 @@ from pxr import UsdPhysics, UsdGeom, PhysxSchema
 workcell = Workcell()
 report = await workcell.quick_start(config_path={args.config!r}, mode={args.mode!r}, discard_changes={args.discard_changes!r})
 stage = omni.usd.get_context().get_stage()
-assert report["state"] == "ready" and report["backend"] == "physx" and report["timeline"] == "stopped"
+assert report["state"] == "ready" and report["backend"] in ("physx", "newton") and report["timeline"] == "stopped"
+if report["backend"] == "newton":
+    scene = stage.GetPrimAtPath("/World/PhysicsScene")
+    assert scene.GetAttribute("newton:timeStepsPerSecond").Get() == report["newton"]["settings"]["newton:timeStepsPerSecond"]
+    for name, drive in report["newton"]["drives"].items():
+        joint = next(p for p in stage.Traverse() if p.GetName() == name and p.IsA(UsdPhysics.Joint))
+        assert abs(joint.GetAttribute("newton:armature").Get() - drive["armature_kgm2"]) < 1e-6, name
 assert report["tabletop_z_m"] == 0.0 and UsdGeom.GetStageMetersPerUnit(stage) == 1.0
 gravity = UsdPhysics.Scene.Get(stage, "/World/PhysicsScene").GetGravityMagnitudeAttr().Get()
 assert abs(gravity - 9.81) < 1e-5
@@ -55,7 +61,7 @@ result = report'''
         print(json.dumps(result, indent=2, default=str))
         if result.get("result", {}).get("state") != "ready":
             raise RuntimeError("workcell smoke did not return a ready report")
-        print("PASS: stopped-stage authoring/BOM only; dynamics and captures are not tested.")
+        print(f"PASS ({result['result']['backend']}): stopped-stage authoring/BOM only; dynamics and captures are not tested.")
 
 
 if __name__ == "__main__":

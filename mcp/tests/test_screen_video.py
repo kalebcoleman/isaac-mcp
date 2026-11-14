@@ -80,7 +80,7 @@ def _register(monkeypatch, tmp_path):
     monkeypatch.setattr(screen, "VIDEO_DIR", tmp_path)
     monkeypatch.setattr(screen, "SHOT_DIR", tmp_path)
     server = FastMCP("screen-test")
-    screen.register_screen_tools(server)
+    screen.register_screen_tools(server, groups={"screen"})
     return {name: tool.fn for name, tool in server._tool_manager._tools.items()}
 
 
@@ -458,7 +458,7 @@ def test_new_tools_are_grouped_and_annotated():
 
     assert toolsets.owner("join_videos") == "screen"
     assert toolsets.owner("tile_windows") == "screen"
-    assert "screen" in toolsets.DEFAULT
+    assert "screen" not in toolsets.DEFAULT and "screen" in toolsets.PROFILES["all"]
 
 
 # ------------------------------------------------------------------ Kit UI: close and single-level menus

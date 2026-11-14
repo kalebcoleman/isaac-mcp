@@ -27,8 +27,6 @@ ALL_GROUPS = "all,+input,+launch"
 
 
 def _listing(monkeypatch, tmp_path, single_purpose):
-    for name in gw.config.LEGACY:
-        monkeypatch.delenv(name, raising=False)
     server = gw.build_server({"TWINSMITH_TOOLSETS": ALL_GROUPS, "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path)})
 
     if single_purpose:
@@ -180,7 +178,7 @@ def test_the_recording_tool_says_it_ends_with_its_server_process(single):
 def test_a_client_is_shown_groups_and_no_single_purpose_member(listed, single):
     names = {t.name for t in listed}
     old = {t.name for t in single}
-    assert len(names) < len(old) / 2.4 and len(names) <= 53
+    assert len(names) < len(old) / 2.5 and len(names) <= 57   # 57 with assets__mesh, assets__validate (#112), sysid (#116), hardware (#118), gap and vabar (#115)
     assert set(tool_groups.GROUPS) <= names
     assert not names & set(tool_groups.members())
     assert names - set(tool_groups.GROUPS) == old - set(tool_groups.members()), "ungrouped tools are listed as they were"
@@ -304,7 +302,7 @@ def test_advice_beside_the_caller_s_data_names_listed_tools(monkeypatch):
             pass
 
     monkeypatch.setattr(gw, "_job_record", lambda job_id: None)
-    server = gw.build_server({"TWINSMITH_TOOLSETS": "minimal"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "default"})
     gw._state_for(server).client = Endpoint()
 
     async def run():

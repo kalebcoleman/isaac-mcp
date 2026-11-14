@@ -43,16 +43,15 @@ arguments they do not declare, so a misspelled name is an error rather than bein
 bridge's own metadata takes precedence over these snapshots once discovered.
 """
 LOCAL_MODULES = ("server.py", "screen.py", "desktop_input.py", "sim_sessions.py", "isaaclab/tools.py",
-                 "robosim/tools.py", "gap.py", "vabar.py")
+                 "robosim/tools.py", "sysid.py", "hardware.py", "gap.py", "vabar.py")
 CATALOGS_BY_NAME = ("builtins.json", "sim.json", "assets.json", "workcell.json")
 # Where each toolset's behaviour is described, relative to docs/.
 REFERENCE = {
-    "core": "TOOLS-HOST.md", "code": "TOOLS-HOST.md", "screen": "TOOLS-HOST.md",
+    "core": "TOOLS-HOST.md", "screen": "TOOLS-HOST.md",
     "input": "TOOLS-HOST.md#optional-desktop-input", "launch": "TOOLS-HOST.md#optional-simulator-sessions",
-    "scene": "TOOLS-SCENE.md", "physics": "TOOLS-SCENE.md", "sensors": "TOOLS-SCENE.md",
-    "ros2": "TOOLS-SCENE.md", "kit_debug": "TOOLS-SCENE.md", "assets": "ASSET-IMPORT.md",
-    "lab": "TOOLS-ISAACLAB.md", "robosim": "ROBOSIM.md", "planning": "PLANNING-EVAL.md#gap",
-    "eval": "PLANNING-EVAL.md#vabar",
+    "sim": "TOOLS-SCENE.md", "ros2": "TOOLS-SCENE.md", "assets": "ASSET-IMPORT.md",
+    "lab": "TOOLS-ISAACLAB.md", "real2sim": "ROBOSIM.md", "cad": "HARDWARE.md",
+    "planning": "PLANNING-EVAL.md#gap", "eval": "PLANNING-EVAL.md#vabar",
     "workcell": "../exts/workcell/workcell/README.md",
 }
 
@@ -230,8 +229,8 @@ def render_toolsets_full():
 def render_profiles():
     rows = ["| Profile | Toolsets | Listed tools |", "|---|---|--:|"]
     extra = frozenset(toolsets.PROFILES["all"] | {"input", "launch"})
-    for label, names in (("`minimal`", toolsets.PROFILES["minimal"]), ("`default`", toolsets.PROFILES["default"]),
-                         ("`all`", toolsets.PROFILES["all"]), ("`all,+input,+launch`", extra)):
+    for label, names in (("`default`", toolsets.PROFILES["default"]), ("`all`", toolsets.PROFILES["all"]),
+                         ("`all,+input,+launch`", extra)):
         shown = ", ".join(f"`{n}`" for n in toolsets.TOOLSETS if n in names)
         rows.append(f"| {label} | {shown} | {_listed_count(names)} |")
     return "\n".join(rows)

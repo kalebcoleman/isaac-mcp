@@ -36,7 +36,4 @@ CATALOG_HINTS = {
     "workcell.perception_status": _READ,
     "workcell.jenga_status": _READ,
     "workcell.jenga_build": _DESTROYS,
-    "workcell.real2sim_status": _READ,
-    "workcell.planning_status": _READ,
-    "workcell.eval_status": _READ,
 }

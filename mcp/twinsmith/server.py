@@ -16,14 +16,13 @@ bridge tool ``<namespace>.<tool>`` is ``<namespace>__<tool>`` to MCP, which allo
 Environment:
 
     TWINSMITH_PORT, TWINSMITH_HOST   the bridge to use. Unset: the one advertised on this machine.
-    TWINSMITH_TOOLSETS               profile and adjustments (default,+lab,-screen).
+    TWINSMITH_TOOLSETS               profile and adjustments (default,+sim,+lab).
     TWINSMITH_NAME, TWINSMITH_INSTRUCTIONS   the server's name and instructions.
 
 Nothing here starts a simulator unless the explicit ``launch`` toolset is selected.
 """
 
 import functools
-import importlib
 import inspect
 import json
 import logging
@@ -61,8 +60,8 @@ LIST_BRIDGES_HELP = (
 
 SERVER_NAME = os.getenv("TWINSMITH_NAME", "twinsmith")
 SERVER_INSTRUCTIONS = (
-    "Call status first, once: it identifies the bridge, running work and stage IDs, and lists enabled, "
-    "disabled and planned toolsets. The twinsmith://toolsets resource reports the same selection. "
+    "Call status first, once: it identifies the bridge, running work and stage IDs, and lists enabled and "
+    "disabled toolsets. The twinsmith://toolsets resource reports the same selection. "
     "Use help(task=...) to find a tool; a needed toolset that is off can be turned on with "
     "toolsets(action=\"enable\", names=[...]), except input and launch. Prefer listed tools over custom code. Confirm the intended simulator "
     "before changing a scene; do not start extra GPU work or stop unrelated processes without authorization. "
@@ -521,7 +520,8 @@ def _catalog_error(canonical: str, error: BaseException, state: Optional[_Bridge
             f"simulator state before retrying. {_BRIDGE_HELP}")
 
 
-_WAITING_TOOLS = frozenset({"job_status"})      # may wait (wait_s) or encode a replay's frames
+_WAITING_TOOLS = frozenset({"job_status",       # may wait (wait_s) or encode a replay's frames
+                            "assets.mesh_inspect", "assets.validate"})   # parse a large USD in a subprocess
 _PYTHON_TYPE = {"string": str, "integer": int, "number": float, "boolean": bool, "array": list, "object": dict}
 
 
@@ -587,7 +587,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
             elif f["kind"] == "array":
                 strings = (f["name"] in {"observe_prims", "observe_joints", "extra_frames", "paths", "dofs", "log", "observe"}
                            or (canonical == "sim.ui.act" and f["name"] == "keys")
-                           or canonical in _PACK_TOOLS)  # every array in these tools holds paths or names
+                           or canonical in _PACK_TOOLS or canonical in _MESH_TOOLS)  # arrays of paths or names
                 annotation = list[str] if strings else list[float]
                 if (canonical, f["name"]) in (("sim.prim.create_many", "items"), ("sim.ui.act", "actions")):
                     annotation = list[dict[str, Any]]  # prim specs: objects, not numbers
@@ -681,6 +681,7 @@ def _failed_tool_result(result: str) -> bool:
     return isinstance(data, dict) and data.get("status") == "error"
 
 
+_MESH_TOOLS = {"assets.mesh_inspect", "assets.mesh_decimate", "assets.mesh_hulls", "assets.mesh_split", "assets.validate"}
 _PACK_TOOLS = {"assets.packs", "assets.pack_doctor", "assets.dependencies", "assets.pack_adopt",
                "assets.pack_pin", "assets.pack_build"}
 
@@ -705,6 +706,13 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                     return json.dumps(broker.search(**params))
                 if canonical == "assets.scan":
                     return json.dumps(broker.scan(**params))
+                if canonical in _MESH_TOOLS:
+                    from . import mesh_tools
+                    from .asset_packs import PackError
+                    try:
+                        return json.dumps(mesh_tools.run_tool(canonical, params, broker))
+                    except PackError as e:
+                        return json.dumps(dict(status="error", code=e.code, message=str(e), **e.details))
                 if canonical in _PACK_TOOLS:
                     from .asset_packs import PackError, run_tool
                     try:
@@ -858,11 +866,11 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
         elif around["bridges"]:
             message = (f"Nothing answers on the port this server is set to use ({error}), but other bridges are "
                        f"advertised: call use_bridge(port={around['bridges'][0]['port']}) after confirming which "
-                       "simulator you mean. The robosim, isaaclab (lab) and screen tools need no bridge.")
+                       "simulator you mean. The robosim (real2sim), isaaclab (lab) and screen tools need no bridge.")
         else:
             message = ("Nothing is running: no Isaac Sim bridge answers. Start your configured simulator, then "
                        "refresh_tools(wait_s=120). See toolsets for available host tools and optional launch support. "
-                       "The robosim, isaaclab (lab) and screen tools need no bridge.")
+                       "The robosim (real2sim), isaaclab (lab) and screen tools need no bridge.")
         return {"running": False, "message": message, **around, "host": _host_brief(),
                 "physics": _physics_status(state), "toolsets": toolsets.describe(state.toolsets, state.runtime_enable)}
     if not isinstance(identity, dict):
@@ -1235,16 +1243,39 @@ def _register_host_tools(server: FastMCP, state: _BridgeState, groups: Iterable[
     register_sim_session_tools(server, groups=groups, env=env,
                                on_launch=lambda record: state.launched_sessions.add(record["id"]))
     register_isaaclab_tools(server, groups=groups)
-    wrapped = [("robosim", "robosim", "register_robosim_tools"), ("planning", "gap", "register"), ("eval", "vabar", "register")]
-    for group, name, function in wrapped:
-        if group not in groups:
-            continue
-        getattr(importlib.import_module(f".{name}", __package__), function)(server)
+    single = []
+    if "real2sim" in groups:
+        from .robosim import register_robosim_tools
+        from .sysid import register_sysid_tools
+        register_robosim_tools(server)
+        register_sysid_tools(server, roots=lambda: _approved_roots(state))
+        single += ["robosim", "sysid"]
+    if "cad" in groups:
+        from .hardware import register_hardware_tools
+        register_hardware_tools(server)
+        single.append("hardware")
+    if "planning" in groups:
+        from .gap import register as register_gap
+        register_gap(server)
+        single.append("gap")
+    if "eval" in groups:
+        from .vabar import register as register_vabar
+        register_vabar(server)
+        single.append("vabar")
+    for name in single:
         # Listed like every other host tool: no generated titles, no docstring indentation.
         tool = server._tool_manager._tools[name]
         tool.description = inspect.cleandoc(tool.description)
         strip_schema_titles(server, name)
         grouped_tools.shorten_listed(tool)
+
+
+def _approved_roots(state) -> list:
+    """The user-approved asset roots, reading the approval file now if no assets tool has run yet."""
+    if not hasattr(state, "asset_broker"):
+        from .project_assets import Broker
+        state.asset_broker = Broker()
+    return [root for root, _ in state.asset_broker.roots.values()]
 
 
 def _drop_unselected(server: FastMCP, state: _BridgeState) -> None:
@@ -1777,14 +1808,20 @@ _HELP_TOPICS = (
      "isaaclab__envs_list, isaaclab__train, isaaclab__runs_status, isaaclab__runs_tail, isaaclab__metrics_summary, "
      "isaaclab__eval, isaaclab__play, job_cancel. Before a long run: isaaclab__preflight (GPU and jobs) and "
      "isaaclab__env_check (NaNs, resets, memory). isaaclab__runs_status(job_id, wait_s=45) waits for a job to end; "
-     "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises your evaluation-result files against criteria you give; isaaclab__checkpoint_register protects a baseline; run_script runs your own script as a job. "
+     "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises your evaluation-result JSON against criteria you give; isaaclab__checkpoint_register protects a baseline; run_script runs your own script as a job. "
      "isaaclab__record gives an MP4 with no window. No bridge needed."),
     ("rebuild a real scene from a video and compare it with the real clip (real-to-sim)",
      ("real-to-sim", "real to sim", "real2sim", "reference video", "video", "clip", "robosim", "robosimstudio", "match the real"),
-     "robosim, in the robosim toolset (off by default: toolsets action=enable names=[\"robosim\"]). It needs no simulator bridge. "
+     "robosim, in the real2sim toolset (off by default: toolsets action=enable names=[\"real2sim\"]). It needs no simulator bridge. "
      "Order: robosim action=start with a template (plain data), reference (frames from the clip), compare, update_scene, "
      "tune_push (makes the simulated block move like the real one), rollout, compare_take, report, stop. It compares images; "
-     "it does not fit mass or friction."),
+     "it does not fit mass or friction (sysid does, from recorded trajectories)."),
+    ("fit physical parameters (damping, armature, friction, gains, mass) to recorded trajectories (system identification)",
+     ("system identification", "sysid", "identify", "fit damping", "fit friction", "fit mass", "armature", "damping",
+      "recorded trajectories"),
+     "sysid, in the real2sim toolset (off by default: toolsets action=enable names=[\"real2sim\"]). It needs no simulator bridge. "
+     "sysid action=status checks its MuJoCo environment; fit (a dataset folder inside an approved root, with SOURCE.md) "
+     "starts a job; jobs action=status follows it; report returns nominal, fitted and bounds per parameter."),
     ("plan a task as a skill graph or score it on a benchmark (Graph-as-Policy, VABAR)",
      ("graph-as-policy", "skill graph", "gap ", "vabar", "benchmark", "workflow graph", "open-robot-skills"),
      "gap in the planning toolset and vabar in the eval toolset (both off by default: toolsets action=enable "
@@ -1872,7 +1909,7 @@ def _help(task: Optional[str], no_fit: bool = False, enabled=toolsets.DEFAULT,
     if task and (no_fit or not hits):
         recorded = _record_help_gap(task, "no_fit" if no_fit else "no_match")
         lines.append(f"No twinsmith tool is known to fit {task!r}." if not hits or no_fit else "")
-        lines.append(_RUN_PYTHON_PATTERN if "code" in enabled else _enable_toolsets({"code"}, runtime_enable))
+        lines.append(_RUN_PYTHON_PATTERN if "sim" in enabled else _enable_toolsets({"sim"}, runtime_enable))
         if recorded is not None:
             lines.append(f"This question was recorded for the maintainer in {recorded} (local file, never sent anywhere).")
         if hits:
@@ -1987,7 +2024,7 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     setattr(server, _STATE_ATTR, state)
     @server.resource("twinsmith://toolsets")
     def toolset_status() -> str:
-        """Enabled, disabled and planned toolsets for this server."""
+        """Enabled and disabled toolsets for this server."""
         return json.dumps(toolsets.describe(state.toolsets, state.runtime_enable))
 
     _advertise_tools_list_changed(server)
@@ -2029,7 +2066,7 @@ def main(argv: list[str] | None = None) -> None:
         "Environment: TWINSMITH_PORT (bridge port, default 8766), DISPLAY (screen tools).",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {_package_version()}")
-    parser.add_argument("--toolsets", help="Profile and adjustments, e.g. default,+lab,-screen")
+    parser.add_argument("--toolsets", help="Profile and adjustments, e.g. default,+sim,+lab")
     parser.add_argument("command", nargs="?", choices=["toolsets"])
     args = parser.parse_args(argv)
     instance = build_server(cli_toolsets=args.toolsets)

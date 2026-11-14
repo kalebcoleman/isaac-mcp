@@ -14,40 +14,7 @@ except ModuleNotFoundError:          # Python before 3.11: tomli, if it is insta
     except ModuleNotFoundError:
         tomllib = None
 
-from . import legacy
 from .toolsets import DEFAULT, PROFILES, TOOLSETS
-
-LEGACY = tuple(legacy.STOPS_STARTUP)      # removed selection settings: a server that finds one set stops
-
-
-def replacement(variable: str, value: str) -> str:
-    """Give an explicit migration command, never interpret legacy settings at runtime."""
-    kind = legacy.STOPS_STARTUP.get(variable)
-    if kind == "local_tools":
-        mapping = {"all": "all", "none": "minimal", "readonly": "minimal,+lab,+screen",
-                   "gateway": "+core", "screen_input": "+input", "sim_launch": "+launch"}
-        parts = []
-        for item in (value or "all").split(","):
-            item = item.strip().lower()
-            part = mapping.get(item, "+lab" if item.startswith("isaaclab_") else "+screen")
-            if part not in parts:
-                parts.append(part)
-        if parts[0].startswith("+"):
-            parts.insert(0, "minimal")
-        selection = ",".join(parts)
-    elif kind == "namespace":
-        mapping = {"sim": "+scene,+physics,+sensors,+ros2,+kit_debug", "assets": "+assets",
-                   "workcell": "+workcell", legacy.OLD_WORKCELL_NAMESPACE: "+workcell"}
-        selection = "minimal,+code,+screen" + "".join("," + mapping.get(part.strip(), "+extensions")
-                                                       for part in value.split(",") if part.strip())
-    elif kind == "builtins":
-        selection = "default,-code" if value.lower() in {"0", "false", "no"} else "default,+code"
-    elif kind == "scene_tools":
-        selection = "default,-scene,-physics,-sensors,-assets,-ros2,-kit_debug" if value.lower() in {"0", "false", "no"} else "default"
-    else:
-        selection = "default"
-    return "TWINSMITH_TOOLSETS=" + selection
-
 
 def select(value) -> frozenset[str]:
     if isinstance(value, str):
@@ -120,10 +87,12 @@ def _config_files(cwd: Path | None = None, home: Path | None = None, minimal: bo
     With ``minimal`` a Python that has no TOML reader still yields the physics setting."""
     current = (Path.cwd() if cwd is None else Path(cwd)).resolve()
     base = Path.home() if home is None else Path(home)
-    user = legacy.choose_file(base / ".config/twinsmith/config.toml", base / legacy.OLD_CONFIG_DIR / "config.toml") \
-        or base / ".config/twinsmith/config.toml"
-    project = next((found for found in (legacy.choose_file(directory / "twinsmith.toml", directory / legacy.OLD_PROJECT_TOML)
-                                        for directory in (current, *current.parents)) if found is not None), None)
+    user = base / ".config/twinsmith/config.toml"
+    project = None
+    for directory in (current, *current.parents):
+        if (directory / "twinsmith.toml").is_file():
+            project = directory / "twinsmith.toml"
+            break
     for label, path in (("user file", user), ("project file", project)):
         if path is not None and path.is_file():
             if tomllib is None:
@@ -156,11 +125,6 @@ def resolve_physics_backend(env: Mapping[str, str] | None = None, cwd: Path | No
 def resolve(env: Mapping[str, str] | None = None, cli_toolsets: str | None = None,
             cwd: Path | None = None, home: Path | None = None) -> Config:
     env = os.environ if env is None else env
-    retired = [name for name in LEGACY if name in env]
-    if retired:
-        raise ValueError("Retired settings: " + "; ".join(
-            f"{name} is no longer supported; remove it and use {replacement(name, env[name])}"
-            for name in retired))
     enabled, runtime, badge = DEFAULT, True, False
     for _, data in _config_files(cwd, home):
         if "toolsets" in data.get("tools", {}):

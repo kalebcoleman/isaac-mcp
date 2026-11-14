@@ -155,7 +155,7 @@ def test_a_graph_outside_the_roots_is_refused(workspace, tmp_path):
 
 def test_the_tool_answers_through_the_server(workspace, monkeypatch):
     monkeypatch.setenv("TWINSMITH_GAP_ROOT", str(workspace / "tools/graph-as-policy"))
-    instance = server.build_server({"TWINSMITH_TOOLSETS": "minimal,+planning"})
+    instance = server.build_server({"TWINSMITH_TOOLSETS": "default,+planning"})
     answer = asyncio.run(instance.call_tool("gap", {"action": "status"}))
     text = answer[0][0].text if isinstance(answer, tuple) else answer[0].text
     assert json.loads(text)["tool"] == "gap"
@@ -167,5 +167,13 @@ def test_toolsets_register_one_tool_each_and_none_when_off():
         return {name for name in instance._tool_manager._tools if toolsets.owner(name) in ("planning", "eval")}
 
     assert owned("default") == set() and owned("all,-planning,-eval") == set()
-    assert owned("minimal,+planning") == {"gap"} and owned("minimal,+eval") == {"vabar"}
+    assert owned("default,+planning") == {"gap"} and owned("default,+eval") == {"vabar"}
     assert "planning" not in toolsets.DEFAULT and "eval" not in toolsets.DEFAULT
+
+
+def test_a_busy_gpu_refuses_and_leaves_no_run_folder(workspace, monkeypatch):
+    monkeypatch.setattr(jobs, "_concurrency_guard", lambda: {"error": "another job is running"})
+    co = gap.checkout(workspace=workspace)
+    result = gap.call(co, "run", sim="libero/0", graph="graph1", name="busy")
+    assert result["code"] == "GPU_BUSY" and "allow_concurrent_gpu" in result["hint"]
+    assert not (workspace / "runs/gap/busy").exists() and calls(co.root) == []

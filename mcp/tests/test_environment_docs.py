@@ -30,13 +30,8 @@ NAME = re.compile(r"[A-Z][A-Z0-9_]+")
 SHELL_VARIABLE = re.compile(r"\$\{?([A-Z][A-Z0-9_]+)")
 
 
-def retired():
-    from twinsmith import config, legacy, pack_manifest
-    return set(config.LEGACY) | set(pack_manifest.REMOVED_ENVIRONMENT) | set(legacy.OLD_NAMES)
-
-
 def is_project(name):
-    return name.startswith(PROJECT_PREFIXES) and not name.endswith("_") and name not in {"ISAAC_MCP", "ISAAC_SIM"}
+    return name.startswith(PROJECT_PREFIXES) and not name.endswith("_") and name != "ISAAC_SIM"
 
 
 def environment_like(node):
@@ -88,7 +83,7 @@ def read_variables(root=ROOT):
 
 def required(names):
     """The variables the page must list."""
-    return {name for name in names if (is_project(name) or name in SYSTEM_VARIABLES)} - retired() - set(NOT_SETTINGS)
+    return {name for name in names if (is_project(name) or name in SYSTEM_VARIABLES)} - set(NOT_SETTINGS)
 
 
 def documented(text):
@@ -117,11 +112,6 @@ def test_every_listed_variable_is_read_by_the_code():
 def test_each_variable_is_listed_once():
     twice = sorted(name for name, count in documented(PAGE.read_text(encoding="utf-8")).items() if count > 1)
     assert not twice, f"listed more than once: {', '.join(twice)}"
-
-
-def test_no_retired_variable_is_listed():
-    listed = set(documented(PAGE.read_text(encoding="utf-8")))
-    assert not sorted(listed & retired()), "a retired variable is listed"
 
 
 def test_every_row_names_a_default_a_reader_and_a_meaning():
