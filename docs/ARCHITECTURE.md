@@ -80,7 +80,8 @@ simulator answered, what else is running, the IDs the scene tools need and which
 registers them as `sim__stage__info`. A client is shown related tools as one grouped tool with an `action` (`sim__stage`).
 [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md) lists every grouped tool with its actions, by toolset. Tools built into the bridge
 (`status`, `run_python`, the file tools), the gateway tools (`use_bridge`, `refresh_tools`) and the desktop tools
-(`screenshot`, `windows`) have no prefix.
+(`screenshot`, `windows`, `doctor`, `computer`) have no prefix: they work on any X11 window, not only Isaac Sim. `sim__` marks
+tools that need Kit, such as `sim__ui`.
 
 **Long work.** A call that would take longer than a moment returns a `job_id` instead of blocking. Inside the simulator that
 is `run_python` with `background=true`, `sim__simulation(action="run")` and `sim__simulation(action="replay")`; on the host it
@@ -185,6 +186,7 @@ under `<workspace>/runs/robosim/`. See [ROBOSIM.md](ROBOSIM.md).
 | Source | Tools | Needs |
 |---|---|---|
 | A window on the desktop | `screenshot`, `screen_recording` | An X11 display. A window is read by its id, so it works when covered or when the screen is locked. |
+| Acting on a window | `computer` (opt-in `input` toolset); `sim__ui` for Isaac Sim's own UI | `computer`: an unlocked X11 desktop. `sim__ui`: a running windowed Isaac Sim; works when locked. See [computer use](TOOLS-HOST.md#computer-use-workflow). |
 | A camera in the scene | `sim__camera`; `camera=` on `sim__simulation` runs and replays | A running simulator. Works headless. |
 | An Isaac Lab task | `isaaclab__launch` with `record`, or `play` with `--video` | An Isaac Lab install. Works headless. |
 | Saved clips and frames | `join_videos` (join, contact sheet, frames to MP4) | Nothing but the files. |

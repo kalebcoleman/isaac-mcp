@@ -4464,7 +4464,7 @@
         },
         "window": {
           "type": "string",
-          "description": "Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'.",
+          "description": "Only windows whose title contains this, e.g. 'Stage'.",
           "required": false,
           "default": ""
         },
@@ -4473,6 +4473,11 @@
           "description": "Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).",
           "required": false,
           "default": 40
+        },
+        "zoom_ref": {
+          "type": "string",
+          "description": "Zoom on this widget ref instead of listing: returns an enlarged crop of the Isaac Sim window around it, with its own coord_space token.",
+          "required": false
         }
       },
       "fields": [
@@ -4492,7 +4497,7 @@
           "required": false,
           "default": "",
           "has_default": true,
-          "description": "Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'."
+          "description": "Only windows whose title contains this, e.g. 'Stage'."
         },
         {
           "name": "limit",
@@ -4502,18 +4507,27 @@
           "default": 40,
           "has_default": true,
           "description": "Maximum widgets returned, 1..100 (the reply is also capped near 48 KB)."
+        },
+        {
+          "name": "zoom_ref",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Zoom on this widget ref instead of listing: returns an enlarged crop of the Isaac Sim window around it, with its own coord_space token."
         }
       ],
       "namespace": "sim",
       "owner_id": "generic-sim"
     },
     "sim.ui.act": {
-      "description": "Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (desktop window_* input does not). Then check the result with screenshot(window_id=<Isaac Sim window>) or sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.",
+      "description": "Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (the X11 computer tool does not). screenshot_after=true returns the window after the action; or check with sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.",
       "parameters": {
         "action": {
           "type": "string",
-          "description": "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab).",
-          "required": true,
+          "description": "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab). Omit it with actions.",
+          "required": false,
           "enum": [
             "click",
             "double_click",
@@ -4566,7 +4580,7 @@
         },
         "window": {
           "type": "string",
-          "description": "For action=tab or close: the window or tab title, e.g. 'Console' or 'Content'.",
+          "description": "Window or tab title for tab and close, e.g. 'Console'.",
           "required": false
         },
         "menu": {
@@ -4591,6 +4605,28 @@
           "description": "Frames to wait after the action so the UI updates (0..600).",
           "required": false,
           "default": 3
+        },
+        "actions": {
+          "type": "array",
+          "description": "Batch of up to 10 steps, each an object with action (not sub_action) and that action's arguments. E.g. [{\"action\": \"click\", \"ref\": \"...\"}, {\"action\": \"type\", \"text\": \"2\"}]. Steps run in order and stop at the first failure; they replace the top-level action fields, and frames is then each step's default wait.",
+          "required": false
+        },
+        "coord_space": {
+          "type": "string",
+          "description": "window (Isaac Sim window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image).",
+          "required": false,
+          "default": "window"
+        },
+        "screenshot_after": {
+          "type": "boolean",
+          "description": "Also return a screenshot of the Isaac Sim window after the action(s).",
+          "required": false,
+          "default": false
+        },
+        "find_after": {
+          "type": "string",
+          "description": "Also return up to 10 widgets matching this text after the action(s), compactly (same matching as sim__ui__find query).",
+          "required": false
         }
       },
       "fields": [
@@ -4611,10 +4647,10 @@
             "close",
             "wait"
           ],
-          "required": true,
+          "required": false,
           "default": null,
           "has_default": false,
-          "description": "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab)."
+          "description": "What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab). Omit it with actions."
         },
         {
           "name": "ref",
@@ -4686,7 +4722,7 @@
           "required": false,
           "default": null,
           "has_default": false,
-          "description": "For action=tab or close: the window or tab title, e.g. 'Console' or 'Content'."
+          "description": "Window or tab title for tab and close, e.g. 'Console'."
         },
         {
           "name": "menu",
@@ -4723,6 +4759,42 @@
           "default": 3,
           "has_default": true,
           "description": "Frames to wait after the action so the UI updates (0..600)."
+        },
+        {
+          "name": "actions",
+          "kind": "array",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Batch of up to 10 steps, each an object with action (not sub_action) and that action's arguments. E.g. [{\"action\": \"click\", \"ref\": \"...\"}, {\"action\": \"type\", \"text\": \"2\"}]. Steps run in order and stop at the first failure; they replace the top-level action fields, and frames is then each step's default wait."
+        },
+        {
+          "name": "coord_space",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": "window",
+          "has_default": true,
+          "description": "window (Isaac Sim window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image)."
+        },
+        {
+          "name": "screenshot_after",
+          "kind": "boolean",
+          "enum": null,
+          "required": false,
+          "default": false,
+          "has_default": true,
+          "description": "Also return a screenshot of the Isaac Sim window after the action(s)."
+        },
+        {
+          "name": "find_after",
+          "kind": "string",
+          "enum": null,
+          "required": false,
+          "default": null,
+          "has_default": false,
+          "description": "Also return up to 10 widgets matching this text after the action(s), compactly (same matching as sim__ui__find query)."
         }
       ],
       "namespace": "sim",

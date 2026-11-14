@@ -61,14 +61,12 @@ def test_profiles_and_guards():
             config.select(value)
 
 
-@pytest.mark.parametrize("variable", config.LEGACY)
-def test_legacy_settings_fail_with_replacement(variable):
+@pytest.mark.parametrize("suffix", ["LOCAL_TOOLS", "NAMESPACE", "BUILTINS", "SCENE_TOOLS", "GROUP_TOOLS", "TOOLSETS"])
+def test_old_selection_settings_stop_the_server(suffix):
+    variable = config.OLD_PREFIXES[0] + suffix
     with pytest.raises(ValueError) as error:
         server.build_server({variable: "all,screen_input,sim_launch"})
-    assert variable in str(error.value)
-    assert config.replacement(variable, "all,screen_input,sim_launch") in str(error.value)
-    local = next(name for name in config.LEGACY if name.endswith("LOCAL_TOOLS"))
-    assert config.replacement(local, "all,screen_input,sim_launch") == "TWINSMITH_TOOLSETS=all,+input,+launch"
+    assert variable in str(error.value) and "TWINSMITH_TOOLSETS" in str(error.value)
 
 
 def test_five_source_precedence_and_backend(tmp_path):
@@ -287,9 +285,9 @@ def test_explicit_only_toolsets_can_never_be_enabled_at_run_time(name):
 
 def test_explicit_only_ones_stay_available_at_startup():
     instance, state = offline_build("minimal,+input,+launch")
-    assert {"window_input", "sim__session"} <= registered(instance)
+    assert {"computer", "sim__session"} <= registered(instance)
     change(instance, "disable", ["input"])          # a user's own startup choice can be dropped again
-    assert "window_input" not in registered(instance)
+    assert "computer" not in registered(instance)
     from mcp.server.fastmcp.exceptions import ToolError
     with pytest.raises(ToolError, match="explicit-only"):
         change(instance, "enable", ["input"])

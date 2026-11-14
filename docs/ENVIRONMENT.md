@@ -45,6 +45,7 @@ A project's `twinsmith.json` is a different file, read for asset packs and the I
 |---|---|---|---|
 | `TWINSMITH_TOOLSETS` | `default` | host | Toolset profile and adjustments. Overrides the files; `--toolsets` overrides it. See [toolsets](TOOLSETS.md). |
 | `TWINSMITH_RUNTIME_ENABLE` | `1` | host | `0` stops the `toolsets` tool from enabling or disabling toolsets while the server runs; `[tools] runtime_enable = false` does the same. See [toolsets](TOOLSETS.md#enabling-a-toolset-while-the-server-runs). |
+| `TWINSMITH_CURSOR_BADGE` | `0` | host | `1` draws a small click-through badge that glides to where `computer` and `sim__ui__act` input lands, then hides; it is hidden from every screenshot but shows in monitor recordings. Overrides `[screen] cursor_badge = true` in the configuration files. |
 | `TWINSMITH_PHYSICS_BACKEND` | `newton` | host, `run.sh`, Kit | Physics engine for a new simulator, `physx` or `newton`. It overrides `[sim] physics_backend` in the configuration files; `--physics-backend` overrides it. The managed launch tool, `run.sh` and `scripts/run_kit.py` all read the same setting. Never falls back to the other engine; the UR5e work cell needs `physx`. See [compatibility](COMPATIBILITY.md#target-engine). |
 | `TWINSMITH_NAME` | `twinsmith` | host | Name the server reports to the client. |
 | `TWINSMITH_INSTRUCTIONS` | built in | host | Replaces the instructions text the server sends to the client. |
@@ -131,6 +132,6 @@ Handshakes between the server's own processes. They are not meant to be set by h
 | `TWINSMITH_TF_DOCTOR_REEXEC` | unset | `scripts/ros2_tf_doctor.py` | Stops the doctor re-running itself in a second environment more than once. |
 
 A managed session's Kit also receives `TWINSMITH_SIM_SESSION_ID` and `TWINSMITH_SIM_SESSION_DIR` from the host; no code reads
-them, they identify the process to a person. Variables that were removed with the toolsets and with the old asset model are refused with the replacement, not read; see [MIGRATING.md](MIGRATING.md#settings-that-were-already-removed).
+them, they identify the process to a person. The pre-0.3.0 names of these variables, and the ones removed with the toolsets and the old asset model, are not read: a server or bridge that finds one set refuses to start and names it; see [MIGRATING.md](MIGRATING.md#environment-variables).
 
-Every variable above had another name before 0.3.0. [MIGRATING.md](MIGRATING.md#environment-variables) lists them; the old names still work in 0.3.x and print one warning each.
+Every variable above had another name before 0.3.0. [MIGRATING.md](MIGRATING.md#environment-variables) lists them. 0.3.x still read the old names; they are no longer read, except `ISAAC_MCP_ASSET_ROOT`, a permanent alias of `TWINSMITH_ASSET_ROOT`.

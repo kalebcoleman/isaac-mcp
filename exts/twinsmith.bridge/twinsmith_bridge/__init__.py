@@ -7,8 +7,6 @@
 """
 
 from . import knobs
-
-knobs.apply_legacy_aliases()      # old variable names keep working for one release (see mcp/twinsmith/legacy.py)
 from .bridge import McpBridge, OwnerRegistrar, ToolDefinition, destroy_bridge, get_mcp_bridge
 from .packages import load_tool_modules, reload_tool_module
 from .protocol import ToolError

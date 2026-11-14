@@ -959,7 +959,13 @@ Check a file's existence, size and sha256 on the bridge's box. Skips unchanged p
 
 ## `screen`: Capture, record and arrange desktop windows
 
-Toolset `screen` is on by default. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 10 tools, listed as 4: `join_videos`, `screen_recording` (start, stop, status), `screenshot`, `windows` (info, list, raise, move, tile).
+Toolset `screen` is on by default. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 11 tools, listed as 5: `doctor`, `join_videos`, `screen_recording` (start, stop, status), `screenshot`, `windows` (info, list, raise, move, tile).
+
+### `doctor`
+
+Check whether desktop input (computer) and Isaac Sim UI control (sim__ui) can work here, and what to fix.
+
+No arguments.
 
 ### `join_videos`
 
@@ -1033,6 +1039,8 @@ Capture the screen, a monitor or a window to see the result of your work. Return
 - `window_id` (int | None, default `None`): Window id from list_windows.
 - `max_width` (int, default `1600`): Inline image width cap in pixels, 320-3840. The saved PNG stays full size.
 - `label` (str | None, default `None`): Short name added to the saved file, e.g. 'push_done'. Letters, digits, - and _ only; other characters become _; max 40.
+- `region` (list[int] | None, default `None`): Zoom: [x, y, width, height] of the window to crop, in the space coord_space names; returned enlarged.
+- `coord_space` (str, default `'window'`): window (default) or a coord_space token from an earlier screenshot, for region.
 
 ### `start_screen_recording`
 
@@ -1414,9 +1422,9 @@ Read a bounded tail of the Kit log. Of the selected Kit log file, never arbitrar
 
 Listed as `sim__ui(action="act")`.
 
-Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (desktop window_* input does not). Then check the result with screenshot(window_id=<Isaac Sim window>) or sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.
+Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI through Kit's input system, not the desktop: click, double_click, right_click, move, drag, scroll, type, keypress, menu, tab, close, or wait. Target a widget by ref from sim__ui__find or by x, y window pixels. Works while the desktop is locked or used remotely (the X11 computer tool does not). screenshot_after=true returns the window after the action; or check with sim__ui__find. UI actions can change or delete scene data and files like a person clicking would.
 
-- `action` (click|double_click|right_click|move|drag|scroll|type|keypress|menu|tab|close|wait, required): What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab).
+- `action` (click|double_click|right_click|move|drag|scroll|type|keypress|menu|tab|close|wait, optional): What to do. tab brings a docked window to the front, like clicking its tab (sim__ui__find lists hidden_tabs); close hides a Kit window or docked panel such as 'Console' and reports whether it is now hidden (reopen with tab). Omit it with actions.
 - `ref` (string, optional): Widget ref from sim__ui__find (its centre is used). For type/keypress it is clicked first to focus it.
 - `x` (integer, optional): X in Isaac Sim window pixels (when no ref).
 - `y` (integer, optional): Y in Isaac Sim window pixels (when no ref).
@@ -1424,11 +1432,15 @@ Click or type in Isaac Sim's UI; can delete data. Drives Isaac Sim's own UI thro
 - `end_y` (integer, optional): Drag end Y in window pixels.
 - `text` (string, optional): Text for action=type (1..500 characters, no newlines; send enter with keypress).
 - `keys` (array, optional): For action=keypress: one key plus optional modifiers, e.g. ["ctrl", "s"], ["enter"], ["shift", "tab"].
-- `window` (string, optional): For action=tab or close: the window or tab title, e.g. 'Console' or 'Content'.
+- `window` (string, optional): Window or tab title for tab and close, e.g. 'Console'.
 - `menu` (string, optional): For action=menu: a menu path, e.g. 'Create/Mesh/Cube' (a menu an extension adds exists only once it has loaded), or a top-level menu such as 'Layouts' (opened to list its items, then closed again).
 - `scroll_x` (integer, default `0`): Horizontal wheel steps for action=scroll (-20..20).
 - `scroll_y` (integer, default `0`): Vertical wheel steps for action=scroll (-20..20; negative scrolls down).
 - `frames` (integer, default `3`): Frames to wait after the action so the UI updates (0..600).
+- `actions` (array, optional): Batch of up to 10 steps, each an object with action (not sub_action) and that action's arguments. E.g. [{"action": "click", "ref": "..."}, {"action": "type", "text": "2"}]. Steps run in order and stop at the first failure; they replace the top-level action fields, and frames is then each step's default wait.
+- `coord_space` (string, default `"window"`): window (Isaac Sim window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image).
+- `screenshot_after` (boolean, default `false`): Also return a screenshot of the Isaac Sim window after the action(s).
+- `find_after` (string, optional): Also return up to 10 widgets matching this text after the action(s), compactly (same matching as sim__ui__find query).
 
 ### `sim__ui__find`
 
@@ -1437,8 +1449,9 @@ Listed as `sim__ui(action="find")`.
 Find Isaac Sim UI widgets. Lists Isaac Sim's own UI widgets (buttons, fields, checkboxes, combo boxes, tree views, and labels when a query is given) with their text, tooltip, current value, a ref, and their centre in pixels of the Isaac Sim window (the same pixels as screenshot(window_id=<Isaac Sim window>)), plus the visible Kit windows. Works while the desktop is locked or used remotely. Use the ref with sim__ui__act instead of guessing coordinates.
 
 - `query` (string, default `""`): Case-insensitive text to match in a widget's name, text, tooltip, identifier or type, e.g. 'play' or 'Add'. Empty lists interactive widgets only.
-- `window` (string, default `""`): Only Kit windows whose title contains this text, e.g. 'Stage' or 'Property'.
+- `window` (string, default `""`): Only windows whose title contains this, e.g. 'Stage'.
 - `limit` (integer, default `40`): Maximum widgets returned, 1..100 (the reply is also capped near 48 KB).
+- `zoom_ref` (string, optional): Zoom on this widget ref instead of listing: returns an enlarged crop of the Isaac Sim window around it, with its own coord_space token.
 
 <a id="ur5e-twin-workcell__"></a>
 
@@ -1568,73 +1581,95 @@ RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a sce
 
 ## `input`: Desktop mouse and keyboard input
 
-Toolset `input` is off until you select it with `+input` (never enabled by `all`). Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-desktop-input). 5 tools, listed as 1: `window_input` (click, drag, scroll, type, key).
+Toolset `input` is off until you select it with `+input` (never enabled by `all`). Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-desktop-input). 6 tools, listed as 1: `computer` (click, drag, scroll, type, key, batch).
 
-### `window_click`
+### `computer_batch`
 
-Listed as `window_input(action="click")`.
+Listed as `computer(action="batch")`.
 
-Click a visible point in one selected X11 window. Coordinates are original window pixels.
+Run 1-10 click, drag, scroll, type or key steps in one selected X11 window, in order.
 
 - `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
-- `x` (int, required): X in original window pixels, from a fresh screenshot.
-- `y` (int, required): Y in original window pixels, from a fresh screenshot.
-- `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
-- `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
+- `expected_width` (int, required): The window's own width in pixels (windows list), not a downscaled image's; it ends a coord_space token (/WxH). A changed size is refused.
+- `expected_height` (int, required): The window's own height in pixels, as for expected_width.
+- `actions` (list[dict[str, Any]], required): 1-10 steps run in order, each an object with action and that action's own arguments. E.g. [{"action": "click", "x": 10, "y": 20}, {"action": "type", "text": "hi"}].
+- `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).
+- `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
+
+### `computer_click`
+
+Listed as `computer(action="click")`.
+
+Click a visible point in one selected X11 window.
+
+- `window_id` (int, required): Window id from list_windows.
+- `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
+- `x` (int, required): X in window pixels (or image pixels, see coord_space), from a fresh screenshot.
+- `y` (int, required): Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.
+- `expected_width` (int, required): The window's own width in pixels (windows list), not a downscaled image's; it ends a coord_space token (/WxH). A changed size is refused.
+- `expected_height` (int, required): The window's own height in pixels, as for expected_width.
 - `button` (str, default `'left'`): left, middle or right.
 - `clicks` (int, default `1`): 1 or 2.
+- `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).
+- `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
-### `window_drag`
+### `computer_drag`
 
-Listed as `window_input(action="drag")`.
+Listed as `computer(action="drag")`.
 
 Drag with the left mouse button between two points in the same X11 window.
 
 - `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
-- `x` (int, required): X in original window pixels, from a fresh screenshot.
-- `y` (int, required): Y in original window pixels, from a fresh screenshot.
-- `end_x` (int, required): Drag end X in original window pixels.
-- `end_y` (int, required): Drag end Y in original window pixels.
-- `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
-- `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
+- `x` (int, required): X in window pixels (or image pixels, see coord_space), from a fresh screenshot.
+- `y` (int, required): Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.
+- `end_x` (int, required): Drag end X, in the same space as x.
+- `end_y` (int, required): Drag end Y, in the same space as y.
+- `expected_width` (int, required): The window's own width in pixels (windows list), not a downscaled image's; it ends a coord_space token (/WxH). A changed size is refused.
+- `expected_height` (int, required): The window's own height in pixels, as for expected_width.
+- `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).
+- `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
-### `window_key`
+### `computer_key`
 
-Listed as `window_input(action="key")`.
+Listed as `computer(action="key")`.
 
 Send one navigation/editing key or ASCII letter/digit to the focused X11 window.
 
 - `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
-- `key` (str, required): A navigation or editing key name, or an ASCII letter or digit, e.g. enter, tab, a.
+- `key` (str, required)
 - `modifiers` (list[str] | None, default `None`): Any of ctrl, shift, alt, super.
+- `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
-### `window_scroll`
+### `computer_scroll`
 
-Listed as `window_input(action="scroll")`.
+Listed as `computer(action="scroll")`.
 
 Scroll up, down, left or right at a visible window point, at most ten steps per call.
 
 - `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
-- `x` (int, required): X in original window pixels, from a fresh screenshot.
-- `y` (int, required): Y in original window pixels, from a fresh screenshot.
-- `expected_width` (int, required): The window width you inspected, in pixels; a changed size is refused.
-- `expected_height` (int, required): The window height you inspected, in pixels; a changed size is refused.
+- `x` (int, required): X in window pixels (or image pixels, see coord_space), from a fresh screenshot.
+- `y` (int, required): Y in window pixels (or image pixels, see coord_space), from a fresh screenshot.
+- `expected_width` (int, required): The window's own width in pixels (windows list), not a downscaled image's; it ends a coord_space token (/WxH). A changed size is refused.
+- `expected_height` (int, required): The window's own height in pixels, as for expected_width.
 - `direction` (str, required): up, down, left or right.
 - `steps` (int, default `1`): Scroll steps, 1-10.
+- `coord_space` (str, default `'window'`): window (window pixels) or the coord_space token a screenshot printed (x/y are then pixels of that image or crop).
+- `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
-### `window_type`
+### `computer_type`
 
-Listed as `window_input(action="type")`.
+Listed as `computer(action="type")`.
 
 Type up to 200 printable ASCII characters into the focused selected X11 window.
 
 - `window_id` (int, required): Window id from list_windows.
 - `expected_pid` (int, required): The window's PID from list_windows; a different owner is refused.
 - `text` (str, required): Up to 200 printable ASCII characters.
+- `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
 ## `launch`: Launch and stop simulator processes
 

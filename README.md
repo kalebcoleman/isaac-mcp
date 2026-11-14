@@ -90,7 +90,7 @@ which keeps the tool list small. The counts below are listed tools; related tool
 | `sensors` | on | 3 | Cameras, LiDAR and viewport framing |
 | `assets` | on | 3 | Import and manage robot and scene assets |
 | `code` | on | 5 | Execute code and scripts, transfer files |
-| `screen` | on | 4 | Capture, record and arrange desktop windows |
+| `screen` | on | 5 | Capture, record and arrange desktop windows |
 | `lab` | off | 4 | Isaac Lab training and evaluation |
 | `ros2` | off | 3 | ROS 2 transforms, graphs and occupancy maps |
 | `kit_debug` | off | 2 | Inspect Kit logs and operate its UI |

@@ -22,19 +22,22 @@ rows for the server you have installed, with the current state of each.
 | `sensors`: Cameras, LiDAR and viewport framing | on | `sim__camera`, `sim__lidar`, `sim__viewport__frame` |
 | `assets`: Import and manage robot and scene assets | on | `assets__import_path`, `assets__library`, `assets__pack` |
 | `code`: Execute code and scripts, transfer files | on | `files`, `reload_tools`, `run_python`, `run_script`, `sim__controller` |
-| `screen`: Capture, record and arrange desktop windows | on | `join_videos`, `screen_recording`, `screenshot`, `windows` |
+| `screen`: Capture, record and arrange desktop windows | on | `doctor`, `join_videos`, `screen_recording`, `screenshot`, `windows` |
 | `lab`: Isaac Lab training and evaluation | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics` |
 | `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
 | `kit_debug`: Inspect Kit logs and operate its UI | off | `sim__logs`, `sim__ui` |
 | `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__eval`, `workcell__jenga`, `workcell__perception`, `workcell__planning`, `workcell__real2sim`, `workcell__robot` |
 | `robosim`: RoboSimStudio real-to-sim runs in its own private environment | off | `robosim` |
-| `input`: Desktop mouse and keyboard input | explicit only | `window_input` |
+| `input`: Desktop mouse and keyboard input | explicit only | `computer` |
 | `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
 | `extensions`: Tools from uncatalogued extension namespaces | on | none |
 <!-- /generated -->
 
 - `core` is always on and cannot be turned off.
 - `input` and `launch` are never part of a profile, not even `all`. Name them to get them (`+input`, `+launch`).
+- `screen` and `input` are not specific to Isaac Sim: `screenshot`, `windows`, `doctor` and `computer` work on any X11 window
+  (FreeCAD, RViz 2, a browser), so they carry no `sim__` prefix. `sim__ui` and `sim__logs` (`kit_debug`) need Kit. The
+  [computer use workflow](TOOLS-HOST.md#computer-use-workflow) covers both.
 - `extensions` carries the tools that a project's own Kit extension registers under a namespace this repository does not
   catalogue. It lists nothing until such an extension connects.
 - `workcell` is the lab's UR5e work cell; see its [README](../exts/workcell/workcell/README.md). Its tools for real-to-sim,
@@ -121,19 +124,19 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 | Profile | Toolsets | Listed tools |
 |---|---|--:|
 | `minimal` | `core` | 6 |
-| `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 31 |
-| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 48 |
-| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 50 |
+| `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 32 |
+| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 49 |
+| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 51 |
 <!-- /generated -->
 
 | Selection | Listed tools | Characters | Estimated tokens |
 |---|--:|--:|--:|
-| `minimal` | 6 | 6,360 | 1,590 |
-| `default` | 31 | 60,715 | 15,178 |
-| `all` | 48 | 88,982 | 22,245 |
-| `all,+input,+launch` | 50 | 93,071 | 23,267 |
-| `core,lab,code` | 15 | 22,059 | 5,514 |
-| `core,workcell` | 13 | 10,542 | 2,635 |
+| `minimal` | 6 | 6,346 | 1,586 |
+| `default` | 32 | 61,863 | 15,465 |
+| `all` | 49 | 92,518 | 23,129 |
+| `all,+input,+launch` | 51 | 97,491 | 24,372 |
+| `core,lab,code` | 15 | 22,027 | 5,506 |
+| `core,workcell` | 13 | 10,470 | 2,617 |
 
 Before toolsets existed the server always listed 48 tools, about 28,450 estimated tokens. The listed text is a summary:
 `action="help"` on a grouped tool and `help(tool="<name>")` return the full description. A test
@@ -189,4 +192,4 @@ change, start the simulator read-only; see [limiting what a client can reach](MC
 
 ## Old settings
 
-The selection variables of 0.2 (named in [MIGRATING.md](MIGRATING.md#settings-that-were-already-removed)) are gone. A server that finds one set stops at startup and prints the `TWINSMITH_TOOLSETS` line that replaces it. Remove the old variable and use that line.
+The selection variables of 0.2 (named in [MIGRATING.md](MIGRATING.md#environment-variables)) are gone. A server that finds one set stops at startup and names it. Remove the old variable and set `TWINSMITH_TOOLSETS` instead.

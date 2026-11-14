@@ -1,5 +1,6 @@
 """The simulator UI helpers (key names, widget records, fingerprints), loaded without Kit."""
 
+import asyncio
 import importlib.util
 import sys
 from pathlib import Path
@@ -173,3 +174,142 @@ def test_hidden_ref_says_an_inline_editor_may_have_replaced_it(kit_ui):
         kit_ui.module._resolve({"ref": "Stage//Frame/VStack[0]/Button[2]|Button:b"})
     assert err.value.code == "STALE_WIDGET"
     assert "inline editor" in str(err.value) and "sim__ui__find" in str(err.value)
+
+
+def test_a_widget_under_a_hidden_container_is_not_shown(kit_ui):
+    """The Stage panel keeps the rows of the tree it switched away from (a search result): they sit under
+    an invisible TreeView, at the header's position, and a click on one would hit the header."""
+    ui = kit_ui.module
+    shown, hidden = "Stage//Frame/ZStack[0]/TreeView[0]/Frame[3]/Label[0]", "Stage//Frame/ZStack[0]/TreeView[1]/Frame[3]/Label[0]"
+
+    def find(path):
+        kit_ui.queries.append(path)
+        return SimpleNamespace(widget=SimpleNamespace(visible="TreeView[1]" not in path.split("/")[-1]),
+                               position=SimpleNamespace(x=0, y=0), size=SimpleNamespace(x=500, y=500))
+
+    kit_ui.module._ui_test().find = find
+    cache = {}
+    assert ui._shown(shown, (10, 10), ui._ui_test(), cache) is None
+    assert ui._shown(hidden, (10, 10), ui._ui_test(), cache) == "it is inside a hidden part of its panel"
+    asked = len(kit_ui.queries)
+    assert ui._shown(hidden.replace("Frame[3]", "Frame[4]"), (10, 10), ui._ui_test(), cache) is not None
+    assert len(kit_ui.queries) == asked, "containers already read for this find are not asked again"
+    _assert_no_bare_prefixes(kit_ui.queries)
+
+
+class MenuWidget:
+    def __init__(self, text, *children, visible=True, shown=False):
+        self.text, self.children, self.visible, self.shown = text, list(children), visible, shown
+
+
+class Menu(MenuWidget):
+    pass
+
+
+class Separator(MenuWidget):
+    pass
+
+
+@pytest.fixture
+def menus(kit_ui, monkeypatch):
+    """A menu bar: Window > [Browsers > (Content), Graph Editors (hidden), a separator, Console], and a
+    ui_test whose menu_click opens the path's top-level menu and fails on a missing item, like Kit's."""
+    bar = MenuWidget("", Menu("Window", Menu("Browsers", MenuWidget("Content")), Menu("Graph Editors", visible=False),
+                              Separator("Assets"), MenuWidget("Console")),
+                     Menu("Replicator", visible=False))
+    clicks = []
+
+    def find_menu(text):
+        return SimpleNamespace(widget=next(c for c in bar.children if c.text == text))
+
+    async def menu_click(path, show=True):
+        clicks.append((path, show))
+        top = find_menu(path.split("/")[0]).widget
+        top.shown = show
+        level = bar
+        for part in path.split("/"):
+            level = next((c for c in level.children if c.text == part), None)
+            if level is None:
+                raise LookupError(part)
+
+    ui_test = kit_ui.module._ui_test()
+    ui_test.menu_click, ui_test.get_menubar = menu_click, lambda: SimpleNamespace(widget=bar, find_menu=find_menu)
+    sys.modules["omni.ui"].Inspector = SimpleNamespace(get_children=lambda widget: widget.children)
+    sys.modules["omni.ui"].Menu = Menu
+
+    async def next_update_async():
+        pass
+
+    names = lambda *n: SimpleNamespace(**{k: k for k in n})  # noqa: E731
+    carb_input = ModuleType("carb.input")
+    carb_input.acquire_input_provider = lambda: None
+    carb_input.MouseEventType, carb_input.KeyboardEventType = names("MOVE"), names("KEY_PRESS")
+    app, appwindow = ModuleType("omni.kit.app"), ModuleType("omni.appwindow")
+    app.get_app = lambda: SimpleNamespace(next_update_async=next_update_async)
+    appwindow.get_default_app_window = lambda: SimpleNamespace(get_mouse=lambda: "m", get_keyboard=lambda: "k")
+    workspace = sys.modules["omni.ui"].Workspace
+    workspace.get_main_window_width, workspace.get_main_window_height = (lambda: 800), (lambda: 600)
+    omni, kit, carb = sys.modules["omni"], ModuleType("omni.kit"), ModuleType("carb")
+    omni.kit, omni.appwindow, kit.app, carb.input = kit, appwindow, app, carb_input
+    for name, module in (("carb", carb), ("carb.input", carb_input), ("omni.kit", kit),
+                         ("omni.kit.app", app), ("omni.appwindow", appwindow)):
+        monkeypatch.setitem(sys.modules, name, module)
+    return SimpleNamespace(ui=kit_ui.module, bar=bar, clicks=clicks,
+                           act=lambda path: asyncio.run(kit_ui.module.act({"action": "menu", "menu": path})))
+
+
+def test_menu_lists_only_what_a_person_sees(menus):
+    assert menus.ui.menu_children("Window", inside=True) == ("Window", ["Browsers", "Console"])
+    assert menus.ui.menu_children("Nope") == ("", ["Window"])
+
+
+def test_a_menu_item_is_clicked_and_a_submenu_is_listed_and_closed(menus):
+    assert menus.act("Window/Console")["note"].startswith("menu clicks move")
+    assert menus.clicks == [("Window/Console", True)]
+    out = menus.act("Window/Browsers")  # a menu, not an item: opening it does nothing by itself
+    assert out["items"] == ["Content"] and out["closed_again"] is True and "is a menu, not an item" in out["note"]
+    assert menus.clicks[-1] == ("Window", False) and not menus.bar.children[0].shown
+
+
+def test_a_hidden_menu_entry_is_refused_before_anything_opens(menus):
+    for path in ("Window/Graph Editors", "Window/Graph Editors/Action Graph", "Replicator"):
+        with pytest.raises(menus.ui.UIRefusal) as err:
+            menus.act(path)
+        assert err.value.code == "MENU_NOT_FOUND" and "may still be open" not in str(err.value)
+        assert menus.ui.refusal("sim.ui.act", err.value)["effects"] == "No input was sent."
+    assert menus.clicks == [], "nothing was opened"
+
+
+def test_a_path_that_runs_on_through_an_item_clicks_nothing(menus):
+    """Kit's menu_click clicks each level on its way: "Window/Console/Foo" would toggle Console, then fail."""
+    with pytest.raises(menus.ui.UIRefusal) as err:
+        menus.act("Window/Console/Foo")
+    assert menus.clicks == [] and menus.ui.refusal("sim.ui.act", err.value)["effects"] == "No input was sent."
+    assert "'Console' is an item, not a menu" in str(err.value)
+
+
+def test_a_visible_menu_entry_wins_over_a_hidden_one_of_the_same_name(menus):
+    window = menus.bar.children[0]
+    window.children.insert(0, Menu("Browsers", visible=False))
+    assert menus.act("Window/Browsers")["items"] == ["Content"]
+
+
+def test_a_failed_menu_path_closes_the_menu_it_opened(menus):
+    with pytest.raises(menus.ui.UIRefusal) as err:
+        menus.act("Window/Nope")
+    assert menus.clicks == [("Window/Nope", True), ("Window", False)] and not menus.bar.children[0].shown
+    assert "Items under 'Window': Browsers, Console." in str(err.value) and "may still be open" not in str(err.value)
+    assert err.value.effects == "The menu was opened, and closed again."
+
+
+def test_points_are_checked_in_window_pixels_at_any_display_scale(kit_ui):
+    """At a display scale of 1.5 omni.ui calls a 1440x900 window 960x600 (UI points). x and y are pixels,
+    as in a screenshot: the far part of the window must stay reachable, and find must report pixels."""
+    workspace = sys.modules["omni.ui"].Workspace
+    workspace.get_dpi_scale = lambda: 1.5
+    workspace.get_main_window_width, workspace.get_main_window_height = (lambda: 960.0), (lambda: 600.0)
+    ui = kit_ui.module
+    assert ui.main_window_pixels() == (1440, 900)
+    assert ui._check_point(1200, 700) == (1440, 900)
+    with pytest.raises(ui.UIRefusal, match=r"outside the Isaac Sim window \(1440x900 pixels\)"):
+        ui._check_point(1440, 10)

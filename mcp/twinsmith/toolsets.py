@@ -46,10 +46,10 @@ _ROOTS = {
     "sensors": "sim__camera sim__lidar sim__viewport__frame",
     "assets": "assets__import_path assets__library assets__pack",
     "code": "run_python files reload_tools sim__controller run_script",
-    "screen": "screenshot screen_recording windows join_videos",
+    "screen": "screenshot screen_recording windows join_videos doctor",
     "ros2": "sim__ros2__tf_setup sim__graph sim__map__occupancy",
     "kit_debug": "sim__ui sim__logs",
-    "input": "window_input",
+    "input": "computer",
     "launch": "sim__session",
     "robosim": "robosim",
 }

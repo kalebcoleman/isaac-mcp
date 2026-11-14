@@ -88,8 +88,11 @@ Rules of thumb:
 - `screenshot` without a selector picks the Isaac Sim / Isaac Lab window and captures it even when
   covered. `windows(action="list", filter="Isaac")` gives ids for `window_id`.
 - `screen_recording` (`start`, `stop`, `status`) records a window or monitor to MP4 (no audio).
-- The optional `input` toolset's `window_input` (`click`, `drag`, `scroll`, `type`, `key`) acts inside one window. They need `expected_width` / `expected_height` from a fresh
-  screenshot, so take one first. Prefer `run_python` or a named tool over clicking UI.
+- The optional `input` toolset's `computer` (`click`, `drag`, `scroll`, `type`, `key`, `batch`) acts inside one window. It needs
+  `expected_width` / `expected_height` from a fresh screenshot, so take one first. Pass the screenshot's printed `coord_space`
+  token to give `x`, `y` in image pixels, and `screenshot_after=true` to see the result in the same call. Prefer `run_python` or
+  a named tool over clicking UI; for Isaac Sim's own widgets use `sim__ui` (the main skill's computer-use section).
+- `doctor` checks the desktop (X11, XTEST, lock, input toolset, Kit window) before any of this.
 
 ## Generic scene and project assets (`sim__*`, `assets__*`)
 
