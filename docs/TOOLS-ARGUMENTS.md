@@ -926,7 +926,7 @@ Fresh filename search across approved project/library roots. No network discover
 
 ### `assets__validate`
 
-Check from the file alone whether a USD asset loads on Newton or PhysX: units, triangle-mesh colliders over budget, rendered collision shapes, zero-force drives, nested articulations, massless moving bodies, drive gains too stiff for 500 Hz, loop joints without a mimic. Returns ok and each check's level, prim, detail and fix; on physx the Newton-only rules are info. Read-only, in a subprocess (the mesh extra).
+Check from the file alone whether a USD asset loads on Newton or PhysX: units, triangle-mesh colliders over budget, rendered collision shapes, zero-force drives, nested articulations, massless moving bodies, drive gains too stiff for 500 Hz, invalid mimic joints. File only: colliders a scene adds at build time are not seen. Returns ok and each check's level, prim, detail and fix; on physx the Newton-only rules are info. Read-only, in a subprocess (the mesh extra).
 
 - `source_path` (string, optional): Absolute USD file under an approved root or the asset root; or give pack and asset_id.
 - `pack` (string, optional): "<pack id>/<version>" holding asset_id. Default: the project file's pack.

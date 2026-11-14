@@ -145,8 +145,13 @@ def run_tool(canonical: str, params: dict, broker) -> dict:
         request.update({k: params[k] for k in ("target_tris", "ratio") if k in params})
     else:
         request["collision"] = _collision(params)
-    job = jobs.run_script(sys.executable, mesh_worker.__file__, args=[_request_file(request)],
-                          label=f"mesh-{action}-{source.stem}", timeout_s=JOB_TIMEOUT_S, uses_gpu=False)
+    request_file = _request_file(request)
+    try:
+        job = jobs.run_script(sys.executable, mesh_worker.__file__, args=[request_file],
+                              label=f"mesh-{action}-{source.stem}", timeout_s=JOB_TIMEOUT_S, uses_gpu=False)
+    except Exception:
+        Path(request_file).unlink(missing_ok=True)
+        raise
     return dict(status="ok", job_id=job["job_id"], action=action, source=str(source), output=str(output),
                 report=str(output / mesh_worker.REPORT),
                 next=f"jobs(action=\"lab_status\", job_id=\"{job['job_id']}\", wait_s=60) until it ends; "

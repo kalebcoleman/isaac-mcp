@@ -1253,7 +1253,7 @@
       "owner_id": "generic-assets"
     },
     "assets.validate": {
-      "description": "Check from the file alone whether a USD asset loads on Newton or PhysX: units, triangle-mesh colliders over budget, rendered collision shapes, zero-force drives, nested articulations, massless moving bodies, drive gains too stiff for 500 Hz, loop joints without a mimic. Returns ok and each check's level, prim, detail and fix; on physx the Newton-only rules are info. Read-only, in a subprocess (the mesh extra).",
+      "description": "Check from the file alone whether a USD asset loads on Newton or PhysX: units, triangle-mesh colliders over budget, rendered collision shapes, zero-force drives, nested articulations, massless moving bodies, drive gains too stiff for 500 Hz, invalid mimic joints. File only: colliders a scene adds at build time are not seen. Returns ok and each check's level, prim, detail and fix; on physx the Newton-only rules are info. Read-only, in a subprocess (the mesh extra).",
       "parameters": {
         "source_path": {
           "type": "string",

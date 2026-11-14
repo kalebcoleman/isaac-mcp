@@ -76,3 +76,12 @@ def test_auto_keeps_a_box_unless_it_is_over_twice_the_hull(mesh):
     assert shapes and all(s["kind"] == "hull" for s in shapes)
     with pytest.raises(ValueError):
         mesh_ops.collision_shapes(tetra, faces, "sphere")
+
+
+def test_flat_meshes_get_an_axis_aligned_box_by_every_method():
+    plate = np.array([[0, 0, 0], [2, 0, 0], [2, 1, 0], [0, 1, 0]], dtype=float)
+    faces = np.array([[0, 1, 2], [0, 2, 3]])
+    for method in ("box", "convex", "coacd", "auto"):
+        shapes = mesh_ops.collision_shapes(plate, faces, method)
+        assert [s["kind"] for s in shapes] == ["box"]
+        assert np.allclose(shapes[0]["half_extents"], [1, 0.5, 0])

@@ -683,9 +683,9 @@
       "source": "Kaleb versioned external asset-pack decision."
     },
     "version": {
-      "value": "v1",
+      "value": "v2",
       "status": "confirmed",
-      "source": "Kaleb versioned external asset-pack decision."
+      "source": "Kaleb versioned external asset-pack decision; v2 (2026-11-13) is v1 with a bench collision layer and the RG2 in the arm's articulation, built by scripts/workcell_pack_v2.py."
     }
   },
   "assets": {
@@ -815,7 +815,6 @@
         "model": "onrobot_rg2",
         "body": "onrobot_rg2_base_link",
         "mount_frame": "onrobot_rg2_base_link",
-        "articulation_root": ".",
         "mount_pose": {
           "position_m": [
             0,

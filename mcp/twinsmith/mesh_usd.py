@@ -39,13 +39,30 @@ def triangulate(counts, indices) -> np.ndarray:
     return np.asarray(tris, dtype=np.int64).reshape(-1, 3)
 
 
+def applied_schemas(prim) -> list[str]:
+    """Every applied API schema, as the composed ``apiSchemas`` list says. ``GetAppliedSchemas`` leaves out schemas
+    whose plugin this USD lacks (usd-core has no PhysX or Newton schemas), so read the list itself."""
+    listop = prim.GetMetadata("apiSchemas")
+    names = list(listop.ApplyOperations([])) if listop else []
+    return list(dict.fromkeys([*prim.GetAppliedSchemas(), *names]))
+
+
 def collision_schemas(prim) -> list[str]:
-    """Applied collision schemas, UsdPhysics and PhysX alike."""
-    return [name for name in prim.GetAppliedSchemas() if "CollisionAPI" in name]
+    """Applied collision schemas, UsdPhysics and PhysX alike: what ``strip_collision`` removes."""
+    return [name for name in applied_schemas(prim) if "CollisionAPI" in name]
+
+
+def is_collider(prim) -> bool:
+    """A prim collides when it has ``PhysicsCollisionAPI`` and collision is not disabled. ``MeshCollisionAPI`` or a
+    PhysX schema alone does not make a collider."""
+    if "PhysicsCollisionAPI" not in applied_schemas(prim):
+        return False
+    enabled = prim.GetAttribute("physics:collisionEnabled")
+    return not (enabled and enabled.HasAuthoredValue() and enabled.Get() is False)
 
 
 def approximation(prim) -> str | None:
-    if not collision_schemas(prim):
+    if not is_collider(prim):
         return None
     attr = prim.GetAttribute("physics:approximation")
     value = attr.Get() if attr and attr.HasAuthoredValue() else None
@@ -72,11 +89,18 @@ def meshes(stage, prims=None):
 def targets(stage, prims=None):
     """The meshes that get collision shapes: those at or under ``prims``; else the file's mesh colliders;
     else, when no mesh is a collider (the shapes are added at scene build, as for the bench), every mesh."""
+    from pxr import Usd
+
     rows = list(meshes(stage, prims))
     if prims:
         return rows, "prims"
-    colliders = [row for row in rows if collision_schemas(row[0])]
-    return (colliders, "mesh colliders") if colliders else (rows, "every mesh (none is a collider)")
+    colliders = [row for row in rows if is_collider(row[0])]
+    if colliders:
+        return colliders, "mesh colliders"
+    if any(is_collider(prim) for prim in stage.Traverse(Usd.TraverseInstanceProxies())):
+        raise ValueError("this file's colliders are not meshes (capsules, boxes, spheres); shapes for its visual meshes "
+                         "would double them. Name the meshes that need shapes with prims.")
+    return rows, "every mesh (the file has no colliders)"
 
 
 def inspect(path, prims=None) -> dict:
@@ -106,9 +130,11 @@ def _reanchor(layer, src_dir: Path, out_dir: Path) -> None:
     from pxr import UsdUtils
 
     def fix(asset):
-        if not asset.startswith(("./", "../")):
-            return asset                                   # absolute, a search path or a URL: left as written
+        if not asset or os.path.isabs(asset) or ":" in asset.split("/")[0]:
+            return asset                                   # absolute or a URL: left as written
         target = os.path.normpath(os.path.join(src_dir, asset))
+        if not asset.startswith(("./", "../")) and not os.path.exists(target):
+            return asset                                   # a search path (an MDL name, say): left as written
         rel = os.path.relpath(target, out_dir)
         return rel if rel.startswith("..") else "./" + rel
 
@@ -134,7 +160,8 @@ def decimate(src: Path, out_dir: Path, *, target_tris=None, ratio=None, prims=No
     from pxr import UsdGeom, Vt
 
     source = open_stage(src)
-    rows = list(meshes(source, prims))
+    rows = [row for row in meshes(source, prims) if not row[0].IsInstanceProxy() and len(row[2])]
+    skipped = [str(prim.GetPath()) for prim, _, _ in meshes(source, prims) if prim.IsInstanceProxy()]
     total = sum(len(f) for _, _, f in rows) or 1
     dest = out_dir / f"{src.stem}_decimated{src.suffix if src.suffix != '.usda' else '.usdc'}"
     stage = copy_root_layer(src, dest)
@@ -147,22 +174,28 @@ def decimate(src: Path, out_dir: Path, *, target_tris=None, ratio=None, prims=No
         mesh.GetPointsAttr().Set(Vt.Vec3fArray.FromNumpy(v.astype(np.float32)))
         mesh.GetFaceVertexCountsAttr().Set(Vt.IntArray([3] * len(f)))
         mesh.GetFaceVertexIndicesAttr().Set(Vt.IntArray.FromNumpy(f.reshape(-1).astype(np.int32)))
+        mesh.GetExtentAttr().Set(Vt.Vec3fArray([tuple(v.min(axis=0)), tuple(v.max(axis=0))]))
         mesh.GetNormalsAttr().Block()
+        mesh.GetHoleIndicesAttr().Block()
+        for subset in UsdGeom.Subset.GetAllGeomSubsets(mesh):      # face indices that no longer exist
+            subset.GetIndicesAttr().Block()
         for primvar in UsdGeom.PrimvarsAPI(mesh).GetPrimvars():
             if primvar.GetInterpolation() in ("vertex", "varying", "faceVarying", "uniform"):
                 primvar.GetAttr().Block()
                 if primvar.GetIndicesAttr():
                     primvar.GetIndicesAttr().Block()
     stage.GetRootLayer().Save()
-    return dict(output=str(dest), meshes=len(rows), triangles_before=before, triangles_after=after)
+    return dict(output=str(dest), meshes=len(rows), triangles_before=before, triangles_after=after,
+                skipped_instance_proxies=skipped,
+                blocked="normals, hole indices, GeomSubset indices and per-vertex or per-face primvars of each decimated mesh")
 
 
 def _parent_space(prim, points):
     """Points in the frame of the prim the collision shapes are added under, and that prim."""
     from pxr import UsdGeom, UsdPhysics
 
-    if prim.HasAPI(UsdPhysics.RigidBodyAPI):          # the mesh is the body: stay under it
-        return prim, points
+    if prim.HasAPI(UsdPhysics.RigidBodyAPI) or prim.GetParent().IsPseudoRoot():
+        return prim, points                            # the mesh is the body, or a root prim: stay under it
     m = np.asarray(UsdGeom.Xformable(prim).GetLocalTransformation(), dtype=np.float64)
     return prim.GetParent(), points @ m[:3, :3] + m[3, :3]
 

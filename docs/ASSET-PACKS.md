@@ -145,12 +145,16 @@ for every rule its level, the prim, a detail and a fix. On `engine="physx"` the 
 |---|---|---|---|
 | `UNITS` | error | `metersPerUnit` and `upAxis` are authored | Import contract |
 | `TRI_COLLIDER` | error | Triangle-mesh colliders hold at most `triangle_budget` triangles (200,000) | The bench's 1.63 M collider triangles needed 7.5 M triangle pairs against Newton's 1 M |
+| `TRI_DYNAMIC` | warning | No triangle-mesh collider sits on a moving rigid body (also a warning on PhysX) | PhysX does not simulate triangle meshes on dynamic bodies |
 | `COLLIDER_RENDERED` | warning | A collision-only shape has purpose `guide` | The split contract below |
 | `DRIVE_ZERO_FORCE` | error | No joint drive has `maxForce` 0 | MuJoCo: "actfrcrange[0] should be smaller than actfrcrange[1]" |
 | `NESTED_ARTICULATION` | error | No articulation root lies inside another or is jointed into one | Newton's importer mis-lists the bodies |
-| `MASS_MIN` | error | Every moving body has a mass source above MuJoCo's `mjMINVAL` | "mass and inertia of moving bodies must be larger than mjMINVAL" |
-| `DRIVE_GAIN` | warning | `sqrt(k / I) <= 2 / dt` at 500 Hz, with `k` in SI per radian or metre and `I` from the driven body, else 0.01 | 9400 N m per degree went non-finite |
-| `LOOP_JOINT` | warning | A joint excluded from its articulation has a mimic or equality constraint | The RG2 fingers did not move |
+| `MASS_MIN` | error | Every moving body has colliders, or an authored mass and inertia above MuJoCo's `mjMINVAL` | "mass and inertia of moving bodies must be larger than mjMINVAL" |
+| `DRIVE_GAIN` | warning | `dt² k / I < 4 + 2 dt c / I` at 500 Hz: `k`, `c` in SI per radian or metre; `I` the driven body's largest inertia (else 0.01) plus the joint's armature (else Isaac Sim's 0.1). MuJoCo-Warp integrates stiffness explicitly and damping implicitly | 9400 N m per degree went non-finite |
+| `MIMIC` | error (both engines) | A mimic joint and its leader are in the articulation, not excluded loop joints; it names one leader; revolute ones have finite limits | PhysX 6.2 rejects such a mimic; Newton skips one on a loop joint |
+
+An excluded loop joint with no mimic is valid on both engines (Newton makes it a MuJoCo connect or weld). The rules read
+the file: colliders a scene adds while it is built, as the work cell does for the `v1` bench, are not seen.
 
 `kit=true`, which would add Isaac Sim's own Asset Validator, is refused for now: it has not been confirmed in Isaac Sim 6.2.
 

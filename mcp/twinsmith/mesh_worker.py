@@ -10,6 +10,8 @@ last line of output and, for actions that write, also saved as ``mesh_report.jso
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -39,19 +41,28 @@ def run(request: dict) -> dict:
     if action == "validate":
         return asset_rules.validate(source, request.get("engine", "newton"),
                                     triangle_budget=request.get("triangle_budget", asset_rules.TRIANGLE_BUDGET))
-    out = Path(request["output"])
-    out.mkdir(parents=True, exist_ok=False)
-    if action == "decimate":
-        result = mesh_usd.decimate(source, out, target_tris=request.get("target_tris"), ratio=request.get("ratio"), prims=prims)
-    elif action == "hulls":
-        result = mesh_usd.author_collision_layer(mesh_usd.open_stage(source), out / f"{source.stem}_collision.usdc",
-                                                 prims=prims, **request.get("collision", {}))
-    elif action == "split":
-        result = mesh_usd.split(source, out, collision=request.get("collision"), prims=prims)
-    else:
+    if action not in ("decimate", "hulls", "split"):
         raise ValueError(f"unknown action {action!r}")
-    result = dict(action=action, source=str(source), **result)
-    (out / REPORT).write_text(json.dumps(result, indent=2) + "\n")
+    out = Path(request["output"])
+    if out.exists() or out.is_symlink():
+        raise FileExistsError(f"{out} exists; outputs are never overwritten")
+    # Written beside the output and renamed into place: a failed run leaves nothing, and relative paths stay valid.
+    work = out.parent / f".{out.name}.partial-{os.getpid()}"
+    work.mkdir()
+    try:
+        if action == "decimate":
+            result = mesh_usd.decimate(source, work, target_tris=request.get("target_tris"), ratio=request.get("ratio"), prims=prims)
+        elif action == "hulls":
+            result = mesh_usd.author_collision_layer(mesh_usd.open_stage(source), work / f"{source.stem}_collision.usdc",
+                                                     prims=prims, **request.get("collision", {}))
+        else:
+            result = mesh_usd.split(source, work, collision=request.get("collision"), prims=prims)
+        result = json.loads(json.dumps(dict(action=action, source=str(source), **result)).replace(str(work), str(out)))
+        (work / REPORT).write_text(json.dumps(result, indent=2) + "\n")
+        os.rename(work, out)
+    except BaseException:
+        shutil.rmtree(work, ignore_errors=True)
+        raise
     return result
 
 
@@ -64,10 +75,13 @@ def main(argv=None) -> int:
     if missing:
         print(json.dumps(dict(status="error", code="MESH_EXTRA_MISSING", missing=missing)))
         return 3
+    request = Path(argv[0])
     try:
-        result = run(json.loads(Path(argv[0]).read_text()))
-    except (ValueError, FileExistsError, OSError) as exc:
-        print(json.dumps(dict(status="error", code="MESH_FAILED", message=str(exc)[:2000])))
+        payload = json.loads(request.read_text())
+        request.unlink(missing_ok=True)               # the request is read once; nothing is left in the jobs folder
+        result = run(payload)
+    except Exception as exc:  # noqa: BLE001 - any failure must still end in one JSON line
+        print(json.dumps(dict(status="error", code="MESH_FAILED", message=f"{type(exc).__name__}: {str(exc)[:2000]}")))
         return 1
     print(json.dumps(dict(status="ok", **result)))
     return 0

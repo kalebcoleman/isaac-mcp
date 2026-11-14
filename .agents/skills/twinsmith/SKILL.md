@@ -16,8 +16,8 @@ For setup use `docs/LINUX-SETUP.md#choose-a-simulator-build` and `docs/COMPATIBI
 extensions; do not pip-install `omni` or `.pyi` stubs. External system ROS and Isaac Lab are separate and only needed for the
 workflows that use them. Do not claim builds or pending tests are supported that the compatibility page does not.
 
-**Physics engine.** The target engine, the current default and how to choose one are in `docs/COMPATIBILITY.md#target-engine`.
-Ask for an engine with `TWINSMITH_PHYSICS_BACKEND`, `./run.sh --physics-backend physx|newton` or
+**Physics engine.** Newton is the default engine; PhysX is opt-in. The UR5e work cell is qualified on PhysX only and refuses
+to build on a Newton session, with no engine switch. Details are in `docs/COMPATIBILITY.md#target-engine`. Ask for an engine with `TWINSMITH_PHYSICS_BACKEND`, `./run.sh --physics-backend physx|newton` or
 `sim__session(action="launch", physics_backend=...)`. `status` reports the stage's `physics_engine`. Never switch an open scene's
 engine, never fall back silently in either direction, and do not infer the solver from a device name (a CPU device does not mean
 PhysX).
@@ -36,11 +36,11 @@ what is off and how to enable more; `help` names the toolset when the tool for a
 | `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 53 |
 <!-- /generated -->
 
-If a tool you expect is missing, call `status`, then tell the user which toolset it belongs to: they enable it in
-`~/.config/twinsmith/config.toml` (`[tools] toolsets = ["default", "+lab"]`) or `TWINSMITH_TOOLSETS`, and restart the server.
-`+workcell` is the lab's UR5e work cell, `+lab` is Isaac Lab, and `+input` and `+launch` (desktop input, managed simulator
-sessions) are never in a profile. If your client offers a `toolsets` tool for enabling one at run time, `input` and `launch` are
-never enabled that way. Toolsets control what is listed, not what is allowed: the bridge token and read-only mode do that.
+To find the tool for a task, call `help(task="...")`: it names the tool, and the toolset when that is off. A toolset that is off
+can be turned on without a restart with `toolsets(action="enable", names=["lab"])`; `input` and `launch` (desktop input,
+managed simulator sessions) are never enabled that way and are never in a profile. To change the selection for every session,
+set `~/.config/twinsmith/config.toml` (`[tools] toolsets = ["default", "+lab"]`) or `TWINSMITH_TOOLSETS` and restart the
+server. `+workcell` is the lab's UR5e work cell and `+lab` is Isaac Lab. Toolsets control what is listed, not what is allowed: the bridge token and read-only mode do that.
 `docs/TOOLSETS.md` has the details.
 
 ## Which tool do I start with?
@@ -52,7 +52,8 @@ never enabled that way. Toolsets control what is listed, not what is allowed: th
 4. **Put a USD or URDF and its files into a pack in your asset root:** `assets__pack_build`, then
    `sim__quick_start robot="<pack id>/<version>/<file>"`.
 5. **Train, evaluate or play a policy:** `isaaclab__install_info`, then `isaaclab__train`. No bridge is needed. (`lab` toolset.)
-6. **The UR5e work cell:** `workcell__cell(action="quick_start")`, only when that is what was asked for. (`workcell` toolset.)
+6. **The UR5e work cell:** `workcell__cell(action="quick_start")`, only when that is what was asked for, and on a PhysX
+   session: it refuses on Newton. (`workcell` toolset.)
 7. **See the result:** `screenshot`; for video, `screen_recording(action="start")`.
 
 **Tool names.** The server lists related tools as one tool with an `action` argument: `sim__stage__info` is `sim__stage` with

@@ -472,7 +472,7 @@ add(
     "assets.validate",
     "Check from the file alone whether a USD asset loads on Newton or PhysX: units, triangle-mesh colliders over budget, "
     "rendered collision shapes, zero-force drives, nested articulations, massless moving bodies, drive gains too stiff "
-    "for 500 Hz, loop joints without a mimic. Returns ok and each check's level, prim, detail and fix; on physx the "
+    "for 500 Hz, invalid mimic joints. File only: colliders a scene adds at build time are not seen. Returns ok and each check's level, prim, detail and fix; on physx the "
     "Newton-only rules are info. Read-only, in a subprocess (the mesh extra).",
     dict(
         source_path=_MESH_SOURCE["source_path"], pack=_MESH_SOURCE["pack"], asset_id=_MESH_SOURCE["asset_id"],

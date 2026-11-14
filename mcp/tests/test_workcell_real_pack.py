@@ -141,9 +141,18 @@ def test_gantry_posts_stand_on_the_bench_top_panel(cell):
 
 def test_rg2_has_no_geometry_free_body_and_all_joint_frames_agree(cell):
     config, stage, report, *_ = cell
-    assert report["frame_bodies_neutralized"] == [f"{report['gripper_path']}/gripper_center"]
-    assert report["joints_deactivated"] == [f"{report['robot_path']}/joints/robot_gripper_joint"]
-    assert report["velocity_iterations_clamped"] == [report["gripper_path"]]
+    # Pack v2 fixes at the source what the build used to patch for v1: nothing is patched now.
+    assert report["frame_bodies_neutralized"] == report["joints_deactivated"] == report["velocity_iterations_clamped"] == []
+    roots = [str(p.GetPath()) for p in Usd.PrimRange(stage.GetPrimAtPath(report["assembly_path"]))
+             if p.HasAPI(UsdPhysics.ArticulationRootAPI)]
+    assert roots == [report["articulation_root"]] and report["gripper_articulation_root"] is None
+    followers = {p.GetName(): p for p in Usd.PrimRange(stage.GetPrimAtPath(report["gripper_path"]))
+                 if p.GetMetadata("apiSchemas") and "NewtonMimicAPI" in p.GetMetadata("apiSchemas").ApplyOperations([])}
+    assert set(followers) == {"left_inner_finger_joint", "left_finger_knuckle_joint", "right_inner_finger_joint", "RevoluteJoint"}
+    for prim in followers.values():
+        assert prim.GetRelationship("newton:mimicJoint").GetTargets()[0].name in ("finger_joint", "right_outer_knuckle_joint")
+        assert 0.98 < abs(prim.GetAttribute("newton:mimicCoef1").Get()) < 1.0
+        assert not prim.GetAttribute("physics:excludeFromArticulation").Get()
     for prim in Usd.PrimRange(stage.GetPrimAtPath(report["assembly_path"])):
         count = prim.GetAttribute("physxArticulation:solverVelocityIterationCount")
         assert not count or (count.Get() or 0) <= 4, prim.GetPath()

@@ -57,8 +57,8 @@ def box(vertices) -> dict:
     import trimesh
 
     v = np.asarray(vertices, dtype=np.float64).reshape(-1, 3)
-    if len(v) < 4:
-        lo, hi = v.min(axis=0), v.max(axis=0)
+    lo, hi = v.min(axis=0), v.max(axis=0)
+    if not _solid(v):                             # a plate, a line or a point: the axis-aligned box
         return dict(center=((lo + hi) / 2).tolist(), half_extents=((hi - lo) / 2).tolist(), orientation=[1.0, 0, 0, 0])
     to_origin, extents = trimesh.bounds.oriented_bounds(trimesh.convex.convex_hull(v))
     world = np.linalg.inv(to_origin)          # box frame -> mesh frame
@@ -68,6 +68,14 @@ def box(vertices) -> dict:
     quat = trimesh.transformations.quaternion_from_matrix(np.vstack([np.hstack([rotation, [[0], [0], [0]]]), [0, 0, 0, 1]]))
     return dict(center=world[:3, 3].tolist(), half_extents=(np.asarray(extents) / 2).tolist(),
                 orientation=[float(q) for q in quat])
+
+
+def _solid(points) -> bool:
+    """Whether the points span three dimensions (a hull of flat points does not exist)."""
+    if len(points) < 4:
+        return False
+    s = np.linalg.svd(points - points.mean(axis=0), compute_uv=False)
+    return bool(s[-1] > 1e-9 * max(s[0], 1e-12))
 
 
 def box_volume(shape: dict) -> float:
@@ -106,7 +114,11 @@ def collision_shapes(vertices, faces, method: str, *, max_hulls: int = 16, thres
     """The collision shapes for one mesh: ``[{"kind": "box", ...}]`` or ``[{"kind": "hull", "points", "faces"}, ...]``.
 
     ``auto`` uses the box unless the box is more than twice the volume of the convex hull (an L, a frame, a
-    bracket), and then a CoACD decomposition."""
+    bracket), and then a CoACD decomposition. A flat mesh (a plate, a floor) has no hull, so it always gets the box."""
+    if method not in ("box", "convex", "coacd", "auto"):
+        raise ValueError("method must be box, convex, coacd or auto")
+    if not _solid(np.asarray(vertices, dtype=np.float64).reshape(-1, 3)):
+        method = "box"
     if method == "auto":
         shape = box(vertices)
         hv, hf = convex(vertices)

@@ -119,3 +119,12 @@ def test_listed_schemas_take_prim_paths_as_strings(tmp_path):
         assert name in tools
     assert tools["assets__mesh"].inputSchema["properties"]["prims"]["items"] == {"type": "string"}
     assert set(tools["assets__mesh"].inputSchema["properties"]["action"]["enum"]) >= {"inspect", "decimate", "hulls", "split"}
+
+
+def test_a_failed_write_leaves_no_output_folder(tmp_path, capsys):
+    request = tmp_path / "req.json"
+    request.write_text(json.dumps(dict(action="split", source=str(tmp_path / "missing.usda"), output=str(tmp_path / "out"))))
+    assert mesh_worker.main([str(request)]) == 1
+    line = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert line["status"] == "error" and line["code"] == "MESH_FAILED"
+    assert sorted(p.name for p in tmp_path.iterdir()) == []          # no output, no partial folder, request removed

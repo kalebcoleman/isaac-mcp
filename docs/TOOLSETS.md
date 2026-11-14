@@ -132,9 +132,9 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 | Selection | Listed tools | Characters | Estimated tokens |
 |---|--:|--:|--:|
 | `minimal` | 6 | 6,346 | 1,586 |
-| `default` | 34 | 65,094 | 16,273 |
-| `all` | 51 | 95,749 | 23,937 |
-| `all,+input,+launch` | 53 | 100,722 | 25,180 |
+| `default` | 34 | 65,104 | 16,276 |
+| `all` | 51 | 95,759 | 23,939 |
+| `all,+input,+launch` | 53 | 100,732 | 25,183 |
 | `core,lab,code` | 15 | 22,027 | 5,506 |
 | `core,workcell` | 13 | 10,470 | 2,617 |
 

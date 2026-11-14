@@ -98,3 +98,100 @@ def test_decimate_writes_a_lighter_copy(asset, tmp_path):
 def test_triangulate_fans_polygons_and_drops_degenerate_faces():
     tris = mesh_usd.triangulate([4, 2, 3], [0, 1, 2, 3, 4, 5, 6, 7, 8])
     assert tris.tolist() == [[0, 1, 2], [0, 2, 3], [6, 7, 8]]
+
+
+def test_schemas_without_a_plugin_are_still_seen_and_stripped(tmp_path):
+    """usd-core has no PhysX schemas: GetAppliedSchemas hides PhysxCollisionAPI, the apiSchemas list does not."""
+    from pxr import Usd, UsdGeom
+
+    path = tmp_path / "physx.usda"
+    stage = Usd.Stage.CreateNew(str(path))
+    mesh = UsdGeom.Mesh.Define(stage, "/W/m")
+    mesh.GetPrim().AddAppliedSchema("PhysxCollisionAPI")
+    assert "PhysxCollisionAPI" not in mesh.GetPrim().GetAppliedSchemas()
+    assert mesh_usd.collision_schemas(mesh.GetPrim()) == ["PhysxCollisionAPI"]
+    assert mesh_usd.strip_collision(stage, ["/W/m"]) == 1 and mesh_usd.collision_schemas(mesh.GetPrim()) == []
+
+
+def _quad(stage, path, z=0.0):
+    from pxr import UsdGeom
+
+    mesh = UsdGeom.Mesh.Define(stage, path)
+    mesh.CreatePointsAttr([(0, 0, z), (1, 0, z), (1, 1, z), (0, 1, z)])
+    mesh.CreateFaceVertexCountsAttr([4])
+    mesh.CreateFaceVertexIndicesAttr([0, 1, 2, 3])
+    return mesh
+
+
+def test_split_of_a_flat_root_mesh_keeps_its_box_inside_the_default_prim(tmp_path):
+    from pxr import Usd
+
+    src = tmp_path / "plate.usda"
+    stage = Usd.Stage.CreateNew(str(src))
+    stage.SetDefaultPrim(_quad(stage, "/plate").GetPrim())
+    stage.GetRootLayer().Save()
+    out = tmp_path / "out"
+    out.mkdir()
+    result = mesh_usd.split(src, out, collision=dict(method="coacd"))     # flat: every method falls back to the box
+    assert result["shapes"]["boxes"] == 1 and result["shapes"]["hulls"] == 0
+    composed = Usd.Stage.Open(result["output"])
+    assert composed.GetPrimAtPath("/plate/plate_collision/box")
+
+
+def test_non_mesh_colliders_need_prims_named(tmp_path):
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    src = tmp_path / "link.usda"
+    stage = Usd.Stage.CreateNew(str(src))
+    _quad(stage, "/link/visual", 0.5)
+    UsdPhysics.CollisionAPI.Apply(UsdGeom.Capsule.Define(stage, "/link/collider").GetPrim())
+    stage.GetRootLayer().Save()
+    with pytest.raises(ValueError, match="prims"):
+        mesh_usd.targets(mesh_usd.open_stage(src))
+    rows, selected = mesh_usd.targets(mesh_usd.open_stage(src), ["/link/visual"])
+    assert selected == "prims" and len(rows) == 1
+
+
+def test_copies_keep_unprefixed_relative_references(tmp_path):
+    from pxr import Usd, UsdGeom
+
+    folder = tmp_path / "src"
+    folder.mkdir()
+    geom = Usd.Stage.CreateNew(str(folder / "geom.usda"))
+    geom.SetDefaultPrim(UsdGeom.Xform.Define(geom, "/g").GetPrim())
+    _quad(geom, "/g/m")
+    geom.GetRootLayer().Save()
+    top = Usd.Stage.CreateNew(str(folder / "top.usda"))
+    ref = UsdGeom.Xform.Define(top, "/A/ref").GetPrim()
+    ref.GetReferences().AddReference("geom.usda")                 # no ./ prefix
+    top.GetRootLayer().Save()
+    out = tmp_path / "out"
+    out.mkdir()
+    copy = mesh_usd.copy_root_layer(folder / "top.usda", out / "top.usda")
+    assert copy.GetPrimAtPath("/A/ref/m")
+
+
+def test_decimate_skips_instance_proxies_and_blocks_subsets(tmp_path):
+    from pxr import Usd, UsdGeom
+
+    import mesh_fixture
+
+    src = tmp_path / "inst.usda"
+    stage = Usd.Stage.CreateNew(str(src))
+    v, f = mesh_fixture.l_mesh(20)
+    proto = UsdGeom.Mesh.Define(stage, "/Proto/m")
+    proto.CreatePointsAttr([tuple(p) for p in v])
+    proto.CreateFaceVertexCountsAttr([3] * len(f))
+    proto.CreateFaceVertexIndicesAttr(f.reshape(-1).tolist())
+    UsdGeom.Subset.CreateGeomSubset(proto, "half", UsdGeom.Tokens.face, list(range(len(f) // 2)), "materialBind")
+    inst = UsdGeom.Xform.Define(stage, "/Inst").GetPrim()
+    inst.GetReferences().AddInternalReference("/Proto")
+    inst.SetInstanceable(True)
+    stage.GetRootLayer().Save()
+    out = tmp_path / "dec"
+    out.mkdir()
+    result = mesh_usd.decimate(src, out, ratio=0.2)
+    assert result["meshes"] == 1 and result["skipped_instance_proxies"] == ["/Inst/m"]
+    copy = Usd.Stage.Open(result["output"])
+    subset = UsdGeom.Subset(copy.GetPrimAtPath("/Proto/m/half"))
+    assert subset.GetIndicesAttr().Get() is None

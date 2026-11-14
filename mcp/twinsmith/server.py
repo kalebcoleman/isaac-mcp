@@ -520,7 +520,8 @@ def _catalog_error(canonical: str, error: BaseException, state: Optional[_Bridge
             f"simulator state before retrying. {_BRIDGE_HELP}")
 
 
-_WAITING_TOOLS = frozenset({"job_status"})      # may wait (wait_s) or encode a replay's frames
+_WAITING_TOOLS = frozenset({"job_status",       # may wait (wait_s) or encode a replay's frames
+                            "assets.mesh_inspect", "assets.validate"})   # parse a large USD in a subprocess
 _PYTHON_TYPE = {"string": str, "integer": int, "number": float, "boolean": bool, "array": list, "object": dict}
 
 
