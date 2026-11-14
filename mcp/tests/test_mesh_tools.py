@@ -113,7 +113,7 @@ def test_split_runs_as_a_job_and_writes_a_report(setup):
 def test_listed_schemas_take_prim_paths_as_strings(tmp_path):
     import asyncio
 
-    server = gw.build_server({"TWINSMITH_TOOLSETS": "default", "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path)})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "default,+assets", "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path)})
     tools = {t.name: t for t in asyncio.run(server.list_tools())}
     for name in ("assets__mesh", "assets__validate"):
         assert name in tools

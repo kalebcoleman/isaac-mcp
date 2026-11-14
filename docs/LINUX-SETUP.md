@@ -224,6 +224,7 @@ connection and generic scene work require neither.
 | `twinsmith` not found | Add the uv tool bin directory to PATH, or use its absolute executable path in the client; keep the editable checkout available |
 | Interpreter missing | Run `python3 scripts/env.py find`, select a compatible `TWINSMITH_SIM_PYTHON`, or install in the new checkout; do not overwrite an unrelated environment |
 | `uv pip check` fails | Record exact versions and conflicts. Use a new isolated locked environment for comparison; do not infer a native failure's cause from metadata alone |
+| Only `status`, `help` and the other `core` tools are listed | Only `core` is on by default. Add `+sim` (and `+assets`, `+screen` as needed) to `[tools] toolsets` or `TWINSMITH_TOOLSETS` and restart the server, or call `toolsets(action="enable", names=["sim"])`; see [toolsets](TOOLSETS.md#choosing-toolsets) |
 | Tools are listed but runtime calls fail | Catalogs can be offline. Check the advertised bridge, `refresh_tools`, the [toolsets](TOOLSETS.md) and the selected endpoint |
 | Port already in use / multiple bridges | Verify PID/host/port; reuse the intended bridge or select an unused port for an authorized new session |
 | Startup still busy / `NOT_READY` | Inspect startup logs and stage readiness. Camera cache is unseeded until a successful tool capture; ordinary Play does not seed it |

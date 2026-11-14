@@ -21,7 +21,8 @@ Machine-readable data:
 
 ## Pack-backed Workcell API
 
-The integration exposes seven grouped tools with ten actions through `twinsmith.bridge`:
+The integration exposes four grouped tools with seven actions through `twinsmith.bridge`, in the `workcell` toolset (off by
+default: add `+workcell`):
 
 | Group | Actions | Purpose |
 | --- | --- | --- |
@@ -29,9 +30,6 @@ The integration exposes seven grouped tools with ten actions through `twinsmith.
 | `workcell__robot` | `status` | Read the robot build report |
 | `workcell__perception` | `status` | Read camera configuration, not captured sensor data |
 | `workcell__jenga` | `build`, `status` | Replace the tower on a stopped timeline or read its build report |
-| `workcell__real2sim` | `status` | Report synchronization as not implemented |
-| `workcell__planning` | `status` | Report planning as not implemented |
-| `workcell__eval` | `status` | Report evaluation as not implemented |
 
 `quick_start` accepts `config_path`, `mode` (`physics` or `mirror_real`) and
 `discard_changes`. Physics mode uses gravity; mirror mode uses zero gravity, not a

@@ -16,7 +16,7 @@ bridge tool ``<namespace>.<tool>`` is ``<namespace>__<tool>`` to MCP, which allo
 Environment:
 
     TWINSMITH_PORT, TWINSMITH_HOST   the bridge to use. Unset: the one advertised on this machine.
-    TWINSMITH_TOOLSETS               profile and adjustments (default,+lab,-screen).
+    TWINSMITH_TOOLSETS               profile and adjustments (default,+sim,+lab).
     TWINSMITH_NAME, TWINSMITH_INSTRUCTIONS   the server's name and instructions.
 
 Nothing here starts a simulator unless the explicit ``launch`` toolset is selected.
@@ -60,8 +60,8 @@ LIST_BRIDGES_HELP = (
 
 SERVER_NAME = os.getenv("TWINSMITH_NAME", "twinsmith")
 SERVER_INSTRUCTIONS = (
-    "Call status first, once: it identifies the bridge, running work and stage IDs, and lists enabled, "
-    "disabled and planned toolsets. The twinsmith://toolsets resource reports the same selection. "
+    "Call status first, once: it identifies the bridge, running work and stage IDs, and lists enabled and "
+    "disabled toolsets. The twinsmith://toolsets resource reports the same selection. "
     "Use help(task=...) to find a tool; a needed toolset that is off can be turned on with "
     "toolsets(action=\"enable\", names=[...]), except input and launch. Prefer listed tools over custom code. Confirm the intended simulator "
     "before changing a scene; do not start extra GPU work or stop unrelated processes without authorization. "
@@ -866,11 +866,11 @@ def _where_am_i(params: Dict[str, Any], state: _BridgeState) -> Dict[str, Any]:
         elif around["bridges"]:
             message = (f"Nothing answers on the port this server is set to use ({error}), but other bridges are "
                        f"advertised: call use_bridge(port={around['bridges'][0]['port']}) after confirming which "
-                       "simulator you mean. The robosim, isaaclab (lab) and screen tools need no bridge.")
+                       "simulator you mean. The robosim (real2sim), isaaclab (lab) and screen tools need no bridge.")
         else:
             message = ("Nothing is running: no Isaac Sim bridge answers. Start your configured simulator, then "
                        "refresh_tools(wait_s=120). See toolsets for available host tools and optional launch support. "
-                       "The robosim, isaaclab (lab) and screen tools need no bridge.")
+                       "The robosim (real2sim), isaaclab (lab) and screen tools need no bridge.")
         return {"running": False, "message": message, **around, "host": _host_brief(),
                 "physics": _physics_status(state), "toolsets": toolsets.describe(state.toolsets, state.runtime_enable)}
     if not isinstance(identity, dict):
@@ -1243,7 +1243,7 @@ def _register_host_tools(server: FastMCP, state: _BridgeState, groups: Iterable[
     register_sim_session_tools(server, groups=groups, env=env,
                                on_launch=lambda record: state.launched_sessions.add(record["id"]))
     register_isaaclab_tools(server, groups=groups)
-    if "robosim" in groups:
+    if "real2sim" in groups:
         from .robosim import register_robosim_tools
         register_robosim_tools(server)
         # Listed like every other host tool: no generated titles, no docstring indentation.
@@ -1783,11 +1783,11 @@ _HELP_TOPICS = (
      "isaaclab__envs_list, isaaclab__train, isaaclab__runs_status, isaaclab__runs_tail, isaaclab__metrics_summary, "
      "isaaclab__eval, isaaclab__play, job_cancel. Before a long run: isaaclab__preflight (GPU and jobs) and "
      "isaaclab__env_check (NaNs, resets, memory). isaaclab__runs_status(job_id, wait_s=45) waits for a job to end; "
-     "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises your evaluation-result files against criteria you give; isaaclab__checkpoint_register protects a baseline; run_script runs your own script as a job. "
+     "isaaclab__metrics_summary(eval_json=[...absolute paths...]) summarises your evaluation-result JSON against criteria you give; isaaclab__checkpoint_register protects a baseline; run_script runs your own script as a job. "
      "isaaclab__record gives an MP4 with no window. No bridge needed."),
     ("rebuild a real scene from a video and compare it with the real clip (real-to-sim)",
      ("real-to-sim", "real to sim", "real2sim", "reference video", "video", "clip", "robosim", "robosimstudio", "match the real"),
-     "robosim, in the robosim toolset (off by default: toolsets action=enable names=[\"robosim\"]). It needs no simulator bridge. "
+     "robosim, in the real2sim toolset (off by default: toolsets action=enable names=[\"real2sim\"]). It needs no simulator bridge. "
      "Order: robosim action=start with a template (plain data), reference (frames from the clip), compare, update_scene, "
      "tune_push (makes the simulated block move like the real one), rollout, compare_take, report, stop. It compares images; "
      "it does not fit mass or friction."),
@@ -1872,7 +1872,7 @@ def _help(task: Optional[str], no_fit: bool = False, enabled=toolsets.DEFAULT,
     if task and (no_fit or not hits):
         recorded = _record_help_gap(task, "no_fit" if no_fit else "no_match")
         lines.append(f"No twinsmith tool is known to fit {task!r}." if not hits or no_fit else "")
-        lines.append(_RUN_PYTHON_PATTERN if "code" in enabled else _enable_toolsets({"code"}, runtime_enable))
+        lines.append(_RUN_PYTHON_PATTERN if "sim" in enabled else _enable_toolsets({"sim"}, runtime_enable))
         if recorded is not None:
             lines.append(f"This question was recorded for the maintainer in {recorded} (local file, never sent anywhere).")
         if hits:
@@ -1987,7 +1987,7 @@ def build_server(env: Optional[Mapping[str, str]] = None,
     setattr(server, _STATE_ATTR, state)
     @server.resource("twinsmith://toolsets")
     def toolset_status() -> str:
-        """Enabled, disabled and planned toolsets for this server."""
+        """Enabled and disabled toolsets for this server."""
         return json.dumps(toolsets.describe(state.toolsets, state.runtime_enable))
 
     _advertise_tools_list_changed(server)
@@ -2029,7 +2029,7 @@ def main(argv: list[str] | None = None) -> None:
         "Environment: TWINSMITH_PORT (bridge port, default 8766), DISPLAY (screen tools).",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {_package_version()}")
-    parser.add_argument("--toolsets", help="Profile and adjustments, e.g. default,+lab,-screen")
+    parser.add_argument("--toolsets", help="Profile and adjustments, e.g. default,+sim,+lab")
     parser.add_argument("command", nargs="?", choices=["toolsets"])
     args = parser.parse_args(argv)
     instance = build_server(cli_toolsets=args.toolsets)

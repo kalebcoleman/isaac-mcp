@@ -26,7 +26,7 @@ The arm then builds the structure by itself: all four bricks onto the baseplate,
 
 ## Toolsets to enable next to BrickSim
 
-The default toolsets are enough: `scene` (stage, prims), `physics` (body state, contacts, raycast, joints, arm), `sensors` (cameras), `code` (`run_python`) and `screen` (screenshots and recordings). Nothing needs turning on. Add `lab` only to train a project task (see below), and leave `workcell` off. Choose them with [toolsets](TOOLSETS.md#choosing-toolsets).
+Turn on `sim` (stage, prims, body state, contacts, raycast, joints, arm, cameras, `run_python`) and `screen` (screenshots and recordings): `TWINSMITH_TOOLSETS=default,+sim,+screen`. Add `lab` only to train a project task (see below), and leave `workcell` off. Choose them with [toolsets](TOOLSETS.md#choosing-toolsets).
 
 ## Which tools work on bricks
 

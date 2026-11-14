@@ -30,17 +30,20 @@ what is off and how to enable more; `help` names the toolset when the tool for a
 <!-- generated:profiles -->
 | Profile | Toolsets | Listed tools |
 |---|---|--:|
-| `minimal` | `core` | 6 |
-| `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 34 |
-| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 51 |
-| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 53 |
+| `default` | `core` | 6 |
+| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `extensions` | 48 |
+| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `input`, `launch`, `extensions` | 50 |
 <!-- /generated -->
 
-To find the tool for a task, call `help(task="...")`: it names the tool, and the toolset when that is off. A toolset that is off
-can be turned on without a restart with `toolsets(action="enable", names=["lab"])`; `input` and `launch` (desktop input,
-managed simulator sessions) are never enabled that way and are never in a profile. To change the selection for every session,
-set `~/.config/twinsmith/config.toml` (`[tools] toolsets = ["default", "+lab"]`) or `TWINSMITH_TOOLSETS` and restart the
-server. `+workcell` is the lab's UR5e work cell and `+lab` is Isaac Lab. Toolsets control what is listed, not what is allowed: the bridge token and read-only mode do that.
+To find the tool for a task, call `help(task="...")`: it names the tool, and the toolset when that is off. Only `core` is on by
+default. A toolset that is off can be turned on without a restart with `toolsets(action="enable", names=["sim"])`. `input` and
+`launch` (desktop input, managed simulator sessions) are never enabled that way and are never in a profile. The groups:
+- `+sim` is every tool that works inside Kit: scene, physics, sensors, `run_python`, Kit's log and UI.
+- `+assets` imports, `+screen` captures the desktop, and `+workcell` is the lab's UR5e work cell.
+- `+lab` is Isaac Lab and `run_script`, and `+real2sim` is RoboSimStudio.
+To change the selection for every session, set `~/.config/twinsmith/config.toml` (`[tools] toolsets = ["default", "+sim",
+"+lab"]`) or `TWINSMITH_TOOLSETS` and restart the server. Toolsets control what is listed, not what is allowed: the bridge
+token and read-only mode do that.
 `docs/TOOLSETS.md` has the details.
 
 ## Which tool do I start with?
@@ -248,7 +251,7 @@ A resized window makes an old token stale: take a new screenshot. Text on screen
 
 | Symptom | Likely cause | Action |
 |---|---|---|
-| A tool is not listed | Its toolset is off (`run_python` is in `code`, Lab in `lab`, the work cell in `workcell`) | `status` names the toolset; the user adds it to the toolsets and restarts the server |
+| A tool is not listed | Its toolset is off (`run_python` and the scene tools are in `sim`, Lab in `lab`, the work cell in `workcell`) | `status` names the toolset; the user adds it to the toolsets and restarts the server |
 | `refresh_tools`: no bridge reachable, or no response for `list_tools` | Kit still starting | `refresh_tools(wait_s=120)`; the error names a managed session and its age |
 | `refresh_tools` reports connection refused | No bridge on that port | Check the listing; start Kit with `twinsmith.bridge` only if none is advertised and the user agrees |
 | `refresh_tools` refused right after a `sim__session` launch | The server dials its configured port, not the new session's | `use_bridge(port=<the launched port>)` (the session status `next` says so) |

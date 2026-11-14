@@ -59,8 +59,8 @@ unrelated file or symlink already occupies that path. Direct `uv tool install` d
 The tools a client is shown are the tools of the enabled [toolsets](TOOLSETS.md); `status` and `twinsmith toolsets` report which
 are on. Every tool and its arguments are in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS.md), one section per toolset. In short:
 
-- **Scene and assets** (`scene`, `physics`, `sensors`, `assets`, and optionally `ros2` and `kit_debug`): the generic `sim__*` and
-  `assets__*` tools are catalogue-listed by default. `assets__library` (roots, scan, search) executes on the host; the others
+- **Scene and assets** (`sim`, `assets`, and optionally `ros2`; off by default like every toolset but `core`): the generic
+  `sim__*` and `assets__*` tools are catalogue-listed once their toolset is on. `assets__library` (roots, scan, search) executes on the host; the others
   require `sim-tools` in the selected Kit. See [scene tools](TOOLS-SCENE.md) for trusted-root configuration and runtime
   prerequisites. The work cell's robot, sensor and bench files are packs in the asset root, which the host and Kit each resolve
   themselves: set `TWINSMITH_ASSET_ROOT` in the **Kit** environment too, or Kit looks in `<workspace>/assets`. See
@@ -74,10 +74,10 @@ are on. Every tool and its arguments are in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS
   capture reads that window's own pixels, so with a compositing window manager (GNOME, KDE) a covered window is still captured;
   without one the covered part is black, and `doctor` says so. Captures are written to `~/Pictures/twinsmith/` and
   `~/Videos/twinsmith/`; recordings contain no audio.
-- **Isaac Lab and script jobs** (`lab`, and `run_script` in `code`): see the [Isaac Lab reference](TOOLS-ISAACLAB.md).
+- **Isaac Lab and script jobs** (`lab`, which holds `run_script` too): see the [Isaac Lab reference](TOOLS-ISAACLAB.md).
 - **Opt-in only** (`input`, `launch`): desktop input (`computer`) and managed simulator sessions (`sim__session`). Neither is
-  part of any profile, not even `all`; name them (`+input`, `+launch`). `robosim` (RoboSimStudio) is off by default like
-  `lab`; see [ROBOSIM.md](ROBOSIM.md).
+  part of any profile, not even `all`; name them (`+input`, `+launch`). `real2sim` (RoboSimStudio, the `robosim` tool) is off
+  by default like `lab`; see [ROBOSIM.md](ROBOSIM.md).
 
 See the [host and bridge reference](TOOLS-HOST.md) for behaviour and limits.
 
@@ -303,7 +303,7 @@ tools registered as read-only (stage and prim reads, joint and body state, logs,
 is called: `run_python`, `files(action="put")`, every scene edit and every other work-cell tool. Read-only protects the simulator, not
 the disk: `files(action="get")` still reads any file your account can read. This is enforced inside Kit, so it does not
 depend on the client, on which tools a host lists, or on who dials the socket. `status` and the bridge listing report
-`read_only`. Toolsets are not a read-only host mode: even `minimal` includes job cancellation.
+`read_only`. Toolsets are not a read-only host mode: even `default` (`core` alone) includes job cancellation.
 
 **Who may connect.** The bridge requires a token on every connection. It writes a random one to a file only your
 account can read, and clients on that account (this server, the CLI, your scripts) read it from there, so nothing

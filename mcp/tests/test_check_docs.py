@@ -162,7 +162,7 @@ def test_vendoring_rejects_a_bundled_asset_claim():
     assert any("ships none" in error for error in errors)
 
 
-@pytest.mark.parametrize("name,block", [("README.md", "toolsets-compact"), ("AGENTS.md", "toolsets-compact"),
+@pytest.mark.parametrize("name,block", [("README.md", "toolsets-full"), ("AGENTS.md", "toolsets-compact"),
                                         ("docs/TOOLSETS.md", "toolsets-full"), ("docs/TOOLSETS.md", "profiles"),
                                         (".agents/skills/twinsmith/SKILL.md", "profiles")])
 def test_the_pages_that_show_counts_carry_their_generated_block(name, block):

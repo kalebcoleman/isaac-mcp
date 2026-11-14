@@ -141,8 +141,8 @@ A missing/different mount produces an error, never an implicit transfer via `put
 
 ## Tools
 
-Names below are registered only when their toolset is enabled (`scene`, `physics`, `sensors`, `assets`, `ros2`, `kit_debug`;
-`status` shows which are on, and `TWINSMITH_TOOLSETS=default,+ros2,+kit_debug` adds the optional ones; see [toolsets](TOOLSETS.md)).
+Names below are registered only when their toolset is enabled (`sim`, `assets`, `ros2`; all off by default. `status` shows which
+are on, and `TWINSMITH_TOOLSETS=default,+sim,+assets,+ros2` adds them; see [toolsets](TOOLSETS.md)).
 Every tool and argument is in the generated [tool arguments](TOOLS-ARGUMENTS.md). The rows below are only the tools whose contract
 says more than their generated description: refusals, error codes, limits and side effects. A tool with no row is fully described
 there.
@@ -906,7 +906,7 @@ native texture may have been torn down, so inspect a refusal rather than assumin
 
 Newton (Isaac Sim 6.2, MuJoCo-Warp) is the target engine; its status and known limits are in
 [compatibility](COMPATIBILITY.md#target-engine). These are the differences in the generic scene tools, read from the installed extension; the live checks that prove them are in
-`scripts/smoke/newton_checks.py` (`python3 scripts/smoke.py physics --backend newton --discard-changes --check newton_checks`).
+`scripts/smoke/newton_checks.py` (`python3 scripts/smoke.py sim --backend newton --discard-changes --check newton_checks`).
 
 - **Contact buffers.** MuJoCo-Warp holds a fixed number of contacts (`nconmax`, default 200 per world) and constraint rows
   (`njmax`, default 1200 per world) and drops what does not fit. A 54-block tower needs far more. `sim__quick_start` (every Newton

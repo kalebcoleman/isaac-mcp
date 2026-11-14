@@ -19,7 +19,7 @@ version.
 - [ ] Decide `sim__physics(action="raycast")` on Newton: implement a query, or keep it refused and say so.
 - [ ] The UR5e work cell on Newton: it builds and holds; the force/torque read, cameras and `mirror_real` remain (see [Work cell on Newton](#work-cell-on-newton)).
 - [ ] Record the live runs that show exact stepping, the one-off push and camera capture after motion passing on Newton; they
-  are reported, not yet recorded in this repository. Run `scripts/smoke.py physics --backend newton --discard-changes
+  are reported, not yet recorded in this repository. Run `scripts/smoke.py sim --backend newton --discard-changes
   --check newton_checks` on a free GPU and keep the JSON report. If a step-timing mismatch remains, read `newton.clocks_before`,
   `newton.clocks_after` and `newton.timestep_check` in the step error. Check solver steps, clock and body state independently
   before changing the timing guard.
@@ -138,7 +138,8 @@ matched the clip within the tool's tolerance. What it does not do yet:
 
 - [ ] Decide the seven shorter names proposed for listed tools during the rename (the list is in the rename pull request).
 - [ ] Regroup the host modules into subpackages; the rename left the flat layout.
-- [ ] Add live smoke checks for the `ros2`, `assets`, `screen`, `code` and `kit_debug` toolsets; `scripts/smoke.py` has none.
+- [ ] Add live smoke checks for the `ros2`, `assets` and `screen` toolsets, and for the code, log and UI tools of `sim`;
+  `scripts/smoke.py` has none.
 - [ ] Inventory the registered tools, arguments, results, side effects and usage. Propose a keep, combine or remove list and a
   compatibility plan to the owner before changing public contracts.
 - [ ] Review the work-cell tool descriptions, partial outcomes, confirmations and destructive effects. Keep existing behaviour

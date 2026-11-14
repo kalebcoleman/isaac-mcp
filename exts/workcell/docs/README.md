@@ -5,7 +5,7 @@ this project is robot-agnostic; use `sim__quick_start` for a generic scene.
 
 The extension integrates the pack-backed Workcell API with the shared
 `twinsmith.bridge`; it has no socket server or UI panel of its own. The
-workcell integration provides seven grouped tools and ten actions:
+workcell integration provides four grouped tools and seven actions:
 
 | Group | Actions |
 | --- | --- |
@@ -13,16 +13,13 @@ workcell integration provides seven grouped tools and ten actions:
 | `workcell__robot` | `status` |
 | `workcell__perception` | `status` |
 | `workcell__jenga` | `build`, `status` |
-| `workcell__real2sim` | `status` |
-| `workcell__planning` | `status` |
-| `workcell__eval` | `status` |
 
 `quick_start` resolves the external `ur5e-jenga-workcell/v2` pack and builds a stopped
 PhysX scene. `physics` mode uses gravity; `mirror_real` uses zero gravity but does not
 synchronize with hardware. An unsaved stage is replaced only with explicit consent.
 `shutdown` releases workcell state without clearing the stage. Robot, perception and
 Jenga status actions read build reports; perception status is not sensor capture.
-Real-to-simulation synchronization, planning and evaluation remain unimplemented.
+Real-to-simulation synchronization, planning and evaluation are not part of the work cell.
 
 There is no legacy extension ROS graph setup or custom `rclpy` build prerequisite for
 this API. Generic `sim__*` tools are separate from the workcell interface.

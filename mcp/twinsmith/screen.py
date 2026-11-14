@@ -1686,8 +1686,8 @@ def doctor_report(port: int | None, host: str | None, enabled: Iterable[str], ru
         sim_ui = "this Kit is headless: sim__ui needs a windowed Isaac Sim"
     elif "reason" in bridge:
         sim_ui = bridge["reason"]
-    elif "kit_debug" not in enabled:
-        sim_ui = "the kit_debug toolset is off. " + toolsets.enable_hint(["kit_debug"], runtime_enable)
+    elif "sim" not in enabled:
+        sim_ui = "the sim toolset is off. " + toolsets.enable_hint(["sim"], runtime_enable)
     else:
         sim_ui = True
     blockers = [f"{name}: {why.rstrip('.')}" for name, why in (("computer", computer), ("sim__ui", sim_ui)) if why is not True]

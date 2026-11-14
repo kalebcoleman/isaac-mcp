@@ -956,7 +956,7 @@ def test_host_tools_run_through_the_gateway_without_kit(env, monkeypatch):
 def test_tool_annotations_match_what_each_tool_does(monkeypatch):
     from twinsmith import server as gw
 
-    tools = gw.build_server({})._tool_manager._tools
+    tools = gw.build_server({"TWINSMITH_TOOLSETS": "default,+assets"})._tool_manager._tools
     for name in ("assets__packs", "assets__pack_doctor", "assets__dependencies"):
         assert tools[name].annotations.readOnlyHint is True and tools[name].annotations.destructiveHint is False
     for name in ("assets__pack_adopt", "assets__pack_pin", "assets__pack_build"):
@@ -996,7 +996,7 @@ def test_every_pack_tool_publishes_string_arrays(monkeypatch):
     from twinsmith import server as gw
     from twinsmith.scene_contracts import REGISTRY
 
-    tools = gw.build_server({})._tool_manager._tools
+    tools = gw.build_server({"TWINSMITH_TOOLSETS": "default,+assets"})._tool_manager._tools
     checked = []
     for canonical in gw._PACK_TOOLS:
         schema = tools[canonical.replace(".", "__")].parameters["properties"]
@@ -1022,7 +1022,7 @@ def test_pack_tools_take_their_arguments_through_a_real_mcp_session(env, tmp_pat
     staging.mkdir(mode=0o700)
     config = tmp_path / "approval.json"
     config.write_text(json.dumps(dict(version=1, profile="trusted_project", roots={"demo": str(root)}, staging=str(staging))))
-    server = gw.build_server({"TWINSMITH_ASSET_CONFIG": str(config)})
+    server = gw.build_server({"TWINSMITH_ASSET_CONFIG": str(config), "TWINSMITH_TOOLSETS": "default,+assets"})
 
     def call(name, **args):
         failed, text = mcp_call(server, name, args)

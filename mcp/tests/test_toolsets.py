@@ -25,35 +25,80 @@ def test_registry_owns_every_registered_tool():
 
 @pytest.mark.parametrize("name", toolsets.TOOLSETS)
 def test_each_toolset_alone_and_disabled_registers_nothing(name):
-    instance = build("minimal,+" + name)
+    instance = build("default,+" + name)
     assert all(toolsets.owner(tool) in {"core", name} for tool in instance._tool_manager._tools)
     if name != "core":
         disabled = build("all,+input,+launch,-" + name)
         assert all(toolsets.owner(tool) != name for tool in disabled._tool_manager._tools)
 
 
-def test_robosim_is_off_by_default_and_registers_only_its_grouped_tool():
-    assert "robosim" not in toolsets.DEFAULT and "robosim" not in toolsets.PLANNED
-    assert "robosim" in config.select("all")
-    assert "robosim" not in {name for name in toolsets.TOOLSETS if name in server._state_for(build()).toolsets}
+def test_real2sim_is_off_by_default_and_registers_only_robosim():
+    assert "real2sim" not in toolsets.DEFAULT and "real2sim" in config.select("all")
     assert "robosim" not in build()._tool_manager._tools
-    alone = build("minimal,+robosim")
-    assert {name for name in alone._tool_manager._tools if toolsets.owner(name) == "robosim"} == {"robosim"}
-    assert toolsets.MEMBERS["robosim"] == {"robosim"}
+    alone = build("default,+real2sim")
+    assert {name for name in alone._tool_manager._tools if toolsets.owner(name) == "real2sim"} == {"robosim"}
+    assert toolsets.MEMBERS["real2sim"] == {"robosim"}
 
 
-def test_documented_default_and_planned_selection():
-    assert toolsets.DEFAULT == {"core", "scene", "physics", "sensors", "assets", "code", "screen", "extensions"}
+def test_only_core_is_on_by_default_and_status_lists_no_planned_toolsets():
+    assert toolsets.DEFAULT == {"core"} and config.select("default") == {"core"}
+    assert [name for name, spec in toolsets.TOOLSETS.items() if spec.default] == ["core"]
+    assert set(toolsets.PROFILES) == {"default", "all"}
     assert config.select("all") == set(toolsets.TOOLSETS) - {"input", "launch"}
-    assert set(toolsets.PLANNED) == {"backend", "params", "compare", "planning", "real2sim", "eval"}
-    assert not set(toolsets.PLANNED) & set(toolsets.TOOLSETS)
+    assert "planned" not in toolsets.describe(toolsets.DEFAULT)
+    assert not hasattr(toolsets, "PLANNED")
+    instance = build("default")
+    assert set(server.grouped_tools.listed_names(instance)) == {"status", "help", "refresh_tools", "use_bridge", "jobs",
+                                                                "toolsets"}
+    assert {toolsets.owner(name) for name in instance._tool_manager._tools} == {"core"}
+
+
+# What each toolset lists, on top of core: the mapping in docs/ARCHITECTURE.md, written out.
+LISTED = {
+    "core": {"status", "help", "refresh_tools", "use_bridge", "jobs", "toolsets"},
+    "screen": {"screenshot", "screen_recording", "windows", "join_videos", "doctor"},
+    "sim": {"sim__quick_start", "sim__stage", "sim__prim", "sim__timeline__control", "sim__light", "sim__material",
+            "sim__physics", "sim__joints", "sim__arm", "sim__simulation", "sim__camera", "sim__lidar",
+            "sim__viewport__frame", "run_python", "files", "reload_tools", "sim__controller", "sim__ui", "sim__logs"},
+    "assets": {"assets__import_path", "assets__library", "assets__mesh", "assets__pack", "assets__validate"},
+    "real2sim": {"robosim"},
+    "lab": {"isaaclab__launch", "isaaclab__inspect", "isaaclab__metrics", "isaaclab__checkpoint_register", "run_script"},
+    "ros2": {"sim__ros2__tf_setup", "sim__graph", "sim__map__occupancy"},
+    "workcell": {"workcell__cell", "workcell__robot", "workcell__perception", "workcell__jenga"},
+    "input": {"computer"},
+    "launch": {"sim__session"},
+    "extensions": set(),
+}
+
+
+@pytest.mark.parametrize("name", toolsets.TOOLSETS)
+def test_each_toolset_lists_exactly_its_mapped_tools(name):
+    assert set(LISTED) == set(toolsets.TOOLSETS)
+    listed = set(server.grouped_tools.listed_names(build("default,+" + name)))
+    assert listed == LISTED["core"] | LISTED[name]
+
+
+@pytest.mark.parametrize("value", ["scene", "physics", "sensors", "code", "kit_debug", "robosim", "minimal",
+                                   "default,+scene", "minimal,+lab"])
+def test_old_toolset_names_stop_the_server_with_the_valid_names(value):
+    with pytest.raises(ValueError, match="Unknown toolset") as error:
+        config.select(value)
+    assert "Valid names: default, all, core, screen, sim," in str(error.value)
+    with pytest.raises(ValueError, match="Valid names"):
+        server.build_server({"TWINSMITH_TOOLSETS": value})
+
+
+def test_no_workcell_stub_is_registered():
+    names = set(build("all,+input,+launch")._tool_manager._tools) | set(tool_groups.GROUPS)
+    names |= {name.replace(".", "__") for name in host_catalog.load_catalog()}
+    assert not [name for name in names if name.startswith("workcell__")
+                and any(word in name for word in ("real2sim", "planning", "eval"))]
 
 
 def test_profiles_and_guards():
     assert config.select("default") == toolsets.DEFAULT
     assert config.select("all").isdisjoint({"input", "launch"})
-    assert config.select("minimal") == {"core"}
-    assert config.select("minimal,lab,+screen,-screen") == {"core", "lab"}
+    assert config.select("default,lab,+screen,-screen") == {"core", "lab"}
     with pytest.raises(ValueError, match="cannot be turned off"):
         config.select("-core")
     for value in ("oops", "default,+backend", "--lab", ""):
@@ -70,13 +115,13 @@ def test_five_source_precedence_and_backend(tmp_path):
     def resolve(env=None, cli=None):
         return config.resolve(env or {}, cli, cwd=child, home=home)
     assert resolve().toolsets == toolsets.DEFAULT
-    user.write_text('[tools]\ntoolsets = ["minimal", "+lab"]\n[sim]\nphysics_backend = "newton"\n')
+    user.write_text('[tools]\ntoolsets = ["default", "+lab"]\n[sim]\nphysics_backend = "newton"\n')
     assert resolve().toolsets == {"core", "lab"}
     assert resolve().physics_backend == "newton"
-    (project / "twinsmith.toml").write_text('[tools]\ntoolsets = ["minimal", "+screen"]\n')
+    (project / "twinsmith.toml").write_text('[tools]\ntoolsets = ["default", "+screen"]\n')
     assert resolve().toolsets == {"core", "screen"}
-    assert resolve({"TWINSMITH_TOOLSETS": "minimal,+assets"}).toolsets == {"core", "assets"}
-    assert resolve({"TWINSMITH_TOOLSETS": "minimal,+assets"}, "minimal,+code").toolsets == {"core", "code"}
+    assert resolve({"TWINSMITH_TOOLSETS": "default,+assets"}).toolsets == {"core", "assets"}
+    assert resolve({"TWINSMITH_TOOLSETS": "default,+assets"}, "default,+sim").toolsets == {"core", "sim"}
     assert resolve({"TWINSMITH_PHYSICS_BACKEND": "physx"}).physics_backend == "physx"
     with pytest.raises(ValueError, match="physics_backend"):
         resolve({"TWINSMITH_PHYSICS_BACKEND": "invalid"})
@@ -91,7 +136,7 @@ def test_registration_requires_ownership_and_annotations():
 
 
 def test_live_visibility_uses_same_selection():
-    instance = build("minimal,+extensions")
+    instance = build("default,+extensions")
     state = server._state_for(instance)
     assert server._visible("demo.ping", {"namespace": "demo"}, state)
     assert not server._visible("sim.stage.info", {"namespace": "sim"}, state)
@@ -101,8 +146,16 @@ def test_live_visibility_uses_same_selection():
         toolsets.owner("sim.unknown", "sim")
 
 
-# Measured 1,590 / 16,282 / 23,950 with assets__mesh and assets__validate (plan 01; before them 15,134 / 22,201), plus about 5 percent.
-@pytest.mark.parametrize("profile,budget", [("minimal", 1670), ("default", 17100), ("all", 25150)])
+# Estimated tokens of each toolset on top of core, and of all: the measured size plus about 5 percent. Measured
+# 2026-11-13 with scripts/measure_tool_list.py: default (core) 1,586; sim 12,213; screen 3,561; assets 4,286 (with
+# assets__mesh and assets__validate, #112);
+# real2sim 2,689; lab 4,561; ros2 3,532; workcell 2,275; input 2,393; launch 2,022; extensions 1,586; all 23,602.
+BUDGETS = {"default": 1670, "default,+sim": 12830, "default,+screen": 3740, "default,+assets": 4500,
+           "default,+real2sim": 2830, "default,+lab": 4790, "default,+ros2": 3710, "default,+workcell": 2390,
+           "default,+input": 2520, "default,+launch": 2130, "default,+extensions": 1670, "all": 24800}
+
+
+@pytest.mark.parametrize("profile,budget", BUDGETS.items())
 def test_listing_size(profile, budget):
     instance = build(profile)
     tools = asyncio.run(instance.list_tools())
@@ -119,14 +172,14 @@ def test_capture_directories_follow_screen_toolset(tmp_path, monkeypatch, enable
     shots, videos = tmp_path / "shots", tmp_path / "videos"
     monkeypatch.setattr(screen, "SHOT_DIR", shots)
     monkeypatch.setattr(screen, "VIDEO_DIR", videos)
-    build("minimal,+screen" if enabled else "minimal")
+    build("default,+screen" if enabled else "default")
     assert shots.exists() is enabled
     assert videos.exists() is enabled
 
 
 def test_cli_table_and_override(monkeypatch, capsys):
-    monkeypatch.setenv("TWINSMITH_TOOLSETS", "minimal")
-    server.main(["--toolsets", "minimal,+lab", "toolsets"])
+    monkeypatch.setenv("TWINSMITH_TOOLSETS", "all")
+    server.main(["--toolsets", "default,+lab", "toolsets"])
     output = capsys.readouterr().out
     assert "Toolset" in output
     for name in toolsets.TOOLSETS:
@@ -135,7 +188,7 @@ def test_cli_table_and_override(monkeypatch, capsys):
         assert "+" + name in row
 
 
-@pytest.mark.parametrize("selection", ["minimal", "default", "all,+input,+launch"])
+@pytest.mark.parametrize("selection", ["default", "default,+sim", "all,+input,+launch"])
 def test_status_resource_and_help_share_selection(selection, monkeypatch):
     instance = build(selection)
     state = server._state_for(instance)
@@ -159,7 +212,7 @@ def test_help_respects_disabled_code_and_mixed_topics(monkeypatch):
     monkeypatch.setattr(server, "_record_help_gap", lambda *args: None)
     answer = server._help("simulate cloth tearing", enabled={"core"})
     assert "run_python" not in answer
-    assert "Toolsets off: code" in answer
+    assert "Toolsets off: sim" in answer
     answer = server._help("where am i", enabled={"core"})
     assert "Available: status" in answer
     assert "sim__launch" not in answer
@@ -173,7 +226,7 @@ def test_instructions_are_short_and_selection_neutral():
 
 
 def test_workcell_owns_the_whole_workcell_namespace():
-    owned = {name for name in build("minimal,+workcell")._tool_manager._tools if toolsets.owner(name) == "workcell"}
+    owned = {name for name in build("default,+workcell")._tool_manager._tools if toolsets.owner(name) == "workcell"}
     assert owned and all(name.startswith("workcell__") for name in owned)
     assert {"workcell__jenga", "workcell__jenga_build", "workcell__cell"} <= owned
 
@@ -215,10 +268,10 @@ class FakeContext:
 
 @pytest.mark.parametrize("name", RUNTIME)
 def test_enable_registers_exactly_what_startup_would(name):
-    instance, _ = offline_build("minimal")
+    instance, _ = offline_build("default")
     before = set(server.grouped_tools.listed_names(instance))
     result = change(instance, "enable", [name])
-    expected = build("minimal,+" + name)
+    expected = build("default,+" + name)
     assert registered(instance) == registered(expected)
     assert set(server.grouped_tools.listed_names(instance)) == set(server.grouped_tools.listed_names(expected))
     assert set(result["tools_available"]) == set(server.grouped_tools.listed_names(instance)) - before
@@ -237,7 +290,7 @@ def test_disable_removes_exactly_that_toolsets_tools(name):
 
 
 def test_enabled_tools_are_callable_and_disabled_ones_are_not():
-    instance, _ = offline_build("minimal")
+    instance, _ = offline_build("default")
     with pytest.raises(Exception):
         asyncio.run(instance.call_tool("windows", {"action": "help"}))
     change(instance, "enable", ["screen"])
@@ -249,7 +302,7 @@ def test_enabled_tools_are_callable_and_disabled_ones_are_not():
 
 
 def test_enable_twice_is_harmless():
-    instance, _ = offline_build("minimal")
+    instance, _ = offline_build("default")
     change(instance, "enable", ["lab", "workcell"])
     once = registered(instance)
     listed = set(server.grouped_tools.listed_names(instance))
@@ -265,7 +318,7 @@ def test_enable_twice_is_harmless():
 @pytest.mark.parametrize("name", ["input", "launch"])
 def test_explicit_only_toolsets_can_never_be_enabled_at_run_time(name):
     from mcp.server.fastmcp.exceptions import ToolError
-    instance, state = offline_build("minimal")
+    instance, state = offline_build("default")
     before = registered(instance)
     with pytest.raises(ToolError) as error:
         change(instance, "enable", ["lab", name])
@@ -277,7 +330,7 @@ def test_explicit_only_toolsets_can_never_be_enabled_at_run_time(name):
 
 
 def test_explicit_only_ones_stay_available_at_startup():
-    instance, state = offline_build("minimal,+input,+launch")
+    instance, state = offline_build("default,+input,+launch")
     assert {"computer", "sim__session"} <= registered(instance)
     change(instance, "disable", ["input"])          # a user's own startup choice can be dropped again
     assert "computer" not in registered(instance)
@@ -288,15 +341,15 @@ def test_explicit_only_ones_stay_available_at_startup():
 
 def test_core_cannot_be_disabled_and_unknown_names_are_refused():
     from mcp.server.fastmcp.exceptions import ToolError
-    instance, state = offline_build("default")
+    instance, state = offline_build("default,+sim")
     before = registered(instance)
-    for action, names, text in (("disable", ["scene", "core"], "core cannot be disabled"),
+    for action, names, text in (("disable", ["sim", "core"], "core cannot be disabled"),
                                 ("enable", ["nonsense"], "Unknown toolset"),
                                 ("enable", [], "needs names"), ("enable", None, "needs names"),
                                 ("disable", ["lab-ish"], "Unknown toolset")):
         with pytest.raises(ToolError, match=text):
             change(instance, action, names)
-    assert registered(instance) == before and "scene" in state.toolsets and "toolsets" in registered(instance)
+    assert registered(instance) == before and "sim" in state.toolsets and "toolsets" in registered(instance)
 
 
 @pytest.mark.parametrize("how", ["env", "env_false", "user_file", "project_file"])
@@ -315,12 +368,12 @@ def test_runtime_enable_switch_turns_the_feature_off(how, tmp_path, monkeypatch)
         (home / ".config/twinsmith/config.toml").write_text("[tools]\nruntime_enable = false\n")
     else:
         (tmp_path / "twinsmith.toml").write_text("[tools]\nruntime_enable = false\n")
-    instance, state = offline_build("minimal", extra)
+    instance, state = offline_build("default", extra)
     assert state.runtime_enable is False
     for action in ("enable", "disable"):
         with pytest.raises(ToolError, match="switched off"):
             change(instance, action, ["lab"])
-    assert registered(instance) == registered(build("minimal"))
+    assert registered(instance) == registered(build("default"))
     listing = change(instance, "list")                       # reading is always allowed
     assert listing["runtime_enable"] is False and listing["can_enable"] == []
     assert "off" in listing["enable"].lower() and "startup" in listing["enable"] or "TWINSMITH_TOOLSETS" in listing["enable"]
@@ -334,7 +387,7 @@ def test_runtime_enable_default_and_bad_value():
 
 
 def test_a_tool_list_change_is_announced_once_and_only_when_something_changed():
-    instance, _ = offline_build("minimal")
+    instance, _ = offline_build("default")
     ctx = FakeContext()
     change(instance, "enable", ["lab"], ctx)
     assert ctx.session.sent == 1
@@ -346,7 +399,7 @@ def test_a_tool_list_change_is_announced_once_and_only_when_something_changed():
 
 
 def test_server_advertises_list_changed_for_the_tool():
-    instance = build("minimal")
+    instance = build("default")
     options = instance._mcp_server.create_initialization_options()
     assert options.capabilities.tools.listChanged is True
     tool = instance._tool_manager._tools["toolsets"]
@@ -354,11 +407,11 @@ def test_server_advertises_list_changed_for_the_tool():
     assert toolsets.owner("toolsets") == "core"
 
 
-def test_workcell_and_robosim_register_without_a_bridge_or_checkout(tmp_path, monkeypatch):
+def test_workcell_and_real2sim_register_without_a_bridge_or_checkout(tmp_path, monkeypatch):
     monkeypatch.setenv("TWINSMITH_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("TWINSMITH_ROBOSIM_ROOT", str(tmp_path / "no-checkout"))
-    instance, _ = offline_build("minimal")
-    result = change(instance, "enable", ["workcell", "robosim"])
+    instance, _ = offline_build("default")
+    result = change(instance, "enable", ["workcell", "real2sim"])
     assert {"robosim", "workcell__cell", "workcell__jenga"} <= set(result["tools_available"])
     assert "dial the selected bridge" in result["note"]
     answer = asyncio.run(instance.call_tool("workcell__cell", {"action": "status"}))
@@ -369,11 +422,11 @@ def test_workcell_and_robosim_register_without_a_bridge_or_checkout(tmp_path, mo
 
 
 def test_enable_also_reads_the_live_bridge_tools(monkeypatch):
-    instance, state = offline_build("minimal")
+    instance, state = offline_build("default")
     seen = []
     monkeypatch.setattr(server, "discover_and_register_tools", lambda srv: seen.append(sorted(state.toolsets)) or [])
-    change(instance, "enable", ["scene"])
-    assert seen and "scene" in seen[0]
+    change(instance, "enable", ["sim"])
+    assert seen and "sim" in seen[0]
 
 
 def test_status_toolsets_field_says_how_to_enable():
@@ -383,7 +436,8 @@ def test_status_toolsets_field_says_how_to_enable():
     assert "input" in field["enable"] and "launch" in field["enable"] and "startup" in field["enable"]
     assert field["can_enable"] == [name for name in toolsets.TOOLSETS if name not in state.toolsets
                                    and name not in toolsets.explicit_only()]
-    assert field["tools"]["scene"] == 6 and field["tools"]["lab"] == 4 and field["tools"]["workcell"] == 7
+    assert field["tools"]["sim"] == 19 and field["tools"]["lab"] == 5 and field["tools"]["workcell"] == 4
+    assert "planned" not in field
     contents = asyncio.run(instance.read_resource("twinsmith://toolsets"))
     assert json.loads(list(contents)[0].content) == field
     change(instance, "enable", ["lab"])
@@ -425,5 +479,5 @@ def test_status_without_a_bridge_says_which_tools_need_none(monkeypatch, bridges
     monkeypatch.setattr(server, "_physics_status", lambda *args, **kwargs: {})
     answer = server._where_am_i({}, State())
     assert answer["running"] is False
-    assert "The robosim, isaaclab (lab) and screen tools need no bridge." in answer["message"]
+    assert "The robosim (real2sim), isaaclab (lab) and screen tools need no bridge." in answer["message"]
     assert ("use_bridge(port=8766)" in answer["message"]) == bool(bridges)

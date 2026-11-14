@@ -55,9 +55,9 @@ def test_tool_listing_check_compares_the_listing_with_the_toolset_registry():
     sys.path.insert(0, str(ROOT / "mcp"))
     from twinsmith import config, toolsets
 
-    default = config.select("default")
+    default = config.select("default,+sim,+assets")
     listed = asyncio.run(tools.promised_tools(default))
-    assert {"sim__prim", "run_python", "status"} <= listed and not {"sim__logs", "workcell__cell"} & listed
+    assert {"sim__prim", "run_python", "status", "sim__logs"} <= listed and not {"isaaclab__launch", "workcell__cell"} & listed
     assert asyncio.run(tools.check_registry(listed, default))["listed"] == len(listed)
     with pytest.raises(AssertionError, match="listed_but_not_promised"):
         asyncio.run(tools.check_registry(listed | {"workcell__cell"}, default))

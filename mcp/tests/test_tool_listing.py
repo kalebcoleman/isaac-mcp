@@ -302,7 +302,7 @@ def test_advice_beside_the_caller_s_data_names_listed_tools(monkeypatch):
             pass
 
     monkeypatch.setattr(gw, "_job_record", lambda job_id: None)
-    server = gw.build_server({"TWINSMITH_TOOLSETS": "minimal"})
+    server = gw.build_server({"TWINSMITH_TOOLSETS": "default"})
     gw._state_for(server).client = Endpoint()
 
     async def run():

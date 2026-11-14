@@ -151,30 +151,33 @@ def test_frames_this_server_cannot_read_are_kept_and_the_reply_says_how_to_encod
 
 # ---- help ----
 
+# The toolsets that were on by default before only core was: what these help answers assume.
+EVERYDAY = frozenset({"core", "sim", "assets", "screen", "extensions"})
+
 def gaps(tmp_path):
     file = tmp_path / "state" / "help-gaps.jsonl"
     return [json.loads(line) for line in file.read_text().splitlines()] if file.exists() else []
 
 
 def test_a_drone_controller_question_gets_the_controller_runner_not_the_arm_tools(tmp_path):
-    answer = gw._help("run my own controller on a drone")
+    answer = gw._help("run my own controller on a drone", enabled=EVERYDAY | {"lab"})
     assert "sim__simulation__run" in answer and "tcp://127.0.0.1" in answer and "job_status" in answer
     assert "sim__arm__ik" not in answer and "sim__joints__move" not in answer
     assert "help(task=..., no_fit=true)" in answer and gaps(tmp_path) == [], "an answered question is not a gap"
 
 
 def test_replay_and_job_questions_name_their_tools():
-    replay = gw._help("replay saved flights into a labelled video")
+    replay = gw._help("replay saved flights into a labelled video", enabled=EVERYDAY)
     assert "sim__trajectory__replay" in replay and "video_path" in replay
-    waiting = gw._help("is it done yet, how do I wait for a long loop")
+    waiting = gw._help("is it done yet, how do I wait for a long loop", enabled=EVERYDAY)
     assert "job_status(job_id, wait_s=30)" in waiting and "background=true" in waiting
-    assert "run_script" in gw._help("run a script as a managed job outside isaac")
-    assert "action=reset" in gw._help("the timeline was left playing, reset to a clean state")
-    assert "Available: status" in gw._help("where am i, what is running")
+    assert "run_script" in gw._help("run a script as a managed job outside isaac", enabled=EVERYDAY | {"lab"})
+    assert "action=reset" in gw._help("the timeline was left playing, reset to a clean state", enabled=EVERYDAY)
+    assert "Available: status" in gw._help("where am i, what is running", enabled=EVERYDAY)
 
 
 def test_an_unanswered_question_says_so_gives_the_pattern_and_is_recorded_locally(tmp_path):
-    answer = gw._help("simulate cloth tearing")
+    answer = gw._help("simulate cloth tearing", enabled=EVERYDAY)
     assert answer.startswith("No twinsmith tool is known to fit 'simulate cloth tearing'.")
     assert "background=true" in answer and "next_update_async" in answer and str(tmp_path / "state" / "help-gaps.jsonl") in answer
     (record,) = gaps(tmp_path)
@@ -182,10 +185,10 @@ def test_an_unanswered_question_says_so_gives_the_pattern_and_is_recorded_locall
 
 
 def test_no_fit_records_a_task_whose_named_tools_did_not_fit(tmp_path):
-    answer = gw._help("move a joint along a spline with jerk limits", no_fit=True)
+    answer = gw._help("move a joint along a spline with jerk limits", no_fit=True, enabled=EVERYDAY)
     assert answer.startswith("No twinsmith tool is known to fit") and "The closest topics" in answer and "sim__joints__move" in answer
     assert [g["reason"] for g in gaps(tmp_path)] == ["no_fit"]
-    assert "full map" not in gw._help(None, no_fit=True) and len(gaps(tmp_path)) == 1, "no task, nothing to record"
+    assert "full map" not in gw._help(None, no_fit=True, enabled=EVERYDAY) and len(gaps(tmp_path)) == 1, "no task, nothing to record"
 
 
 def test_recording_can_be_turned_off_and_never_breaks_the_answer(tmp_path, monkeypatch):
@@ -310,6 +313,6 @@ def test_the_check_in_does_not_reread_jobs_and_sessions_that_have_ended(tmp_path
     "computer use",
 ])
 def test_help_knows_the_computer_use_tools(task):
-    answer = gw._help(task, enabled=toolsets.DEFAULT | {"input", "kit_debug"})
+    answer = gw._help(task, enabled=toolsets.DEFAULT | {"input", "sim", "screen"})
     assert not answer.startswith("No twinsmith tool is known to fit")
     assert "doctor" in answer and "computer" in answer and "sim__ui" in answer and "coord_space" in answer

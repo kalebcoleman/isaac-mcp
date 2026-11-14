@@ -1,7 +1,7 @@
 """Live Newton checks, for a disposable simulator whose physics engine is Newton (Isaac Sim 6.2, MuJoCo-Warp).
 
 Needs a free GPU and a running bridge on Newton; it replaces the open stage twice (a plain scene, then the
-Jenga scene). Run it through ``python3 scripts/smoke.py physics --backend newton --discard-changes --check newton_checks``
+Jenga scene). Run it through ``python3 scripts/smoke.py sim --backend newton --discard-changes --check newton_checks``
 or directly: ``python3 scripts/smoke/newton_checks.py --port 8766 --output results.json --discard-changes``.
 
 Every check is reported on its own, with what it measured. A check whose set-up failed is "not_run" and says why;

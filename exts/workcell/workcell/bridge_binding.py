@@ -3,8 +3,7 @@
 OWNER_ID = "workcell"
 NAMESPACE = "workcell"
 DEFAULT_PORT = 8766
-READ_ONLY = frozenset({"workcell_status", "robot_status", "perception_status", "jenga_status",
-                       "real2sim_status", "planning_status", "eval_status"})
+READ_ONLY = frozenset({"workcell_status", "robot_status", "perception_status", "jenga_status"})
 
 
 def attach(bridge, registry, instance, tool_type, *, requested_port=None, configured_port=None, host="localhost"):
