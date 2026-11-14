@@ -192,4 +192,4 @@ change, start the simulator read-only; see [limiting what a client can reach](MC
 
 ## Old settings
 
-The selection variables of 0.2 (named in [MIGRATING.md](MIGRATING.md#environment-variables)) are gone. A server that finds one set stops at startup and names it. Remove the old variable and set `TWINSMITH_TOOLSETS` instead.
+The tool-selection variables of 0.2 are gone and nothing reads them. Use `TWINSMITH_TOOLSETS`.
