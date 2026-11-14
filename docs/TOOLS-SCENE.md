@@ -588,7 +588,7 @@ session-layer overrides, and the prims go back to where they were when the job e
   bundled ffmpeg and draws `label` on every frame. The MP4 goes to `~/Videos/twinsmith/<filename>`. If the server
   cannot read Kit's output folder (Kit on another machine) the result says so and keeps the frames;
   `join_videos(mode="frames")` encodes frames from any folder.
-- Without `camera` nothing is saved: the poses are shown at wall-clock pace, for `start_screen_recording`. Use
+- Without `camera` nothing is saved: the poses are shown at wall-clock pace, for `screen_recording(action="start")`. Use
   `sim__viewport__frame` with `layout="clean"` and `caption` first for a tidy picture.
 
 ## Sensors, physics and trusted controllers
@@ -837,7 +837,7 @@ python3 scripts/make_scene_fixture.py /absolute/new-fixture
 MCPPY="uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python"  # pxr and numpy for the validators
 $MCPPY scripts/scene_mcp_client.py --port 18861 assets__roots '{}'
 $MCPPY scripts/scene_mcp_client.py --port 18861 sim__stage__info '{}'
-$MCPPY scripts/validate_scene_tools.py --port 18861 --output /absolute/transcript.json
+$MCPPY scripts/smoke/validate_scene_tools.py --port 18861 --output /absolute/transcript.json
 ```
 
 The validator expects the approved root ID `fixture`; it changes the selected disposable stage.

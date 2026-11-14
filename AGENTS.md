@@ -33,7 +33,7 @@ Start here if you are an AI agent working in or with this repository. It is a ma
   `session_id` and `stage_id`, and which toolsets are on and off. With nothing running it says so and names the next call. Do not
   repeat it before each call or after a context reset: a scene tool that meets a changed stage answers `STALE_TARGET` with the new
   IDs. A listed tool does not prove a running or compatible simulator.
-- Native ROS camera and LiDAR render handles can make `sim__stage__save` refuse with `SAVE_UNSUPPORTED`: inspect its `properties`
+- Native ROS camera and LiDAR render handles can make `sim__stage(action="save")` refuse with `SAVE_UNSUPPORTED`: inspect its `properties`
   and `retry_with`, and retry with `reset_camera_render_handles=true` only when normalizing the exported copy is intended. Pause
   before saving and verify the copy in a fresh process ([scene reference](docs/TOOLS-SCENE.md#saved-lidar-scenes-and-scan)).
 - A `PHYSICS_STATE_INVALID` result from a physics read or step reports invalid observed runtime data: inspect its backend, path
@@ -77,8 +77,8 @@ Every registered tool is in the generated [TOOLS-ARGUMENTS.md](docs/TOOLS-ARGUME
 builds a stopped scene; joint tools take the articulation root, not the robot's parent Xform (`sim__ros2__tf_setup` reports it). See
 the [scene workflow](docs/TOOLS-SCENE.md#a-typical-session).
 
-After reopening a scene, its sensors and prims are not pack-owned: pass `adopt=true` to `sim__lidar__read` or
-`sim__camera__capture`, and `allow_foreign=true` to `sim__prim__delete`, which deactivates rather than removes
+After reopening a scene, its sensors and prims are not pack-owned: pass `adopt=true` to `sim__lidar(action="read")` or
+`sim__camera(action="capture")`, and `allow_foreign=true` to `sim__prim(action="delete")`, which deactivates rather than removes
 ([reopened scenes](docs/TOOLS-SCENE.md#reopened-scenes)). Camera capture defaults to a fresh bounded renderer CPU readback; with
 `wait_for_render=false` it writes the last validated image and reports its age, an unseeded camera returns `NOT_READY`, and cached
 pixels can predate Stop, reset or scene edits.
@@ -87,7 +87,7 @@ pixels can predate Stop, reset or scene edits.
 
 1. Call `status` first, once; it answers with or without a bridge. `refresh_tools` re-reads a bridge's tools after Kit starts or
    changes. From the checkout, `python3 mcp/twinsmith/client.py --list-bridges` lists advertised PID, host and port (exit 2 with `[]`
-   if none). From elsewhere use `"$(uv tool dir)/twinsmith/bin/python" -m twinsmith.client --list-bridges`.
+   if none). From elsewhere use `<repo>/mcp/.venv/bin/python -m twinsmith.client --list-bridges`.
 2. Without the MCP tools, confirm the intended bridge with `python3 mcp/twinsmith/client.py status --host <host> --port <port>`; use
    `use_bridge` when needed. Pinned port variables override discovery, and an ambiguous unpinned selection is refused.
 3. If none exists and the requested work needs one, `./run.sh --headless` starts a bridge and the work cell on port 8766 by default.

@@ -1096,7 +1096,7 @@ No arguments.
 
 ### `screenshot`
 
-Capture the screen, a monitor or a window to see the result of your work. Returns the image and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise the primary monitor. A window capture works even when another window covers it.
+Capture the screen, a monitor or a window to see the result of your work. Returns the image and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise the primary monitor. A window capture works when another window covers it if the window manager composites (GNOME, KDE); doctor reports whether it does.
 
 - `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
 - `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
@@ -1110,7 +1110,7 @@ Capture the screen, a monitor or a window to see the result of your work. Return
 
 Listed as `screen_recording(action="start")`.
 
-Start a desktop MP4 recording; one at a time, no audio. E.g. for a demo. Stop it with stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window if one is open; a window recording works when covered or on a locked screen. The recording ends if this MCP server process exits, so keep one client connected from start to stop. Details: docs/TOOLS-HOST.md. UR5e work cell render: workcell__start_recording; to combine clips, join_videos.
+Start a desktop MP4 recording; one at a time, no audio. Stop it with stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window if one is open; a window recording works on a locked screen, or covered with a compositor. The recording ends if this MCP server process exits, so keep one client connected from start to stop. Details: docs/TOOLS-HOST.md. UR5e work cell render: workcell__start_recording; to combine clips, join_videos.
 
 - `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
 - `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
