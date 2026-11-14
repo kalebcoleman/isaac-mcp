@@ -78,6 +78,8 @@ def _preflight(config_path, mode):
         raise ValueError("jenga block mass must be positive")
     if len(jenga["tower_xy_m"]) != 2 or not all(math.isfinite(float(value)) for value in jenga["tower_xy_m"]):
         raise ValueError("invalid jenga tower position")
+    if "bench_top" in config:
+        check_bench_top(config["bench_top"])
     tower.realize(config)
     _bom_rows(config, config_path)
     pack = asset_pack.resolve_pack(config)
@@ -89,6 +91,29 @@ def _preflight(config_path, mode):
             raise ValueError(f"asset {role} must resolve to an existing absolute file")
         assets[role] = path
     return config, raw, pack, assets
+
+
+BENCH_TOP_KEYS = {"panel_path", "color_rgb", "roughness", "static_friction", "dynamic_friction"}
+
+
+def check_bench_top(top):
+    """Refuse a malformed bench_top section before any stage is replaced."""
+    if not isinstance(top, dict) or set(top) != BENCH_TOP_KEYS:
+        raise ValueError(f"bench_top needs exactly {sorted(BENCH_TOP_KEYS)}")
+    if not isinstance(top["panel_path"], str) or not top["panel_path"] or top["panel_path"].startswith("/"):
+        raise ValueError("bench_top.panel_path must be a path relative to /World/Bench")
+    rgb = top["color_rgb"]
+    if (not isinstance(rgb, (list, tuple)) or len(rgb) != 3
+            or not all(isinstance(v, (int, float)) and math.isfinite(v) and 0 <= v <= 1 for v in rgb)):
+        raise ValueError("bench_top.color_rgb must be three numbers from 0 to 1")
+    numbers = {key: top[key] for key in ("roughness", "static_friction", "dynamic_friction")}
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0
+               for v in numbers.values()):
+        raise ValueError("bench_top roughness and friction must be finite numbers >= 0")
+    if numbers["roughness"] > 1:
+        raise ValueError("bench_top.roughness must be from 0 to 1")
+    if numbers["dynamic_friction"] > numbers["static_friction"]:
+        raise ValueError("bench_top.dynamic_friction must not exceed static_friction")
 
 
 def _configure_robot_gravity(stage, assembly_path, disabled):

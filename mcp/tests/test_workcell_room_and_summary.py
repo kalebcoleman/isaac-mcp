@@ -189,3 +189,60 @@ def test_the_shipped_config_has_a_black_top_and_the_robot_facing_the_table():
     assert max(values["bench_top"]["color_rgb"]) < 0.1
     assert 0 < values["bench_top"]["dynamic_friction"] <= values["bench_top"]["static_friction"]
     assert values["robot"]["placement"]["orientation_wxyz"] == [0, 0, 0, 1]   # 180 degrees about z
+
+
+def test_a_room_with_its_own_physics_bodies_instancing_and_lights_is_neutralised(tmp_path):
+    """Simple Room 6.2 has none of these, but another room may: a second physics scene makes Newton refuse, a loose
+    body falls on Play, an instanced collider cannot be switched off, and room lights change the cell's renders."""
+    pytest.importorskip("pxr.Usd")
+    from pxr import Gf, Usd, UsdGeom, UsdLux, UsdPhysics
+
+    room = Usd.Stage.Open(_room_file(tmp_path))
+    UsdPhysics.Scene.Define(room, "/Room/physicsScene")
+    UsdLux.RectLight.Define(room, "/Room/Lamp")
+    crate = UsdGeom.Cube.Define(room, "/Room/Crate")
+    crate.AddTranslateOp().Set(Gf.Vec3d(3, 3, 0.7))
+    UsdPhysics.RigidBodyAPI.Apply(crate.GetPrim())
+    UsdPhysics.CollisionAPI.Apply(crate.GetPrim())
+    UsdGeom.Xform.Define(room, "/Room/Shelf")
+    shelf = UsdGeom.Cube.Define(room, "/Room/Shelf/board")
+    shelf.AddTranslateOp().Set(Gf.Vec3d(-3, 3, 0.7))
+    UsdPhysics.CollisionAPI.Apply(shelf.GetPrim())
+    room.GetPrimAtPath("/Room/Shelf").SetInstanceable(True)
+    room.Save()
+
+    rooms = load("environment")
+    stage = _cell(tmp_path)
+    report = rooms.place(stage, "simple_room", str(tmp_path / "room.usda"))
+    base = "/World/Environment/simple_room"
+    assert report["physics_scenes_deactivated"] == 1 and not stage.GetPrimAtPath(f"{base}/physicsScene").IsActive()
+    assert report["lights_deactivated"] == 1 and not stage.GetPrimAtPath(f"{base}/Lamp").IsActive()
+    assert report["rigid_bodies_made_kinematic"] == 1
+    assert UsdPhysics.RigidBodyAPI(stage.GetPrimAtPath(f"{base}/Crate")).GetKinematicEnabledAttr().Get() is True
+    assert report["deinstanced"] == 1
+    board = stage.GetPrimAtPath(f"{base}/Shelf/board")
+    assert not board.IsInstanceProxy()
+    assert UsdPhysics.CollisionAPI(board).GetCollisionEnabledAttr().Get() is False
+    assert [p for p in Usd.PrimRange(stage.GetPseudoRoot()) if p.IsA(UsdPhysics.Scene) and p.IsActive()] == []
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"color_rgb": [0.1, 0.1]}, "three numbers"),
+    ({"color_rgb": [0.1, 0.1, 2.0]}, "three numbers"),
+    ({"dynamic_friction": 0.5}, "must not exceed"),
+    ({"static_friction": float("nan")}, "finite"),
+    ({"roughness": 1.5}, "roughness must be from 0 to 1"),
+    ({"panel_path": "/World/Bench/Panel"}, "relative"),
+    ({"extra": 1}, "needs exactly"),
+])
+def test_a_malformed_bench_top_is_refused_before_the_stage_is_touched(change, message):
+    scene = load("scene")
+    top = {"panel_path": "Panel", "color_rgb": [0.02, 0.02, 0.02], "roughness": 0.6,
+           "static_friction": 0.3, "dynamic_friction": 0.25}
+    scene.check_bench_top(top)
+    with pytest.raises(ValueError, match=message):
+        scene.check_bench_top(dict(top, **change))
+    without = dict(top)
+    del without["roughness"]
+    with pytest.raises(ValueError, match="needs exactly"):
+        scene.check_bench_top(without)
