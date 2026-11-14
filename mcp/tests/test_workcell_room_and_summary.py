@@ -233,9 +233,12 @@ def test_a_room_with_its_own_physics_bodies_instancing_and_lights_is_neutralised
     ({"static_friction": float("nan")}, "finite"),
     ({"roughness": 1.5}, "roughness must be from 0 to 1"),
     ({"panel_path": "/World/Bench/Panel"}, "relative"),
+    ({"panel_path": "a b/../c"}, "not a valid USD prim path"),
+    ({"color_rgb": [True, False, True]}, "three numbers"),
     ({"extra": 1}, "needs exactly"),
 ])
 def test_a_malformed_bench_top_is_refused_before_the_stage_is_touched(change, message):
+    pytest.importorskip("pxr.Sdf")
     scene = load("scene")
     top = {"panel_path": "Panel", "color_rgb": [0.02, 0.02, 0.02], "roughness": 0.6,
            "static_friction": 0.3, "dynamic_friction": 0.25}
@@ -273,3 +276,44 @@ def test_the_static_wrench_check_passes_only_within_tolerance():
     assert module.check(reading, 0.01, 0.02)["pass"]
     assert not module.check(dict(reading, force_n=[0.0, 0.0, 16.0]), 0.01, 0.02)["pass"]
     assert not module.check({"status": "unavailable", "reason": "not initialized"}, 0.01, 0.02)["pass"]
+
+
+def test_articulated_props_nested_instances_emissive_meshes_and_the_floor_holder(tmp_path):
+    pytest.importorskip("pxr.Usd")
+    from pxr import Gf, Usd, UsdGeom, UsdLux, UsdPhysics
+
+    room = Usd.Stage.Open(_room_file(tmp_path))
+    door = UsdGeom.Cube.Define(room, "/Room/Door/leaf")       # a hinged door: an articulation in the room
+    door.AddTranslateOp().Set(Gf.Vec3d(3, -3, 1))
+    UsdPhysics.RigidBodyAPI.Apply(door.GetPrim())
+    UsdPhysics.ArticulationRootAPI.Apply(room.GetPrimAtPath("/Room/Door"))
+    hinge = UsdPhysics.RevoluteJoint.Define(room, "/Room/Door/hinge")
+    hinge.CreateBody1Rel().SetTargets(["/Room/Door/leaf"])
+    glow = UsdGeom.Mesh.Define(room, "/Room/GlowPanel")       # an emissive mesh, not a light prim
+    UsdLux.MeshLightAPI.Apply(glow.GetPrim())
+    UsdGeom.Xform.Define(room, "/Room/Outer/Inner")           # an instance inside an instance
+    board = UsdGeom.Cube.Define(room, "/Room/Outer/Inner/board")
+    board.AddTranslateOp().Set(Gf.Vec3d(-3, -3, 0.7))
+    UsdPhysics.CollisionAPI.Apply(board.GetPrim())
+    room.GetPrimAtPath("/Room/Outer/Inner").SetInstanceable(True)
+    room.GetPrimAtPath("/Room/Outer").SetInstanceable(True)
+    big = UsdGeom.Cube.Define(room, "/Room/GroundPlane/slab")  # the floor holder reaches into the bench's box
+    big.AddTranslateOp().Set(Gf.Vec3d(0, 0, 0.6))
+    big.AddScaleOp().Set(Gf.Vec3f(3, 3, 0.8))
+    room.Save()
+
+    rooms = load("environment")
+    stage = _cell(tmp_path)
+    UsdLux.DistantLight.Define(stage, "/World/Light")
+    report = rooms.place(stage, "simple_room", str(tmp_path / "room.usda"))
+    base = "/World/Environment/simple_room"
+    assert report["joints_deactivated"] == 1 and not stage.GetPrimAtPath(f"{base}/Door/hinge").IsActive()
+    assert report["articulation_roots_removed"] == 1
+    assert not stage.GetPrimAtPath(f"{base}/Door").HasAPI(UsdPhysics.ArticulationRootAPI)
+    assert stage.GetPrimAtPath(f"{base}/GlowPanel").IsActive() and report["lights_deactivated"] == 0
+    assert report["deinstanced"] == 2
+    nested = stage.GetPrimAtPath(f"{base}/Outer/Inner/board")
+    assert not nested.IsInstanceProxy() and UsdPhysics.CollisionAPI(nested).GetCollisionEnabledAttr().Get() is False
+    assert "GroundPlane" not in report["deactivated_for_overlap"] and "Table" in report["deactivated_for_overlap"]
+    assert stage.GetPrimAtPath(f"{base}/GroundPlane").IsActive()
+    assert stage.GetPrimAtPath("/World/Light").IsActive()      # the cell's own lights are never touched

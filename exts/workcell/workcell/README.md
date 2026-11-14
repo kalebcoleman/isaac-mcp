@@ -36,8 +36,9 @@ default: add `+workcell`):
 `workcell__cell(action="status")` returns the full report. `simple_room` references NVIDIA's
 Simple Room from the Isaac Sim assets server (checked before the stage is replaced) with its
 ground level with the bench feet; room parts inside the bench are deactivated, every room
-collider but the ground plane is off, and a room physics scene, room rigid bodies, instancing
-and room lights are neutralised (deactivated, kinematic, de-instanced). Physics mode uses gravity; mirror mode uses zero gravity, not a
+collider but the ground plane is off. A physics scene, joints and lights the room brings are
+deactivated, its articulation roots removed, its rigid bodies made kinematic and its instanced
+parts de-instanced. Physics mode uses gravity; mirror mode uses zero gravity, not a
 real-robot connection. Replacing an unsaved stage requires explicit consent. There is no
 extension panel or legacy ROS graph setup, and no planning,
 real-hardware control or evaluation. Generic scene tools remain separate. See the

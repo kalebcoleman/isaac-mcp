@@ -102,9 +102,14 @@ def check_bench_top(top):
         raise ValueError(f"bench_top needs exactly {sorted(BENCH_TOP_KEYS)}")
     if not isinstance(top["panel_path"], str) or not top["panel_path"] or top["panel_path"].startswith("/"):
         raise ValueError("bench_top.panel_path must be a path relative to /World/Bench")
+    from pxr import Sdf
+
+    if not Sdf.Path.IsValidPathString(f"/World/Bench/{top['panel_path']}"):
+        raise ValueError(f"bench_top.panel_path {top['panel_path']!r} is not a valid USD prim path")
     rgb = top["color_rgb"]
     if (not isinstance(rgb, (list, tuple)) or len(rgb) != 3
-            or not all(isinstance(v, (int, float)) and math.isfinite(v) and 0 <= v <= 1 for v in rgb)):
+            or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and 0 <= v <= 1
+                       for v in rgb)):
         raise ValueError("bench_top.color_rgb must be three numbers from 0 to 1")
     numbers = {key: top[key] for key in ("roughness", "static_friction", "dynamic_friction")}
     if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0

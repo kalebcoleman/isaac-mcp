@@ -3,15 +3,16 @@
 The room is moved so its ground plane is level with the bottom of the bench. Room parts that overlap the
 bench are deactivated (Simple Room's own table stands where the bench goes), and every room collider except the
 ground plane is switched off, so the room adds one static floor to the physics and nothing else: a physics scene
-the room brings is deactivated (the cell has its own), its rigid bodies are made kinematic, instanced parts are
-de-instanced so their colliders can be switched off, and its lights are deactivated so renders keep the cell's
-lighting.
+the room brings is deactivated (the cell has its own), its joints are deactivated and articulation roots removed,
+its rigid bodies are made kinematic, instanced parts are de-instanced so their colliders can be switched off, and
+its light prims are deactivated so renders keep the cell's lighting (an emissive mesh keeps its geometry).
 """
 
 ENVIRONMENTS = {"simple_room": "Isaac/Environments/Simple_Room/simple_room.usd"}
 ROOT = "/World/Environment"
 NAMES = ("none",) + tuple(ENVIRONMENTS)
 OVERLAP_M = 0.01      # a room part must reach this far into the bench's box to count as overlapping
+MAX_INSTANCE_DEPTH = 8
 
 
 def resolve(name, assets_root=None, reachable=None):
@@ -65,21 +66,32 @@ def place(stage, name, url, bench_path="/World/Bench"):
     from pxr import UsdLux
 
     deinstanced = 0
-    while True:      # instance proxies cannot be edited: open each instanced part, outermost first
+    for _ in range(MAX_INSTANCE_DEPTH):   # instance proxies cannot be edited: open instanced parts, outermost first
         instanced = [prim for prim in Usd.PrimRange(room) if prim.IsInstanceable()]
         if not instanced:
             break
         for prim in instanced:
             prim.SetInstanceable(False)
+        if any(prim.IsInstanceable() for prim in instanced):
+            raise ValueError(f"The {name} environment keeps instanced parts open to no edit (a stronger layer sets "
+                             "instanceable); its colliders cannot be switched off")
         deinstanced += len(instanced)
-    scenes, lights = [], []
+    else:
+        raise ValueError(f"The {name} environment nests instances more than {MAX_INSTANCE_DEPTH} deep")
+    scenes, lights, joints, articulations = [], [], [], []
     for prim in Usd.PrimRange(room):
         if prim.IsA(UsdPhysics.Scene):
             scenes.append(prim)
-        elif prim.HasAPI(UsdLux.LightAPI) or prim.GetTypeName().endswith("Light"):
-            lights.append(prim)
-    for prim in scenes + lights:
+        elif prim.IsA(UsdLux.BoundableLightBase) or prim.IsA(UsdLux.NonboundableLightBase):
+            lights.append(prim)        # light prims only: a mesh with MeshLightAPI keeps its geometry and collider
+        elif prim.IsA(UsdPhysics.Joint):
+            joints.append(prim)        # a hinged prop: a kinematic link cannot stay jointed on PhysX
+        if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+            articulations.append(prim)
+    for prim in scenes + lights + joints:
         prim.SetActive(False)
+    for prim in articulations:
+        prim.RemoveAPI(UsdPhysics.ArticulationRootAPI)
     kinematic = 0
     for prim in Usd.PrimRange(room):
         if prim.HasAPI(UsdPhysics.RigidBodyAPI):
@@ -97,13 +109,14 @@ def place(stage, name, url, bench_path="/World/Bench"):
     lift = bench.GetMin()[2] - ground_z
     offset.Set(Gf.Vec3d(0, 0, lift))
     cache.Clear()
+    keep = {str(plane.GetPath()) for plane in planes[:1]}
     removed = []
     for child in room.GetChildren():
         box = _box(cache, child)
-        if box is not None and _overlaps(box, bench):
+        holds_ground = any(path.startswith(str(child.GetPath()) + "/") for path in keep)
+        if box is not None and not holds_ground and _overlaps(box, bench):
             child.SetActive(False)
             removed.append(child.GetName())
-    keep = {str(plane.GetPath()) for plane in planes[:1]}
     switched_off = 0
     for prim in Usd.PrimRange(room):
         if prim.HasAPI(UsdPhysics.CollisionAPI) and str(prim.GetPath()) not in keep:
@@ -113,4 +126,5 @@ def place(stage, name, url, bench_path="/World/Bench"):
             "lifted_m": round(lift, 4), "deactivated_for_overlap": removed,
             "colliders": {"ground_plane": sorted(keep)[0] if keep else None, "switched_off": switched_off},
             "physics_scenes_deactivated": len(scenes), "rigid_bodies_made_kinematic": kinematic,
-            "deinstanced": deinstanced, "lights_deactivated": len(lights)}
+            "deinstanced": deinstanced, "lights_deactivated": len(lights), "joints_deactivated": len(joints),
+            "articulation_roots_removed": len(articulations)}
