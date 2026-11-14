@@ -5,7 +5,7 @@ T made of two boxes on one rigid body, or a Jenga-sized block), a small cylinder
 plain data near the top. The ``push`` and ``settle`` routines read ``ROLLOUT`` (set by the bridge's
 ``rollout`` action) and fall back to ``PUSH`` and ``DURATION_S`` below.
 
-Which solver steps it, from the RSS source (pin 87b5e32): ``rss.Scene`` defaults to the ``GENERIC``
+Which solver steps it, from the RSS source (pin ba3650c): ``rss.Scene`` defaults to the ``GENERIC``
 arrangement, whose catch-all backend is ``vbd`` (``specs/arrangement.py``). On a GPU that puts every free
 rigid body, the pusher included, on SolverVBD, which does not take its coordinates from ``joint_q`` and
 ``joint_qd``: the pusher write below is silently ignored and the pusher stays at its start. A CPU device
@@ -14,7 +14,7 @@ scene therefore names ``MUJOCO_500HZ`` (the arm and every rigid body in one MuJo
 10 substeps) so that cpu and cuda:0 run the same physics: plain MuJoCo on the CPU, Newton's MuJoCo-Warp on
 the GPU. The push result records the solver class that stepped the scene.
 
-How things move, from the RSS source (checkout paths, pin 87b5e32):
+How things move, from the RSS source (checkout paths, pin ba3650c):
 * ``domains/rigid/entity.py`` ``_add_primitive`` records ``coord_start`` and ``dof_start`` for a free
   body, and its ``reset`` writes ``state.joint_q[coord_start:coord_start+7]``. The pusher is placed
   the same way, every control step, with its velocity written to ``joint_qd[dof_start:dof_start+6]``.

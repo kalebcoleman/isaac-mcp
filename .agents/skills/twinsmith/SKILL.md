@@ -31,8 +31,8 @@ what is off and how to enable more; `help` names the toolset when the tool for a
 | Profile | Toolsets | Listed tools |
 |---|---|--:|
 | `default` | `core` | 6 |
-| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `extensions` | 49 |
-| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `input`, `launch`, `extensions` | 51 |
+| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `extensions` | 50 |
+| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `input`, `launch`, `extensions` | 52 |
 <!-- /generated -->
 
 To find the tool for a task, call `help(task="...")`: it names the tool, and the toolset when that is off. Only `core` is on by

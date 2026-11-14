@@ -1246,8 +1246,10 @@ def _register_host_tools(server: FastMCP, state: _BridgeState, groups: Iterable[
     single = []
     if "real2sim" in groups:
         from .robosim import register_robosim_tools
+        from .sysid import register_sysid_tools
         register_robosim_tools(server)
-        single.append("robosim")
+        register_sysid_tools(server, roots=lambda: _approved_roots(state))
+        single += ["robosim", "sysid"]
     if "cad" in groups:
         from .hardware import register_hardware_tools
         register_hardware_tools(server)
@@ -1258,6 +1260,14 @@ def _register_host_tools(server: FastMCP, state: _BridgeState, groups: Iterable[
         tool.description = inspect.cleandoc(tool.description)
         strip_schema_titles(server, name)
         grouped_tools.shorten_listed(tool)
+
+
+def _approved_roots(state) -> list:
+    """The user-approved asset roots, reading the approval file now if no assets tool has run yet."""
+    if not hasattr(state, "asset_broker"):
+        from .project_assets import Broker
+        state.asset_broker = Broker()
+    return [root for root, _ in state.asset_broker.roots.values()]
 
 
 def _drop_unselected(server: FastMCP, state: _BridgeState) -> None:
@@ -1797,7 +1807,13 @@ _HELP_TOPICS = (
      "robosim, in the real2sim toolset (off by default: toolsets action=enable names=[\"real2sim\"]). It needs no simulator bridge. "
      "Order: robosim action=start with a template (plain data), reference (frames from the clip), compare, update_scene, "
      "tune_push (makes the simulated block move like the real one), rollout, compare_take, report, stop. It compares images; "
-     "it does not fit mass or friction."),
+     "it does not fit mass or friction (sysid does, from recorded trajectories)."),
+    ("fit physical parameters (damping, armature, friction, gains, mass) to recorded trajectories (system identification)",
+     ("system identification", "sysid", "identify", "fit damping", "fit friction", "fit mass", "armature", "damping",
+      "recorded trajectories"),
+     "sysid, in the robosim toolset (off by default: toolsets action=enable names=[\"robosim\"]). It needs no simulator bridge. "
+     "sysid action=status checks its MuJoCo environment; fit (a dataset folder inside an approved root, with SOURCE.md) "
+     "starts a job; jobs action=status follows it; report returns nominal, fitted and bounds per parameter."),
     ("operate a desktop app (FreeCAD, RViz, any X11 window) or Isaac Sim's own UI with mouse and keyboard",
      ("click", "typing", "type into", "type text", "keyboard", "mouse", "button", "menu", "toolbar", "dialog", "widget",
       "desktop", "gui", "freecad", "rviz", "computer use", "operate", "scroll"),

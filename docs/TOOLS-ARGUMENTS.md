@@ -1182,9 +1182,9 @@ Check from the file alone whether a USD asset loads on Newton or PhysX: units, t
 - `triangle_budget` (integer, default `200000`): Triangle-mesh collider triangles allowed.
 - `kit` (boolean, default `false`): Also run Isaac Sim's Asset Validator: not available yet, refused.
 
-## `real2sim`: RoboSimStudio real-to-sim runs in its own private environment
+## `real2sim`: RoboSimStudio real-to-sim and MuJoCo system identification
 
-Toolset `real2sim` is off until you select it with `+real2sim`. Reference: [ROBOSIM.md](ROBOSIM.md). 1 tools, listed as 1: `robosim`.
+Toolset `real2sim` is off until you select it with `+real2sim`. Reference: [ROBOSIM.md](ROBOSIM.md). 2 tools, listed as 2: `robosim`, `sysid`.
 
 ### `robosim`
 
@@ -1218,6 +1218,17 @@ RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a sce
 - `template` (dict | None, default `None`): start/update_scene/scene_template: plain data {shape, size, position [x,y], yaw, color, camera, push}.
 - `all` (bool, default `False`): status without run: every run in full, not live servers and the 5 newest.
 - `max_trials` (int | None, default `None`): tune_push: most rollouts to try (default 6, at most 12).
+
+### `sysid`
+
+Fit model parameters (joint damping, armature, friction loss, position gains, geom mass and friction) to recorded trajectories with MuJoCo's system identification, in its own environment on the CPU. No simulator bridge needed. fit runs a job; follow it with jobs, then report. Reads only an approved dataset folder with a SOURCE.md; nothing here reads a robot.
+
+- `action` (Literal['status', 'fit', 'report'], required): status: the environment, its MuJoCo against the pin, recent fits. fit: start a fit job. report: read a fit.
+- `dataset` (str | None, default `None`): fit: absolute dataset folder inside a user-approved root: model.xml, params.json, episodes/*.npz, SOURCE.md.
+- `name` (str | None, default `None`): fit/report: the fit's name; its folder is <workspace>/runs/sysid/<name>/.
+- `holdout` (list[str] | None, default `None`): fit: episodes (file names without .npz) kept out of the fit and scored after it.
+- `max_iters` (int, default `50`): fit: optimiser iterations at most.
+- `timeout_s` (float, default `3600.0`): fit: the job is stopped after this many seconds.
 
 ## `lab`: Isaac Lab jobs and script jobs
 

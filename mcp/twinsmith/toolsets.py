@@ -17,7 +17,7 @@ TOOLSETS = {
     "screen": Toolset("Capture, record and arrange desktop windows"),
     "sim": Toolset("Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim"),
     "assets": Toolset("Import and manage robot and scene assets"),
-    "real2sim": Toolset("RoboSimStudio real-to-sim runs in its own private environment"),
+    "real2sim": Toolset("RoboSimStudio real-to-sim and MuJoCo system identification"),
     "lab": Toolset("Isaac Lab jobs and script jobs"),
     "ros2": Toolset("ROS 2 transforms, graphs and occupancy maps"),
     "workcell": Toolset("UR5e workcell tools"),
@@ -34,7 +34,7 @@ _ROOTS = {
             "sim__physics sim__joints sim__arm sim__simulation sim__camera sim__lidar sim__viewport__frame "
             "run_python files reload_tools sim__controller sim__ui sim__logs"),
     "assets": "assets__import_path assets__library assets__pack assets__mesh assets__validate",
-    "real2sim": "robosim",
+    "real2sim": "robosim sysid",
     "lab": "run_script",
     "ros2": "sim__ros2__tf_setup sim__graph sim__map__occupancy",
     "input": "computer",

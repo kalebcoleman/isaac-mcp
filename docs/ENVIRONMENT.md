@@ -56,6 +56,7 @@ A project's `twinsmith.json` is a different file, read for asset packs and the I
 | `TWINSMITH_KIKIT` | `<workspace>/tools/kikit/.venv/bin/kikit` | host | The KiKit command `hardware` runs for `fab`. See [HARDWARE.md](HARDWARE.md). |
 | `TWINSMITH_BLENDER` | `blender` on `PATH` | host | The Blender `hardware` runs for `render`. See [HARDWARE.md](HARDWARE.md). |
 | `TWINSMITH_ROBOSIM_ROOT` | `<workspace>/tools/robosimstudio` | host | The RoboSimStudio checkout the `robosim` tool runs. See [ROBOSIM.md](ROBOSIM.md). |
+| `TWINSMITH_SYSID_ROOT` | `<workspace>/tools/sysid` | host | The folder whose `.venv` (MuJoCo 4.0.1 with its `sysid` extra) the `sysid` tool runs. See [SYSID.md](SYSID.md). |
 
 Toolsets are visibility preferences, not security: the token and read-only mode are enforced by the bridge.
 

@@ -20,7 +20,7 @@ rows for the server you have installed, with the current state of each.
 | `screen`: Capture, record and arrange desktop windows | off | `doctor`, `join_videos`, `screen_recording`, `screenshot`, `windows` |
 | `sim`: Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim | off | `files`, `reload_tools`, `run_python`, `sim__arm`, `sim__camera`, `sim__controller`, `sim__joints`, `sim__lidar`, `sim__light`, `sim__logs`, `sim__material`, `sim__physics`, `sim__prim`, `sim__quick_start`, `sim__simulation`, `sim__stage`, `sim__timeline__control`, `sim__ui`, `sim__viewport__frame` |
 | `assets`: Import and manage robot and scene assets | off | `assets__import_path`, `assets__library`, `assets__mesh`, `assets__pack`, `assets__validate` |
-| `real2sim`: RoboSimStudio real-to-sim runs in its own private environment | off | `robosim` |
+| `real2sim`: RoboSimStudio real-to-sim and MuJoCo system identification | off | `robosim`, `sysid` |
 | `lab`: Isaac Lab jobs and script jobs | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics`, `run_script` |
 | `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
 | `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__jenga`, `workcell__perception`, `workcell__robot` |
@@ -41,8 +41,8 @@ rows for the server you have installed, with the current state of each.
   (`run_python`, `files`, `reload_tools`, `sim__controller`) and Kit's own log and UI.
 - `lab` holds the Isaac Lab tools and `run_script`, which runs any script as a host job.
 - `workcell` is the lab's UR5e work cell; see its [README](../exts/workcell/workcell/README.md).
-- `real2sim` holds `robosim`, one grouped tool that runs RoboSimStudio in its own Python environment; it needs no Kit
-  bridge. See [ROBOSIM.md](ROBOSIM.md).
+- `real2sim` holds two grouped tools, each running in its own Python environment and needing no Kit bridge: `robosim`
+  runs RoboSimStudio ([ROBOSIM.md](ROBOSIM.md)) and `sysid` fits model parameters with MuJoCo ([SYSID.md](SYSID.md)).
 - `cad` holds `hardware`: KiCad checks, fab files and renders from the tools beside twinsmith (KiCad, KiKit, Blender);
   it needs no Kit bridge and never uploads or orders. See [HARDWARE.md](HARDWARE.md).
 
@@ -125,8 +125,8 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 | Profile | Toolsets | Listed tools |
 |---|---|--:|
 | `default` | `core` | 6 |
-| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `extensions` | 49 |
-| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `input`, `launch`, `extensions` | 51 |
+| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `extensions` | 50 |
+| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `input`, `launch`, `extensions` | 52 |
 <!-- /generated -->
 
 Measured on 2026-11-13. Each `default,+name` row is `core` plus that one toolset.
@@ -137,7 +137,7 @@ Measured on 2026-11-13. Each `default,+name` row is `core` plus that one toolset
 | `default,+sim` | 25 | 48,855 | 12,213 |
 | `default,+screen` | 11 | 14,244 | 3,561 |
 | `default,+assets` | 11 | 17,132 | 4,283 |
-| `default,+real2sim` | 7 | 10,757 | 2,689 |
+| `default,+real2sim` | 8 | 12,203 | 3,050 |
 | `default,+cad` | 7 | 8,072 | 2,018 |
 | `default,+lab` | 11 | 18,247 | 4,561 |
 | `default,+ros2` | 9 | 14,130 | 3,532 |
@@ -145,8 +145,8 @@ Measured on 2026-11-13. Each `default,+name` row is `core` plus that one toolset
 | `default,+input` | 7 | 9,575 | 2,393 |
 | `default,+launch` | 7 | 8,090 | 2,022 |
 | `default,+sim,+assets,+screen,+extensions` | 35 | 67,554 | 16,888 |
-| `all` | 49 | 96,133 | 24,033 |
-| `all,+input,+launch` | 51 | 101,106 | 25,276 |
+| `all` | 50 | 97,579 | 24,394 |
+| `all,+input,+launch` | 52 | 102,552 | 25,638 |
 
 Before toolsets existed the server always listed 48 tools, about 28,450 estimated tokens. The listed text is a summary:
 `action="help"` on a grouped tool and `help(tool="<name>")` return the full description. A test

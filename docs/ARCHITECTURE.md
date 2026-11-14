@@ -21,7 +21,7 @@ default. A tool is one of three kinds:
 
 | Kind | Examples | Where the work happens |
 |---|---|---|
-| Host tool | `help`, `screenshot`, `join_videos`, `robosim`, `hardware` | In the server process itself |
+| Host tool | `help`, `screenshot`, `join_videos`, `robosim`, `sysid`, `hardware` | In the server process itself |
 | Simulator tool | `sim__*`, `assets__*`, `status`, `run_python`, the work cell's `workcell__*` | Inside a running Isaac Sim, reached over a local TCP connection |
 | Job tool | `isaaclab__launch`, `run_script` | In a separate process the server starts and watches |
 
@@ -36,6 +36,7 @@ default. A tool is one of three kinds:
 | Work cell | `exts/workcell/` | One lab's UR5e Jenga work cell: the `workcell.*` tools on the same bridge. Its assets come from an [asset pack](ASSET-PACKS.md). See its [README](../exts/workcell/workcell/README.md). |
 | Isaac Lab jobs | `mcp/twinsmith/isaaclab/` | Train, evaluate, play and record in separate processes the host starts. |
 | RoboSimStudio bridge | `mcp/twinsmith/robosim/` | Runs RoboSimStudio in its own Python environment from one grouped tool. |
+| System identification | `mcp/twinsmith/sysid.py`, `sysid_driver.py` | Fits model parameters with `mujoco.sysid` in its own environment; the driver is the only file that imports MuJoCo. |
 | Hardware | `mcp/twinsmith/hardware.py`, `sibling.py` | Runs `kicad-cli`, KiKit and Blender beside twinsmith with a scrubbed environment. |
 | Launch and checks | `run.sh`, `install.sh`, `scripts/` | Start Isaac Sim with the extensions, install the host, run checks. |
 
@@ -180,7 +181,8 @@ See [Asset packs](ASSET-PACKS.md) and [importing](ASSET-IMPORT.md).
 
 `robosim` is one grouped tool, registered by the `real2sim` toolset (off by default). It does not use the Kit bridge: it runs
 RoboSimStudio commands with RoboSimStudio's own Python environment, so the host never imports it, and keeps each run's files
-under `<workspace>/runs/robosim/`. See [ROBOSIM.md](ROBOSIM.md).
+under `<workspace>/runs/robosim/`. See [ROBOSIM.md](ROBOSIM.md). The same toolset registers `sysid`, which runs MuJoCo's
+system identification in its own environment as a job and writes under `<workspace>/runs/sysid/`. See [SYSID.md](SYSID.md).
 
 ## Hardware
 

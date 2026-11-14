@@ -32,12 +32,12 @@ def test_each_toolset_alone_and_disabled_registers_nothing(name):
         assert all(toolsets.owner(tool) != name for tool in disabled._tool_manager._tools)
 
 
-def test_real2sim_is_off_by_default_and_registers_only_robosim():
+def test_real2sim_is_off_by_default_and_registers_robosim_and_sysid():
     assert "real2sim" not in toolsets.DEFAULT and "real2sim" in config.select("all")
-    assert "robosim" not in build()._tool_manager._tools
+    assert not {"robosim", "sysid"} & set(build()._tool_manager._tools)
     alone = build("default,+real2sim")
-    assert {name for name in alone._tool_manager._tools if toolsets.owner(name) == "real2sim"} == {"robosim"}
-    assert toolsets.MEMBERS["real2sim"] == {"robosim"}
+    assert {name for name in alone._tool_manager._tools if toolsets.owner(name) == "real2sim"} == {"robosim", "sysid"}
+    assert toolsets.MEMBERS["real2sim"] == {"robosim", "sysid"}
 
 
 def test_only_core_is_on_by_default_and_status_lists_no_planned_toolsets():
@@ -61,7 +61,7 @@ LISTED = {
             "sim__physics", "sim__joints", "sim__arm", "sim__simulation", "sim__camera", "sim__lidar",
             "sim__viewport__frame", "run_python", "files", "reload_tools", "sim__controller", "sim__ui", "sim__logs"},
     "assets": {"assets__import_path", "assets__library", "assets__mesh", "assets__pack", "assets__validate"},
-    "real2sim": {"robosim"},
+    "real2sim": {"robosim", "sysid"},
     "cad": {"hardware"},
     "lab": {"isaaclab__launch", "isaaclab__inspect", "isaaclab__metrics", "isaaclab__checkpoint_register", "run_script"},
     "ros2": {"sim__ros2__tf_setup", "sim__graph", "sim__map__occupancy"},
@@ -150,11 +150,11 @@ def test_live_visibility_uses_same_selection():
 # Estimated tokens of each toolset on top of core, and of all: the measured size plus about 5 percent. Measured
 # 2026-11-13 with scripts/measure_tool_list.py: default (core) 1,586; sim 12,213; screen 3,561; assets 4,286 (with
 # assets__mesh and assets__validate, #112);
-# real2sim 2,689; lab 4,561; ros2 3,532; workcell 2,275; input 2,393; launch 2,022; extensions 1,586; cad 2,018 (#118); all 24,033.
+# real2sim 3,053 (with sysid, #116); lab 4,561; ros2 3,532; workcell 2,275; input 2,393; launch 2,022; extensions 1,586; cad 2,018 (#118); all 24,394.
 BUDGETS = {"default": 1670, "default,+sim": 12830, "default,+screen": 3740, "default,+assets": 4500,
-           "default,+real2sim": 2830, "default,+lab": 4790, "default,+ros2": 3710, "default,+workcell": 2390,
+           "default,+real2sim": 3210, "default,+lab": 4790, "default,+ros2": 3710, "default,+workcell": 2390,
            "default,+input": 2520, "default,+launch": 2130, "default,+extensions": 1670, "default,+cad": 2120,
-           "all": 25250}
+           "all": 25600}
 
 
 @pytest.mark.parametrize("profile,budget", BUDGETS.items())
@@ -412,6 +412,7 @@ def test_server_advertises_list_changed_for_the_tool():
 def test_workcell_and_real2sim_register_without_a_bridge_or_checkout(tmp_path, monkeypatch):
     monkeypatch.setenv("TWINSMITH_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("TWINSMITH_ROBOSIM_ROOT", str(tmp_path / "no-checkout"))
+    monkeypatch.delenv("TWINSMITH_SYSID_ROOT", raising=False)
     instance, _ = offline_build("default")
     result = change(instance, "enable", ["workcell", "real2sim"])
     assert {"robosim", "workcell__cell", "workcell__jenga"} <= set(result["tools_available"])
@@ -421,6 +422,8 @@ def test_workcell_and_real2sim_register_without_a_bridge_or_checkout(tmp_path, m
     assert "not available" in text and "no Isaac Sim bridge could be reached" in text
     answer = asyncio.run(instance.call_tool("robosim", {"action": "status"}))
     assert "missing or unreadable" in str(answer) and "never installs" in str(answer)
+    answer = asyncio.run(instance.call_tool("sysid", {"action": "status"}))
+    assert "ENVIRONMENT_MISSING" in str(answer) and "never installs" in str(answer)
 
 
 def test_enable_also_reads_the_live_bridge_tools(monkeypatch):

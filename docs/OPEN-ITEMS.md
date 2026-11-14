@@ -75,11 +75,14 @@ The `robosim` tool reproduced a real push on the GPU (Newton's MuJoCo-Warp solve
 matched the clip within the tool's tolerance. What it does not do yet:
 
 - [ ] Match the block's rotation. Only the displacement of its centre is tuned and judged; the overlap at the end frame was 0.39.
-- [ ] Fit mass and friction. The push path is tuned; the physics parameters are not.
+- [ ] Fit mass and friction. The push path is tuned; the physics parameters are not. The [`sysid`](SYSID.md) tool fits
+  them from recorded trajectories and recovered a synthetic pendulum's damping and armature, but no real dataset has been
+  fitted yet: the block needs object poses from the push recordings.
 - [ ] Estimate the camera pose from the clip. The simulated view is set by hand, so only the block's mask is compared.
 - [ ] Take the pusher's path from the clip. `tune_push` searches a straight two-point path.
 - [ ] Make `report` say when the file is complete; it returns `running` and the caller cannot tell.
-- [ ] The RoboSimStudio viewer listens on every network interface and has no localhost-only option at the tested pin.
+- [ ] The RoboSimStudio viewer listens on every network interface and has no localhost-only option at the tested pin
+  (still none at `ba3650c`).
 - [ ] A hand-written scene that keeps RoboSimStudio's default physics runs free bodies on its VBD solver on a GPU, which
   ignores the pusher. The tool reports this, but only the built-in template selects MuJoCo by itself.
 - [ ] Repeat the GPU and CPU comparison over more clips and seeds; one pair was run for the T block.
