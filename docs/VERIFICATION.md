@@ -41,7 +41,7 @@ uv build
 ## Test matrix
 
 Live smokes are run from `mcp/` with `uv run --locked --isolated --python 3.12 --extra test --extra isaaclab --extra scene-test
-python ../scripts/smoke.py <toolset>`, because the checks import the MCP SDK (and the work cell check `pxr`); a stock `python3`
+python ../scripts/smoke.py <toolset>`, because the checks import the MCP SDK (the work cell check's `pxr` code runs inside Kit); a stock `python3`
 is refused with that command. `python3 scripts/smoke.py --list` lists every check with its GPU
 and simulator needs without connecting to anything. A smoke mutates the selected simulator, so use a disposable one on its own
 port. The runner verifies the engine before each check, prints a results table, writes a JSON report to a temporary folder (or

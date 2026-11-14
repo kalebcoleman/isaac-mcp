@@ -5,6 +5,7 @@ import asyncio
 import importlib.util
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import sys
@@ -13,7 +14,8 @@ import time
 import traceback
 
 SCRIPTS = Path(__file__).resolve().parent
-# The checks import the MCP SDK (and the work cell check pxr), which a stock python3 lacks; --list needs neither.
+# The checks import the MCP SDK, which a stock python3 lacks; --list does not. Only validate_scene_edges also imports pxr
+# on the host; every other pxr import (the work cell check's among them) is code sent to Kit.
 RUN = "cd mcp && uv run --locked --isolated --python 3.12 --extra test --extra isaaclab --extra scene-test python ../scripts/smoke.py"
 TOOLSETS = {
     "core": ["validate_scene_sessions"],
@@ -291,11 +293,11 @@ def main(argv=None, client_factory=None):
         print("No checks registered for this toolset", file=sys.stderr)
         return 2
     if client_factory is None:
-        missing = [m for m in ("mcp", "pxr") if (m == "mcp" or "workcell_smoke" in checks)
+        missing = [m for m in ("mcp", "pxr") if (m == "mcp" or "validate_scene_edges" in checks)
                    and importlib.util.find_spec(m) is None]
         if missing:
             print(f"This Python ({sys.executable}) has no {' or '.join(missing)}, which the checks import. "
-                  f"Run from the checkout root: {RUN} {' '.join(argv if argv is not None else sys.argv[1:])}",
+                  f"Run from the checkout root: {RUN} {shlex.join(argv if argv is not None else sys.argv[1:])}",
                   file=sys.stderr)
             return 2
         sys.path.insert(0, str(SCRIPTS.parent / "mcp"))
