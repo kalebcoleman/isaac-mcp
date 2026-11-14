@@ -16,7 +16,7 @@ from typing import Annotated, Literal
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from . import config, gap, sibling
+from . import gap, sibling
 
 PIN = "64b594ed2e1ae25e431d235de086c7cfd99d9aaf"       # "VABAR 1.0 release"
 REPOSITORY = "https://github.com/BerkeleyAutomation/VABAR"
@@ -27,6 +27,7 @@ _CELL = re.compile(r"[a-z0-9_]+/L[0-9]+")
 _LABEL = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}")
 _EPISODES = re.compile(r"[0-9]+(:[0-9]+(:[0-9]+)?|(,[0-9]+)+)?")
 RESULT_FILES = 200
+RESULT_BYTES = 8 * 1024 * 1024   # read at most this much of one episode_results.jsonl
 
 
 def checkout(workspace=None, root=None) -> sibling.Checkout:
@@ -62,11 +63,22 @@ def results(co: sibling.Checkout, run=None) -> dict:
         names = sorted((path for path in runs.glob("*") if path.is_dir()), key=lambda path: path.stat().st_mtime)
         return {"runs": [path.name for path in names[-10:][::-1]], "folder": str(runs)}
     folder = runs / sibling.run_name(run, "")
-    if not folder.is_dir():
+    if folder.is_symlink() or not folder.is_dir():
         raise sibling.Refusal("NOT_FOUND", f"No run folder {folder}.")
-    table, files = {}, sorted(folder.glob("**/episode_results.jsonl"))[:RESULT_FILES]
-    for path in files:
-        for line in path.read_text(errors="replace").splitlines():
+    inside = folder.resolve()
+    found = (path for path in sorted(folder.glob("**/episode_results.jsonl"))
+             if not path.is_symlink() and path.is_file() and path.resolve().is_relative_to(inside))
+    table, files, cut = {}, [], []
+    for path in found:
+        if len(files) == RESULT_FILES:
+            break
+        files.append(path)
+        with path.open("rb") as stream:
+            data = stream.read(RESULT_BYTES + 1)
+        if len(data) > RESULT_BYTES:
+            cut.append(str(path.relative_to(folder)))
+            data = data[:RESULT_BYTES].rsplit(b"\n", 1)[0]
+        for line in data.decode(errors="replace").splitlines():
             try:
                 row = json.loads(line)
             except ValueError:
@@ -79,7 +91,8 @@ def results(co: sibling.Checkout, run=None) -> dict:
             for (task, solution), (count, wins) in sorted(table.items())]
     return {"run": folder.name, "folder": str(folder), "result_files": [str(path.relative_to(folder)) for path in files],
             "rows": rows, "episodes": sum(row["episodes"] for row in rows),
-            "successes": sum(row["successes"] for row in rows)}
+            "successes": sum(row["successes"] for row in rows),
+            **({"truncated": cut, "note": f"Only the first {RESULT_BYTES} bytes of each listed file were read."} if cut else {})}
 
 
 def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=None, episodes=None, cell=None, limit=None,
@@ -95,14 +108,14 @@ def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=No
             return sibling.answer("vabar", action, info, result={
                 **{key: info[key] for key in ("checkout", "environment_present", "setup") if key in info},
                 "graph_as_policy": beside, "skills": gap.skills_info(library), "warmup": warmup(co),
-                "allow_paid": config.allow_paid(), "runs": str(co.workspace / "runs/vabar")})
+                "allow_paid": gap.owner_flags()[0], "runs": str(co.workspace / "runs/vabar")})
         if action == "results":
             return sibling.answer("vabar", action, info, result=results(co, run))
         if "setup" in info:
             raise sibling.Refusal("NOT_INSTALLED", info["setup"])
-        allowed = config.allow_paid()
+        allowed = gap.owner_flags()[0]
         env = {"VABAR_OPEN_ROBOT_SKILLS": str(gap.skills(gap.checkout(workspace=co.workspace)).root)}
-        env_pass = ["HF_TOKEN", *gap.paid_env(allowed)]
+        env_pass = gap.run_env(allowed)
         if action == "list":
             done = sibling.run(argv(co, action), cwd=co.root, env_pass=env_pass, env_set=env, timeout_s=300,
                                stdout_chars=sibling.WHOLE)
@@ -135,9 +148,7 @@ def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=No
         if action == "bench" and print_only:
             return sibling.answer("vabar", action, info, result={
                 "planned": command, "note": "Nothing ran. Call again with print_only=false to run it as a job; it uses the GPU."})
-        if folder.exists():
-            raise sibling.Refusal("ALREADY_EXISTS", f"{folder} exists; choose another name.")
-        folder.mkdir(parents=True)
+        sibling.new_run_folder(folder)
         started = sibling.start_job(command, task=f"vabar-{folder.name}", kind=f"vabar-{action}", cwd=folder,
                                     env_pass=env_pass, env_set={**env, "PYTHONUNBUFFERED": "1"}, timeout_s=timeout_s,
                                     uses_gpu=True, allow_concurrent_gpu=allow_concurrent_gpu)

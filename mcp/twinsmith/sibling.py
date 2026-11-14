@@ -153,3 +153,12 @@ def answer(tool: str, action: str, info: dict, *, warnings=(), **fields) -> dict
     return {"ok": "error" not in fields, "tool": tool, "action": action, "commit": info["commit"], "pin": info["pin"],
             "pin_match": info["pin_match"], "exit_code": fields.pop("exit_code", None), **fields,
             "warnings": [*info["warnings"], *warnings]}
+
+
+def new_run_folder(folder: Path) -> None:
+    """Create a run folder that must not exist yet, so two calls with one name cannot share it."""
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        folder.mkdir()
+    except FileExistsError:
+        raise Refusal("ALREADY_EXISTS", f"{folder} exists; choose another name.") from None

@@ -52,9 +52,28 @@ def skills_info(gap: sibling.Checkout) -> dict:
     return info
 
 
+# Not secrets: where weights are cached and where upstream finds its benchmark roots. Always passed when set.
+PLAIN_ENV = ("HF_HOME", "GAP_VAB_ROOT", "GAP_LIBERO_PRO_ROOT")
+
+
 def paid_env(allowed: bool) -> list[str]:
     """The model-provider variables a run may see: none unless the owner allowed paid calls."""
-    return ["OPENROUTER_API_KEY", *(key for key in os.environ if key.startswith("GAP_VLM_"))] if allowed else []
+    if not allowed:
+        return []
+    return ["OPENROUTER_API_KEY", *(key for key in os.environ if key.startswith(("GAP_VLM_", "GAP_LLM_")))]
+
+
+def run_env(allowed: bool) -> list[str]:
+    """Every variable a Graph-as-Policy or VABAR process may see beyond the scrubbed base."""
+    return ["HF_TOKEN", *PLAIN_ENV, *paid_env(allowed)]
+
+
+def owner_flags() -> tuple[bool, bool]:
+    """``(allow_paid, allow_scripts)`` from the owner's own file; a malformed file is a refusal, not a crash."""
+    try:
+        return config.allow_paid(), config.allow_scripts()
+    except (ValueError, TypeError) as error:
+        raise sibling.Refusal("CONFIG_INVALID", f"~/.config/twinsmith/config.toml: {error}") from None
 
 
 def _real(token: str) -> bool:
@@ -99,6 +118,56 @@ def _graph(value, co: sibling.Checkout) -> str:
     return str(path)
 
 
+def graph_scripts(workflow: Path) -> list[tuple[str, str]]:
+    """``(node, script)`` for every ``script`` and ``router`` node of a workflow and its subgraphs (all in one file)."""
+    try:
+        data = json.loads(workflow.read_text())
+    except (OSError, ValueError) as error:
+        raise sibling.Refusal("INVALID_VALUE", f"{workflow} is not readable JSON: {error}") from None
+    if not isinstance(data, dict):
+        raise sibling.Refusal("INVALID_VALUE", f"{workflow} must hold a JSON object.")
+    subgraphs = data.get("subgraphs") or {}
+    graphs = [("", data)] + [(f"{name}.", sub) for name, sub in subgraphs.items() if isinstance(sub, dict)] \
+        if isinstance(subgraphs, dict) else [("", data)]
+    found = []
+    for prefix, graph in graphs:
+        nodes = graph.get("nodes") or {}
+        for node, spec in (nodes.items() if isinstance(nodes, dict) else ()):
+            if isinstance(spec, dict) and spec.get("type") in ("script", "router"):
+                script = spec.get("script")
+                found.append((prefix + str(node), script if isinstance(script, str) else ""))
+    return found
+
+
+def check_graph_scripts(workflow: Path, trusted: bool, allow_scripts: bool) -> list[str]:
+    """A graph's script and router nodes must name files inside the graph's own folder. They are arbitrary Python run
+    inside Graph-as-Policy, so outside the pinned checkouts (``trusted``) they also need the owner's ``allow_scripts``.
+    Returns the scripts it found."""
+    folder = workflow.parent.resolve()
+    scripts = graph_scripts(workflow)
+    for node, script in scripts:
+        path = Path(script)
+        if not script or path.is_absolute() or ".." in path.parts or not (folder / path).resolve().is_relative_to(folder):
+            raise sibling.Refusal("PATH_NOT_ALLOWED", f"node {node}: script {script!r} must be a relative path inside "
+                                  f"the graph's folder {folder}.")
+    if scripts and not trusted and not allow_scripts:
+        raise sibling.Refusal("SCRIPT_NOT_ALLOWED", f"this graph has {len(scripts)} script or router node(s), which run "
+                              "arbitrary Python inside Graph-as-Policy (twinsmith's --real guard covers only the command "
+                              "line). The owner allows them for graphs outside the pinned checkouts with [planning] "
+                              "allow_scripts = true in ~/.config/twinsmith/config.toml.")
+    return [script for _, script in scripts]
+
+
+def trusted_graph(path: Path, co: sibling.Checkout) -> bool:
+    """Whether a graph ships in one of the two pinned checkouts, each at its tested commit."""
+    from . import vabar
+
+    for checkout in (co, vabar.checkout(workspace=co.workspace)):
+        if path.is_relative_to(checkout.root.resolve()) and checkout.info().get("pin_match"):
+            return True
+    return False
+
+
 def argv(co: sibling.Checkout, action: str, *, sim=None, graph=None, instruction=None, model=None, out=None) -> list[str]:
     """The command line for one action, from validated values only."""
     gap, library = str(co.bin("gap")), ["--skills", str(skills(co).root)]
@@ -118,7 +187,7 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
         refuse_real([sim, graph, instruction, model, name])
         if action not in ACTIONS:
             raise sibling.Refusal("INVALID_VALUE", f"action must be one of {', '.join(ACTIONS)}.")
-        allowed = config.allow_paid()
+        allowed, scripts_allowed = owner_flags()
         if action == "status":
             return sibling.answer("gap", action, info, result=_status(co, info, allowed))
         if "setup" in info:
@@ -126,7 +195,7 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
         if action in ("tools", "check"):
             command = argv(co, action)
             refuse_real(command)
-            done = sibling.run(command, cwd=co.root, env_pass=["HF_TOKEN", *paid_env(allowed)], timeout_s=300,
+            done = sibling.run(command, cwd=co.root, env_pass=run_env(allowed), timeout_s=300,
                                stdout_chars=sibling.WHOLE)
             try:
                 result = json.loads(done["stdout"])
@@ -148,16 +217,16 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
             if not isinstance(sim, str) or not _SIM.fullmatch(sim):
                 raise sibling.Refusal("INVALID_VALUE", "sim is required for run: SUITE/TASK, such as libero_object/0.")
             graph = _graph(graph, co)
+            workflow = Path(graph) if Path(graph).is_file() else Path(graph) / "workflow.json"
+            check_graph_scripts(workflow, trusted_graph(Path(graph), co), scripts_allowed)
         if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not 0 < timeout_s <= 86400:
             raise sibling.Refusal("INVALID_VALUE", "timeout_s must be more than 0 and at most 86400 seconds.")
         folder = co.workspace / "runs/gap" / sibling.run_name(name, action)
-        if folder.exists():
-            raise sibling.Refusal("ALREADY_EXISTS", f"{folder} exists; choose another name.")
         command = argv(co, action, sim=sim, graph=graph, instruction=instruction, model=model, out=folder / "output")
         refuse_real(command)
-        folder.mkdir(parents=True)
+        sibling.new_run_folder(folder)
         started = sibling.start_job(command, task=f"gap-{folder.name}", kind=f"gap-{action}", cwd=folder,
-                                    env_pass=["HF_TOKEN", *paid_env(allowed)],
+                                    env_pass=run_env(allowed),
                                     env_set={"MUJOCO_GL": "egl", "PYTHONUNBUFFERED": "1"}, timeout_s=timeout_s,
                                     uses_gpu=action == "run", allow_concurrent_gpu=allow_concurrent_gpu)
         if not started["ok"]:
@@ -202,7 +271,8 @@ def register(server, *, workspace=None, root=None):
     ) -> str:
         """Graph-as-Policy skill graphs, from its own pinned checkout: status (checkout, GPU, keys), tools (the skill
         catalog), check (which tool bundles are ready), generate (a graph from an instruction; calls a paid model, only
-        when the owner allows it), run (a graph in simulation, as a job; uses the GPU). Never real hardware.
+        when the owner allows it), run (a graph in simulation, as a job; uses the GPU). Never --real; script nodes of a
+        graph outside the pinned checkouts need the owner's allow_scripts.
         Follow jobs with jobs(action="status").
         """
         arguments = dict(sim=sim, graph=graph, instruction=instruction, model=model, name=name, timeout_s=timeout_s,

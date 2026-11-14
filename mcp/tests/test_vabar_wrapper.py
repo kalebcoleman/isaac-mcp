@@ -120,3 +120,23 @@ def test_missing_checkout(tmp_path, monkeypatch):
     co = vabar.checkout(workspace=tmp_path)
     assert "BerkeleyAutomation/VABAR" in vabar.call(co, "status")["result"]["setup"]
     assert vabar.call(co, "list")["code"] == "NOT_INSTALLED"
+
+
+def test_results_skip_links_and_cap_each_file(workspace, tmp_path, monkeypatch):
+    folder = workspace / "runs/vabar/mixed"
+    (folder / "a").mkdir(parents=True)
+    row = json.dumps({"task": "t/v", "solution": "routine", "success": True})
+    outside = tmp_path / "outside.jsonl"
+    outside.write_text((row + "\n") * 50)
+    (folder / "a/episode_results.jsonl").symlink_to(outside)
+    (tmp_path / "elsewhere/b").mkdir(parents=True)
+    (tmp_path / "elsewhere/b/episode_results.jsonl").write_text((row + "\n") * 50)
+    (folder / "linked").symlink_to(tmp_path / "elsewhere")
+    (folder / "c").mkdir()
+    (folder / "c/episode_results.jsonl").write_text((row + "\n") * 10)
+    monkeypatch.setattr(vabar, "RESULT_BYTES", 3 * (len(row) + 1) + 5)
+    result = vabar.call(vabar.checkout(workspace=workspace), "results", run="mixed")["result"]
+    assert result["result_files"] == ["c/episode_results.jsonl"] and result["episodes"] == 3
+    assert result["truncated"] == ["c/episode_results.jsonl"]
+    (workspace / "runs/vabar/alias").symlink_to(folder)
+    assert vabar.call(vabar.checkout(workspace=workspace), "results", run="alias")["code"] == "NOT_FOUND"

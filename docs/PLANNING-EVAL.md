@@ -63,10 +63,12 @@ own file allows it:
 allow_paid = true
 ```
 
-A project `twinsmith.toml` cannot set it. Without it, the tools also keep `OPENROUTER_API_KEY` and `GAP_VLM_*` from every
-process they start, so graph nodes that ask a VLM fail instead of spending money (the answer says so), and `check` reports
-the key as missing. `HF_TOKEN` is always passed,
-because model weights are free downloads. `status` reports whether each key is set and never its value.
+A project `twinsmith.toml` cannot set it. Without it, the tools also keep `OPENROUTER_API_KEY`, `GAP_VLM_*` and `GAP_LLM_*`
+from every process they start, so graph nodes that ask a model fail instead of spending money (the answer says so), and
+`check` reports the key as missing. `HF_TOKEN` is always passed, because model weights are free downloads, and so are the
+paths `HF_HOME`, `GAP_VAB_ROOT` and `GAP_LIBERO_PRO_ROOT` when they are set. `status` reports whether each key is set and
+never its value. A malformed `config.toml` or a `[planning]` value that is not `true` or `false` is refused with
+`CONFIG_INVALID`; nothing runs.
 
 ## `gap`
 
@@ -88,6 +90,24 @@ to it) before anything else, and the built argument list is scanned again before
 `REAL_ROBOT_REFUSED`, "twinsmith does not run Graph-as-Policy on real hardware". The process never sees `ROS_DOMAIN_ID`
 or any other `ROS_*` variable.
 
+That guard covers the command line only. A graph's `script` and `router` nodes are Python files that Graph-as-Policy
+imports and runs, and they can do anything the user can. So before `run` starts, twinsmith reads the `workflow.json` and
+its `subgraphs`:
+
+- every `script` path must be relative, without `..`, and resolve inside the graph's own folder, or the run is refused
+  with `PATH_NOT_ALLOWED`;
+- a graph inside the Graph-as-Policy or VABAR checkout runs its scripts when that checkout is at its tested pin;
+- any other graph with script or router nodes (one in `<workspace>/runs/gap/`, or one in a checkout at another commit) is
+  refused with `SCRIPT_NOT_ALLOWED` unless the owner sets, in their own file:
+
+```toml
+# ~/.config/twinsmith/config.toml
+[planning]
+allow_scripts = true
+```
+
+Like `allow_paid`, a project `twinsmith.toml` cannot set it. Read a generated graph's scripts before turning it on.
+
 ## `vabar`
 
 | Action | Runs | Notes |
@@ -96,7 +116,7 @@ or any other `ROS_*` variable.
 | `list` | `python -m vabar list` | Every `suite/variant`. Read-only |
 | `run` | `python -m vabar run --task <t> --solve routine\|graph\|idle [--graph <label>] [--episodes ...]` | A job that uses the GPU. `graph` is a label the task ships, such as `gt` |
 | `bench` | `python -m vabar bench --cell <c> --solve ... [--limit n] --workers <1-4>` | `print_only=true` (the default) returns the command and starts nothing; `false` runs it as a job that uses the GPU |
-| `results` | Nothing upstream | Reads every `episode_results.jsonl` in a run folder and returns successes per task and solver; without `run`, the newest run folders |
+| `results` | Nothing upstream | Reads the `episode_results.jsonl` files in a run folder (at most 200, 8 MB each; links and files outside the folder are skipped) and returns successes per task and solver; without `run`, the newest run folders |
 
 `warmup` and `studio` are not wrapped: the owner runs the one-time warmup, and `studio` serves a viewer on the network.
 Run folders are `<workspace>/runs/vabar/<name>/`.
@@ -110,7 +130,7 @@ budget. Nothing is stopped to make room.
 
 Every answer has the same envelope: `{ok, tool, action, commit, pin, pin_match, exit_code, result | error, warnings}`,
 with `code` on a refusal (`REAL_ROBOT_REFUSED`, `PAID_NOT_ALLOWED`, `NOT_INSTALLED`, `PATH_NOT_ALLOWED`, `NOT_FOUND`,
-`ALREADY_EXISTS`, `INVALID_VALUE`, `GPU_BUSY`, `GPU_BUDGET`, `UPSTREAM_FAILED`). A checkout at another commit still runs, with a
+`ALREADY_EXISTS`, `INVALID_VALUE`, `CONFIG_INVALID`, `SCRIPT_NOT_ALLOWED`, `GPU_BUSY`, `GPU_BUDGET`, `UPSTREAM_FAILED`). A checkout at another commit still runs, with a
 warning that it differs from the tested pin.
 
 ## What has been verified

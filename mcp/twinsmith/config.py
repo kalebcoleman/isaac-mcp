@@ -145,13 +145,37 @@ def resolve(env: Mapping[str, str] | None = None, cli_toolsets: str | None = Non
     return Config(enabled, backend, source, runtime, cursor_badge=badge)
 
 
+def _owner_planning_flag(name: str, home: Path | None = None) -> bool:
+    """``[planning] <name>`` from the owner's own ``~/.config/twinsmith/config.toml`` only, false when unset. No project
+    file is read, so a cloned repository cannot turn it on. A malformed file or value raises ValueError."""
+    path = (Path.home() if home is None else Path(home)) / ".config/twinsmith/config.toml"
+    if not path.is_file():
+        return False
+    if tomllib is None:
+        raise ValueError(f"Reading {path} needs Python 3.11 or the tomli package.")
+    try:
+        with path.open("rb") as stream:
+            data = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise ValueError(f"{path} is not readable TOML: {error}") from None
+    planning = data.get("planning", {})
+    if not isinstance(planning, dict):
+        raise ValueError(f"[planning] in {path} must be a table.")
+    value = planning.get(name, False)
+    if not isinstance(value, bool):   # an opt-in is a TOML boolean, never a string or number that might mean yes
+        raise ValueError(f"planning.{name} in {path} must be true or false, not {value!r}.")
+    return value
+
+
 def allow_paid(home: Path | None = None) -> bool:
-    """``[planning] allow_paid`` from the owner's own ``~/.config/twinsmith/config.toml``, false when unset. A project
-    file is not read for it, so a cloned repository cannot turn on calls to paid models."""
-    for label, data in _config_files(home=home):
-        if label == "user file" and "allow_paid" in data.get("planning", {}):
-            return _flag(data["planning"]["allow_paid"], "planning.allow_paid")
-    return False
+    """Whether the owner allows calls to paid models (``[planning] allow_paid``)."""
+    return _owner_planning_flag("allow_paid", home)
+
+
+def allow_scripts(home: Path | None = None) -> bool:
+    """Whether the owner allows graph ``script`` and ``router`` nodes from outside the pinned checkouts
+    (``[planning] allow_scripts``). Those nodes are arbitrary Python run inside Graph-as-Policy."""
+    return _owner_planning_flag("allow_scripts", home)
 
 
 def physics_backend(**kwargs) -> str:

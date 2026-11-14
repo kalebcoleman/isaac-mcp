@@ -1638,7 +1638,7 @@ Toolset `planning` is off until you select it with `+planning`. Reference: [PLAN
 
 ### `gap`
 
-Graph-as-Policy skill graphs, from its own pinned checkout: status (checkout, GPU, keys), tools (the skill catalog), check (which tool bundles are ready), generate (a graph from an instruction; calls a paid model, only when the owner allows it), run (a graph in simulation, as a job; uses the GPU). Never real hardware. Follow jobs with jobs(action="status").
+Graph-as-Policy skill graphs, from its own pinned checkout: status (checkout, GPU, keys), tools (the skill catalog), check (which tool bundles are ready), generate (a graph from an instruction; calls a paid model, only when the owner allows it), run (a graph in simulation, as a job; uses the GPU). Never --real; script nodes of a graph outside the pinned checkouts need the owner's allow_scripts. Follow jobs with jobs(action="status").
 
 - `action` (Literal['status', 'tools', 'check', 'generate', 'run'], required): Action to perform.
 - `sim` (str | None, default `None`): run (required): simulated SUITE/TASK, such as libero_object/0. Simulation only.

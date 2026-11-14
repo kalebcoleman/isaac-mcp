@@ -7,7 +7,7 @@ import json
 import pytest
 from mcp.server.fastmcp import FastMCP
 
-from twinsmith import gap, server, toolsets
+from twinsmith import gap, server, sibling, toolsets
 from twinsmith.isaaclab import jobs
 
 from sibling_testing import calls, fake_checkout, wait_for
@@ -177,3 +177,103 @@ def test_a_busy_gpu_refuses_and_leaves_no_run_folder(workspace, monkeypatch):
     result = gap.call(co, "run", sim="libero/0", graph="graph1", name="busy")
     assert result["code"] == "GPU_BUSY" and "allow_concurrent_gpu" in result["hint"]
     assert not (workspace / "runs/gap/busy").exists() and calls(co.root) == []
+
+
+def owner_config(tmp_path, text):
+    folder = tmp_path / "home/.config/twinsmith"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "config.toml").write_text(text)
+
+
+def write_graph(folder, nodes, subgraphs=None):
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "workflow.json").write_text(json.dumps({"nodes": nodes, **({"subgraphs": subgraphs} if subgraphs else {})}))
+    return folder
+
+
+SCRIPT = {"pick": {"type": "script", "script": "pick.py"}}
+
+
+@pytest.mark.parametrize("script", ["/etc/x.py", "../outside.py", "sub/../../outside.py", "", "linked/x.py"])
+def test_a_script_outside_the_graph_folder_is_refused(workspace, tmp_path, script):
+    owner_config(tmp_path, "[planning]\nallow_scripts = true\n")
+    graph = write_graph(workspace / "runs/gap/scripted", {"a": {"type": "router", "script": script}})
+    (tmp_path / "elsewhere").mkdir()
+    (graph / "linked").symlink_to(tmp_path / "elsewhere")
+    co = gap.checkout(workspace=workspace)
+    refused = gap.call(co, "run", sim="libero/0", graph="scripted", name="r")
+    assert refused["code"] == "PATH_NOT_ALLOWED" and calls(co.root) == []
+    assert not (workspace / "runs/gap/r").exists()
+
+
+def test_a_subgraph_script_is_checked_too(workspace, tmp_path):
+    owner_config(tmp_path, "[planning]\nallow_scripts = true\n")
+    write_graph(workspace / "runs/gap/nested", {"start": {"type": "subgraph"}},
+                subgraphs={"inner": {"nodes": {"s": {"type": "script", "script": "../../x.py"}}}})
+    refused = gap.call(gap.checkout(workspace=workspace), "run", sim="libero/0", graph="nested")
+    assert refused["code"] == "PATH_NOT_ALLOWED" and "inner.s" in refused["error"]
+
+
+def test_script_nodes_outside_the_pinned_checkouts_need_allow_scripts(workspace, tmp_path):
+    write_graph(workspace / "runs/gap/scripted", SCRIPT)
+    co = gap.checkout(workspace=workspace)
+    refused = gap.call(co, "run", sim="libero/0", graph="scripted", name="r")
+    assert refused["code"] == "SCRIPT_NOT_ALLOWED" and "allow_scripts" in refused["error"] and calls(co.root) == []
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "twinsmith.toml").write_text("[planning]\nallow_scripts = true\n")
+    assert gap.call(co, "run", sim="libero/0", graph="scripted", name="r")["code"] == "SCRIPT_NOT_ALLOWED"
+    owner_config(tmp_path, "[planning]\nallow_scripts = true\n")
+    started = gap.call(co, "run", sim="libero/0", graph="scripted", name="r")
+    assert started["ok"], started
+    wait_for(started["result"]["job_id"])
+
+
+def test_a_graph_in_the_checkout_runs_its_scripts_only_at_the_pin(workspace, monkeypatch):
+    co = gap.checkout(workspace=workspace)
+    write_graph(co.root / "examples/scripted", SCRIPT)
+    refused = gap.call(co, "run", sim="libero/0", graph=str(co.root / "examples/scripted"), name="other-commit")
+    assert refused["code"] == "SCRIPT_NOT_ALLOWED"
+    monkeypatch.setattr(gap, "PIN", sibling.commit(co.root))
+    co = gap.checkout(workspace=workspace)
+    started = gap.call(co, "run", sim="libero/0", graph=str(co.root / "examples/scripted/workflow.json"), name="pinned")
+    assert started["ok"], started
+    wait_for(started["result"]["job_id"])
+
+
+@pytest.mark.parametrize("text", ["[planning\n", "[planning]\nallow_paid = 'yes'\n", "planning = 3\n",
+                                  "[planning]\nallow_scripts = 1\n"])
+def test_a_malformed_owner_config_is_a_refusal(workspace, tmp_path, text):
+    owner_config(tmp_path, text)
+    co = gap.checkout(workspace=workspace)
+    for action, arguments in (("status", {}), ("run", {"sim": "libero/0", "graph": "graph1"})):
+        refused = gap.call(co, action, **arguments)
+        assert refused["ok"] is False and refused["code"] == "CONFIG_INVALID", refused
+    assert calls(co.root) == []
+
+
+def test_a_run_name_is_taken_once(workspace, tmp_path):
+    co = gap.checkout(workspace=workspace)
+    first = gap.call(co, "run", sim="libero/0", graph="graph1", name="same")
+    assert first["ok"], first
+    wait_for(first["result"]["job_id"])
+    assert gap.call(co, "run", sim="libero/0", graph="graph1", name="same")["code"] == "ALREADY_EXISTS"
+    with pytest.raises(sibling.Refusal) as refusal:
+        sibling.new_run_folder(workspace / "runs/gap/same")
+    assert refusal.value.code == "ALREADY_EXISTS"
+
+
+def test_model_variables_follow_allow_paid_and_paths_always_pass(workspace, tmp_path, monkeypatch):
+    for name, value in (("GAP_LLM_MODEL", "llm"), ("GAP_VLM_MODEL", "vlm"), ("HF_HOME", "/cache/hf"),
+                        ("GAP_VAB_ROOT", "/data/vab"), ("GAP_LIBERO_PRO_ROOT", "/data/lp"), ("CUDA_HOME", "/cuda")):
+        monkeypatch.setenv(name, value)
+    co = gap.checkout(workspace=workspace)
+    wait_for(gap.call(co, "run", sim="libero/0", graph="graph1", name="off")["result"]["job_id"])
+    allow_paid(tmp_path)
+    wait_for(gap.call(co, "run", sim="libero/0", graph="graph1", name="on")["result"]["job_id"])
+    off, on = (call["env"] for call in calls(co.root))
+    paths = {"HF_HOME": "/cache/hf", "GAP_VAB_ROOT": "/data/vab", "GAP_LIBERO_PRO_ROOT": "/data/lp"}
+    assert paths.items() <= off.items() and paths.items() <= on.items()
+    assert not {"GAP_LLM_MODEL", "GAP_VLM_MODEL", "OPENROUTER_API_KEY"} & off.keys()
+    assert on["GAP_LLM_MODEL"] == "llm" and on["GAP_VLM_MODEL"] == "vlm" and on["OPENROUTER_API_KEY"] == "or-secret-value"
+    assert "CUDA_HOME" not in off and "CUDA_HOME" not in on

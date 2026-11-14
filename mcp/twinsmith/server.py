@@ -1827,7 +1827,7 @@ _HELP_TOPICS = (
      "gap in the planning toolset and vabar in the eval toolset (both off by default: toolsets action=enable "
      "names=[\"planning\", \"eval\"]). They need no simulator bridge and run their own pinned checkouts. gap action=status, "
      "tools, check, generate (paid model, only when the owner allows it), run (simulation only, a job). vabar action=status, "
-     "list, run (a job), bench (print_only=true shows the plan), results. Never real hardware."),
+     "list, run (a job), bench (print_only=true shows the plan), results. Simulation only."),
     ("operate a desktop app (FreeCAD, RViz, any X11 window) or Isaac Sim's own UI with mouse and keyboard",
      ("click", "typing", "type into", "type text", "keyboard", "mouse", "button", "menu", "toolbar", "dialog", "widget",
       "desktop", "gui", "freecad", "rviz", "computer use", "operate", "scroll"),
