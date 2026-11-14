@@ -82,6 +82,9 @@ def _preflight(config_path, mode):
         check_bench_top(config["bench_top"])
     if "contact" in config:
         check_contact(config["contact"])
+    if "inertials" in config:
+        from .robot import check_inertials
+        check_inertials(config["inertials"])
     tower.realize(config)
     _bom_rows(config, config_path)
     pack = asset_pack.resolve_pack(config)
@@ -92,6 +95,9 @@ def _preflight(config_path, mode):
         if not path.is_absolute() or not path.is_file():
             raise ValueError(f"asset {role} must resolve to an existing absolute file")
         assets[role] = path
+    if "inertials" in config:
+        from .robot import check_inertial_links
+        check_inertial_links(config["inertials"], [assets["robot"], assets["rg2"]])
     return config, raw, pack, assets
 
 

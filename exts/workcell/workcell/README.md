@@ -249,9 +249,11 @@ configuration or a design envelope and are not vendor drawings.
 | Bench height | 0.885 m default; 0.801 m alternative | `conflict` |
 | Bench top | 1.4 x 0.9 m | `unconfirmed` |
 | Base plate thickness | 0.005 m (5 mm), replacing the old zero placeholder | Provisional; installed thickness `unconfirmed` |
-| Bota diameter / length / mass | 0.048 m / 0.032 m / 0.12 kg | `unconfirmed` |
+| Bota diameter / length / mass | 0.048 m / 0.032 m / 0.113 kg; sensor frame on the tool-side face (0.032 m) | `confirmed` (Bota datasheet and URDF); the lab's adapter plates are not modelled |
 | Quick Changer standoff | 0.01592 m (15.92 mm) in CAD | CAD `confirmed`; installed size `unconfirmed` |
-| Quick Changer mass | 0.41 kg | `unconfirmed` |
+| Quick Changer mass | 0.2 kg (robot side 0.06 + tool side 0.14), pack inertia scaled to it | `unconfirmed` (OnRobot datasheet v2.0; 0.41 kg was the Dual Quick Changer; the RG2's 0.78 kg may include the tool side) |
+| RG2 mass and link split | 0.78 kg total, split by pack-v2 hull volume (base 0.639 kg, CoM z 0.064 m) | total `confirmed` (OnRobot datasheet v1.8); split `unconfirmed` |
+| UR5e link inertials | 3.761 / 8.058 / 2.846 / 1.37 / 1.3 / 0.365 kg with UR's CoMs and inertia tensors | `confirmed` (Universal Robots ROS 2 description `physical_parameters.yaml`; UR's DH article) |
 | RG2 maximum opening | 0.110 m | `confirmed` |
 | Finger pad size | 0.012 x 0.008 x 0.025 m | Provisional proxy; installed dimensions `unconfirmed` |
 | D415 body | 0.099 x 0.020 x 0.023 m | `unconfirmed` |

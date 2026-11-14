@@ -31,7 +31,10 @@ contact the same on both engines: every collider without a material gets a defau
 it 1.0), every material combines friction by max (MuJoCo's rule) and does not bounce, and on Newton, which reads one
 coefficient, each material's static value is used. The finger pads carry convex colliders, so the pad material is what
 touches a block. `workcell__robot(action="wrench")` reads the Bota F/T sensor on both engines with the weight it carries;
-`scripts/workcell_static_wrench.py` checks the two agree at rest.
+`scripts/workcell_static_wrench.py` checks the two agree at rest. The `inertials` section sets explicit mass, centre of
+mass and principal inertia on named bodies (the UR5e links from Universal Robots' ROS 2 description, the RG2 links at the
+datasheet's 0.78 kg), so neither engine computes them from collider shapes; the Bota and Quick Changer masses come from their
+own sections.
 
 There is no legacy extension ROS graph setup or custom `rclpy` build prerequisite for
 this API. Generic `sim__*` tools are separate from the workcell interface.

@@ -124,15 +124,16 @@ def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=No
             return sibling.answer("vabar", action, info, result={
                 **{key: info[key] for key in ("checkout", "environment_present", "setup") if key in info},
                 "graph_as_policy": beside, "skills": gap.skills_info(library), "warmup": warmup(co),
-                "allow_paid": gap.owner_flags()[0], "runs": str(co.workspace / "runs/vabar")})
+                "allow_paid": gap.owner_flags()[0], "vlm": gap.vlm_status(),
+                "runs": str(co.workspace / "runs/vabar")})
         if action == "results":
             return sibling.answer("vabar", action, info, result=results(co, run))
         if "setup" in info:
             raise sibling.Refusal("NOT_INSTALLED", info["setup"])
         allowed = gap.owner_flags()[0]
-        env = {"VABAR_OPEN_ROBOT_SKILLS": str(gap.skills(gap.checkout(workspace=co.workspace)).root)}
-        env_pass = gap.run_env(allowed)
+        skills_env = {"VABAR_OPEN_ROBOT_SKILLS": str(gap.skills(gap.checkout(workspace=co.workspace)).root)}
         if action == "list":
+            env_pass, env = gap.run_env(allowed), skills_env      # lists tasks; asks no model, so no endpoint or key
             done = sibling.run(argv(co, action), cwd=co.root, env_pass=env_pass, env_set=env, timeout_s=300,
                                stdout_chars=sibling.WHOLE)
             tasks = [line.strip() for line in done["stdout"].splitlines() if _TASK.fullmatch(line.strip())]
@@ -164,6 +165,9 @@ def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=No
         if action == "bench" and print_only:
             return sibling.answer("vabar", action, info, result={
                 "planned": command, "note": "Nothing ran. Call again with print_only=false to run it as a job; it uses the GPU."})
+        local = gap.owner_vlm()
+        env_pass, env, env_warnings = gap.model_env(allowed, local)
+        env.update(skills_env)
         sibling.new_run_folder(folder)
         started = sibling.start_job(command, task=f"vabar-{folder.name}", kind=f"vabar-{action}", cwd=folder,
                                     env_pass=env_pass, env_set={**env, "PYTHONUNBUFFERED": "1"}, timeout_s=timeout_s,
@@ -171,8 +175,7 @@ def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=No
         if not started["ok"]:
             folder.rmdir()
             return sibling.answer("vabar", action, info, error=started["message"], code=started["code"], hint=started["hint"])
-        warnings = [] if allowed or solve != "graph" else [
-            "Paid model calls are off: graphs whose nodes ask a VLM fail. The owner allows them with [planning] allow_paid."]
+        warnings = env_warnings + (gap.no_model_warning(allowed, local) if solve == "graph" else [])
         return sibling.answer("vabar", action, info, warnings=warnings, result={
             "job_id": started["job_id"], "log_dir": started["log_dir"], "run": folder.name, "command": command,
             "next": f'jobs(action="status", job_id="{started["job_id"]}"), then vabar(action="results", run="{folder.name}")'})

@@ -71,6 +71,21 @@ Still open:
   checks the modelled masses, not the real ones: those still need weighing.
 - [ ] Renders (cell, wrist, overhead) on Newton.
 
+### Work cell realism
+
+Datasheet values are in `lab_hardware.json` with their sources (`inertials`, `bota`, `quick_changer`, `rg2`); these need the
+real cell:
+
+- [ ] Weigh the Bota with its adapter plates, the Quick Changer (both sides), the RG2, the D415 with its printed mount, and a
+  few Jenga blocks. The Bota's adapter plates are custom (both Rokubi faces have M3 patterns, not ISO-50) and are not modelled.
+- [ ] Settle whether the RG2's datasheet 0.78 kg includes the Quick Changer tool side (0.14 kg); the cell counts both.
+- [ ] Move the wrist D415 and its mount onto the RG2 body (below the F/T sensor), with mass and convex colliders, from the
+  measured pose on the printed mount or its CAD. Today they sit above the sensor and weigh nothing.
+- [ ] Replace the Bota and D415 placeholder boxes with vendor meshes (STEP needs converting to STL first; CAD is not importable).
+- [ ] Tilt-test friction for block on block, block on the HDPE top and pad on block, and enter them with their spread.
+- [ ] The UR5e base mass (4.0 kg) is UR's own "might be incorrect" figure; it does not affect dynamics while the base is fixed.
+- [ ] Fit the arm's joint damping and armature to real joint logs with `sysid`; datasheets do not give the drive behaviour.
+
 ## Real-to-sim with RoboSimStudio
 
 The `robosim` tool reproduced a real push on the GPU (Newton's MuJoCo-Warp solver) and on the CPU: the block's image displacement
