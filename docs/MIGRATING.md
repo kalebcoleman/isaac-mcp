@@ -53,7 +53,7 @@ in [VENDORING.md](VENDORING.md).
 |---|---|
 | `isaac_help` | `help` |
 | `ur5e_dt__workcell` (actions `quick_start`, `status`, `shutdown`) | `workcell__cell` |
-| `ur5e_dt__robot`, `__perception`, `__jenga`, `__real2sim`, `__planning`, `__eval` | `workcell__robot`, `workcell__perception`, `workcell__jenga`, `workcell__real2sim`, `workcell__planning`, `workcell__eval` |
+| `ur5e_dt__robot`, `__perception`, `__jenga`, `__real2sim`, `__planning`, `__eval` | `workcell__robot`, `workcell__perception`, `workcell__jenga`; the last three were deleted later (see [toolset names](#toolset-names)) |
 
 Every other listed tool keeps its name. Rename the tools in your client's permission rules too: a rule for
 `mcp__isaac__status` becomes `mcp__twinsmith__status`.
@@ -160,3 +160,21 @@ python3 scripts/install.py               # registers twinsmith.bridge
 
 If you start Kit with `run.sh`, nothing is stored and there is nothing to clean up: `run.sh` enables `twinsmith.bridge`,
 `workcell` and `sim-tools` itself.
+
+## Toolset names
+
+The toolsets became groups, and only `core` is on by default. Old toolset names are not kept as aliases: a configuration
+that names one stops the server at startup with the list of valid names. Rename them in `[tools] toolsets`,
+`TWINSMITH_TOOLSETS` and `--toolsets`:
+
+| Before | Now |
+|---|---|
+| `scene`, `physics`, `sensors`, `kit_debug` | `sim` |
+| `code` | `sim` (`run_python`, `files`, `reload_tools`, `sim__controller`); `run_script` moved to `lab` |
+| `robosim` | `real2sim` (the tool keeps its name, `robosim`) |
+| `minimal` | `default`, which is now `core` alone |
+| `default` (on before: `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions`) | `default,+sim,+assets,+screen,+extensions` lists the same tools plus `sim__ui` and `sim__logs`; `run_script` needs `+lab` |
+| The work cell's `real2sim`, `planning` and `eval` status tools, which answered "not implemented" | Deleted, with no replacement tool |
+| The `planned` list in `status` and `twinsmith://toolsets` | Deleted |
+
+`core`, `assets`, `screen`, `lab`, `ros2`, `workcell`, `input`, `launch` and `extensions` keep their names.

@@ -140,7 +140,7 @@ def test_grouped_sim_ui_act_returns_the_picture_through_a_client(monkeypatch, tm
                         or next(answers))
     monkeypatch.setattr(computer_use, "kit_window", lambda state: {"id": 7, "width": 400, "height": 300})
     monkeypatch.setattr(screen, "capture", lambda **kwargs: [PNG, "caption"])
-    app = server.build_server({"TWINSMITH_TOOLSETS": "default,+kit_debug", "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path)})
+    app = server.build_server({"TWINSMITH_TOOLSETS": "default,+sim", "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path)})
     act = {"action": "act", "sub_action": "click", "x": 100, "y": 50, "screenshot_after": True,
            "coord_space": "img:200x150@0,0,400x300/400x300"}
 

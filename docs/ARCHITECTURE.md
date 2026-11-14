@@ -15,8 +15,8 @@ OpenCode and others) uses outside tools. The client starts an **MCP server** as 
 has, and calls them by name with JSON arguments. The server does the work and returns text or images.
 
 `twinsmith` is such a server. It is a small Python program that starts in about a second and needs no simulator to
-start. Its tools are grouped into [toolsets](TOOLSETS.md), and a client is shown only the enabled ones. A tool is one of
-three kinds:
+start. Its tools are grouped into [toolsets](TOOLSETS.md), and a client is shown only the enabled ones; only `core` is on by
+default. A tool is one of three kinds:
 
 | Kind | Examples | Where the work happens |
 |---|---|---|
@@ -177,7 +177,7 @@ See [Asset packs](ASSET-PACKS.md) and [importing](ASSET-IMPORT.md).
 
 ## RoboSimStudio
 
-`robosim` is one grouped tool, registered by the `robosim` toolset (off by default). It does not use the Kit bridge: it runs
+`robosim` is one grouped tool, registered by the `real2sim` toolset (off by default). It does not use the Kit bridge: it runs
 RoboSimStudio commands with RoboSimStudio's own Python environment, so the host never imports it, and keeps each run's files
 under `<workspace>/runs/robosim/`. See [ROBOSIM.md](ROBOSIM.md).
 

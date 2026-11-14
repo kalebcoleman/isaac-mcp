@@ -1,9 +1,9 @@
 # RoboSimStudio host bridge
 
 `twinsmith.robosim.register_robosim_tools(server)` registers one grouped `robosim`
-tool independently of Kit. **It needs no Isaac Sim or Kit bridge.** The server calls it only when the `robosim` toolset is
-selected (off by default, for example `TWINSMITH_TOOLSETS=default,+robosim`, or
-`toolsets(action="enable", names=["robosim"])`). RSS is never imported
+tool independently of Kit. **It needs no Isaac Sim or Kit bridge.** The server calls it only when the `real2sim` toolset is
+selected (off by default, for example `TWINSMITH_TOOLSETS=default,+real2sim`, or
+`toolsets(action="enable", names=["real2sim"])`). RSS is never imported
 into the MCP host: `examples/live/ctl` uses RSS's own `.venv/bin/python`.
 Tested pin: **87b5e32** of <https://github.com/robosimstudio/robosimstudio>.
 Every response identifies the checkout commit and warns about a different pin.
@@ -31,7 +31,7 @@ The whole flow is data: no scene file is written by hand. Times are seconds, len
 1. `status()` — live servers and the five most recent runs, one line each (name, state, device, engine,
    age); says `bridge_needed: false`. `status(run=...)` gives one run in full, `status(all=true)` every run in
    full. If your client loads tools lazily, search for the tool by name (for example `robosim`) first.
-2. `toolsets(action="enable", names=["robosim"])` — only if the toolset is off.
+2. `toolsets(action="enable", names=["real2sim"])` — only if the toolset is off.
 3. `scene_template(shape="tee")` (or `"box"`, `"jenga"`) — optional. Writes the scene file (into the run
    folder when `run` is given, else `<workspace>/runs/robosim/_templates/`) and returns its **path**, the
    resolved template data, a compact parameter list, `size_meaning`, the `mask_key` and the coordinate frame.

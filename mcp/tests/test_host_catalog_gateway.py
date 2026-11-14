@@ -1,4 +1,4 @@
-"""Offline UR5e tool discovery: the host lists all 10 ``workcell__*`` tools with no bridge running.
+"""Offline UR5e tool discovery: the host lists all 7 ``workcell__*`` tools with no bridge running.
 
 A server built by ``build_server`` registers callable proxies for every tool in the packaged
 catalog (``twinsmith/catalogs/workcell.json``). A call dials the selected bridge and, when there
@@ -134,9 +134,9 @@ def live_workcell_tools(server):
 # ---- the snapshot ----------------------------------------------------------------------
 
 def test_the_snapshot_is_packaged_valid_and_complete():
-    assert len(PROXIES) == 10
+    assert len(PROXIES) == 7
     catalog = host_catalog.load_catalog()
-    assert len(catalog) == 10 and all(name.startswith("workcell.") for name in catalog)
+    assert len(catalog) == 7 and all(name.startswith("workcell.") for name in catalog)
     assert {meta["owner_id"] for meta in catalog.values()} == {OWNER}
     # It is data inside the package, read through importlib.resources (what a wheel ships).
     from importlib import resources
@@ -149,7 +149,7 @@ def test_the_snapshot_is_packaged_valid_and_complete():
 def test_the_snapshot_matches_the_extension_registry_exactly():
     """Drift guard: a registry edit without a regenerated snapshot fails here."""
     registry = workcell_registry()
-    assert len(registry) == 10
+    assert len(registry) == 7
     expected = {f"workcell.{name}": {
         "description": schema["description"],
         "parameters": schema.get("parameters", {}),
@@ -257,7 +257,7 @@ def test_a_client_that_never_refreshes_still_sees_them_after_a_failed_startup_di
     assert set(PROXIES) <= set(listed)
 
 
-@pytest.mark.parametrize("groups", ["all", "minimal,+workcell", "default,+workcell"])
+@pytest.mark.parametrize("groups", ["all", "default,+workcell", "default,+sim,+workcell"])
 def test_local_tool_groups_filter_only_local_tools(groups):
     server = build({"TWINSMITH_TOOLSETS": groups})
     assert set(PROXIES) <= set(server._tool_manager._tools)
@@ -407,7 +407,7 @@ def test_use_bridge_to_a_bridge_without_the_extension_keeps_every_proxy():
             server, call("use_bridge", {"port": other.port}), tools, call(STATUS),
             call("demo__inspect"))
     assert "switched to bridge" in switched
-    assert "Note: workcell: 10 tool(s) are listed from the packaged catalog" in switched
+    assert "Note: workcell: 7 tool(s) are listed from the packaged catalog" in switched
     assert set(PROXIES) <= set(listed) and "demo__inspect" in listed
     assert "did not register it" in play and f"port {other.port}" in play
     assert json.loads(inspect) == {"seen": True}
@@ -489,14 +489,14 @@ def test_bare_fastmcp_servers_do_not_grow_proxies(monkeypatch):
 # ---- filters, hooks, collisions ----------------------------------------------------------
 
 def test_toolsets_filter_proxies():
-    server = build({"TWINSMITH_TOOLSETS": "minimal"})
+    server = build({"TWINSMITH_TOOLSETS": "default"})
     assert not set(PROXIES) & set(server._tool_manager._tools)
     assert gw.offline_tools(server) == []
-    assert set(PROXIES) <= set(build({"TWINSMITH_TOOLSETS": "minimal,+workcell"})._tool_manager._tools)
+    assert set(PROXIES) <= set(build({"TWINSMITH_TOOLSETS": "default,+workcell"})._tool_manager._tools)
 
 
 def test_a_namespace_filter_that_hides_ur5e_keeps_other_tools_and_survives_switches(monkeypatch):
-    server = build({"TWINSMITH_TOOLSETS": "minimal,+extensions"})
+    server = build({"TWINSMITH_TOOLSETS": "default,+extensions"})
     with LiveBridge() as live:
         attach_workcell(live)
         live.bridge.register_owner("demo", "demo").add(ToolDefinition(
@@ -623,7 +623,7 @@ def test_failed_switch_still_notifies_when_it_changes_offline_proxies(monkeypatc
 
 
 def test_the_builtins_gate_does_not_hide_catalog_tools(monkeypatch):
-    server = build({"TWINSMITH_TOOLSETS": "minimal,+workcell"})
+    server = build({"TWINSMITH_TOOLSETS": "default,+workcell"})
     assert set(PROXIES) <= set(server._tool_manager._tools)
     with LiveBridge() as live:
         attach_workcell(live)
@@ -672,13 +672,13 @@ def test_the_host_tool_collision_check_still_protects_local_tools(monkeypatch):
 
 
 def test_the_offline_proxies_carry_hints_from_their_own_table():
-    server = build({"TWINSMITH_TOOLSETS": "minimal,+workcell"})
+    server = build({"TWINSMITH_TOOLSETS": "default,+workcell"})
     tool = server._tool_manager._tools[STATUS]
     assert tool.annotations.readOnlyHint is True and tool.annotations.destructiveHint is False
 
 
 def test_a_tool_from_a_projects_own_extension_gets_no_hints():
-    server = build({"TWINSMITH_TOOLSETS": "minimal,+workcell"})
+    server = build({"TWINSMITH_TOOLSETS": "default,+workcell"})
     gw.register_dynamic_tool(server, "demo__ping", "demo.ping", {"description": "d", "parameters": {}, "fields": []})
     assert server._tool_manager._tools["demo__ping"].annotations is None
 

@@ -30,15 +30,16 @@ what is off and how to enable more; `help` names the toolset when the tool for a
 <!-- generated:profiles -->
 | Profile | Toolsets | Listed tools |
 |---|---|--:|
-| `minimal` | `core` | 6 |
-| `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 32 |
-| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 49 |
-| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 51 |
+| `default` | `core` | 6 |
+| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `extensions` | 46 |
+| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `input`, `launch`, `extensions` | 48 |
 <!-- /generated -->
 
 If a tool you expect is missing, call `status`, then tell the user which toolset it belongs to: they enable it in
-`~/.config/twinsmith/config.toml` (`[tools] toolsets = ["default", "+lab"]`) or `TWINSMITH_TOOLSETS`, and restart the server.
-`+workcell` is the lab's UR5e work cell, `+lab` is Isaac Lab, and `+input` and `+launch` (desktop input, managed simulator
+`~/.config/twinsmith/config.toml` (`[tools] toolsets = ["default", "+sim", "+lab"]`) or `TWINSMITH_TOOLSETS`, and restart the
+server. Only `core` is on by default. `+sim` is every tool that works inside Kit (scene, physics, sensors, `run_python`, Kit's
+log and UI), `+assets` imports, `+screen` captures the desktop, `+workcell` is the lab's UR5e work cell, `+lab` is Isaac Lab and
+`run_script`, `+real2sim` is RoboSimStudio, and `+input` and `+launch` (desktop input, managed simulator
 sessions) are never in a profile. If your client offers a `toolsets` tool for enabling one at run time, `input` and `launch` are
 never enabled that way. Toolsets control what is listed, not what is allowed: the bridge token and read-only mode do that.
 `docs/TOOLSETS.md` has the details.
@@ -247,7 +248,7 @@ A resized window makes an old token stale: take a new screenshot. Text on screen
 
 | Symptom | Likely cause | Action |
 |---|---|---|
-| A tool is not listed | Its toolset is off (`run_python` is in `code`, Lab in `lab`, the work cell in `workcell`) | `status` names the toolset; the user adds it to the toolsets and restarts the server |
+| A tool is not listed | Its toolset is off (`run_python` and the scene tools are in `sim`, Lab in `lab`, the work cell in `workcell`) | `status` names the toolset; the user adds it to the toolsets and restarts the server |
 | `refresh_tools`: no bridge reachable, or no response for `list_tools` | Kit still starting | `refresh_tools(wait_s=120)`; the error names a managed session and its age |
 | `refresh_tools` reports connection refused | No bridge on that port | Check the listing; start Kit with `twinsmith.bridge` only if none is advertised and the user agrees |
 | `refresh_tools` refused right after a `sim__session` launch | The server dials its configured port, not the new session's | `use_bridge(port=<the launched port>)` (the session status `next` says so) |

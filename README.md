@@ -61,7 +61,15 @@ For another client, add this to its MCP configuration (see [client configuration
 {"mcpServers": {"twinsmith": {"command": "twinsmith", "env": {"TWINSMITH_PORT": "8766"}}}}
 ```
 
-Start a new client session. The client should list the tools of the default toolsets (see the table below).
+Only `core` is on by default. Turn on the simulator tools for every client in `~/.config/twinsmith/config.toml`:
+
+```toml
+[tools]
+toolsets = ["default", "+sim", "+assets", "+screen"]
+```
+
+Start a new client session. The client should list the `core` tools and those of the toolsets you added (see the table
+below). An agent can also turn one on for its own session with `toolsets(action="enable", names=["sim"])`.
 
 **4. Call `status`.** Ask the agent: *"Call status and tell me what it reports."* Or call the tool yourself. It answers
 with `running: true`, the simulator's `pid`, `port` and `app_version`, the stage's `session_id` and `stage_id`, the
@@ -78,34 +86,30 @@ If a step fails, see [troubleshooting the first connection](docs/LINUX-SETUP.md#
 ## Toolsets
 
 Tools are grouped into toolsets that you switch on or off. A client is shown only the tools of the enabled toolsets,
-which keeps the tool list small. The counts below are listed tools; related tools share one grouped tool with an
-`action` argument.
+which keeps the tool list small. Only `core` is on by default. Related tools share one grouped tool with an `action`
+argument.
 
-<!-- generated:toolsets-compact -->
-| Toolset | Default | Tools | What it holds |
-|---|---|--:|---|
-| `core` | on | 6 | Connection, discovery, help and job tracking |
-| `scene` | on | 6 | Create and edit scenes and primitives |
-| `physics` | on | 4 | Physics, joints, arms and simulation |
-| `sensors` | on | 3 | Cameras, LiDAR and viewport framing |
-| `assets` | on | 3 | Import and manage robot and scene assets |
-| `code` | on | 5 | Execute code and scripts, transfer files |
-| `screen` | on | 5 | Capture, record and arrange desktop windows |
-| `lab` | off | 4 | Isaac Lab training and evaluation |
-| `ros2` | off | 3 | ROS 2 transforms, graphs and occupancy maps |
-| `kit_debug` | off | 2 | Inspect Kit logs and operate its UI |
-| `workcell` | off | 7 | UR5e workcell tools |
-| `robosim` | off | 1 | RoboSimStudio real-to-sim runs in its own private environment |
-| `input` | explicit only | 1 | Desktop mouse and keyboard input |
-| `launch` | explicit only | 1 | Launch and stop simulator processes |
-| `extensions` | on | 0 | Tools from uncatalogued extension namespaces |
+<!-- generated:toolsets-full -->
+| Toolset | Default | Listed tools |
+|---|---|---|
+| `core`: Connection, discovery, help, jobs and toolsets | on | `help`, `jobs`, `refresh_tools`, `status`, `toolsets`, `use_bridge` |
+| `screen`: Capture, record and arrange desktop windows | off | `doctor`, `join_videos`, `screen_recording`, `screenshot`, `windows` |
+| `sim`: Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim | off | `files`, `reload_tools`, `run_python`, `sim__arm`, `sim__camera`, `sim__controller`, `sim__joints`, `sim__lidar`, `sim__light`, `sim__logs`, `sim__material`, `sim__physics`, `sim__prim`, `sim__quick_start`, `sim__simulation`, `sim__stage`, `sim__timeline__control`, `sim__ui`, `sim__viewport__frame` |
+| `assets`: Import and manage robot and scene assets | off | `assets__import_path`, `assets__library`, `assets__pack` |
+| `real2sim`: RoboSimStudio real-to-sim runs in its own private environment | off | `robosim` |
+| `lab`: Isaac Lab jobs and script jobs | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics`, `run_script` |
+| `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
+| `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__jenga`, `workcell__perception`, `workcell__robot` |
+| `input`: Desktop mouse and keyboard input | explicit only | `computer` |
+| `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
+| `extensions`: Tools from uncatalogued extension namespaces | off | none |
 <!-- /generated -->
 
 Turn one on in `~/.config/twinsmith/config.toml`, with `TWINSMITH_TOOLSETS` or with `--toolsets`:
 
 ```toml
 [tools]
-toolsets = ["default", "+lab", "+ros2"]
+toolsets = ["default", "+sim", "+lab", "+ros2"]
 ```
 
 [TOOLSETS.md](docs/TOOLSETS.md) has the precedence, the syntax and the measured size of each profile. Every tool and

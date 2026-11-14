@@ -50,26 +50,23 @@ Toolsets control what is listed, not what is allowed: the bridge token and `TWIN
 <!-- generated:toolsets-compact -->
 | Toolset | Default | Tools | What it holds |
 |---|---|--:|---|
-| `core` | on | 6 | Connection, discovery, help and job tracking |
-| `scene` | on | 6 | Create and edit scenes and primitives |
-| `physics` | on | 4 | Physics, joints, arms and simulation |
-| `sensors` | on | 3 | Cameras, LiDAR and viewport framing |
-| `assets` | on | 3 | Import and manage robot and scene assets |
-| `code` | on | 5 | Execute code and scripts, transfer files |
-| `screen` | on | 5 | Capture, record and arrange desktop windows |
-| `lab` | off | 4 | Isaac Lab training and evaluation |
+| `core` | on | 6 | Connection, discovery, help, jobs and toolsets |
+| `screen` | off | 5 | Capture, record and arrange desktop windows |
+| `sim` | off | 19 | Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim |
+| `assets` | off | 3 | Import and manage robot and scene assets |
+| `real2sim` | off | 1 | RoboSimStudio real-to-sim runs in its own private environment |
+| `lab` | off | 5 | Isaac Lab jobs and script jobs |
 | `ros2` | off | 3 | ROS 2 transforms, graphs and occupancy maps |
-| `kit_debug` | off | 2 | Inspect Kit logs and operate its UI |
-| `workcell` | off | 7 | UR5e workcell tools |
-| `robosim` | off | 1 | RoboSimStudio real-to-sim runs in its own private environment |
+| `workcell` | off | 4 | UR5e workcell tools |
 | `input` | explicit only | 1 | Desktop mouse and keyboard input |
 | `launch` | explicit only | 1 | Launch and stop simulator processes |
-| `extensions` | on | 0 | Tools from uncatalogued extension namespaces |
+| `extensions` | off | 0 | Tools from uncatalogued extension namespaces |
 <!-- /generated -->
 
 The counts are listed tools (a grouped tool with an `action` argument counts once) and are generated from the code. The sizes of
-each profile are in [docs/TOOLSETS.md](docs/TOOLSETS.md#size-of-the-tool-list). Use `TWINSMITH_TOOLSETS=default,+lab` to add one,
-`twinsmith --toolsets minimal` to start small. `core` is always on; `all` excludes `input` and `launch`.
+each toolset are in [docs/TOOLSETS.md](docs/TOOLSETS.md#size-of-the-tool-list). Only `core` is on by default: scene work needs
+`sim` (`TWINSMITH_TOOLSETS=default,+sim,+assets`, or `toolsets(action="enable", names=["sim"])` at run time). `core` is always on;
+`all` excludes `input` and `launch`.
 
 Every registered tool is in the generated [TOOLS-ARGUMENTS.md](docs/TOOLS-ARGUMENTS.md), grouped by toolset, and the pages
 [TOOLS-HOST](docs/TOOLS-HOST.md), [TOOLS-SCENE](docs/TOOLS-SCENE.md), [TOOLS-ISAACLAB](docs/TOOLS-ISAACLAB.md),

@@ -64,8 +64,8 @@ def test_an_old_user_config_is_refused_until_it_is_moved(tmp_path):
     with pytest.raises(ValueError, match="mv .*config.toml"):
         config.resolve({}, cwd=tmp_path, home=home)
     (home / ".config/twinsmith").mkdir()
-    (home / ".config/twinsmith/config.toml").write_text('[tools]\ntoolsets = ["minimal"]\n')
-    assert config.resolve({}, cwd=tmp_path, home=home).toolsets == config.select("minimal")
+    (home / ".config/twinsmith/config.toml").write_text('[tools]\ntoolsets = ["default"]\n')
+    assert config.resolve({}, cwd=tmp_path, home=home).toolsets == config.select("default")
 
 
 def test_an_old_project_file_is_refused_where_it_would_have_been_found(tmp_path):

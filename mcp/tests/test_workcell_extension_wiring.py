@@ -34,7 +34,12 @@ def test_workcell_forwarding_and_reports():
     assert commands._cmd_workcell_shutdown() == {"stage_preserved": True}
 
 
-def test_interface_stubs_are_explicit():
+def test_the_work_cell_has_four_grouped_tools_and_no_stubs():
+    import sys
+    sys.path.insert(0, str(ROOT / "mcp"))
+    from twinsmith.tool_groups import GROUPS
     commands = load_commands()
     for name in ("real2sim", "planning", "eval"):
-        assert getattr(commands, f"_cmd_{name}_status")()["status"] == "not_implemented"
+        assert not hasattr(commands, f"_cmd_{name}_status")
+    assert sorted(name for name in GROUPS if name.startswith("workcell__")) == [
+        "workcell__cell", "workcell__jenga", "workcell__perception", "workcell__robot"]

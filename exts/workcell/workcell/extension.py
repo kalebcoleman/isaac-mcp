@@ -29,9 +29,6 @@ MCP_TOOL_REGISTRY = {
             "seed": {"type": "integer", "description": "Optional integer seed; omitted uses the configured variation_seed. A selected profile requires a seed."},
         },
     },
-    "real2sim_status": {"description": "Report the real-to-simulation interface availability; no synchronization is implemented.", "parameters": {}},
-    "planning_status": {"description": "Report the planning interface availability; no planner is implemented.", "parameters": {}},
-    "eval_status": {"description": "Report the evaluation interface availability; no evaluation is implemented.", "parameters": {}},
 }
 
 

@@ -128,27 +128,6 @@
       ],
       "namespace": "workcell",
       "owner_id": "workcell"
-    },
-    "workcell.real2sim_status": {
-      "description": "Report the real-to-simulation interface availability; no synchronization is implemented.",
-      "parameters": {},
-      "fields": [],
-      "namespace": "workcell",
-      "owner_id": "workcell"
-    },
-    "workcell.planning_status": {
-      "description": "Report the planning interface availability; no planner is implemented.",
-      "parameters": {},
-      "fields": [],
-      "namespace": "workcell",
-      "owner_id": "workcell"
-    },
-    "workcell.eval_status": {
-      "description": "Report the evaluation interface availability; no evaluation is implemented.",
-      "parameters": {},
-      "fields": [],
-      "namespace": "workcell",
-      "owner_id": "workcell"
     }
   }
 }
