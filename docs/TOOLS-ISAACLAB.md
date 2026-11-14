@@ -13,6 +13,12 @@ argument, with its default, is in the generated [TOOLS-ARGUMENTS.md](TOOLS-ARGUM
   the host to expose them, and they do not call `run_python`.
 - MCP tool names cannot contain dots, so they appear as `isaaclab__<tool>`
   (double underscore). There is no `isaaclab.` bridge namespace behind them.
+- A client is shown grouped tools with an `action` argument; the [tool details](#tool-details) below are titled by the
+  single-purpose name each action runs, which still works when called by name from a script. The listed forms are
+  `isaaclab__launch` (`train`, `eval`, `play`, `record`, `env_check`), `isaaclab__inspect` (`install`, `envs`,
+  `preflight`, `checkpoints`), `isaaclab__metrics` (`summary`, `curve`), `isaaclab__checkpoint_register`, and `jobs`
+  (`list`, `lab_status`, `tail`, `status`, `cancel`) for job control. [Grouped tools](TOOLS-HOST.md#grouped-tools) explains
+  the mapping.
 - Every tool returns a JSON string. Failures come back as `{"error": ...}` (often with
   `hint`) rather than exceptions, so a client can read and retry. An argument of the wrong type or a missing
   one is refused earlier by the MCP layer, as an MCP error.
@@ -258,8 +264,7 @@ When `isaaclab_tasks` cannot be imported, `isaaclab__envs_list` adds `isaac_task
 
 ### `isaaclab__install_info`
 
-- Parameters: none.
-- Parameters: `install` (optional), see [choosing the install](#choosing-the-isaac-lab-sim-install-per-call).
+- Parameters: `install` (optional), see [choosing the install](#choosing-the-isaac-lab--sim-install-per-call).
 - Returns: `{known_installs, python, isaaclab_version, isaacsim_version, isaaclab_root, venv, source, rl_libraries, tested, profile}` on success, with a `note` if this pair isn't tested;
   `{"error": "Isaac Lab install not found", "hint": "set ISAACLAB_PYTHON or ISAACLAB_ROOT"}` (or a probe error)
   on failure. A successful probe can still return null version fields if distributions are absent;
@@ -596,26 +601,27 @@ start a job without the user's authorization and available GPU capacity.
 
 ### 1. Discover the install and tasks
 
-1. `isaaclab__install_info` — confirm interpreter, `isaaclab`/`isaacsim` versions, root, venv.
-2. `isaaclab__envs_list` with `{"filter": "reach"}` — confirm the task id exists and check
+1. `isaaclab__inspect(action="install")` — confirm interpreter, `isaaclab`/`isaacsim` versions, root, venv.
+2. `isaaclab__inspect(action="envs")` with `{"filter": "reach"}` — confirm the task id exists and check
    `import_errors`.
 
 ### 2. Train
 
-1. (Optional) `isaaclab__runs_list` with `{"state": "running"}` — ensure no other job is active.
-2. `isaaclab__train` with the chosen task and parameters. It returns immediately with
+1. (Optional) `jobs(action="list")` with `{"state": "running"}` — ensure no other job is active.
+2. `isaaclab__launch(action="train")` with the chosen task and parameters. It returns immediately with
    `{job_id, log_dir, command}`.
-3. Poll with `isaaclab__runs_status` and `isaaclab__runs_tail` (stdout/stderr) until the
+3. Poll with `jobs(action="lab_status")` and `jobs(action="tail")` (stdout/stderr) until the
    state is no longer `running`. For a windowed job, `runs_status` also reports `window`.
-4. `isaaclab__checkpoints_list` / `isaaclab__metrics_summary` against the `run_dir`
+4. `isaaclab__inspect(action="checkpoints")` / `isaaclab__metrics(action="summary")` against the `run_dir`
    reported by status.
 
 Example train call shape (illustrative):
 
 ```json
 {
-  "tool": "isaaclab__train",
+  "tool": "isaaclab__launch",
   "arguments": {
+    "action": "train",
     "task": "Isaac-Reach-UR10",
     "num_envs": 64,
     "max_iterations": 2,
@@ -628,28 +634,29 @@ Example train call shape (illustrative):
 
 ### 3. Inspect checkpoints and metrics
 
-1. `isaaclab__runs_status` → read `run_dir` and `latest_checkpoint`.
-2. `isaaclab__checkpoints_list` with `{"run_dir": "<run_dir>"}`.
-3. `isaaclab__metrics_summary` with `{"run_dir": "<run_dir>"}` (or a `tags` list).
-4. `isaaclab__tensorboard_tail` with `{"run_dir": "<run_dir>", "tag": "<tag>", "last_n": 50}`.
+1. `jobs(action="lab_status")` → read `run_dir` and `latest_checkpoint`.
+2. `isaaclab__inspect(action="checkpoints")` with `{"run_dir": "<run_dir>"}`.
+3. `isaaclab__metrics(action="summary")` with `{"run_dir": "<run_dir>"}` (or a `tags` list).
+4. `isaaclab__metrics(action="curve")` with `{"run_dir": "<run_dir>", "tag": "<tag>", "last_n": 50}`.
 
 ### 4. Play / eval a checkpoint
 
-1. `isaaclab__play` (or `isaaclab__eval`) with `task`, `checkpoint`, and options. Returns
+1. `isaaclab__launch(action="play")` (or `isaaclab__launch(action="eval")`) with `task`, `checkpoint`, and options. Returns
    `{job_id, log_dir, command}`. For eval, wait for the job to finish and read `eval_result` from
-   `isaaclab__runs_status`: it ends on its own after `num_episodes` or `max_steps`, so no cancel is needed.
-2. For a windowed `play`, call `isaaclab__runs_status` to get `window.id`, then use the host
-   `screenshot(window_id=...)` / `start_screen_recording(window_id=...)` tools to inspect.
+   `jobs(action="lab_status")`: it ends on its own after `num_episodes` or `max_steps`, so no cancel is needed.
+2. For a windowed `play`, call `jobs(action="lab_status")` to get `window.id`, then use the host
+   `screenshot(window_id=...)` / `screen_recording(action="start", window_id=...)` tools to inspect.
    The viewport is black until the log contains "Completed setting up the environment"; check for it with
-   `isaaclab__runs_tail`, since later lines can push it out of `last_log_lines`, then wait ~5 s before capturing.
+   `jobs(action="tail")`, since later lines can push it out of `last_log_lines`, then wait ~5 s before capturing.
 3. Stop with `jobs(action="cancel")` when done.
 
 Example play call shape (illustrative):
 
 ```json
 {
-  "tool": "isaaclab__play",
+  "tool": "isaaclab__launch",
   "arguments": {
+    "action": "play",
     "task": "Isaac-Reach-UR10",
     "checkpoint": "/abs/path/to/model.pth",
     "num_envs": 4,
@@ -661,7 +668,7 @@ Example play call shape (illustrative):
 ### 5. Cancel and clean up
 
 - `jobs(action="cancel")` with `{"job_id": "...", "grace_s": 10}`.
-- Re-check with `isaaclab__runs_list` / `isaaclab__runs_status`. Cancelled jobs release the
+- Re-check with `jobs(action="list")` / `jobs(action="lab_status")`. Cancelled jobs release the
   job-vs-job guard.
 
 ### 6. Your own task
@@ -687,7 +694,7 @@ Measured on `Isaac-Velocity-Flat-G1`, PhysX, 64 episodes: 98.4% reached the time
 
 ### 8. A video of a play run, and its camera
 
-`isaaclab__play` with `headless=true` and `extra_args=["--video", "--video_length", "400"]` writes an MP4; `runs_status` lists them newest first in `video_paths`. It needs `moviepy<2`, `decorator<5` and `imageio-ffmpeg` in the Lab interpreter, and a job refuses if they are missing. Aim the camera at world coordinates with `env.sim.default_visualizer_cfg.eye=[x,y,z]` and `env.sim.default_visualizer_cfg.lookat=[x,y,z]`, on a task that sets `default_visualizer_cfg` (on one that does not, the job fails with `'NoneType' object has no attribute 'eye'`). With `num_envs=1` the environment sits at the origin.
+`isaaclab__launch(action="play")` with `headless=true` and `extra_args=["--video", "--video_length", "400"]` writes an MP4; `jobs(action="lab_status")` lists them newest first in `video_paths`. It needs `moviepy<2`, `decorator<5` and `imageio-ffmpeg` in the Lab interpreter, and a job refuses if they are missing. Aim the camera at world coordinates with `env.sim.default_visualizer_cfg.eye=[x,y,z]` and `env.sim.default_visualizer_cfg.lookat=[x,y,z]`, on a task that sets `default_visualizer_cfg` (on one that does not, the job fails with `'NoneType' object has no attribute 'eye'`). With `num_envs=1` the environment sits at the origin.
 
 ### 9. Walking on PhysX and on Newton
 
@@ -704,7 +711,7 @@ A second job (an eval of the checkpoint a train just wrote, a play after an eval
 really succeeded. The host has no job dependency feature; the caller is the sequencer, and each hop is an explicit
 check, not "the next step in the plan":
 
-1. `isaaclab__train` returns `{job_id}`. Poll `isaaclab__runs_status` until `state` is no longer `running`
+1. `isaaclab__launch(action="train")` returns `{job_id}`. Poll `jobs(action="lab_status")` until `state` is no longer `running`
    (`runs_list` with `{"state": "running"}` shows the others; the GPU guard allows one at a time anyway).
 2. Continue only when `state == "succeeded"` **and** `exit_code == 0`. Treat `failed`, `cancelled` and `timeout` as
    stops: read `last_stderr_lines` and `last_log_lines`, report them, and do not start the next job. A process that
@@ -729,7 +736,7 @@ play  --task <task> --headless --checkpoint <run_dir>/model_<n>.pt || { rc=$?; e
 ```
 
 Under `set -e` a failing stage inside `a | tee log` is hidden unless `pipefail` is set, as above. Lab's
-launcher must be the one your install provides (see `isaaclab__install_info`), not a guessed path.
+launcher must be the one your install provides (see `isaaclab__inspect(action="install")`), not a guessed path.
 
 ## Concurrency guards
 

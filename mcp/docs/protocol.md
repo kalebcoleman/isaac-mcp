@@ -102,4 +102,4 @@ token as `TWINSMITH_TOKEN`, with `TWINSMITH_HOST` and `TWINSMITH_PORT`. A remote
 read the portfiles; the `status` tool, asked of any bridge it can reach, lists the others
 on that machine.
 
-Every setting is listed in [ENVIRONMENT.md](../../docs/ENVIRONMENT.md#bridge-twinsmithbridge).
+Every setting is listed in [ENVIRONMENT.md](../../docs/ENVIRONMENT.md#reaching-a-bridge).

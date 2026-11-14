@@ -55,6 +55,9 @@ GROUPS: Dict[str, tuple] = {
     "assets__pack": ("Named asset packs: list, check, dependencies, adopt a folder, pin, build.", {
         "list": "assets__packs", "doctor": "assets__pack_doctor", "dependencies": "assets__dependencies",
         "adopt": "assets__pack_adopt", "pin": "assets__pack_pin", "build": "assets__pack_build"}),
+    "assets__mesh": ("Mesh preparation: inspect, decimate render meshes, collision shapes, split render and collision.", {
+        "inspect": "assets__mesh_inspect", "decimate": "assets__mesh_decimate", "hulls": "assets__mesh_hulls",
+        "split": "assets__mesh_split"}),
     "workcell__cell": ("Build and inspect the pack-backed workcell.", {
         "quick_start": "workcell__workcell_quick_start", "status": "workcell__workcell_status",
         "shutdown": "workcell__workcell_shutdown"}),

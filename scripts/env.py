@@ -29,12 +29,10 @@ HOME_VENV_DIRS = ("venvs", ".virtualenvs", "envs")
 STANDALONE_ENV_VARS = ("ISAACSIM_PATH", "ISAAC_PATH")
 STANDALONE_HOME_DIRS = ("isaacsim", "isaac-sim")
 SYSTEM_ROOT_GLOBS = ("/opt/nvidia/isaac-sim*", "/isaac-sim")
-# Keep these names equal to HOME_WORKSPACE_NAME, TRANSITIONAL_WORKSPACE_NAME and the asset folder names in
+# Keep these names equal to HOME_WORKSPACE_NAME and STANDARD_DIR in
 # mcp/twinsmith/pack_manifest.py (this script is standard library only, so it cannot import that module).
 DEFAULT_WORKSPACE_NAME = "robotics-workspace"
-OLD_WORKSPACE_NAME = "isaac-workspace"  # only while the new folder does not exist
 ASSET_DIR = "assets"
-OLD_ASSET_DIR = "isaac-mcp-assets"  # an existing one is left as it is
 WORKSPACE_DIRS = (ASSET_DIR, "envs", "projects", "runs", "tools")
 
 README = """\
@@ -404,13 +402,10 @@ Name any MCP gap you hit so it can be fixed.
 
 
 def _default_workspace(env):
-    """``$TWINSMITH_WORKSPACE``, else ``<home>/robotics-workspace``, or ``<home>/isaac-workspace`` only while the
-    first does not exist and the second does (the same rule as ``pack_manifest.home_workspace``)."""
+    """``$TWINSMITH_WORKSPACE``, else ``<home>/robotics-workspace`` (the same rule as ``pack_manifest.home_workspace``)."""
     if env.get("TWINSMITH_WORKSPACE"):
         return Path(os.path.expanduser(env["TWINSMITH_WORKSPACE"]))
-    home = Path(os.path.expanduser("~"))
-    new, old = home / DEFAULT_WORKSPACE_NAME, home / OLD_WORKSPACE_NAME
-    return old if not new.exists() and old.exists() else new
+    return Path(os.path.expanduser("~")) / DEFAULT_WORKSPACE_NAME
 
 
 def cmd_init(args, env, repo=REPO):
@@ -427,11 +422,7 @@ def cmd_init(args, env, repo=REPO):
         return 2
     try:
         ws.mkdir(parents=True, exist_ok=True)
-        # An old isaac-mcp-assets/ is the asset root: do not add an empty assets/ beside it, which would win.
-        keep_old_assets = (ws / OLD_ASSET_DIR).is_dir() and not (ws / ASSET_DIR).exists()
         for name in WORKSPACE_DIRS:
-            if name == ASSET_DIR and keep_old_assets:
-                continue
             (ws / name).mkdir(mode=0o755, exist_ok=True)
         readme = ws / "README.md"
         if not readme.exists():
@@ -448,12 +439,7 @@ def cmd_init(args, env, repo=REPO):
     print(f"workspace ready: {ws}\n")
     print("Add to your shell profile:")
     print(f"  export TWINSMITH_WORKSPACE=\"{ws}\"")
-    if keep_old_assets:
-        print(f"  export TWINSMITH_ASSET_ROOT=\"{ws}/{OLD_ASSET_DIR}\"\n")
-        print(f"Found {ws}/{OLD_ASSET_DIR}: left as it is (the old name is still found, with a warning).")
-        print(f"To use the new name, when nothing is running from it: mv \"{ws}/{OLD_ASSET_DIR}\" \"{ws}/{ASSET_DIR}\"\n")
-    else:
-        print(f"  export TWINSMITH_ASSET_ROOT=\"{ws}/{ASSET_DIR}\"\n")
+    print(f"  export TWINSMITH_ASSET_ROOT=\"{ws}/{ASSET_DIR}\"\n")
     print(f"Example {ws}/projects/<name>/twinsmith.json:")
     print(json.dumps({"pack": "my-robot/v1"}, indent=2))
     return 0

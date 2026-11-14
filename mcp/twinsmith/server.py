@@ -520,7 +520,8 @@ def _catalog_error(canonical: str, error: BaseException, state: Optional[_Bridge
             f"simulator state before retrying. {_BRIDGE_HELP}")
 
 
-_WAITING_TOOLS = frozenset({"job_status"})      # may wait (wait_s) or encode a replay's frames
+_WAITING_TOOLS = frozenset({"job_status",       # may wait (wait_s) or encode a replay's frames
+                            "assets.mesh_inspect", "assets.validate"})   # parse a large USD in a subprocess
 _PYTHON_TYPE = {"string": str, "integer": int, "number": float, "boolean": bool, "array": list, "object": dict}
 
 
@@ -586,7 +587,7 @@ def _build_tool_function(name: str, canonical: str, description: str,
             elif f["kind"] == "array":
                 strings = (f["name"] in {"observe_prims", "observe_joints", "extra_frames", "paths", "dofs", "log", "observe"}
                            or (canonical == "sim.ui.act" and f["name"] == "keys")
-                           or canonical in _PACK_TOOLS)  # every array in these tools holds paths or names
+                           or canonical in _PACK_TOOLS or canonical in _MESH_TOOLS)  # arrays of paths or names
                 annotation = list[str] if strings else list[float]
                 if (canonical, f["name"]) in (("sim.prim.create_many", "items"), ("sim.ui.act", "actions")):
                     annotation = list[dict[str, Any]]  # prim specs: objects, not numbers
@@ -680,6 +681,7 @@ def _failed_tool_result(result: str) -> bool:
     return isinstance(data, dict) and data.get("status") == "error"
 
 
+_MESH_TOOLS = {"assets.mesh_inspect", "assets.mesh_decimate", "assets.mesh_hulls", "assets.mesh_split", "assets.validate"}
 _PACK_TOOLS = {"assets.packs", "assets.pack_doctor", "assets.dependencies", "assets.pack_adopt",
                "assets.pack_pin", "assets.pack_build"}
 
@@ -704,6 +706,13 @@ def _dispatch(canonical: str, params: Dict[str, Any],
                     return json.dumps(broker.search(**params))
                 if canonical == "assets.scan":
                     return json.dumps(broker.scan(**params))
+                if canonical in _MESH_TOOLS:
+                    from . import mesh_tools
+                    from .asset_packs import PackError
+                    try:
+                        return json.dumps(mesh_tools.run_tool(canonical, params, broker))
+                    except PackError as e:
+                        return json.dumps(dict(status="error", code=e.code, message=str(e), **e.details))
                 if canonical in _PACK_TOOLS:
                     from .asset_packs import PackError, run_tool
                     try:

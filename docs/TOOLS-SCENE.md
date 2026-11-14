@@ -147,7 +147,8 @@ Every tool and argument is in the generated [tool arguments](TOOLS-ARGUMENTS.md)
 says more than their generated description: refusals, error codes, limits and side effects. A tool with no row is fully described
 there.
 `assets__roots`,
-`assets__scan`, `assets__search`, `assets__packs` and the `assets__pack_*` tools execute on the host even without Kit
+`assets__scan`, `assets__search`, `assets__packs`, the `assets__pack_*` and `assets__mesh_*` tools and `assets__validate`
+execute on the host even without Kit
 (`assets__dependencies` and the USD parts of the pack tools use a host USD helper if one is set, otherwise the
 selected Kit; see [asset packs](ASSET-PACKS.md#the-tools)). Other tools explain an absent
 bridge/extension. The optional `sim__session` process tools are separate (see [host tools](TOOLS-HOST.md#optional-simulator-sessions)).
@@ -157,6 +158,8 @@ bridge/extension. The optional `sim__session` process tools are separate (see [h
 | `assets__scan` | Bounded filename-only USD discovery on the MCP host. No USD parser. Results are untrusted data. A folder deeper than eight levels is skipped, not fatal: `skipped_deep` names it, `depth_limit` is 8, and the rest of the root is still listed. A snapshot still refuses, because copying part of a project silently would be wrong. |
 | `assets__pack_adopt` | Copy a folder's asset files into a new `<id>/<version>` in the asset root and write its `pack.yaml` (sha256 of every file, the `source` and `license` you give, `redistributable` false unless you say so). The source must be under a user-approved root; no tool can approve folders. A version that exists is never modified. A symlink is never followed: a named one is refused, and one met while copying a folder is listed in `skipped_symlinks` with a note. `from_old` converts an old-format pack folder of the asset root into `<id>/v1`. Nothing is written inside the repository. |
 | `assets__pack_build` | Copy USD, URDF, MJCF, SDF, mesh or map files and only what they depend on into a new pack version in the asset root, keeping relative layout, and write its `pack.yaml`. A file from `from_pack` keeps that pack's source, license and `redistributable`; any other file needs `source` and `license`. Sources must be under an approved root or the asset root; dependencies outside those are never copied. Unresolved or remote references refuse the build unless allow_unresolved=true, which records them; such a pack still will not import, and the result says `importable: false` with `import_blockers`. Checks the new pack afterwards. |
+| `assets__mesh_split` | Writes `<stem>.usda`, `<stem>_render` and `<stem>_collision.usdc` into a new `output` folder as a job (see [asset packs](ASSET-PACKS.md#preparing-meshes-and-checking-an-asset)). Refuses an `output` that exists (`OUTPUT_EXISTS`), one inside the asset root (`INVALID_PATH`), a source or output outside approved roots (`ROOT_NOT_APPROVED`), and answers `MESH_EXTRA_MISSING` with the install command when the extra is absent. The source is never changed. |
+| `assets__validate` | File-only rules for Newton or PhysX, each with level, prim, detail and fix; `ok` is false when an error-level rule fails. `kit=true` answers `NOT_AVAILABLE`. Same source and extra rules as `assets__mesh`. |
 | `assets__import_path` | The one import for any robot or asset file: USD, URDF, xacro, SDF (Gazebo), MuJoCo MJCF, or a folder that holds one. `format=auto` picks it from the name; xacro and SDF are converted on the host, never by running their code. Under an approved root or a pack; source files never change. A USD composes with its own variant selections and payloads, and the result's `visuals` counts the geometry that will be drawn: a robot with physics but nothing to draw comes back with a warning instead of looking fine until you render it. See [ASSET-IMPORT.md](ASSET-IMPORT.md). |
 | `sim__stage__info` | Read process incarnation, stage identity, units, timeline and bounded prim count. Start here before scene operations. Also returns `ros`: the simulator's ROS_DISTRO, ROS_DOMAIN_ID, RMW, localhost and Cyclone settings, plus the shell line that matches them. |
 | `sim__quick_start` | Build a ground plane, physics scene, lights and an aimed camera with no IDs, optionally with a robot and ROS 2. See [Start a scene](#start-a-scene). |
@@ -585,7 +588,7 @@ session-layer overrides, and the prims go back to where they were when the job e
   bundled ffmpeg and draws `label` on every frame. The MP4 goes to `~/Videos/twinsmith/<filename>`. If the server
   cannot read Kit's output folder (Kit on another machine) the result says so and keeps the frames;
   `join_videos(mode="frames")` encodes frames from any folder.
-- Without `camera` nothing is saved: the poses are shown at wall-clock pace, for `start_screen_recording`. Use
+- Without `camera` nothing is saved: the poses are shown at wall-clock pace, for `screen_recording(action="start")`. Use
   `sim__viewport__frame` with `layout="clean"` and `caption` first for a tidy picture.
 
 ## Sensors, physics and trusted controllers
@@ -834,7 +837,7 @@ python3 scripts/make_scene_fixture.py /absolute/new-fixture
 MCPPY="uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python"  # pxr and numpy for the validators
 $MCPPY scripts/scene_mcp_client.py --port 18861 assets__roots '{}'
 $MCPPY scripts/scene_mcp_client.py --port 18861 sim__stage__info '{}'
-$MCPPY scripts/validate_scene_tools.py --port 18861 --output /absolute/transcript.json
+$MCPPY scripts/smoke/validate_scene_tools.py --port 18861 --output /absolute/transcript.json
 ```
 
 The validator expects the approved root ID `fixture`; it changes the selected disposable stage.

@@ -10,9 +10,9 @@ named by `ISAACLAB_PYTHON` against the checkout at `ISAACLAB_ROOT`:
 
 | Tool | Runs | Notes |
 |---|---|---|
-| `isaaclab__train` | `scripts/reinforcement_learning/train.py` | `headless=true` by default; ordinary jobs use `--viz none`, video jobs retain a windowless Kit renderer |
-| `isaaclab__eval` | `scripts/reinforcement_learning/play.py --checkpoint ...` | Isaac Lab has no separate eval script; headless by default |
-| `isaaclab__play` | `scripts/reinforcement_learning/play.py --checkpoint ...` | Opens a window by default (`--viz kit`), `num_envs=1` |
+| `isaaclab__launch(action="train")` | `scripts/reinforcement_learning/train.py` | `headless=true` by default; ordinary jobs use `--viz none`, video jobs retain a windowless Kit renderer |
+| `isaaclab__launch(action="eval")` | `scripts/reinforcement_learning/play.py --checkpoint ...` | Isaac Lab has no separate eval script; headless by default |
+| `isaaclab__launch(action="play")` | `scripts/reinforcement_learning/play.py --checkpoint ...` | Opens a window by default (`--viz kit`), `num_envs=1` |
 
 Each launch returns `{job_id, log_dir, command}`. Jobs survive the MCP call and are tracked under
 `~/.local/share/twinsmith/jobs` (or `TWINSMITH_JOBS_DIR`). If the host restarts, a dead job is
@@ -23,7 +23,7 @@ reported as `failed` ("host restarted") on the next read.
 These were checked against an Isaac Lab 3.0.0 checkout and NVIDIA's own skills:
 
 - Task ids have no version suffix: `Isaac-Reach-Franka`, `Isaac-Cartpole`. Use
-  `isaaclab__envs_list` with a `filter` substring, never guess.
+  `isaaclab__inspect(action="envs")` with a `filter` substring, never guess.
 - The RL backend is chosen with `rl_library` (Isaac Lab 3.0.0 accepts `rsl_rl`, `rl_games`, `skrl`,
   `sb3`, `rlinf` and `torchrl`). When omitted,
   the task's registered `default_agent` is used; a task without one (or a misspelled task id) exits 2
@@ -47,12 +47,12 @@ These were checked against an Isaac Lab 3.0.0 checkout and NVIDIA's own skills:
   `skills/README.md` of the IsaacLab repository; check there rather than inventing module paths.
 - Upstream Isaac Lab now recommends `uv run isaaclab train` / `uv run isaaclab play` from a checkout.
   The MCP tools still call the `scripts/reinforcement_learning/` entry points, which exist in
-  3.0.0. If a future Lab release removes them, `isaaclab__train` will fail with a missing-script
+  3.0.0. If a future Lab release removes them, `isaaclab__launch(action="train")` will fail with a missing-script
   error: report that instead of hand-running commands.
 
 ## Custom tasks
 
-`isaaclab__envs_list` imports `isaaclab_tasks` plus the comma-separated modules in
+`isaaclab__inspect(action="envs")` imports `isaaclab_tasks` plus the comma-separated modules in
 `ISAACLAB_TASK_MODULES`, with `ISAACLAB_TASK_PATH` added to `PYTHONPATH`. The same variables are
 forwarded to jobs. Set them in the MCP server's environment (client config), then restart the
 connection. Importing a task module runs its code, so only add modules the user trusts.
@@ -78,23 +78,23 @@ goes through `run_script`; a script that prints `TWINSMITH_PROGRESS: 3/10 text` 
 
 ## A smoke run, step by step
 
-1. `isaaclab__install_info` and confirm `isaaclab_version`.
-2. `isaaclab__envs_list` `{"filter": "Reach"}` and choose the id.
-3. `isaaclab__train` `{"task": "<id>", "num_envs": 32, "max_iterations": 20, "timeout_s": 900}`.
-4. `isaaclab__runs_status` `{"job_id": "<job_id>", "wait_s": 45}`, repeated until `state` is no longer `running` (it blocks without holding a lock). Report
+1. `isaaclab__inspect(action="install")` and confirm `isaaclab_version`.
+2. `isaaclab__inspect(action="envs")` `{"filter": "Reach"}` and choose the id.
+3. `isaaclab__launch(action="train")` `{"task": "<id>", "num_envs": 32, "max_iterations": 20, "timeout_s": 900}`.
+4. `jobs(action="lab_status")` `{"job_id": "<job_id>", "wait_s": 45}`, repeated until `state` is no longer `running` (it blocks without holding a lock). Report
    progress between checks instead of polling in a tight loop.
-5. On failure: `isaaclab__runs_tail` `{"job_id": "<job_id>", "stream": "stderr", "lines": 200}`.
+5. On failure: `jobs(action="tail")` `{"job_id": "<job_id>", "stream": "stderr", "lines": 200}`.
    Classify the failure (install, task import, config, GPU memory, runner) before changing anything.
 6. On success: scale `num_envs` / `max_iterations` only after the user agrees.
 
 ## Reading results
 
-- `isaaclab__runs_status` gives `run_dir` (with `run_dir_source`; `job_dir` means no Lab run folder yet, and `require_run_dir=true` makes that an error) and `latest_checkpoint`; `{"log_root": ..., "run_name": ...}` resolves a run folder by name.
-- Evaluation JSON from a project's own scripts: `isaaclab__metrics_summary` with `eval_json` (paths or globs) and `criteria` (`[{key, op, value, label}]` or a JSON/YAML file): per-file values, pass/fail, mean/min/max and baseline deltas; without criteria it just reports the numbers. Protect a baseline with `isaaclab__checkpoint_register`.
-- `isaaclab__metrics_summary` `{"run_dir": "<run_dir>"}` lists every scalar with last, min, max,
-  step and count. Unknown tags return the `available` list. Then `isaaclab__tensorboard_tail` for
+- `jobs(action="lab_status")` gives `run_dir` (with `run_dir_source`; `job_dir` means no Lab run folder yet, and `require_run_dir=true` makes that an error) and `latest_checkpoint`; `{"log_root": ..., "run_name": ...}` resolves a run folder by name.
+- Evaluation JSON from a project's own scripts: `isaaclab__metrics(action="summary")` with `eval_json` (paths or globs) and `criteria` (`[{key, op, value, label}]` or a JSON/YAML file): per-file values, pass/fail, mean/min/max and baseline deltas; without criteria it just reports the numbers. Protect a baseline with `isaaclab__checkpoint_register`.
+- `isaaclab__metrics(action="summary")` `{"run_dir": "<run_dir>"}` lists every scalar with last, min, max,
+  step and count. Unknown tags return the `available` list. Then `isaaclab__metrics(action="curve")` for
   the curve of one tag.
-- `isaaclab__checkpoints_list` `{"run_dir": "<run_dir>"}` lists `*.pt` / `*.pth`, newest first.
+- `isaaclab__inspect(action="checkpoints")` `{"run_dir": "<run_dir>"}` lists `*.pt` / `*.pth`, newest first.
 
 Judge a run the way NVIDIA's `isaaclab-debugging-rl-training` skill recommends:
 
@@ -107,7 +107,7 @@ Judge a run the way NVIDIA's `isaaclab-debugging-rl-training` skill recommends:
 
 ## Watching a policy
 
-`isaaclab__play` opens a window. `isaaclab__runs_status` reports `window: {id, title, width,
+`isaaclab__launch(action="play")` opens a window. `jobs(action="lab_status")` reports `window: {id, title, width,
 height}` once it is up. Take `screenshot` `{"window_id": <id>}`, or record with
 `screen_recording` `{"action": "start", "window_id": <id>, "max_seconds": 20, "full_screen": false}` followed
 by `{"action": "stop"}`. Stop play with `jobs(action="cancel")` when done; it is interactive and

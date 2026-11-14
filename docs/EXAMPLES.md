@@ -52,9 +52,9 @@ Add ROS 2 and the same scene runs Nav2: `Set up ROS 2 TF, build an occupancy map
 `sim__quick_start environment=warehouse` builds the room, the racks and the robot in one call, with nothing to download.
 For a real floor plan, a ROS Nav2 map becomes walls: see [importing any asset](ASSET-IMPORT.md#ros-maps).
 
-**A Jenga tower you can really knock over.** `sim__quick_start environment=jenga` builds 54 dynamic blocks and a Franka with a push rod; `sim__arm__ik move=true` moves the arm in one call. In live runs on Sim 6.2 and 5.1 it pushed a block 12 cm out and the top of the tower moved 0.3 mm. See [A Jenga tower in one call](TOOLS-SCENE.md#a-jenga-tower-in-one-call).
+**A Jenga tower you can really knock over.** `sim__quick_start environment=jenga` builds 54 dynamic blocks and a Franka with a push rod; `sim__arm action=ik move=true` moves the arm in one call. In live runs on Sim 6.2 and 5.1 it pushed a block 12 cm out and the top of the tower moved 0.3 mm. See [A Jenga tower in one call](TOOLS-SCENE.md#a-jenga-tower-in-one-call).
 
-**Train a policy.** `isaaclab__train`, `eval` and `play` run on Isaac Lab, including tasks provided by a separate project: [your own task](TOOLS-ISAACLAB.md#6-your-own-task). **BrickSim**, a contact-rich assembly simulator, runs next to these tools with no change to it: [BrickSim](BRICKSIM.md).
+**Train a policy.** `isaaclab__launch(action="train")`, `eval` and `play` run on Isaac Lab, including tasks provided by a separate project: [your own task](TOOLS-ISAACLAB.md#6-your-own-task). **BrickSim**, a contact-rich assembly simulator, runs next to these tools with no change to it: [BrickSim](BRICKSIM.md).
 
 ### Import almost any robot or object file
 
@@ -82,7 +82,7 @@ This is the open-source [SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100)
 ![A Unitree G1 humanoid with its arms posed beside a table holding a red can, a blue box and a gold ball](media/g1-github-scene.png)
 
 A small, fast model (Gemini 3.8 Flash), given a request like that one (the [exact prompt](evidence/readme-examples-prompts-and-models.md#brief-1-robot-from-github-gemini-38-flash-thinking-level-high) is longer and adds sandbox rules), chose Unitree's G1, cloned `unitreerobotics/unitree_ros`, and found the repo too
-big to import in one go (1,597 files). It built a pack with `assets__pack_build` (the one URDF and its 36 meshes, 19 MB),
+big to import in one go (1,597 files). It built a pack with `assets__pack(action="build")` (the one URDF and its 36 meshes, 19 MB),
 loaded it by name, posed the arms and waist, built the table and objects, added a camera and a LiDAR (118,000 points), and
 dropped a 2 kg ball on it. It then did the same for Google's Barkour quadruped from MuJoCo Menagerie. The G1 was loaded with
 a fixed base, so it holds a pose; it does not balance or walk.
@@ -91,7 +91,7 @@ a fixed base, so it holds a pose; it does not balance or walk.
 
 > Train the Unitree G1 to walk on flat ground, tell me how it did, and show it to me in a window.
 
-There was no agent prompt for this one: Claude Sonnet 5.5 called the tools directly (the [exact calls](evidence/readme-examples-prompts-and-models.md#the-humanoid-walking-run-the-exact-tool-calls) are recorded), so the prompt above is an example. It used Isaac Lab's built-in G1 task, `Isaac-Velocity-Flat-G1-v0`, with NVIDIA's own G1 model (not the GitHub one above), trained twice with `isaaclab__train` (1,024 environments, rsl_rl), scored with `isaaclab__eval`, and watched in a window with `isaaclab__play`. The arrows over the robots are the speed commands each one follows.
+There was no agent prompt for this one: Claude Sonnet 5.5 called the tools directly (the [exact calls](evidence/readme-examples-prompts-and-models.md#the-humanoid-walking-run-the-exact-tool-calls) are recorded), so the prompt above is an example. It used Isaac Lab's built-in G1 task, `Isaac-Velocity-Flat-G1-v0`, with NVIDIA's own G1 model (not the GitHub one above), trained twice with `isaaclab__launch(action="train")` (1,024 environments, rsl_rl), scored with `isaaclab__launch(action="eval")`, and watched in a window with `isaaclab__launch(action="play")`. The arrows over the robots are the speed commands each one follows.
 
 | Short run: 300 iterations | Longer run: 1,500 iterations |
 |---|---|
@@ -153,6 +153,6 @@ before starting Isaac Sim to keep the folder somewhere else.
 - **Nothing is downloaded.** A file is in a pack or it is not. Each result says where every file came from.
 - **Trust.** Loading USD and URDF runs native parsers that are not sandboxed, so only load files you trust. Approving
   other folders is deliberately something only you can do, not the agent.
-- **Packs of USD scenes** work the same way. `assets__pack_build` copies a USD and only the files it needs into a new version.
+- **Packs of USD scenes** work the same way. `assets__pack(action="build")` copies a USD and only the files it needs into a new version.
 
 Full details: [Asset packs](ASSET-PACKS.md).

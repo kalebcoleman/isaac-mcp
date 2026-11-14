@@ -60,7 +60,7 @@ LISTED = {
     "sim": {"sim__quick_start", "sim__stage", "sim__prim", "sim__timeline__control", "sim__light", "sim__material",
             "sim__physics", "sim__joints", "sim__arm", "sim__simulation", "sim__camera", "sim__lidar",
             "sim__viewport__frame", "run_python", "files", "reload_tools", "sim__controller", "sim__ui", "sim__logs"},
-    "assets": {"assets__import_path", "assets__library", "assets__pack"},
+    "assets": {"assets__import_path", "assets__library", "assets__mesh", "assets__pack", "assets__validate"},
     "real2sim": {"robosim"},
     "lab": {"isaaclab__launch", "isaaclab__inspect", "isaaclab__metrics", "isaaclab__checkpoint_register", "run_script"},
     "ros2": {"sim__ros2__tf_setup", "sim__graph", "sim__map__occupancy"},
@@ -106,14 +106,6 @@ def test_profiles_and_guards():
             config.select(value)
 
 
-@pytest.mark.parametrize("suffix", ["LOCAL_TOOLS", "NAMESPACE", "BUILTINS", "SCENE_TOOLS", "GROUP_TOOLS", "TOOLSETS"])
-def test_old_selection_settings_stop_the_server(suffix):
-    variable = config.OLD_PREFIXES[0] + suffix
-    with pytest.raises(ValueError) as error:
-        server.build_server({variable: "all,screen_input,sim_launch"})
-    assert variable in str(error.value) and "TWINSMITH_TOOLSETS" in str(error.value)
-
-
 def test_five_source_precedence_and_backend(tmp_path):
     home, project = tmp_path / "home", tmp_path / "project"
     user = home / ".config/twinsmith/config.toml"
@@ -155,11 +147,12 @@ def test_live_visibility_uses_same_selection():
 
 
 # Estimated tokens of each toolset on top of core, and of all: the measured size plus about 5 percent. Measured
-# 2026-11-13 with scripts/measure_tool_list.py: default (core) 1,586; sim 12,213; screen 3,561; assets 3,472;
-# real2sim 2,689; lab 4,561; ros2 3,532; workcell 2,275; input 2,393; launch 2,022; extensions 1,586; all 22,787.
-BUDGETS = {"default": 1670, "default,+sim": 12830, "default,+screen": 3740, "default,+assets": 3650,
+# 2026-11-13 with scripts/measure_tool_list.py: default (core) 1,586; sim 12,213; screen 3,561; assets 4,286 (with
+# assets__mesh and assets__validate, #112);
+# real2sim 2,689; lab 4,561; ros2 3,532; workcell 2,275; input 2,393; launch 2,022; extensions 1,586; all 23,602.
+BUDGETS = {"default": 1670, "default,+sim": 12830, "default,+screen": 3740, "default,+assets": 4500,
            "default,+real2sim": 2830, "default,+lab": 4790, "default,+ros2": 3710, "default,+workcell": 2390,
-           "default,+input": 2520, "default,+launch": 2130, "default,+extensions": 1670, "all": 23930}
+           "default,+input": 2520, "default,+launch": 2130, "default,+extensions": 1670, "all": 24800}
 
 
 @pytest.mark.parametrize("profile,budget", BUDGETS.items())

@@ -19,7 +19,7 @@ rows for the server you have installed, with the current state of each.
 | `core`: Connection, discovery, help, jobs and toolsets | on | `help`, `jobs`, `refresh_tools`, `status`, `toolsets`, `use_bridge` |
 | `screen`: Capture, record and arrange desktop windows | off | `doctor`, `join_videos`, `screen_recording`, `screenshot`, `windows` |
 | `sim`: Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim | off | `files`, `reload_tools`, `run_python`, `sim__arm`, `sim__camera`, `sim__controller`, `sim__joints`, `sim__lidar`, `sim__light`, `sim__logs`, `sim__material`, `sim__physics`, `sim__prim`, `sim__quick_start`, `sim__simulation`, `sim__stage`, `sim__timeline__control`, `sim__ui`, `sim__viewport__frame` |
-| `assets`: Import and manage robot and scene assets | off | `assets__import_path`, `assets__library`, `assets__pack` |
+| `assets`: Import and manage robot and scene assets | off | `assets__import_path`, `assets__library`, `assets__mesh`, `assets__pack`, `assets__validate` |
 | `real2sim`: RoboSimStudio real-to-sim runs in its own private environment | off | `robosim` |
 | `lab`: Isaac Lab jobs and script jobs | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics`, `run_script` |
 | `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
@@ -76,7 +76,7 @@ The list starts from a profile and adjusts it, left to right:
 
 An unknown name, or `-core`, stops the server at startup and lists the valid names. The toolset names of 0.3
 (`scene`, `physics`, `sensors`, `code`, `kit_debug`, `robosim`) and the `minimal` profile are unknown names now; see
-[MIGRATING.md](MIGRATING.md#toolset-names). The choice is read once, when the
+[earlier toolset names](#earlier-toolset-names). The choice is read once, when the
 server starts: after changing a file or variable, restart the MCP server (your client's reconnect or restart action).
 
 Three worked examples:
@@ -122,8 +122,8 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 | Profile | Toolsets | Listed tools |
 |---|---|--:|
 | `default` | `core` | 6 |
-| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `extensions` | 46 |
-| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `input`, `launch`, `extensions` | 48 |
+| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `extensions` | 48 |
+| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `input`, `launch`, `extensions` | 50 |
 <!-- /generated -->
 
 Measured on 2026-11-13. Each `default,+name` row is `core` plus that one toolset.
@@ -133,16 +133,16 @@ Measured on 2026-11-13. Each `default,+name` row is `core` plus that one toolset
 | `default` | 6 | 6,346 | 1,586 |
 | `default,+sim` | 25 | 48,855 | 12,213 |
 | `default,+screen` | 11 | 14,244 | 3,561 |
-| `default,+assets` | 9 | 13,891 | 3,472 |
+| `default,+assets` | 11 | 17,132 | 4,283 |
 | `default,+real2sim` | 7 | 10,757 | 2,689 |
 | `default,+lab` | 11 | 18,247 | 4,561 |
 | `default,+ros2` | 9 | 14,130 | 3,532 |
 | `default,+workcell` | 10 | 9,103 | 2,275 |
 | `default,+input` | 7 | 9,575 | 2,393 |
 | `default,+launch` | 7 | 8,090 | 2,022 |
-| `default,+sim,+assets,+screen,+extensions` | 33 | 64,298 | 16,074 |
-| `all` | 46 | 91,151 | 22,787 |
-| `all,+input,+launch` | 48 | 96,124 | 24,031 |
+| `default,+sim,+assets,+screen,+extensions` | 35 | 67,554 | 16,888 |
+| `all` | 48 | 94,407 | 23,601 |
+| `all,+input,+launch` | 50 | 99,380 | 24,845 |
 
 Before toolsets existed the server always listed 48 tools, about 28,450 estimated tokens. The listed text is a summary:
 `action="help"` on a grouped tool and `help(tool="<name>")` return the full description. A test
@@ -197,4 +197,22 @@ change, start the simulator read-only; see [limiting what a client can reach](MC
 
 ## Old settings
 
-The selection variables of 0.2 (named in [MIGRATING.md](MIGRATING.md#environment-variables)) are gone. A server that finds one set stops at startup and names it. Remove the old variable and set `TWINSMITH_TOOLSETS` instead.
+The tool-selection variables of 0.2 are gone and nothing reads them. Use `TWINSMITH_TOOLSETS`.
+
+## Earlier toolset names
+
+The toolsets became groups, and only `core` is on by default. Old toolset names are not kept as aliases: a configuration
+that names one stops the server at startup with the list of valid names. Rename them in `[tools] toolsets`,
+`TWINSMITH_TOOLSETS` and `--toolsets`:
+
+| Before | Now |
+|---|---|
+| `scene`, `physics`, `sensors`, `kit_debug` | `sim` |
+| `code` | `sim` (`run_python`, `files`, `reload_tools`, `sim__controller`); `run_script` moved to `lab` |
+| `robosim` | `real2sim` (the tool keeps its name, `robosim`) |
+| `minimal` | `default`, which is now `core` alone |
+| `default` (on before: `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions`) | `default,+sim,+assets,+screen,+extensions` lists the same tools plus `sim__ui` and `sim__logs`; `run_script` needs `+lab` |
+| The work cell's `real2sim`, `planning` and `eval` status tools, which answered "not implemented" | Deleted, with no replacement tool |
+| The `planned` list in `status` and `twinsmith://toolsets` | Deleted |
+
+`core`, `assets`, `screen`, `lab`, `ros2`, `workcell`, `input`, `launch` and `extensions` keep their names.

@@ -220,16 +220,95 @@ def test_tower_layout_and_cached_status(modules):
     assert cell.shutdown()["stage_preserved"]
 
 
-def test_refuses_non_physx_before_stage_access(modules, monkeypatch, tmp_path):
+ARM = ("shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint")
+
+
+def newton_section(**drive):
+    values = dict({"stiffness_nm_per_rad": 5000, "damping_nms_per_rad": 50, "armature_kgm2": 0.1}, **drive)
+    return {"physics_hz": 500, "impratio": 10, "drives": {joint: dict(values) for joint in ARM}}
+
+
+def load_newton_cell():
+    spec = importlib.util.spec_from_file_location("workcell_test_newton_cell", PACKAGE / "newton_cell.py")
+    cell = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cell)
+    return cell
+
+
+@pytest.mark.parametrize("values,mode,message", [
+    ({}, "physics", "no newton section"),
+    ({"newton": {"physics_hz": 500}}, "physics", "Invalid newton section"),
+    ({"newton": newton_section(stiffness_nm_per_rad=0)}, "physics", "Invalid newton section"),
+    ({"newton": newton_section()}, "mirror_real", "mirror_real"),
+    ({"newton": newton_section(), "asset_layout": {"rg2": {"articulation_root": "."}}}, "physics", "separate RG2"),
+])
+def test_newton_refusals_come_before_stage_access(modules, monkeypatch, tmp_path, values, mode, message):
     scene, _ = modules
-    install_contracts(monkeypatch, scene, tmp_path, config(scene))
+    install_contracts(monkeypatch, scene, tmp_path, {**config(scene), **values})
     physics = types.ModuleType("workcell_test.physics_compat")
     physics.selected_engine = lambda: "newton"
     monkeypatch.setitem(sys.modules, physics.__name__, physics)
-    with pytest.raises(RuntimeError, match="not yet qualified on Newton") as refused:
-        asyncio.run(scene.Workcell().quick_start())
-    for way in ("--physics-backend physx", 'physics_backend = "physx"', "TWINSMITH_PHYSICS_BACKEND=physx", "Work cell on Newton"):
-        assert way in str(refused.value)
+    with pytest.raises(RuntimeError, match=message):
+        asyncio.run(scene.Workcell().quick_start(mode=mode))
+
+
+def test_newton_drives_need_all_six_arm_joints_and_report_their_margin():
+    cell = load_newton_cell()
+    section = newton_section()
+    assert set(cell.validate({"newton": section})) == set(ARM)
+    assert cell.stability(section["drives"], 500)["wrist_1_joint"] == {"ratio": 0.2, "limit": 6.0}   # dt^2 k / I, 4 + 2 dt c / I
+    partial = dict(section, drives={"wrist_1_joint": section["drives"]["wrist_1_joint"]})
+    for bad in ({}, {"newton": {}}, {"newton": partial}, {"newton": dict(section, impratio=0)},
+                {"newton": dict(section, drives=[1])}, {"newton": newton_section(armature_kgm2=0)}):
+        with pytest.raises(ValueError):
+            cell.validate(bad)
+
+
+def test_prepare_writes_per_degree_gains_and_both_armatures(monkeypatch):
+    Usd = pytest.importorskip("pxr.Usd")
+    from pxr import UsdPhysics
+
+    cell = load_newton_cell()
+    stage = Usd.Stage.CreateInMemory()
+    scene = UsdPhysics.Scene.Define(stage, "/World/PhysicsScene").GetPrim()
+    scene.CreateAttribute("mjc:option:impratio", __import__("pxr").Sdf.ValueTypeNames.Float).Set(1.0)
+    for name in ARM:
+        joint = UsdPhysics.RevoluteJoint.Define(stage, f"/World/RobotAssembly/robot/joints/{name}").GetPrim()
+        drive = UsdPhysics.DriveAPI.Apply(joint, "angular")
+        drive.CreateStiffnessAttr(9400.0)
+        drive.CreateDampingAttr(0.4)
+    box = stage.DefinePrim("/World/Bench/box", "Cube")
+    UsdPhysics.CollisionAPI.Apply(box)
+    seen = []
+    support = types.ModuleType("sim_tools.newton_support")
+    support.scene_settings = lambda prim, rate, tower: {"newton:timeStepsPerSecond": rate}
+    support.collision_settings = lambda prim: seen.append(str(prim.GetPath()))
+    support.prepare_buffers = lambda *args: ("config", {"rigid_bodies": 0})
+    support.apply_buffers = lambda config: None
+    package = types.ModuleType("sim_tools")
+    package.__path__ = []
+    monkeypatch.setitem(sys.modules, "sim_tools", package)
+    monkeypatch.setitem(sys.modules, "sim_tools.newton_support", support)
+    report = cell.prepare(stage, {"newton": newton_section(stiffness_nm_per_rad=25000, damping_nms_per_rad=300)},
+                          "/World/RobotAssembly", timeline=None)
+    joint = stage.GetPrimAtPath("/World/RobotAssembly/robot/joints/elbow_joint")
+    assert joint.GetAttribute("drive:angular:physics:stiffness").Get() == pytest.approx(25000 * 3.141592653589793 / 180)
+    assert joint.GetAttribute("drive:angular:physics:damping").Get() == pytest.approx(300 * 3.141592653589793 / 180)
+    assert joint.GetAttribute("newton:armature").Get() == joint.GetAttribute("physxJoint:armature").Get() == pytest.approx(0.1)
+    assert scene.GetAttribute("mjc:option:impratio").Get() == 10.0 and seen == ["/World/Bench/box"]
+    assert set(report["drives"]) == set(ARM) and report["colliders_with_contact_gap"] == 1
+
+
+def test_a_bench_without_its_own_colliders_is_refused_on_newton(modules):
+    Usd = pytest.importorskip("pxr.Usd")
+    from pxr import UsdGeom
+
+    scene, _ = modules
+    stage = Usd.Stage.CreateInMemory()
+    UsdGeom.Mesh.Define(stage, "/World/Bench/Frame/Mesh_0")
+    with pytest.raises(ValueError, match="overflow Newton"):
+        scene.bench_colliders(stage, engine="newton")
+    assert not stage.GetPrimAtPath("/World/Bench/Frame/Mesh_0").GetAppliedSchemas()       # refused before authoring
 
 
 def test_unsaved_stage_refused_without_replacement(modules, monkeypatch, tmp_path):
@@ -268,3 +347,24 @@ def test_unsaved_stage_refused_without_replacement(modules, monkeypatch, tmp_pat
     monkeypatch.setitem(sys.modules, "pxr", pxr)
     with pytest.raises(RuntimeError, match="UNSAVED_CHANGES"):
         asyncio.run(scene.Workcell().quick_start())
+
+
+def test_bench_keeps_its_own_collision_layer_and_else_gets_triangle_meshes(modules):
+    Usd = pytest.importorskip("pxr.Usd")
+    from pxr import UsdGeom, UsdPhysics
+
+    scene, _ = modules
+    plain = Usd.Stage.CreateInMemory()
+    mesh = UsdGeom.Mesh.Define(plain, "/World/Bench/Frame/Mesh_0")
+    assert scene.bench_colliders(plain) == "triangle meshes"
+    assert mesh.GetPrim().GetAttribute("physics:approximation").Get() == "none"
+
+    split = Usd.Stage.CreateInMemory()
+    render = UsdGeom.Mesh.Define(split, "/World/Bench/Frame/Mesh_0")
+    box = UsdGeom.Cube.Define(split, "/World/Bench/Frame/Mesh_0_collision/box")
+    UsdPhysics.CollisionAPI.Apply(box.GetPrim())
+    assert scene.bench_colliders(split) == "own"
+    assert not render.GetPrim().HasAPI(UsdPhysics.CollisionAPI)
+
+    with pytest.raises(ValueError):
+        scene.bench_colliders(Usd.Stage.CreateInMemory())

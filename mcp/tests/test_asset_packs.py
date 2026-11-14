@@ -574,7 +574,6 @@ def test_convert_old_takes_hashes_from_the_files_not_from_sha256sums(env):
     put(old, "objects/fmb1.json", b"{}")
     put(old, "Isaac/Materials/m.mdl", b"mdl")
     (old / "SHA256SUMS").write_text(f"{'0' * 64}  robot/ur5e.usd\n")  # a wrong pin: ignored
-    (old / packs.OLD_FORMAT_FILES[1]).write_text('{"version": 1, "entries": []}')
     report = packs.convert_old(old, source_note="lab files", license_="private")
     assert report["pack"] == "workcell/v1" and report["files"] == 3 and report["converted_from"] == str(old)
     manifest = verifies(env, "workcell").manifest

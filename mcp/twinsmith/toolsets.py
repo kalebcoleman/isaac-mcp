@@ -32,7 +32,7 @@ _ROOTS = {
     "sim": ("sim__quick_start sim__stage sim__prim sim__timeline__control sim__light sim__material "
             "sim__physics sim__joints sim__arm sim__simulation sim__camera sim__lidar sim__viewport__frame "
             "run_python files reload_tools sim__controller sim__ui sim__logs"),
-    "assets": "assets__import_path assets__library assets__pack",
+    "assets": "assets__import_path assets__library assets__pack assets__mesh assets__validate",
     "real2sim": "robosim",
     "lab": "run_script",
     "ros2": "sim__ros2__tf_setup sim__graph sim__map__occupancy",
