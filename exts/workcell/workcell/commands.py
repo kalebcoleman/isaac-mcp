@@ -33,7 +33,7 @@ def summarize(report):
         summary["newton"] = {"steps_per_second": (newton.get("settings") or {}).get("newton:timeStepsPerSecond"),
                              **{key: buffers[key] for key in ("rigid_bodies", "nconmax", "njmax", "warnings")
                                 if key in buffers}}
-    for key in ("bench_top", "environment"):
+    for key in ("bench_top", "environment", "contact"):
         if key in report:
             summary[key] = report[key]
     limitations = report.get("limitations") or []
@@ -59,6 +59,9 @@ class Commands:
     def _cmd_robot_status(self):
         report = self.workcell.status()
         return {"state": report.get("state"), "robot": report.get("robot")}
+
+    def _cmd_robot_wrench(self):
+        return self.workcell.read_wrench()
 
     def _cmd_perception_status(self):
         report = self.workcell.status()

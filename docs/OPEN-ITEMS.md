@@ -17,7 +17,7 @@ version.
 - [x] Hold a full 54-block Jenga tower for ten seconds on Newton with the contact-buffer check on (500 Hz; 1.7 mm).
 - [ ] Make a Franka joint move settle within the PhysX tolerance on Newton.
 - [ ] Decide `sim__physics(action="raycast")` on Newton: implement a query, or keep it refused and say so.
-- [ ] The UR5e work cell on Newton: it builds and holds; the force/torque read, cameras and `mirror_real` remain (see [Work cell on Newton](#work-cell-on-newton)).
+- [ ] The UR5e work cell on Newton: it builds and holds, and the force/torque read passes the static check; the cameras and `mirror_real` remain (see [Work cell on Newton](#work-cell-on-newton)).
 - [x] Record the live runs that show exact stepping, the one-off push and camera capture after motion passing on Newton:
   [recorded 2026-11-14](VERIFICATION.md#headless-newton-check). To repeat it, run `smoke.py sim --backend newton --discard-changes
   --check newton_checks` (the [command](VERIFICATION.md#test-matrix) needs the `mcp/` environment). If a step-timing mismatch remains, read `newton.clocks_before`,
@@ -57,16 +57,18 @@ Done:
 
 Still open:
 
-- [ ] The flange force and torque read on Newton. `get_link_incoming_joint_force` fails ("Failed to get incoming link joint
-  forces from backend") unless Newton's `link_incoming_joint_force` output is enabled before initialization. The finger contact
-  reads need Newton's contact snapshot instead of the PhysX contact view. Sensors keep reporting "unavailable" rather than
-  inventing values.
+- [x] The flange force and torque read on Newton: `newton_cell.prepare` enables Newton's `link_incoming_joint_force` output
+  before initialization, and `workcell__robot(action="wrench")` reads it (the static check passes on both engines).
+- [ ] The finger contact reads on Newton: they need Newton's contact snapshot instead of the PhysX contact view, and are
+  refused there until then rather than inventing values.
 - [ ] `mirror_real` (robot-only gravity off) on Newton. It is refused today. Newton's PhysX resolver may read
   `physxRigidBody:disableGravity`, which needs a live check.
 - [ ] Per-engine friction profiles in `lab_hardware.json` (unconfirmed; they start equal to the PhysX values).
 - [ ] Measured finger width at open, mid and closed on both engines. The RG2 knuckle drives (1 N m) are slow. Of a -20 degree
   target, they reached -17.7 degrees on PhysX after 360 steps, and -15.2 and -15.5 degrees on Newton after 0.72 s.
-- [ ] The static check at rest (flange wrench equals the weight below the sensor) on both engines.
+- [x] The static check at rest (flange wrench equals the weight below the sensor) on both engines: `scripts/workcell_static_wrench.py`
+  passes on PhysX and Newton in two poses (2026-11-13, pack v2: 15.009 N against 15.009 N; torques agree across engines). It
+  checks the modelled masses, not the real ones: those still need weighing.
 - [ ] Renders (cell, wrist, overhead) on Newton.
 
 ## Real-to-sim with RoboSimStudio

@@ -10,7 +10,7 @@ workcell integration provides four grouped tools and seven actions:
 | Group | Actions |
 | --- | --- |
 | `workcell__cell` | `quick_start`, `status`, `shutdown` |
-| `workcell__robot` | `status` |
+| `workcell__robot` | `status`, `wrench` |
 | `workcell__perception` | `status` |
 | `workcell__jenga` | `build`, `status` |
 
@@ -26,7 +26,12 @@ Real-to-simulation synchronization, planning and evaluation are not part of the 
 Room, referenced from the Isaac Sim assets server (it needs network, and is checked before the stage is replaced): the room's
 ground is level with the bench feet, room parts inside the bench (its own table) are deactivated, and every room collider but
 the ground plane is off. The config's `bench_top` section colours the top panel and gives it a friction material on both
-engines (black HDPE; the friction values are placeholders until a tilt test measures them).
+engines (black HDPE; the friction values are placeholders until a tilt test measures them). The `contact` section makes
+contact the same on both engines: every collider without a material gets a default one (PhysX's 0.5; Newton would give
+it 1.0), every material combines friction by max (MuJoCo's rule) and does not bounce, and on Newton, which reads one
+coefficient, each material's static value is used. The finger pads carry convex colliders, so the pad material is what
+touches a block. `workcell__robot(action="wrench")` reads the Bota F/T sensor on both engines with the weight it carries;
+`scripts/workcell_static_wrench.py` checks the two agree at rest.
 
 There is no legacy extension ROS graph setup or custom `rclpy` build prerequisite for
 this API. Generic `sim__*` tools are separate from the workcell interface.
