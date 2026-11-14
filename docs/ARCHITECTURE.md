@@ -3,6 +3,7 @@
 This page explains the whole system: how an MCP client connects, what the host server, the bridge and the Kit extensions
 each do, how Isaac Lab jobs, asset packs and RoboSimStudio fit in, and where each setting is read. For setup steps see
 [Linux setup](LINUX-SETUP.md) and [MCP server](MCP-SERVER.md); for every tool see the [tool arguments](TOOLS-ARGUMENTS.md).
+The page describes `main` as it is; the last section, [Target layout](#target-layout-planned), is the plan.
 
 ![The MCP client talks to the twinsmith host server over stdio. The server answers some tools itself, forwards simulator tools over TCP to the bridge extension inside Isaac Sim, and runs Isaac Lab and script jobs as separate processes. Assets, staging, outputs and job logs are files on the same machine.](media/architecture.svg)
 
@@ -109,9 +110,8 @@ checking GPU and memory headroom. The server never starts a simulator on its own
 PID and port. The server picks the bridge to dial in this order:
 
 1. An explicit choice: `use_bridge(port)` in the session, or `--port` on the command-line client.
-2. `TWINSMITH_PORT`, the older name for the port.
-3. `TWINSMITH_PORT`.
-4. Portfile discovery, when exactly one bridge is advertised. With several and no explicit choice it refuses to guess and
+2. `TWINSMITH_PORT`.
+3. Portfile discovery, when exactly one bridge is advertised. With several and no explicit choice it refuses to guess and
    lists them.
 
 | Port | Used by |
@@ -193,7 +193,7 @@ files, a headless Blender render) on files in an approved folder, and writes eac
 
 | Source | Tools | Needs |
 |---|---|---|
-| A window on the desktop | `screenshot`, `screen_recording` | An X11 display. A window is read by its id, so it works when covered or when the screen is locked. |
+| A window on the desktop | `screenshot`, `screen_recording` | An X11 display. A window is read by its id, so it works when the screen is locked, and when covered if the window manager composites (`doctor` says). |
 | Acting on a window | `computer` (opt-in `input` toolset); `sim__ui` for Isaac Sim's own UI | `computer`: an unlocked X11 desktop. `sim__ui`: a running windowed Isaac Sim; works when locked. See [computer use](TOOLS-HOST.md#computer-use-workflow). |
 | A camera in the scene | `sim__camera`; `camera=` on `sim__simulation` runs and replays | A running simulator. Works headless. |
 | An Isaac Lab task | `isaaclab__launch` with `record`, or `play` with `--video` | An Isaac Lab install. Works headless. |
@@ -238,3 +238,171 @@ The simulation and every ROS 2 client that talks to it must use the same DDS set
 [`config/ros_dds.env`](../config/ros_dds.env) (Cyclone DDS, loopback only, multicast off), and every ROS client or inspection
 script must source the same file. A client that does not discovers nothing: its nodes report no error, and messages publish
 into the void. The rules, the publishing tool and the doctor are in [ROS 2 and RViz 2](ROS2-RVIZ.md).
+
+## Target layout (planned)
+
+Everything above describes `main` today. This section is the layout the [roadmap](ROADMAP.md) builds toward; nothing in it
+exists until the pull request in [plans/](plans/README.md) that adds it has merged. Proposed tools are written as a namespace
+and a tool, in separate columns: the MCP name joins them by the naming rule above (`<namespace>__<tool>`), and the plans spell
+each one in full.
+
+### Groups
+
+A group is a toolset: one switch, one row in the README. Every group is off by default except `core`.
+
+| Group | Default | Holds | Kind |
+|---|---|---|---|
+| `core` | always on | Connection, discovery, help, jobs, toolsets | Native |
+| `screen` | off | `screenshot`, `screen_recording`, `windows`, `join_videos`, `doctor` (desktop readiness) | Native |
+| `sim` | off | Everything that runs inside Kit on any scene: stage, prims, physics, joints, sensors, code in Kit, Kit's log and UI | Native |
+| `assets` | off | Import, packs, mesh preparation, validation | Native |
+| `real2sim` | off | RoboSimStudio runs, system identification, the pose-service client | Wrapped |
+| `planning` | off | Graph-as-Policy | Wrapped |
+| `eval` | off | VABAR | Wrapped |
+| `lab` | off | Isaac Lab jobs and script jobs | Native |
+| `ros2` | off | Simulator-side ROS 2 transforms, graphs and occupancy maps | Native |
+| `workcell` | off | The lab's UR5e Jenga work cell | Native |
+| `input` | explicit only | `computer`: desktop mouse and keyboard | Native |
+| `cad` | off (on in the owner's configuration) | `hardware`: checks, fabrication files and renders around the CAD servers beside twinsmith | Wrapped |
+| `launch` | explicit only | Starting and stopping simulators | Native |
+| `extensions` | off | Tools a project's own Kit extension registers | Native |
+
+`cad` holds no authoring: FreeCAD, KiCad and Blender run as separate MCP servers beside twinsmith. Its one tool checks and
+packages what they produce (plan 05, pull request #110); importing their meshes into a scene stays a format on
+`assets__import_path`.
+
+Profiles: `default` is `core` alone and `all` is every group except the explicit-only ones. `minimal` is deleted because it
+equals `default`. Old toolset names are not kept as aliases.
+
+### Every current tool, mapped
+
+| Toolset today | Listed tools | Target group |
+|---|---|---|
+| `core` | `status`, `help`, `refresh_tools`, `use_bridge`, `jobs`, `toolsets` | `core` |
+| `scene` | `sim__quick_start`, `sim__stage`, `sim__prim`, `sim__timeline__control`, `sim__light`, `sim__material` | `sim` |
+| `physics` | `sim__physics`, `sim__joints`, `sim__arm`, `sim__simulation` | `sim` |
+| `sensors` | `sim__camera`, `sim__lidar`, `sim__viewport__frame` | `sim` |
+| `code` | `run_python`, `files`, `reload_tools`, `sim__controller` | `sim` |
+| `code` | `run_script` | `lab` (a host job, not Kit) |
+| `kit_debug` | `sim__ui`, `sim__logs` | `sim` |
+| `assets` | `assets__import_path`, `assets__library`, `assets__pack` | `assets` |
+| `screen` | `screenshot`, `screen_recording`, `windows`, `join_videos`, `doctor` | `screen` |
+| `input` | `computer` | `input` |
+| `lab` | `isaaclab__launch`, `isaaclab__inspect`, `isaaclab__metrics`, `isaaclab__checkpoint_register` | `lab` |
+| `ros2` | `sim__ros2__tf_setup`, `sim__graph`, `sim__map__occupancy` | `ros2` |
+| `workcell` | `workcell__cell`, `workcell__robot`, `workcell__perception`, `workcell__jenga` | `workcell` |
+| `workcell` | The three stubs: its `real2sim`, `planning` and `eval` status tools | **Deleted.** The `real2sim`, `planning` and `eval` groups replace them |
+| `robosim` | `robosim` | `real2sim` |
+| `launch` | `sim__session` | `launch` |
+| `extensions` | none of its own | `extensions` |
+
+The `sim__` prefix stays only on tools that need Kit. Tools that work without a simulator carry no prefix.
+
+### Proposed tools
+
+| Namespace | Tool | Actions | Runs in | Plan |
+|---|---|---|---|---|
+| none | `gap` | `status`, `tools`, `check`, `generate`, `run` | Graph-as-Policy's environment | [03](plans/03-planning-eval-wrappers.md) |
+| none | `vabar` | `status`, `list`, `run`, `bench`, `results` | VABAR's environment | [03](plans/03-planning-eval-wrappers.md) |
+| none | `sysid` | `status`, `fit`, `report` | Its own MuJoCo environment | [04](plans/04-robosim-bump-and-sysid.md) |
+| none | `perception` | `status`, `pose` | A separate pose service | Later |
+| none | `status` | Adds the loaded and pinned versions of every wrapped tool | Host | With [03](plans/03-planning-eval-wrappers.md) |
+| none | `hardware` | `status`, `check`, `fab`, `render` | Host; `kicad-cli`, KiKit and Blender beside it | 05 (#110) |
+| none | `use_bridge` | Adds `hold` and `release`: a lease on one Kit for one caller | Host | Later |
+
+A wrapped tool takes the upstream tool's name, bare, and is one grouped tool. A new asset format is an option on
+`assets__import_path`, never a new tool: STEP and IGES (`format="step"`, through Isaac Sim's CAD converter) and visual-only
+Gaussian splats come that way.
+
+### Wrapped, native, beside
+
+| How | What | Why |
+|---|---|---|
+| **Native** (code in this repository) | Computer use, scene and physics tools, asset import, packs, mesh preparation, validation rules, the bridge lease | Stable patterns; small; worth owning |
+| **Wrapped** (pinned sibling checkout, its own environment, its own command line) | RoboSimStudio, Graph-as-Policy with its skill library, VABAR, MuJoCo system identification | Young and fast-moving; an import would chain this repository to their dependencies |
+| **Service** (separate process, reached over loopback) | FoundationPose; any other model with a restrictive licence | Research-only or custom licences must not touch an MIT repository |
+| **Beside** (another MCP server in the client's configuration) | FreeCAD, build123d or agentcad, Blender, NVIDIA's documentation servers | Mature servers; twinsmith only receives their output as files |
+| **Library, in the `mesh` extra** | CoACD (MIT), fast-simplification (MIT), trimesh (MIT) | Used as dependencies, not copied |
+| **Not used** | ROS control servers such as ros-mcp-server; MoveIt servers | They give an agent publish, service and action tools. twinsmith does not wrap them and none is installed on any of the owner's machines. See [safety](#safety-boundaries) |
+
+Every wrapper follows one contract, the one `robosim` already has:
+
+1. The checkout is found by `TWINSMITH_<NAME>_ROOT`, by default `<workspace>/tools/<name>`. The wrapper never installs or
+   updates it; a missing checkout answers with setup steps.
+2. It runs the upstream command line with the checkout's own interpreter. The host never imports the tool.
+3. A `PIN` in the code names the tested commit. Every answer carries the checkout's commit and says when it differs.
+4. Arguments are typed and allow-listed. No free-form argument string reaches the command line.
+5. Long work is a job in the shared jobs folder, followed and cancelled with `jobs`. GPU work is guarded as Isaac Lab jobs are.
+6. Run files go under `<workspace>/runs/<name>/`.
+
+### Process boundaries
+
+```mermaid
+flowchart TB
+    client[MCP client] -- stdio --> host[twinsmith host<br/>MIT, light dependencies]
+    host -- "TCP, loopback, token" --> kit[Kit: Isaac Sim 6.2<br/>bridge, sim-tools, workcell<br/>bundled Newton 1.6.1]
+    host -- subprocess --> lab[Isaac Lab job<br/>Lab's interpreter]
+    host -- subprocess --> mesh[Mesh job<br/>host interpreter, mesh extra]
+    host -- subprocess --> rss[RoboSimStudio<br/>own venv, Newton 1.7.x]
+    host -- subprocess --> gap[Graph-as-Policy<br/>own venv]
+    host -- subprocess --> vabar[VABAR<br/>own venv]
+    host -- subprocess --> sysid[sysid<br/>own venv, MuJoCo]
+    host -- "HTTP, loopback" --> pose[Pose service<br/>own environment, own licence]
+```
+
+| Process | Environment | Boundary to the host | May import the host? |
+|---|---|---|---|
+| Host server | Its own `uv` environment; starts in about a second | stdio to the client | — |
+| Kit | Isaac Sim's interpreter and its bundled packages, never changed | TCP on loopback, one JSON line each way, token | The extensions import a few dependency-free `twinsmith` modules |
+| Isaac Lab job | The Lab install's interpreter | Process group, job folder | No |
+| Mesh job | The host's interpreter with the optional `mesh` extra | Process, job folder | Yes, it is host code |
+| Wrapped tool | The checkout's own `.venv` | Process, allow-listed arguments, run folder | No |
+| Pose service | Its own container or environment | HTTP on loopback, a small documented contract | No |
+
+Two rules follow. Nothing is ever installed into Kit's environment: a different Newton, Warp or MuJoCo beside the bundled
+ones can break the simulator. And the environments are never reconciled: each tool resolves its own dependencies, and
+twinsmith only reports them.
+
+### Version pins
+
+| Component | Pinned or loaded | Source |
+|---|---|---|
+| Isaac Sim | 6.2.0.0, Python 3.12 | This repository's lock |
+| Newton inside Kit | 1.6.1 (`isaacsim.physics.newton` 1.1.1), with Warp 1.17.0 | Loaded versions recorded in [compatibility](COMPATIBILITY.md) |
+| Isaac Lab | 3.0.0 with Sim 6.2; 2.3.2 with Sim 5.1 (PhysX only) | [Compatibility](COMPATIBILITY.md) |
+| RoboSimStudio | `87b5e32`; upstream `main` was `4e52e1a` on 2026-11-13, 13 commits later | `mcp/twinsmith/robosim/bridge.py`; upstream |
+| Newton inside RoboSimStudio | `newton[sim]>=1.7,<1.8` | RoboSimStudio's project file |
+| Newton, latest release | 1.8.0, released 2026-11-11; used by nothing here | Upstream |
+| CoACD | 1.0.11, the same pin RoboSimStudio uses, so both stacks cut the same hulls | Plan 01 |
+| Graph-as-Policy and its skill library | The commits VABAR's README names: `06dd619` and `b15859a` | Plan 03 |
+| VABAR | The 1.0 release commit, set when the wrapper is written | Plan 03 |
+| MuJoCo for `sysid` | 4.0.1, in its own environment | Plan 04 |
+
+Three Newton versions are in play and that is intended. `status` reports them side by side; nothing unifies them.
+
+Which machine runs which of these processes, and what each machine cannot run, is in the roadmap's
+[hardware and hosts](ROADMAP.md#hardware-and-hosts).
+
+### Safety boundaries
+
+1. **No agent runs on the real robot.** No tool here connects to robot hardware. The two PCs twinsmith runs on are
+   simulation-only: neither is connected to the UR5e. The owner's laptop is the only machine that is, and it runs only ROS 2
+   code the owner has approved ([hardware and hosts](ROADMAP.md#hardware-and-hosts)). The simulator's ROS 2 traffic uses the
+   loopback-only DDS settings in `config/ros_dds.env`.
+2. **Data crosses one way at a time, by hand.** Recordings leave the laptop as files the owner exports and approves; they are
+   used offline. Code reaches the robot only as ROS 2 code the owner has reviewed and starts in person.
+3. **The `gap` wrapper refuses real hardware.** Graph-as-Policy's `run` accepts `--real franka` and `--real ur_zed`. The wrapper
+   builds its command line from typed arguments, has no argument that maps to `--real`, and refuses any value that contains
+   it, with `REAL_ROBOT_REFUSED`. A test proves it.
+4. **No agent-facing ROS MCP server, on any machine.** A server such as ros-mcp-server gives an agent tools to publish, call
+   services and send action goals. None is installed on the ASU PC, the home PC or the robot laptop, and twinsmith does not
+   wrap one. The only agent path to ROS 2 is twinsmith's own `ros2` toolset: off by default, simulator-side, on the two
+   simulation-only PCs, and never on the laptop, where twinsmith is not installed at all. ROS 2 itself stays on the PCs.
+5. **Restrictive licences stay outside.** FoundationPose (research-only) and SAM 3D (custom licence) run as separate services
+   or offline steps. No code or weights from them enter this repository; only files and poses come back.
+6. **Wrapped tools that spend money say so first.** A tool that calls a paid model, or drives another agent, runs only with
+   configuration the owner wrote. Secrets are passed through by name from the server's environment; a status reports only
+   whether each is set.
+7. **No fiducials.** No plan adds a marker to the cell or the scene.
+8. **Listing is not permission.** Groups decide what a client is shown. The bridge token and `TWINSMITH_READ_ONLY=1` are what
+   refuse a call, as today.
