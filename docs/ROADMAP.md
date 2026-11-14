@@ -38,12 +38,13 @@ What `origin/main` shows today. Each line is from the code or a recorded result,
 
 | Area | State |
 |---|---|
-| Tool surface | 15 toolsets, 8 of them on by default. Three work-cell tools are stubs that answer "not implemented". |
+| Tool surface | Eight groups: `core` (always on), `computer` (explicit only), `sim`, `assets`, `cad`, `real2sim`, `planning`, `eval`. No tool answers "not implemented". |
 | Generic scenes on Newton | The 54-block tower holds for 10 s at 500 Hz (1.7 mm; Isaac Sim 6.2, Newton 1.6.1). Raycast is refused; a Franka joint move does not settle yet. |
 | Work cell on Newton | Builds and holds since #112 (pack `ur5e-jenga-workcell/v2` and per-engine drives). Live on Isaac Sim 6.2 / Newton 1.6.1: the arm holds within 0.05 degrees at the presentation pose, the RG2 fingers move with the mimic followers within 0.003 degrees, and the tower drifts at most 0.54 mm over 11 s after settling. Not yet: the force/torque read, cameras, `mirror_real` and measured finger widths ([details](OPEN-ITEMS.md#work-cell-on-newton)). |
 | Jenga variation | Seeded per-block variation of size, mass and friction exists (`measured_pending` profile); every number in it is unconfirmed. |
-| Real-to-sim | `robosim` reproduced one real push by image displacement on CPU and GPU. It does not fit mass or friction, match rotation, or estimate the camera. Pinned to RoboSimStudio `87b5e32`. |
-| Perception, planning, evaluation | Nothing. The work cell reads its camera configuration only. |
+| Real-to-sim | `robosim` reproduced one real push by image displacement on CPU and GPU. It does not fit mass or friction, match rotation, or estimate the camera. Pinned to RoboSimStudio `ba3650c` (#116), where the CPU push gives the same result as at `87b5e32`. `sysid` recovers known parameters from synthetic data on CPU; no real dataset has been fitted. |
+| Perception | Nothing. The work cell reads its camera configuration only. |
+| Planning, evaluation | `gap` and `vabar` (#115, #127) at VABAR 1.0's pins, with their environments built on the ASU PC. One `gt` graph episode has run on its GPU; no bench cell and no `gap run` yet ([what was verified](PLANNING-EVAL.md#what-has-been-verified)). |
 | Real robot | Nothing in this repository drives one, by design. Only the owner's laptop connects to it ([hosts](#hardware-and-hosts)). |
 
 ## Hardware and hosts
@@ -58,7 +59,7 @@ named by role here, not by hostname.
 | Runs | RoboSimStudio, real-to-sim, `sysid`, heavy simulation, Graph-as-Policy and VABAR, and the Jenga games | Development and short checks while the owner is there |
 | GPU | NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition, 97,887 MiB, driver 595.99.02 | RTX 5080, 16 GB, as the repository's recorded test machine. Not re-verified from here |
 | System | Ubuntu 22.04.5, 32 CPU threads, 125 GiB of memory | Ubuntu 24.04.5, as recorded |
-| Installed | Isaac Sim 6.0.0.0 to 6.2.0.0, Isaac Lab 2.3.2 and 3.0.0, RoboSimStudio at `87b5e32`, work-cell pack `v1`, the twinsmith host | Not verified from here |
+| Installed | Isaac Sim 6.0.0.0 to 6.2.0.0, Isaac Lab 2.3.2 and 3.0.0, RoboSimStudio at `ba3650c`, Graph-as-Policy, its skill library and VABAR at VABAR 1.0's pins, `sysid`'s MuJoCo 4.0.1, work-cell pack `v1`, the twinsmith host | Not verified from here |
 
 The ASU column was read on that machine on 2026-11-13 (`nvidia-smi`, `scripts/env.py find`, the checkouts themselves).
 
@@ -66,13 +67,13 @@ The ASU column was read on that machine on 2026-11-13 (`nvidia-smi`, `scripts/en
 
 | Machine | Connected to the UR5e | ROS 2 | Agent path to ROS 2 |
 |---|---|---|---|
-| ASU PC | No | Installed; simulation traffic only | twinsmith's `ros2` toolset, and nothing else |
-| Home PC | No | Installed; simulation traffic only | twinsmith's `ros2` toolset, and nothing else |
+| ASU PC | No | Installed; simulation traffic only | twinsmith's ROS 2 tools in `sim`, and nothing else |
+| Home PC | No | Installed; simulation traffic only | twinsmith's ROS 2 tools in `sim`, and nothing else |
 | Laptop | **Yes, and it is the only one** | Only code the owner has approved | **None.** No agent runs here and twinsmith is not installed here |
 
 **No agent-facing ROS MCP server is installed on any of these machines**: nothing that gives an agent tools to publish, call
-services or send action goals. twinsmith's own `ros2` toolset is the only agent path to ROS 2. It is off by default, it works
-inside the simulator, and it exists only on the two PCs.
+services or send action goals. twinsmith's own ROS 2 tools in `sim` are the only agent path to ROS 2. They are off by default, they work
+inside the simulator, and they exist only on the two PCs.
 
 twinsmith and everything in this roadmap run on the two PCs. Nothing here is installed on the laptop.
 
@@ -85,7 +86,7 @@ twinsmith and everything in this roadmap run on the two PCs. Nothing here is ins
   game running. Until then `<workspace>` on that machine is the old folder and must be named with `TWINSMITH_WORKSPACE`;
   without it `scripts/env.py find` finds no install.
 - **Graph-as-Policy does not run on the home PC.** It asks for 24 GB of GPU memory and the RTX 5080 has 16 GB. It runs on the
-  ASU PC only, and it and VABAR are not installed there yet.
+  ASU PC only, where it and VABAR were installed on 2026-11-13.
 - **The home PC cannot host anything unattended:** no scheduled job, no long run, no service another step waits for.
 - **No recorded Newton result is from the ASU PC.** The work-cell probe names an RTX 5080; the tower hold does not record
   its GPU. Each is rerun on the ASU PC's GPU, driver and Ubuntu release before it counts as that host's baseline.
@@ -96,7 +97,7 @@ twinsmith and everything in this roadmap run on the two PCs. Nothing here is ins
 - [ ] Finish the ASU PC's workspace move when no game is running.
 - [ ] Verify the home PC's row on that machine the next time it is on.
 - [ ] Not established here: which machine the lab's D415s are attached to for recording, how recordings travel from the
-  laptop to the ASU PC, and whether the ASU PC has a desktop session for the `screen` and `input` groups.
+  laptop to the ASU PC, and whether the ASU PC has a desktop session for the `computer` group.
 
 ## The phases
 
@@ -120,11 +121,11 @@ flowchart LR
 **Goal.** One naming pass and one grouping pass, so every later tool lands in its final place and nothing is renamed twice.
 
 **Scope.**
-- Done: the computer-use pull request (#108) merged on 2026-11-13. The desktop tools stay in the `screen` group
-  (`screenshot`, `screen_recording`, `windows`, `join_videos`, `doctor`), and `input` holds the one `computer` tool.
-- Regroup every tool into off-by-default groups and delete the three work-cell stubs
-  ([plan](plans/02-toolset-groups.md)).
-- Decide the seven shorter tool names from the rename in the same pass.
+- Done: the computer-use pull request (#108) merged on 2026-11-13.
+- Done: every group off by default except `core`, and the three work-cell stubs deleted (#120).
+- Done in the tool-groups pull request: the eight final groups (`core`, `computer`, `sim`, `assets`, `cad`, `real2sim`,
+  `planning`, `eval`) and the shorter names (`simulators`, `sim__timeline`, `sim__viewport`, `sim__ros2_tf`,
+  `sim__occupancy_map`), with no aliases. The table of old names to new is in [TOOLSETS.md](TOOLSETS.md#renamed-toolsets).
 - Done: twinsmith is the only name; the earlier names and their compatibility layer are gone (#113 and its follow-ups).
 
 **Exit criteria.**
@@ -211,7 +212,7 @@ simulation got.
 
 **Scope.**
 - Bump RoboSimStudio from `87b5e32` and call its module entry point; add `sysid` in the `real2sim` group on MuJoCo's official
-  system identification module ([plan](plans/04-robosim-bump-and-sysid.md)).
+  system identification module (#116).
 - First target: the arm's joint parameters (damping, armature, friction loss, gains) from recorded joint trajectories, because
   that data needs no perception. Second target: block mass and friction from push recordings, once Phase 5 gives object poses.
 - A data contract for approved exports: a folder of episodes the owner copies off the laptop, the one machine connected to
@@ -224,6 +225,11 @@ simulation got.
 - `robosim` runs at the new pin on CPU with the same push result as before, within its own tolerance.
 
 **Depends on.** Phase 2 for the simulated arm to compare against. The `robosim` bump depends on nothing.
+
+**Status.** The tools are done (#116):
+- `robosim` runs at `ba3650c` on CPU with the same push result as at `87b5e32`; no `cuda:0` run at the new pin yet.
+- `sysid` recovers damping and armature from synthetic data in a CPU test.
+- No real joint log has been fitted, so nothing in `lab_hardware.json` comes from it yet.
 
 ### Phase 5: markerless perception
 
@@ -253,7 +259,7 @@ own evaluated the same way.
 
 **Scope.**
 - `gap` in the `planning` group and `vabar` in the `eval` group: one grouped tool each, the upstream command line in its own
-  environment, simulation only ([plan](plans/03-planning-eval-wrappers.md)).
+  environment, simulation only (#115, #127).
 - Reproduce one published VABAR cell to prove the stack before measuring anything of ours.
 - Express a Jenga turn as a skill graph and evaluate it with the Phase 3 protocol.
 
@@ -264,6 +270,14 @@ own evaluated the same way.
 
 **Depends on.** Phase 0 (the groups) and Phase 3 (the task). It runs on the ASU PC only
 ([hardware and hosts](#hardware-and-hosts)).
+
+**Status.** The wrappers are done (#115, #127), and the refusal test is in place:
+- The environments are built on the ASU PC. `vabar list`, `bench` plans and `gap validate` run on CPU, and one `gt`
+  graph episode has run on the GPU ([details](PLANNING-EVAL.md#what-has-been-verified)).
+- The published-cell rerun is still open. Eight of the twelve bench cells need SAM 3, whose gated weights the owner's
+  Hugging Face account must be granted. The cable cells (`cable_routing/L1` uses the `gt` graph) run with upstream's
+  palette segmenter and need no access.
+- The Jenga skill graph is still open.
 
 ### Phase 7: parts beyond Jenga
 
@@ -301,11 +315,11 @@ the real robot runs the result as approved ROS 2 code.
 |--:|---|---|---|
 | 0 | Computer use (#108, merged 2026-11-13) | 0 | Done |
 | 1 | Mesh preparation, validation, and the work-cell pack rebuild | 1 | Merged as #112 (with the work cell on Newton) |
-| 2 | Toolset groups, stubs deleted, README table | 0 | [02-toolset-groups](plans/02-toolset-groups.md) |
-| 3 | `gap` and `vabar` wrappers | 6 | [03-planning-eval-wrappers](plans/03-planning-eval-wrappers.md) |
-| 4 | RoboSimStudio bump and `sysid` | 4 | [04-robosim-bump-and-sysid](plans/04-robosim-bump-and-sysid.md) |
+| 2 | Toolset groups, stubs deleted, README table | 0 | Merged as #120; the final groups and names follow in the tool-groups pull request |
+| 3 | `gap` and `vabar` wrappers | 6 | Merged as #115, with `gap validate` in #127 |
+| 4 | RoboSimStudio bump and `sysid` | 4 | Merged as #116 |
 
-Items 3 and 4 do not depend on each other. Later candidates, not yet specified: a bridge lease so parallel agents cannot
+Later candidates, not yet specified: a bridge lease so parallel agents cannot
 interleave changes in one Kit (`use_bridge` with `hold` and `release`), a step that returns observations in the same call,
 semantic clicks through the desktop accessibility tree, the CAD format, the pose service, and dataset export.
 
@@ -317,10 +331,10 @@ The plan was drafted from a survey dated 2026-11-13. Where it and the code diffe
 |---|---|
 | Decimate the bench so 1.63 M triangles fit Newton's 1 M buffer | The buffer counts triangle **pairs**: 7,500,052 were needed against 1,000,000, across 385 mesh colliders. Convex hulls per mesh are what the probe showed to work. Decimation helps rendering cost, not this limit; the fix is the collision layer. |
 | The work cell's perception tool is a stub | It is implemented: it reports the camera configuration. Only the `real2sim`, `planning` and `eval` tools of the work cell are stubs. |
-| Add smoke checks for `screen` and `kit_debug` | Five toolsets have none: `ros2`, `assets`, `screen`, `code` and `kit_debug`. |
+| Add smoke checks for `screen` and `kit_debug` | Groups with no live smoke check: `assets`, `computer`, and the ROS 2, code, log and UI tools of `sim`. |
 | Fit with `sysid` on RoboSimStudio's CPU runs | RoboSimStudio's own project file notes MuJoCo 3.15 in its lock; the system identification module arrives with MuJoCo 4.0.1. `sysid` needs its own environment. |
 | Extend `doctor` | `doctor` arrived with #108 and checks desktop readiness only. The versions of wrapped tools belong in `status`. |
-| Toolsets are off by default (owner's rule) | Eight toolsets are on by default today. Plan 02 changes that. |
+| Toolsets are off by default (owner's rule) | Done in #120: only `core` is on by default. |
 
 Confirmed as the survey said, on 2026-11-13: RoboSimStudio `main` is `4e52e1a`, 13 commits past the pin, and requires
 `newton[sim]>=1.7,<1.8` and `coacd==1.0.11`; Newton `v1.8.0` was released on 2026-11-11; Graph-as-Policy's `gap run` has a
@@ -329,7 +343,7 @@ Confirmed as the survey said, on 2026-11-13: RoboSimStudio `main` is `4e52e1a`, 
 
 ## Decisions
 
-Decided by the owner on 2026-11-13. Plan 02 builds on these.
+Decided by the owner on 2026-11-13.
 
 1. **`cad` is a group.** It holds one tool, `hardware`, which wraps `kicad-cli`, KiKit and a headless Blender
    (plan 05, in pull request #110). CAD authoring stays in the separate servers beside
@@ -337,12 +351,14 @@ Decided by the owner on 2026-11-13. Plan 02 builds on these.
    except `core`, it is off in the shipped `default`; the owner's own client configurations turn it on.
 2. **`default` lists only `core`.** The `minimal` profile is deleted because it equals `default`, and `extensions` is off.
 3. **One Graph-as-Policy checkout**, at VABAR's pins, for both `planning` and `eval`, until a planning need forces a second.
-4. **`ros2` stays its own group**, because DDS traffic is a boundary worth one explicit switch.
+4. **ROS 2 is part of `sim`.** It was its own group (`ros2`) until the owner's final grouping later the same day; its tools
+   still work only inside the simulator, with the loopback-only DDS settings.
 5. **Graph-as-Policy runs on the ASU PC.** It asks for 24 GB of GPU memory: the ASU PC has about 96 GB, the home PC's RTX 5080
    has 16 GB. See [hardware and hosts](#hardware-and-hosts).
 6. **Old toolset names are not aliased.** A configuration that names `scene`, `physics` or another removed group stops the
    server at startup with the list of valid names; [TOOLSETS.md](TOOLSETS.md) gets one table of old to new.
 7. **The `planned` list in `status` is deleted.** `planning`, `real2sim` and `eval` become real groups; `backend`, `params` and
    `compare` had no plan.
-8. **The desktop group keeps the name `screen`** that #108 left it with, so it is not renamed twice; `computer` stays the
-   name of the one tool in `input`.
+8. **The desktop group is `computer`.** The owner's final grouping joined `screen`, `input` and `launch` into one
+   explicit-only group: screenshots, windows, mouse and keyboard, and simulator launch. `computer` is also the name of its
+   mouse-and-keyboard tool.
