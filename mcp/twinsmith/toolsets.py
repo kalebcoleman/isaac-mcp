@@ -25,6 +25,8 @@ TOOLSETS = {
     "kit_debug": Toolset("Inspect Kit logs and operate its UI"),
     "workcell": Toolset("UR5e workcell tools"),
     "robosim": Toolset("RoboSimStudio real-to-sim runs in its own private environment"),
+    "planning": Toolset("Graph-as-Policy skill graphs, generated and run in simulation"),
+    "eval": Toolset("VABAR benchmark runs and their results"),
     "input": Toolset("Desktop mouse and keyboard input", explicit_only=True),
     "launch": Toolset("Launch and stop simulator processes", explicit_only=True),
     "extensions": Toolset("Tools from uncatalogued extension namespaces", True),
@@ -34,9 +36,7 @@ PLANNED = {
     "backend": "Select and inspect physics backends",
     "params": "Inspect and tune runtime parameters",
     "compare": "Compare simulation results",
-    "planning": "Plan robot actions",
     "real2sim": "Synchronize real and simulated systems",
-    "eval": "Evaluate robot task performance",
 }
 
 _ROOTS = {
@@ -52,6 +52,8 @@ _ROOTS = {
     "input": "computer",
     "launch": "sim__session",
     "robosim": "robosim",
+    "planning": "gap",
+    "eval": "vabar",
 }
 
 MEMBERS = {

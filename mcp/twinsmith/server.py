@@ -23,6 +23,7 @@ Nothing here starts a simulator unless the explicit ``launch`` toolset is select
 """
 
 import functools
+import importlib
 import inspect
 import json
 import logging
@@ -1234,13 +1235,15 @@ def _register_host_tools(server: FastMCP, state: _BridgeState, groups: Iterable[
     register_sim_session_tools(server, groups=groups, env=env,
                                on_launch=lambda record: state.launched_sessions.add(record["id"]))
     register_isaaclab_tools(server, groups=groups)
-    if "robosim" in groups:
-        from .robosim import register_robosim_tools
-        register_robosim_tools(server)
+    wrapped = [("robosim", "robosim", "register_robosim_tools"), ("planning", "gap", "register"), ("eval", "vabar", "register")]
+    for group, name, function in wrapped:
+        if group not in groups:
+            continue
+        getattr(importlib.import_module(f".{name}", __package__), function)(server)
         # Listed like every other host tool: no generated titles, no docstring indentation.
-        tool = server._tool_manager._tools["robosim"]
+        tool = server._tool_manager._tools[name]
         tool.description = inspect.cleandoc(tool.description)
-        strip_schema_titles(server, "robosim")
+        strip_schema_titles(server, name)
         grouped_tools.shorten_listed(tool)
 
 
@@ -1782,6 +1785,12 @@ _HELP_TOPICS = (
      "Order: robosim action=start with a template (plain data), reference (frames from the clip), compare, update_scene, "
      "tune_push (makes the simulated block move like the real one), rollout, compare_take, report, stop. It compares images; "
      "it does not fit mass or friction."),
+    ("plan a task as a skill graph or score it on a benchmark (Graph-as-Policy, VABAR)",
+     ("graph-as-policy", "skill graph", "gap ", "vabar", "benchmark", "workflow graph", "open-robot-skills"),
+     "gap in the planning toolset and vabar in the eval toolset (both off by default: toolsets action=enable "
+     "names=[\"planning\", \"eval\"]). They need no simulator bridge and run their own pinned checkouts. gap action=status, "
+     "tools, check, generate (paid model, only when the owner allows it), run (simulation only, a job). vabar action=status, "
+     "list, run (a job), bench (print_only=true shows the plan), results. Never real hardware."),
     ("operate a desktop app (FreeCAD, RViz, any X11 window) or Isaac Sim's own UI with mouse and keyboard",
      ("click", "typing", "type into", "type text", "keyboard", "mouse", "button", "menu", "toolbar", "dialog", "widget",
       "desktop", "gui", "freecad", "rviz", "computer use", "operate", "scroll"),

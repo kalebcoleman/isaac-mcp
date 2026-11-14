@@ -43,7 +43,7 @@ arguments they do not declare, so a misspelled name is an error rather than bein
 bridge's own metadata takes precedence over these snapshots once discovered.
 """
 LOCAL_MODULES = ("server.py", "screen.py", "desktop_input.py", "sim_sessions.py", "isaaclab/tools.py",
-                 "robosim/tools.py")
+                 "robosim/tools.py", "gap.py", "vabar.py")
 CATALOGS_BY_NAME = ("builtins.json", "sim.json", "assets.json", "workcell.json")
 # Where each toolset's behaviour is described, relative to docs/.
 REFERENCE = {
@@ -51,7 +51,8 @@ REFERENCE = {
     "input": "TOOLS-HOST.md#optional-desktop-input", "launch": "TOOLS-HOST.md#optional-simulator-sessions",
     "scene": "TOOLS-SCENE.md", "physics": "TOOLS-SCENE.md", "sensors": "TOOLS-SCENE.md",
     "ros2": "TOOLS-SCENE.md", "kit_debug": "TOOLS-SCENE.md", "assets": "ASSET-IMPORT.md",
-    "lab": "TOOLS-ISAACLAB.md", "robosim": "ROBOSIM.md",
+    "lab": "TOOLS-ISAACLAB.md", "robosim": "ROBOSIM.md", "planning": "PLANNING-EVAL.md#gap",
+    "eval": "PLANNING-EVAL.md#vabar",
     "workcell": "../exts/workcell/workcell/README.md",
 }
 

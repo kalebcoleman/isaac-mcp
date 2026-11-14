@@ -73,7 +73,8 @@ are on. Every tool and its arguments are in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS
   that window's buffer directly, so overlapping windows do not obscure it. Captures are written to `~/Pictures/twinsmith/` and
   `~/Videos/twinsmith/`; recordings contain no audio.
 - **Isaac Lab and script jobs** (`lab`, and `run_script` in `code`): see the [Isaac Lab reference](TOOLS-ISAACLAB.md).
-- **Optional** (`input`, `launch`, `robosim`): desktop input, managed simulator sessions, RoboSimStudio.
+- **Optional** (`input`, `launch`, `robosim`, `planning`, `eval`): desktop input, managed simulator sessions, RoboSimStudio,
+  Graph-as-Policy and VABAR ([planning and evaluation](PLANNING-EVAL.md)).
 
 See the [host and bridge reference](TOOLS-HOST.md) for behaviour and limits.
 

@@ -19,7 +19,7 @@ import threading
 import time
 import uuid
 
-from twinsmith import legacy, pack_manifest
+from twinsmith import legacy, sibling
 
 from . import plan
 from . import template as scene_template_module
@@ -82,29 +82,19 @@ class RoboSimBridge:
     """
 
     def __init__(self, workspace=None, root=None):
-        self.workspace = Path(workspace or pack_manifest.workspace_dir()).expanduser().resolve()
-        self.root = Path(root or os.environ.get("TWINSMITH_ROBOSIM_ROOT", self.workspace / "tools/robosimstudio")).expanduser().resolve()
+        self.checkout = sibling.Checkout("robosimstudio", "TWINSMITH_ROBOSIM_ROOT", PIN, REPOSITORY,
+                                         workspace=workspace, root=root)
+        self.workspace, self.root = self.checkout.workspace, self.checkout.root
         self.runs = self.workspace / "runs/robosim"
         self._jobs = {}
         self._mutex = threading.RLock()
 
     def _installation(self):
-        commit = None
-        try:
-            result = subprocess.run(["git", "-C", str(self.root), "rev-parse", "HEAD"],
-                                    capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                commit = result.stdout.strip()
-        except (OSError, subprocess.SubprocessError):
-            pass
-        present = (self.root / ".venv/bin/python").is_file() and os.access(self.root / ".venv/bin/python", os.X_OK)
-        info = {"checkout": str(self.root), "rss_commit": commit, "pin": PIN,
-                "pin_match": bool(commit and commit.startswith(PIN)), "environment_present": present,
-                "warnings": []}
-        if not info["pin_match"]:
-            info["warnings"].append(f"RSS checkout commit {commit or 'unknown'} differs from tested pin {PIN}.")
+        info = self.checkout.info()
+        info.pop("setup", None)
+        commit = info["rss_commit"] = info.pop("commit")
         ctl = self.root / "examples/live/ctl"
-        if not present or not ctl.is_file() or not os.access(ctl, os.X_OK) or not commit:
+        if not info["environment_present"] or not ctl.is_file() or not os.access(ctl, os.X_OK) or not commit:
             info.update(ok=False, error=f"RSS checkout/private environment missing or unreadable. Clone {REPOSITORY} "
                         f"at commit {PIN} into {self.root}, then provision its own .venv/bin/python. "
                         "The bridge never installs RSS or changes its environment.")

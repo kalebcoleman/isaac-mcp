@@ -181,6 +181,15 @@ def resolve(env: Mapping[str, str] | None = None, cli_toolsets: str | None = Non
     return Config(enabled, backend, source, runtime, cursor_badge=badge)
 
 
+def allow_paid(home: Path | None = None) -> bool:
+    """``[planning] allow_paid`` from the owner's own ``~/.config/twinsmith/config.toml``, false when unset. A project
+    file is not read for it, so a cloned repository cannot turn on calls to paid models."""
+    for label, data in _config_files(home=home):
+        if label == "user file" and "allow_paid" in data.get("planning", {}):
+            return _flag(data["planning"]["allow_paid"], "planning.allow_paid")
+    return False
+
+
 def physics_backend(**kwargs) -> str:
     """Return the configured backend; this does not change any simulator's engine."""
     return resolve(**kwargs).physics_backend

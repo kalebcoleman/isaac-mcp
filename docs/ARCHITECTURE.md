@@ -20,7 +20,7 @@ three kinds:
 
 | Kind | Examples | Where the work happens |
 |---|---|---|
-| Host tool | `help`, `screenshot`, `join_videos`, `robosim` | In the server process itself |
+| Host tool | `help`, `screenshot`, `join_videos`, `robosim`, `gap`, `vabar` | In the server process itself |
 | Simulator tool | `sim__*`, `assets__*`, `status`, `run_python`, the work cell's `workcell__*` | Inside a running Isaac Sim, reached over a local TCP connection |
 | Job tool | `isaaclab__launch`, `run_script` | In a separate process the server starts and watches |
 
@@ -35,6 +35,8 @@ three kinds:
 | Work cell | `exts/workcell/` | One lab's UR5e Jenga work cell: the `workcell.*` tools on the same bridge. Its assets come from an [asset pack](ASSET-PACKS.md). See its [README](../exts/workcell/workcell/README.md). |
 | Isaac Lab jobs | `mcp/twinsmith/isaaclab/` | Train, evaluate, play and record in separate processes the host starts. |
 | RoboSimStudio bridge | `mcp/twinsmith/robosim/` | Runs RoboSimStudio in its own Python environment from one grouped tool. |
+| Planning and evaluation | `mcp/twinsmith/gap.py`, `mcp/twinsmith/vabar.py` | Run Graph-as-Policy and VABAR from their own pinned checkouts. |
+| Pinned checkouts | `mcp/twinsmith/sibling.py` | What the wrapped tools share: find a checkout and its commit, run its command line with a scrubbed environment, start it as a job. |
 | Launch and checks | `run.sh`, `install.sh`, `scripts/` | Start Isaac Sim with the extensions, install the host, run checks. |
 
 They are separate on purpose. The host must start instantly and must never need the 20 GB simulator environment just to
@@ -180,6 +182,14 @@ See [Asset packs](ASSET-PACKS.md) and [importing](ASSET-IMPORT.md).
 `robosim` is one grouped tool, registered by the `robosim` toolset (off by default). It does not use the Kit bridge: it runs
 RoboSimStudio commands with RoboSimStudio's own Python environment, so the host never imports it, and keeps each run's files
 under `<workspace>/runs/robosim/`. See [ROBOSIM.md](ROBOSIM.md).
+
+## Graph-as-Policy and VABAR
+
+`gap` (toolset `planning`) and `vabar` (toolset `eval`), both off by default, wrap two more pinned checkouts the same way:
+the checkout is found under `<workspace>/tools/`, its commit is reported against a `PIN` in the code, arguments are typed
+and allow-listed, long work is a job in the shared jobs folder, and run files go under `<workspace>/runs/gap/` and
+`<workspace>/runs/vabar/`. `gap` refuses anything that would reach Graph-as-Policy's real-hardware option. See
+[PLANNING-EVAL.md](PLANNING-EVAL.md).
 
 ## Seeing and recording
 

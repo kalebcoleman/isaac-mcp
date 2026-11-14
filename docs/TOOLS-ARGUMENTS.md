@@ -1579,6 +1579,45 @@ RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a sce
 - `all` (bool, default `False`): status without run: every run in full, not live servers and the 5 newest.
 - `max_trials` (int | None, default `None`): tune_push: most rollouts to try (default 6, at most 12).
 
+## `planning`: Graph-as-Policy skill graphs, generated and run in simulation
+
+Toolset `planning` is off until you select it with `+planning`. Reference: [PLANNING-EVAL.md](PLANNING-EVAL.md#gap). 1 tools, listed as 1: `gap`.
+
+### `gap`
+
+Graph-as-Policy skill graphs, from its own pinned checkout: status (checkout, GPU, keys), tools (the skill catalog), check (which tool bundles are ready), generate (a graph from an instruction; calls a paid model, only when the owner allows it), run (a graph in simulation, as a job; uses the GPU). Never real hardware. Follow jobs with jobs(action="status").
+
+- `action` (Literal['status', 'tools', 'check', 'generate', 'run'], required): Action to perform.
+- `sim` (str | None, default `None`): run (required): simulated SUITE/TASK, such as libero_object/0. Simulation only.
+- `graph` (str | None, default `None`): run (required): workflow directory or workflow.json, in this tool's run folder or the GaP or VABAR checkout.
+- `instruction` (str | None, default `None`): generate (required): the task in words, one line.
+- `model` (str | None, default `None`): generate: provider model name; omit for the upstream default.
+- `name` (str | None, default `None`): generate/run: run folder name under <workspace>/runs/gap; default action and time.
+- `timeout_s` (float, default `3600`): generate/run: job time limit in seconds.
+- `allow_concurrent_gpu` (bool, default `False`): run: knowingly start beside another GPU job or a running Isaac Sim.
+
+## `eval`: VABAR benchmark runs and their results
+
+Toolset `eval` is off until you select it with `+eval`. Reference: [PLANNING-EVAL.md](PLANNING-EVAL.md#vabar). 1 tools, listed as 1: `vabar`.
+
+### `vabar`
+
+VABAR benchmark from its own pinned checkout: status (pins, warmup), list (tasks), run (a task's episodes, as a job; uses the GPU), bench (a frozen cell; print_only=true returns the plan, false runs it as a job), results (success table of a run folder). Follow jobs with jobs(action="status").
+
+- `action` (Literal['status', 'list', 'run', 'bench', 'results'], required): Action to perform.
+- `task` (str | None, default `None`): run (required): SUITE/VARIANT from list, such as tool_hanging/wrenches_level1.
+- `solve` (Literal['routine', 'graph', 'idle'], default `'routine'`): run/bench: the scripted routine, a Graph-as-Policy graph, or idle.
+- `graph` (str | None, default `None`): run with solve=graph: a graph label the task ships, such as gt; omit for its default.
+- `episodes` (str | None, default `None`): run: '0:16', '0:100:4' or '0,4,9'; default the first episode.
+- `cell` (str | None, default `None`): bench (required): benchmark cell TASK_CLASS/L<level>, such as tool_hanging/L1.
+- `limit` (int | None, default `None`): bench: run only the first N instances.
+- `workers` (int, default `1`): bench: worker processes, 1 to 4.
+- `print_only` (bool, default `True`): bench: return the planned command without running it.
+- `name` (str | None, default `None`): run/bench: run folder name under <workspace>/runs/vabar; default action and time.
+- `run` (str | None, default `None`): results: run folder name; omit to list the newest runs.
+- `timeout_s` (float, default `21600`): run/bench: job time limit in seconds.
+- `allow_concurrent_gpu` (bool, default `False`): run/bench: knowingly start beside another GPU job or a running Isaac Sim.
+
 ## `input`: Desktop mouse and keyboard input
 
 Toolset `input` is off until you select it with `+input` (never enabled by `all`). Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-desktop-input). 6 tools, listed as 1: `computer` (click, drag, scroll, type, key, batch).

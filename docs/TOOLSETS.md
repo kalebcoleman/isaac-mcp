@@ -28,6 +28,8 @@ rows for the server you have installed, with the current state of each.
 | `kit_debug`: Inspect Kit logs and operate its UI | off | `sim__logs`, `sim__ui` |
 | `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__eval`, `workcell__jenga`, `workcell__perception`, `workcell__planning`, `workcell__real2sim`, `workcell__robot` |
 | `robosim`: RoboSimStudio real-to-sim runs in its own private environment | off | `robosim` |
+| `planning`: Graph-as-Policy skill graphs, generated and run in simulation | off | `gap` |
+| `eval`: VABAR benchmark runs and their results | off | `vabar` |
 | `input`: Desktop mouse and keyboard input | explicit only | `computer` |
 | `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
 | `extensions`: Tools from uncatalogued extension namespaces | on | none |
@@ -44,6 +46,8 @@ rows for the server you have installed, with the current state of each.
   planning and evaluation answer that they are not implemented.
 - `robosim` is one grouped tool that runs RoboSimStudio in its own Python environment; it needs no Kit bridge. See
   [ROBOSIM.md](ROBOSIM.md).
+- `planning` holds `gap` (Graph-as-Policy, simulation only) and `eval` holds `vabar` (the VABAR benchmark). Each runs a pinned
+  checkout with its own environment and needs no Kit bridge. See [PLANNING-EVAL.md](PLANNING-EVAL.md).
 - The status also names toolsets that are **planned** and not built yet; they list no tools.
 
 ## Choosing toolsets
@@ -125,8 +129,8 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 |---|---|--:|
 | `minimal` | `core` | 6 |
 | `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 32 |
-| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 49 |
-| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 51 |
+| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `planning`, `eval`, `extensions` | 51 |
+| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `planning`, `eval`, `input`, `launch`, `extensions` | 53 |
 <!-- /generated -->
 
 | Selection | Listed tools | Characters | Estimated tokens |

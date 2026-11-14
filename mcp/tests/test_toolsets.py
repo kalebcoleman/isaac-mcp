@@ -45,7 +45,7 @@ def test_robosim_is_off_by_default_and_registers_only_its_grouped_tool():
 def test_documented_default_and_planned_selection():
     assert toolsets.DEFAULT == {"core", "scene", "physics", "sensors", "assets", "code", "screen", "extensions"}
     assert config.select("all") == set(toolsets.TOOLSETS) - {"input", "launch"}
-    assert set(toolsets.PLANNED) == {"backend", "params", "compare", "planning", "real2sim", "eval"}
+    assert set(toolsets.PLANNED) == {"backend", "params", "compare", "real2sim"}
     assert not set(toolsets.PLANNED) & set(toolsets.TOOLSETS)
 
 
