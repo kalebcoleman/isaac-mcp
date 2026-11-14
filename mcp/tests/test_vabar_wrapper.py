@@ -88,6 +88,13 @@ def test_run_passes_a_bus_timeout(workspace):
     result = vabar.call(co, "run", task="tool_hanging/scissors_level1", solve="graph", graph="gt", bus_timeout_s=180, name="b")
     assert result["result"]["command"][-4:] == ["--bus-timeout", "180", "--out", str(workspace / "runs/vabar/b")]
     wait_for(result["result"]["job_id"])
+    for task, expected in (("tool_hanging/scissors_level1", "180"), ("cable_route/board_l1", "600"), ("usbc_insert/a", "600")):
+        started = vabar.call(co, "run", task=task, solve="graph", name=f"d-{expected}-{task.split('/')[0]}")
+        assert started["result"]["command"][-4:-2] == ["--bus-timeout", expected], task
+        wait_for(started["result"]["job_id"])
+    routine = vabar.call(co, "run", task="cable_route/board_l1", name="r")
+    assert "--bus-timeout" not in routine["result"]["command"]
+    wait_for(routine["result"]["job_id"])
     for action, value in (("run", 10), ("run", 4000), ("run", True), ("run", 60.5), ("bench", 180)):
         refused = vabar.call(co, action, task="a/b", cell="tool_hanging/L1", bus_timeout_s=value)
         assert refused["code"] == "INVALID_VALUE" and "bus_timeout_s" in refused["error"], (action, value)

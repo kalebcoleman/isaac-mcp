@@ -33,6 +33,11 @@ RESULT_FILES = 200
 RESULT_BYTES = 8 * 1024 * 1024   # read at most this much of one episode_results.jsonl
 WALK_ENTRIES = 200_000            # stop walking a run folder after this many entries
 REASONS = 3                       # failure reasons listed per results row
+# A graph run's tool-call wait when none is given: what upstream's bench cells use (vabar/benchmark.py:68 and :73 at the
+# pin), since upstream's own 30 s default fails a cold first run while a kernel compiles.
+GRAPH_BUS_TIMEOUT_S = 180
+CABLE_SUITES = ("cable_route", "usbc_insert")
+CABLE_BUS_TIMEOUT_S = 600
 
 
 def checkout(workspace=None, root=None) -> sibling.Checkout:
@@ -166,6 +171,8 @@ def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=No
                 raise sibling.Refusal("INVALID_VALUE", "limit must be a positive number of instances.")
         if bus_timeout_s is not None and (action != "run" or type(bus_timeout_s) is not int or not 30 <= bus_timeout_s <= 3600):
             raise sibling.Refusal("INVALID_VALUE", "bus_timeout_s is for run only: 30 to 3600 seconds (bench sets its own).")
+        if action == "run" and solve == "graph" and bus_timeout_s is None:
+            bus_timeout_s = CABLE_BUS_TIMEOUT_S if task.split("/")[0] in CABLE_SUITES else GRAPH_BUS_TIMEOUT_S
         if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not 0 < timeout_s <= 7 * 86400:
             raise sibling.Refusal("INVALID_VALUE", "timeout_s must be more than 0 and at most 7 days in seconds.")
         folder = co.workspace / "runs/vabar" / sibling.run_name(name, action)
@@ -222,7 +229,7 @@ def register(server, *, workspace=None, root=None):
         workers: Annotated[int, Field(description="bench: worker processes, 1 to 4.", ge=1, le=4)] = 1,
         print_only: Annotated[bool, Field(description="bench: return upstream's resolved jobs (--print, CPU, writes nothing) without running.")] = True,
         name: Annotated[str | None, Field(description="run/bench: run folder name under <workspace>/runs/vabar; default action and time.")] = None,
-        bus_timeout_s: Annotated[int | None, Field(description="run: seconds a graph's tool call may wait (upstream --bus-timeout, default 30; bench cells use 180, cable cells 600).", ge=30, le=3600)] = None,
+        bus_timeout_s: Annotated[int | None, Field(description="run: seconds a graph's tool call may wait (--bus-timeout); default for solve=graph 180, cable suites 600, as bench does.", ge=30, le=3600)] = None,
         run: Annotated[str | None, Field(description="results: run folder name; omit to list the newest runs.")] = None,
         timeout_s: Annotated[float, Field(description="run/bench: job time limit in seconds.", gt=0, le=604800)] = 21600,
         allow_concurrent_gpu: Annotated[bool, Field(description="run/bench: knowingly start beside another GPU job or a running Isaac Sim.")] = False,
