@@ -47,12 +47,12 @@ packs and checks that they give the same verdict and message.
 
 One rule resolves it, for the host, the CLI and Kit alike (Kit, which cannot import the host module, repeats it in `exts/workcell/workcell/asset_pack.py`). In order:
 
-1. `TWINSMITH_ASSET_ROOT`, an absolute path (its old name, `ISAAC_MCP_ASSET_ROOT`, is a permanent alias of it).
+1. `TWINSMITH_ASSET_ROOT`, an absolute path.
 2. `<workspace>/assets`, if that folder exists.
-3. `<workspace>/isaac-mcp-assets`, if it exists. The result warns that this name is transitional.
-4. Otherwise an error that names the setting.
+3. Otherwise an error that names the setting, and says where to move an old asset or workspace folder it finds
+   ([Workspace folder](MIGRATING.md#workspace-folder)).
 
-`<workspace>` is `TWINSMITH_WORKSPACE`, else the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace`. Only while that last folder does not exist and the old `<home>/isaac-workspace` does, the old folder is used (the transition; see [Workspace folder](MIGRATING.md#workspace-folder)).
+`<workspace>` is `TWINSMITH_WORKSPACE`, else the folder that holds the checkout (when it has `envs/` or `assets/`), else `<home>/robotics-workspace`.
 Set `TWINSMITH_ASSET_ROOT` in the MCP server's `env` **and** in the environment of any Kit you start yourself: each reads
 its own settings. `assets__pack action=list` reports what the host resolved, and warns when a connected Kit uses another root.
 

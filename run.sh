@@ -75,6 +75,13 @@ case "$PORT" in
 esac
 if [ "$PORT" -gt 65535 ]; then echo "port must be a number from 0 to 65535, not '$PORT'" >&2; exit 2; fi
 
+# An old setting or config file from before the rename stops the launch, whatever the flags, before any interpreter is
+# probed or Kit starts (docs/MIGRATING.md). --help and TWINSMITH_PRINT_PYTHON=1 only report, so they skip it.
+if [ "$SHOW_HELP" != 1 ] && [ "${TWINSMITH_PRINT_PYTHON:-0}" != 1 ]; then
+  PYTHONPATH="$ROOT/mcp${PYTHONPATH:+:$PYTHONPATH}" python3 -m twinsmith.config --check \
+    || { echo "run.sh: refused by the configuration check above; nothing was started" >&2; exit 2; }
+fi
+
 if [ "$PY_AUTODETECT" = 1 ]; then
   if command -v python3 >/dev/null 2>&1 && [ -f "$ROOT/scripts/env.py" ]; then
     # Any Isaac Sim 6.x; the first match in the documented search order wins.

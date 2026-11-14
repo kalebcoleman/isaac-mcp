@@ -23,7 +23,7 @@ reason = "The bridge's refusal message names the old project so the user knows w
 [[allow]]
 pattern = "*"
 path = "mcp/tests/test_old_names.py"
-reason = "Tests that old settings are refused, the permanent alias works and the installer cleans up the old id."
+reason = "Tests that old settings and folders are refused or not read, and that the installer cleans up the old id."
 
 [[allow]]
 pattern = "*"
@@ -41,39 +41,13 @@ pattern = "isaac-mcp"
 path = "mcp/twinsmith/asset_packs.py"
 reason = "The old pack format's build-description file, isaac-mcp-pack.json, is left out when an old pack on disk is converted."
 
-# --- ISAAC_MCP_ASSET_ROOT is a permanent alias of TWINSMITH_ASSET_ROOT: no warning, no removal date
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "mcp/twinsmith/pack_manifest.py"
-literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Permanent alias, read where the host resolves the asset root."
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "exts/workcell/workcell/asset_pack.py"
-literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Permanent alias, read here because this loader runs in Kit and cannot import the host's resolver."
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "docs/ASSET-PACKS.md"
-literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Documents the permanent alias."
-
-[[allow]]
-pattern = "ISAAC_MCP"
-path = "docs/ENVIRONMENT.md"
-literal = "ISAAC_MCP_ASSET_ROOT"
-reason = "Documents the permanent alias."
-
 # --- Folder names that exist on users' disks
 
 [[allow]]
 pattern = "isaac-mcp"
 path = "*"
 literal = "isaac-mcp-assets"
-reason = "The transitional asset-root folder name is still recognised (with a warning); it is a folder on users' disks."
+reason = "The old asset-root folder name is no longer read; it is named only to tell a user with one on disk where to move it."
 
 [[allow]]
 pattern = "isaac-mcp"

@@ -361,17 +361,18 @@ def test_init_default_workspace_uses_env_then_home(world):
     assert (world.tmp / "viaenv" / "assets").is_dir()
 
 
-def test_init_uses_the_old_home_folder_only_while_the_new_one_is_absent(world):
+def test_init_does_not_use_the_old_home_folder_and_says_how_to_move_it(world):
     old = world.home / "isaac-workspace"
     old.mkdir()
     (old / "keep.txt").write_text("x")
+    r = run_cli(world, "init")
+    assert r.returncode == 2 and "mv " in r.stderr and str(world.home / "robotics-workspace") in r.stderr
+    assert not (world.home / "robotics-workspace").exists() and not (old / "runs").exists()
+    assert (old / "keep.txt").read_text() == "x"
+    (world.home / "robotics-workspace").mkdir()                 # the new folder exists: it is used
     assert run_cli(world, "init").returncode == 0
-    assert (old / "runs").is_dir() and (old / "assets").is_dir() and (old / "keep.txt").read_text() == "x"
-    assert not (world.home / "robotics-workspace").exists()
-    (world.home / "robotics-workspace").mkdir()                 # the new folder now exists: it wins
-    assert run_cli(world, "init").returncode == 0
-    assert (world.home / "robotics-workspace" / "runs").is_dir()
-    r = run_cli(world, "init", env={"TWINSMITH_WORKSPACE": str(world.tmp / "viaenv")})   # the variable wins over both
+    assert (world.home / "robotics-workspace" / "runs").is_dir() and not (old / "runs").exists()
+    r = run_cli(world, "init", env={"TWINSMITH_WORKSPACE": str(world.tmp / "viaenv")})   # the variable wins
     assert (world.tmp / "viaenv" / "runs").is_dir() and r.returncode == 0
 
 
@@ -382,9 +383,9 @@ def test_init_leaves_an_existing_old_asset_folder_alone_and_says_so(world):
     r = run_cli(world, "init", "--workspace", str(target))
     assert r.returncode == 0
     assert (target / "isaac-mcp-assets" / "pack" / "v1" / "pack.yaml").read_text() == "{}"
-    assert not (target / "assets").exists()          # an empty assets/ would be preferred over the populated old folder
-    assert "isaac-mcp-assets" in r.stdout and "left as it is" in r.stdout
-    assert f'TWINSMITH_ASSET_ROOT="{target}/isaac-mcp-assets"' in r.stdout
+    assert not (target / "assets").exists()          # so that one mv renames the old folder
+    assert "no longer read" in r.stdout and f'mv "{target}/isaac-mcp-assets" "{target}/assets"' in r.stdout
+    assert f'TWINSMITH_ASSET_ROOT="{target}/assets"' in r.stdout
     assert (target / "envs").is_dir() and (target / "tools").is_dir()
 
 
@@ -447,7 +448,7 @@ def test_run_sh_explicit_names_and_venv_keep_old_behaviour(world):
 
 
 def test_run_sh_nothing_found_keeps_error_with_pointer(world):
-    shim = "#!/bin/sh\nexit 1\n"
+    shim = '#!/bin/sh\n[ "$2" = twinsmith.config ] && exit 0\nexit 1\n'      # the settings check passes; nothing is found
     r = run_sh(world, shim, env={"TWINSMITH_PRINT_PYTHON": "0"})
     assert r.returncode == 1
     assert "env.py find" in r.stderr and "LINUX-SETUP.md" in r.stderr and "TWINSMITH_SIM_PYTHON" in r.stderr

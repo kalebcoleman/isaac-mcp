@@ -11,17 +11,41 @@ SETTINGS_SUBTREE = "/persistent/exts/twinsmith.bridge"
 
 # Variables of isaac-mcp (before 0.3.0) that nothing reads now. The bridge refuses to listen when one is set, as the
 # host does (mcp/twinsmith/config.py, which has the same rule): an old ISAAC_MCP_READ_ONLY=1 must not leave a
-# writable simulator without a word. ISAAC_MCP_ASSET_ROOT is a permanent alias of TWINSMITH_ASSET_ROOT, not one of them.
+# writable simulator without a word.
 OLD_PREFIXES = ("ISAAC_MCP_", "UR5E_DT_")
 OLD_VARIABLES = ("ISAAC_SIM_PORT", "ISAAC_SIM_PYTHON", "ISAACLAB_JOBS_DIR")
-ASSET_ROOT_ALIAS = "ISAAC_MCP_ASSET_ROOT"
+# What an old variable became: the host's table (mcp/twinsmith/config.py), copied because Kit does not import the
+# host package. A test checks that the two are identical.
+_TOOLSETS = "TWINSMITH_TOOLSETS (it takes toolset names: docs/TOOLSETS.md)"
+_ASSET_ROOT = "TWINSMITH_ASSET_ROOT (the one folder that holds <pack id>/<version>/pack.yaml)"
+_NO_DOWNLOADS = "nothing: remove it (nothing is downloaded; put the files in a pack under TWINSMITH_ASSET_ROOT)"
+OLD_REPLACEMENTS = {
+    "ISAAC_MCP_PORT": "TWINSMITH_PORT", "UR5E_DT_PORT": "TWINSMITH_PORT", "ISAAC_SIM_PORT": "TWINSMITH_PORT",
+    "ISAAC_MCP_PYTHON": "TWINSMITH_SIM_PYTHON", "UR5E_DT_PYTHON": "TWINSMITH_SIM_PYTHON",
+    "ISAAC_SIM_PYTHON": "TWINSMITH_SIM_PYTHON",
+    "UR5E_DT_HEADLESS": "TWINSMITH_HEADLESS",
+    "ISAACLAB_JOBS_DIR": "TWINSMITH_JOBS_DIR",
+    "ISAAC_MCP_LOCAL_TOOLS": _TOOLSETS, "ISAAC_MCP_NAMESPACE": _TOOLSETS, "ISAAC_MCP_BUILTINS": _TOOLSETS,
+    "ISAAC_MCP_SCENE_TOOLS": _TOOLSETS, "ISAAC_MCP_GROUP_TOOLS": _TOOLSETS,
+    "ISAAC_MCP_ASSET_ROOT": "TWINSMITH_ASSET_ROOT", "ISAAC_MCP_ASSET_PATH": _ASSET_ROOT, "UR5E_DT_ASSET_CACHE": _ASSET_ROOT,
+    "ISAAC_MCP_ASSET_PACK": 'nothing: remove it, and name the pack as "pack": "<id>/<version>" in twinsmith.json',
+    "ISAAC_MCP_ASSET_STRICT": _NO_DOWNLOADS, "UR5E_DT_OFFLINE": _NO_DOWNLOADS,
+    "ISAAC_MCP_ASSET_REMOTE_ROOT": _NO_DOWNLOADS, "UR5E_DT_ASSET_ROOT": _NO_DOWNLOADS,
+}
 
 
 def old_settings(environ=None) -> list:
     """The isaac-mcp variables that are set, sorted."""
     environ = os.environ if environ is None else environ
-    return sorted(name for name, value in environ.items() if str(value).strip() and name != ASSET_ROOT_ALIAS
+    return sorted(name for name, value in environ.items() if str(value).strip()
                   and (name.startswith(OLD_PREFIXES) or name in OLD_VARIABLES))
+
+
+def replacement(name: str) -> str:
+    """What to set instead of the old variable ``name``."""
+    if name in OLD_REPLACEMENTS:
+        return OLD_REPLACEMENTS[name]
+    return "TWINSMITH_" + name[len("ISAAC_MCP_"):] if name.startswith("ISAAC_MCP_") else "nothing: remove it"
 
 
 class Knob:

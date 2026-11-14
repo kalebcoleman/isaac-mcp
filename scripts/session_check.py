@@ -12,10 +12,6 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "mcp"))
-try:
-    import twinsmith  # noqa: F401  (applies the old variable names, for one release)
-except Exception:     # never block a session
-    pass
 
 
 def report(port=None):

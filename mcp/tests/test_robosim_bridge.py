@@ -1288,7 +1288,7 @@ def test_the_workspace_follows_the_shared_rule(tmp_path, monkeypatch):
     monkeypatch.delenv("TWINSMITH_WORKSPACE", raising=False)
     assert RoboSimBridge().workspace == tmp_path / "home" / "robotics-workspace"
     (tmp_path / "home" / "isaac-workspace").mkdir(parents=True)
-    assert RoboSimBridge().workspace == tmp_path / "home" / "isaac-workspace"      # only while the new folder is absent
+    assert RoboSimBridge().workspace == tmp_path / "home" / "robotics-workspace"   # the old folder is not read
     (tmp_path / "home" / "robotics-workspace").mkdir()
     assert RoboSimBridge().workspace == tmp_path / "home" / "robotics-workspace"
     monkeypatch.setenv("TWINSMITH_WORKSPACE", str(tmp_path / "chosen"))

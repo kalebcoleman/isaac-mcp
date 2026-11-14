@@ -114,11 +114,11 @@ These must be the same for the host and for Kit: each reads its own environment.
 
 | Variable | Default | Read by | Meaning |
 |---|---|---|---|
-| `TWINSMITH_ASSET_ROOT` | `<workspace>/assets`, else `<workspace>/isaac-mcp-assets` (transitional, with a warning) | host, Kit | The one [asset root](ASSET-PACKS.md#the-asset-root-and-how-it-is-found): packs are `<pack id>/<version>/pack.yaml` under it. With nothing found, the error names this setting. `ISAAC_MCP_ASSET_ROOT` is a permanent alias of it: it needs no change and prints no warning. |
+| `TWINSMITH_ASSET_ROOT` | `<workspace>/assets` | host, Kit | The one [asset root](ASSET-PACKS.md#the-asset-root-and-how-it-is-found): packs are `<pack id>/<version>/pack.yaml` under it. With nothing found, the error names this setting. |
 | `TWINSMITH_ASSET_CONFIG` | unset | host, Kit | The [trusted-project approval file](TOOLS-SCENE.md#one-time-approval). No file means no approved roots. |
 | `TWINSMITH_STAGING` | `~/.cache/twinsmith/staging` | host, Kit | With no approval file: the private folder the host copies import snapshots into and Kit reads them from. |
 | `TWINSMITH_USD_PYTHON` | unset | host | A Python with `usd-core` for USD dependency checks on the host; without it they use the selected Kit. |
-| `TWINSMITH_WORKSPACE` | the folder that holds the checkout (when it has `envs/` or an asset folder), else `<home>/robotics-workspace` (the old `<home>/isaac-workspace` only while the new folder is absent); `scripts/env.py init` uses `<home>/robotics-workspace` | host, Kit, installer | The [workspace folder](LINUX-SETUP.md#one-workspace-folder); `<workspace>/assets` is where the asset root is looked for. |
+| `TWINSMITH_WORKSPACE` | the folder that holds the checkout (when it has `envs/` or `assets/`), else `<home>/robotics-workspace`; `scripts/env.py init` uses `<home>/robotics-workspace` | host, Kit, installer | The [workspace folder](LINUX-SETUP.md#one-workspace-folder); `<workspace>/assets` is where the asset root is looked for. |
 | `TWINSMITH_PROJECT` | walk up from the working directory | host, Kit | A project directory or its `twinsmith.json`; its `"pack"` key (`"<id>/<version>"`) is the default pack for `doctor` and `pin`. Only a project named here can set `isaaclab_python` and `isaaclab_root`. |
 
 ## Set by the code, read by the code
@@ -132,6 +132,6 @@ Handshakes between the server's own processes. They are not meant to be set by h
 | `TWINSMITH_TF_DOCTOR_REEXEC` | unset | `scripts/ros2_tf_doctor.py` | Stops the doctor re-running itself in a second environment more than once. |
 
 A managed session's Kit also receives `TWINSMITH_SIM_SESSION_ID` and `TWINSMITH_SIM_SESSION_DIR` from the host; no code reads
-them, they identify the process to a person. The pre-0.3.0 names of these variables, and the ones removed with the toolsets and the old asset model, are not read: a server or bridge that finds one set refuses to start and names it; see [MIGRATING.md](MIGRATING.md#environment-variables).
+them, they identify the process to a person.
 
-Every variable above had another name before 0.3.0. [MIGRATING.md](MIGRATING.md#environment-variables) lists them. 0.3.x still read the old names; they are no longer read, except `ISAAC_MCP_ASSET_ROOT`, a permanent alias of `TWINSMITH_ASSET_ROOT`.
+Most variables above had another name before 0.3.0, and some settings were removed with the toolsets and the old asset model; [MIGRATING.md](MIGRATING.md#environment-variables) lists them. Versions before the old names were removed on 2026-11-13 (PR #113, merge commit `e54ae49`) still read them. They are no longer read: a server, `run.sh` or a bridge that finds one set refuses to start and names its replacement.

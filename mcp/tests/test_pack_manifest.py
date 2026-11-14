@@ -64,17 +64,17 @@ def test_the_environment_wins(clean, monkeypatch):
 
 def test_the_workspace_assets_folder_is_next(clean, monkeypatch):
     (clean / "ws" / "assets").mkdir(parents=True)
-    (clean / "ws" / "isaac-mcp-assets").mkdir()
     monkeypatch.setenv("TWINSMITH_WORKSPACE", str(clean / "ws"))
     root = pm.resolve_asset_root()
     assert root.path == (clean / "ws" / "assets").resolve() and root.source == "workspace" and root.warnings == ()
 
 
-def test_the_transitional_name_works_and_says_so(clean, monkeypatch):
+def test_the_old_asset_folder_name_is_not_read_and_the_error_names_the_new_one(clean, monkeypatch):
     (clean / "ws" / "isaac-mcp-assets").mkdir(parents=True)
     monkeypatch.setenv("TWINSMITH_WORKSPACE", str(clean / "ws"))
-    root = pm.resolve_asset_root()
-    assert root.source == "transitional" and any("transitional" in w for w in root.warnings)
+    with pytest.raises(pm.RootError) as caught:
+        pm.resolve_asset_root()
+    assert f"move it to {(clean / 'ws' / 'assets').resolve()}" in str(caught.value)
 
 
 def test_the_workspace_defaults_to_the_folder_holding_the_checkout(clean, monkeypatch):
@@ -130,12 +130,14 @@ def test_without_a_checkout_the_new_home_folder_wins(clean, monkeypatch):
     assert pm.workspace_dir() == clean / "home" / "robotics-workspace"      # both exist: the new one
 
 
-def test_the_old_home_folder_is_used_only_when_the_new_one_is_absent(clean, monkeypatch):
+def test_the_old_home_folder_is_not_used_and_the_error_says_where_to_move_it(clean, monkeypatch):
     monkeypatch.setattr(pm, "checkout_root", lambda: None)
-    (clean / "home" / "isaac-workspace" / "isaac-mcp-assets").mkdir(parents=True)
-    assert pm.workspace_dir() == clean / "home" / "isaac-workspace"
-    root = pm.resolve_asset_root()
-    assert root.path == clean / "home" / "isaac-workspace" / "isaac-mcp-assets" and root.source == "transitional"
+    (clean / "home" / "isaac-workspace" / "assets").mkdir(parents=True)
+    assert pm.workspace_dir() == clean / "home" / "robotics-workspace"
+    with pytest.raises(pm.RootError) as caught:
+        pm.resolve_asset_root()
+    assert f"{clean / 'home' / 'isaac-workspace'} is an old name" in str(caught.value)
+    assert f"move it to {clean / 'home' / 'robotics-workspace'}" in str(caught.value)
 
 
 def test_the_new_home_folder_and_assets_are_found_without_any_setting(clean, monkeypatch):
@@ -478,15 +480,9 @@ def test_the_work_cell_default_root_follows_the_host_order(clean):
     home = clean / "home"
     environ = {}
     assert copy.default_root(environ, home) == home / "robotics-workspace" / "assets"          # nothing exists
-    (home / "isaac-workspace" / "isaac-mcp-assets").mkdir(parents=True)
-    assert copy.default_root(environ, home) == home / "isaac-workspace" / "isaac-mcp-assets"   # old folder, old name
+    (home / "isaac-workspace" / "isaac-mcp-assets").mkdir(parents=True)                         # old names: not read
     (home / "isaac-workspace" / "assets").mkdir()
-    assert copy.default_root(environ, home) == home / "isaac-workspace" / "assets"
-    (home / "robotics-workspace").mkdir()
-    assert copy.default_root(environ, home) == home / "robotics-workspace" / "assets"          # the new folder wins
-    (home / "robotics-workspace" / "isaac-mcp-assets").mkdir()
-    assert copy.default_root(environ, home) == home / "robotics-workspace" / "isaac-mcp-assets"
-    (home / "robotics-workspace" / "assets").mkdir()
+    (home / "robotics-workspace" / "isaac-mcp-assets").mkdir(parents=True)
     assert copy.default_root(environ, home) == home / "robotics-workspace" / "assets"
 
 
@@ -504,8 +500,8 @@ def test_the_work_cell_and_the_host_agree_on_the_default_root(clean, monkeypatch
     copy = load_workcell_copy(clean / "copy")
     monkeypatch.setattr(pm, "checkout_root", lambda: None)
     home = clean / "home"
-    for layout in (["robotics-workspace/assets"], ["isaac-workspace/isaac-mcp-assets"],
-                   ["robotics-workspace/isaac-mcp-assets", "isaac-workspace/assets"]):
+    for layout in (["robotics-workspace/assets"], ["robotics-workspace/assets", "isaac-workspace/isaac-mcp-assets"],
+                   ["robotics-workspace/assets", "robotics-workspace/isaac-mcp-assets", "isaac-workspace/assets"]):
         for folder in layout:
             (home / folder).mkdir(parents=True)
         assert copy.default_root({}, home) == pm.resolve_asset_root().path

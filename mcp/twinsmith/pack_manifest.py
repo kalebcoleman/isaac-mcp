@@ -21,19 +21,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT_ENV = "TWINSMITH_ASSET_ROOT"
-# The asset root's name before 0.3.0. It stays a permanent alias of ROOT_ENV, with no warning and no removal date:
-# the work cell's lead asked for this. exts/workcell/workcell/asset_pack.py reads it too.
-ASSET_ROOT_ALIAS = "ISAAC_MCP_ASSET_ROOT"
 WORKSPACE_ENV = "TWINSMITH_WORKSPACE"
 PROJECT_ENV = "TWINSMITH_PROJECT"
 PROJECT_FILE = "twinsmith.json"
 MANIFEST_NAME = "pack.yaml"
 OLD_PINS_FILE = "SHA256SUMS"
 STANDARD_DIR = "assets"
-TRANSITIONAL_DIR = "isaac-mcp-assets"
 HOME_WORKSPACE_NAME = "robotics-workspace"
-TRANSITIONAL_WORKSPACE_NAME = "isaac-workspace"
-WORKSPACE_MARKERS = ("envs", STANDARD_DIR, TRANSITIONAL_DIR)
+WORKSPACE_MARKERS = ("envs", STANDARD_DIR)
+# The folder names before the rename. They are not read; a missing asset root names them only to say where to move them.
+OLD_ASSET_DIR = "isaac-mcp-assets"
+OLD_WORKSPACE_NAME = "isaac-workspace"
 MAX_REPORTED = 200
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
@@ -57,7 +55,7 @@ class RootError(ValueError):
 @dataclass(frozen=True)
 class AssetRoot:
     path: Path
-    source: str  # "environment", "workspace" or "transitional"
+    source: str  # "environment" or "workspace"
     warnings: tuple = field(default_factory=tuple)
 
     @property
@@ -72,17 +70,14 @@ def checkout_root() -> Path | None:
 
 
 def home_workspace(home=None) -> Path:
-    """The workspace folder in a home folder: ``<home>/robotics-workspace``, or, only while that folder does
-    not exist and ``<home>/isaac-workspace`` does, the old folder (the transition from the old name)."""
+    """The workspace folder in a home folder: ``<home>/robotics-workspace``."""
     home = Path(home).expanduser() if home is not None else Path.home()
-    standard = home / HOME_WORKSPACE_NAME
-    old = home / TRANSITIONAL_WORKSPACE_NAME
-    return old if not standard.exists() and old.exists() else standard
+    return home / HOME_WORKSPACE_NAME
 
 
 def looks_like_workspace(folder: Path) -> bool:
-    """A folder that holds ``envs/``, ``assets/`` or the transitional asset folder. A git worktree of the
-    checkout usually sits in a folder that holds none of them, and that folder is not the workspace."""
+    """A folder that holds ``envs/`` or ``assets/``. A git worktree of the checkout usually sits in a
+    folder that holds neither, and that folder is not the workspace."""
     return any((folder / name).is_dir() for name in WORKSPACE_MARKERS)
 
 
@@ -102,15 +97,14 @@ def workspace_dir(environ=None) -> Path:
 def resolve_asset_root(environ=None, workspace=None) -> AssetRoot:
     """The one asset root, in this order:
 
-    1. ``$TWINSMITH_ASSET_ROOT`` (or its permanent alias ``$ISAAC_MCP_ASSET_ROOT``).
+    1. ``$TWINSMITH_ASSET_ROOT``.
     2. ``<workspace>/assets`` if that folder exists.
-    3. ``<workspace>/isaac-mcp-assets`` if it exists (the name is transitional: the result says so).
 
-    ``<workspace>`` is :func:`workspace_dir`. If none of these exists this raises :class:`RootError`
-    naming the setting.
+    ``<workspace>`` is :func:`workspace_dir`. If neither exists this raises :class:`RootError` naming the
+    setting, and the old folder names when one of them is there to be moved.
     """
     environ = os.environ if environ is None else environ
-    configured = str(environ.get(ROOT_ENV) or environ.get(ASSET_ROOT_ALIAS) or "").strip()   # the alias is permanent
+    configured = str(environ.get(ROOT_ENV) or "").strip()
     if configured:
         path = Path(configured).expanduser()
         if not path.is_absolute():
@@ -120,14 +114,21 @@ def resolve_asset_root(environ=None, workspace=None) -> AssetRoot:
     standard = base / STANDARD_DIR
     if standard.is_dir():
         return AssetRoot(standard, "workspace")
-    transitional = base / TRANSITIONAL_DIR
-    if transitional.is_dir():
-        return AssetRoot(transitional, "transitional", (f"Using {transitional}: the name isaac-mcp-assets is transitional. "
-                                                        f"Rename it to {STANDARD_DIR}/ or set {ROOT_ENV} to it.",))
-    raise RootError(f"No asset root: neither {standard} nor {transitional} exists. Set {ROOT_ENV} to the folder "
+    raise RootError(f"No asset root: {standard} does not exist. Set {ROOT_ENV} to the folder "
                     f"that holds your packs (<pack id>/<version>/pack.yaml), or create {standard} "
                     f"(the workspace is {WORKSPACE_ENV}, else the folder holding the checkout if it has envs/ or assets/, else "
-                    f"<home>/{HOME_WORKSPACE_NAME}).")
+                    f"<home>/{HOME_WORKSPACE_NAME}).{_old_folders_hint(base)}")
+
+
+def _old_folders_hint(base: Path) -> str:
+    """Where an old folder that is no longer read should go, or ''."""
+    pairs = [(base / OLD_ASSET_DIR, base / STANDARD_DIR)]
+    if base == home_workspace():
+        pairs.append((Path.home() / OLD_WORKSPACE_NAME, base))
+    for old, new in pairs:
+        if old.is_dir() and not new.exists():
+            return f" {old} is an old name that is no longer read: move it to {new} (docs/MIGRATING.md)."
+    return ""
 
 
 # ---------------------------------------------------------------------------

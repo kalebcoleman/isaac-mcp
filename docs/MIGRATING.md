@@ -1,17 +1,18 @@
 # Migrating from isaac-mcp
 
-twinsmith was called isaac-mcp until 0.3.0. 0.3.x still read the old environment variables, config file names and output
-markers. They are no longer read. This page is for anyone coming from isaac-mcp 0.2 or an older 0.3 setup that still uses
-them. It is the only page that names the old spellings.
+twinsmith was called isaac-mcp until 0.3.0. Until the old names were removed on 2026-11-13 (PR #113, merge commit
+`e54ae49`), twinsmith still read the old environment variables, config file names and output markers; a checkout or
+install that includes that commit no longer reads them. The asset-root alias `ISAAC_MCP_ASSET_ROOT` and the folder
+names `<home>/isaac-workspace` and `<workspace>/isaac-mcp-assets` were kept a little longer, and were removed by the
+pull request that followed #113. This page is for anyone coming from isaac-mcp 0.2, or from a twinsmith setup older than
+those changes that still uses them. It is the only page that names the old spellings.
 
 A host server or a Kit bridge that finds an old setting refuses to start and names it, so a leftover
-`ISAAC_MCP_READ_ONLY` or `ISAAC_MCP_TOOLSETS` cannot quietly change what a client may do. `run.sh` refuses too, before
-it starts Kit. An old `config.toml` under `~/.config/isaac-mcp` or an old `isaac-mcp.toml` is refused the same way while
-its new file is missing. Two old names are still accepted on purpose:
-
-- `ISAAC_MCP_ASSET_ROOT` is a **permanent** alias of `TWINSMITH_ASSET_ROOT`. It needs no change and prints no warning.
-- The folders `<home>/isaac-workspace` and `<workspace>/isaac-mcp-assets` are still found, as transitional fallbacks
-  (see [Folders and files](#folders-and-files) and [Workspace folder](#workspace-folder)).
+`ISAAC_MCP_READ_ONLY` or `ISAAC_MCP_TOOLSETS` cannot quietly change what a client may do; the message names what replaces
+each one. `run.sh` refuses too, whatever its flags, before it probes the interpreter or starts Kit. An old `config.toml`
+under `~/.config/isaac-mcp` or an old `isaac-mcp.toml` is refused the same way while its new file is missing. The old
+folders are not read: move them (see [Folders and files](#folders-and-files) and [Workspace folder](#workspace-folder));
+an asset root that is not found names the old folder it sees.
 
 ## The short version
 
@@ -68,12 +69,13 @@ Every `ISAAC_MCP_<X>` becomes `TWINSMITH_<X>`, with these exceptions.
 | `ISAAC_MCP_PYTHON`, `UR5E_DT_PYTHON`, `ISAAC_SIM_PYTHON` | `TWINSMITH_SIM_PYTHON` | Three names for the simulator's interpreter became one |
 | `UR5E_DT_HEADLESS` | `TWINSMITH_HEADLESS` | |
 | `ISAACLAB_JOBS_DIR` | `TWINSMITH_JOBS_DIR` | The other `ISAACLAB_*` names are unchanged, `ISAACLAB_EXTERNAL_CALLBACK` included |
-| `ISAAC_MCP_ASSET_ROOT` | `TWINSMITH_ASSET_ROOT` | The old name is a **permanent** alias: it keeps working, with no warning |
+| `ISAAC_MCP_ASSET_ROOT` | `TWINSMITH_ASSET_ROOT` | Was an alias until the pull request after #113; now refused like the others. Rename it |
 | `ISAAC_MCP_LOCAL_TOOLS`, `ISAAC_MCP_NAMESPACE`, `ISAAC_MCP_BUILTINS`, `ISAAC_MCP_SCENE_TOOLS`, `ISAAC_MCP_GROUP_TOOLS` | `TWINSMITH_TOOLSETS` | The 0.2 selection settings; see [toolsets](TOOLSETS.md) |
 | `ISAAC_MCP_ASSET_PATH`, `UR5E_DT_ASSET_CACHE` | `TWINSMITH_ASSET_ROOT` | One folder that holds `<pack id>/<version>/pack.yaml` |
 | `ISAAC_MCP_ASSET_PACK` | none | The project file's `"pack": "<id>/<version>"`, or the tool's `pack` argument |
 | `ISAAC_MCP_ASSET_STRICT`, `UR5E_DT_OFFLINE`, `ISAAC_MCP_ASSET_REMOTE_ROOT`, `UR5E_DT_ASSET_ROOT` | none | Nothing is ever downloaded; put the files in a pack |
-| `ISAAC_SIM_PATH`, `UR5E_DT_SHOW_PANEL`, `UR5E_DT_CAMERA_CONFIG` | none | Removed. Use NVIDIA's `ISAACSIM_PATH` for the first |
+| `UR5E_DT_SHOW_PANEL`, `UR5E_DT_CAMERA_CONFIG` | none | Removed |
+| `ISAAC_SIM_PATH` | none | Removed and **ignored**, not refused (it is not an `ISAAC_MCP_*` name). Use NVIDIA's `ISAACSIM_PATH` |
 
 Every other `ISAAC_MCP_*` or `UR5E_DT_*` name that is set, and `ISAAC_SIM_PORT`, `ISAAC_SIM_PYTHON` or `ISAACLAB_JOBS_DIR`,
 stops the host server (and `run.sh`) and keeps the Kit bridge from listening, with a message that names it. Remove it or
@@ -107,17 +109,17 @@ The runtime folders (the token and portfile folder `/tmp/isaac-mcp-<uid>`, `isaa
 are recreated under the new names; nothing to move. A simulator started by isaac-mcp advertises its bridge in the old
 place, so restart it.
 
-The asset-root folder name `isaac-mcp-assets` is still found, with a warning that the name is transitional. Rename it to
-`assets/` inside your workspace, or set `TWINSMITH_ASSET_ROOT` to it. Nothing under it needs to change. An old-format pack
-in it can be converted with `scripts/assets.py adopt --from-old`.
+The asset-root folder name `isaac-mcp-assets` is no longer read. Rename it to `assets/` inside your workspace, or set
+`TWINSMITH_ASSET_ROOT` to it. Nothing under it needs to change. An old-format pack in it can be converted with
+`scripts/assets.py adopt --from-old`.
 
 ## Workspace folder
 
 The default workspace is `<home>/robotics-workspace` (a general robotics workspace: `twinsmith/`, `assets/`, `envs/`,
-`projects/`, `tools/`, `runs/`), no longer `<home>/isaac-workspace`. Nothing is moved for you. An existing
-`<home>/isaac-workspace` is still used, as the transitional fallback, while `<home>/robotics-workspace` does not exist; if
-both exist the new one wins. `TWINSMITH_WORKSPACE` always wins over both. To move, only when no simulator or job is running
-from the workspace:
+`projects/`, `tools/`, `runs/`), no longer `<home>/isaac-workspace`. Nothing is moved for you, and the old folder is not
+read: with only `<home>/isaac-workspace`, the asset root is not found (the error says where to move it) and
+`scripts/env.py init` stops and prints the `mv`. `TWINSMITH_WORKSPACE` always wins. To move, only when no simulator or job
+is running from the workspace:
 
 ```bash
 mv ~/isaac-workspace ~/robotics-workspace && ln -s ~/robotics-workspace ~/isaac-workspace

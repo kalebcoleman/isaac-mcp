@@ -24,12 +24,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "mcp"))
 from twinsmith import asset_packs as packs  # noqa: E402
+from twinsmith import config  # noqa: E402
 from twinsmith import pack_manifest  # noqa: E402
 from twinsmith.asset_packs import PackError as CliError  # noqa: E402
 
@@ -70,6 +72,10 @@ def cmd_where(args) -> int:
         root, source, warnings, error = str(resolved.path), resolved.source, list(resolved.warnings), None
     except pack_manifest.RootError as exc:
         root, source, warnings, error = None, None, [], str(exc)
+    try:
+        config.refuse_old_settings(os.environ)      # ignored here; the server refuses to start with one
+    except ValueError as exc:
+        warnings.append(str(exc))
     try:
         selected = pack_manifest.project_pack()
     except ValueError as exc:

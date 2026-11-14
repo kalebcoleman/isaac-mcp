@@ -31,10 +31,9 @@ SHELL_VARIABLE = re.compile(r"\$\{?([A-Z][A-Z0-9_]+)")
 
 
 def retired():
-    """Old names the code spells only to refuse them, and the asset root's permanent alias, which the page
-    documents in the TWINSMITH_ASSET_ROOT row."""
-    from twinsmith import config, pack_manifest
-    return set(config.OLD_VARIABLES) | {pack_manifest.ASSET_ROOT_ALIAS}
+    """Old names the code spells only to refuse them and to name their replacements."""
+    from twinsmith import config
+    return set(config.OLD_VARIABLES) | set(config.OLD_REPLACEMENTS)
 
 
 def is_project(name):

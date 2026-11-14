@@ -14,33 +14,56 @@ except ModuleNotFoundError:          # Python before 3.11: tomli, if it is insta
     except ModuleNotFoundError:
         tomllib = None
 
-from .pack_manifest import ASSET_ROOT_ALIAS
 from .toolsets import DEFAULT, PROFILES, TOOLSETS
 
 # isaac-mcp, this project's name before 0.3.0, read these settings and files; 0.3 still honoured them, and nothing
 # reads them now. A server that finds one refuses to start rather than ignore it: a leftover ISAAC_MCP_READ_ONLY,
 # ISAAC_MCP_TOOLSETS or isaac-mcp.toml would otherwise change what a client may do, or the physics engine, without a
-# word. docs/MIGRATING.md maps each one to its new name. ISAAC_MCP_ASSET_ROOT is not one of them: it is a permanent
-# alias of TWINSMITH_ASSET_ROOT. The Kit bridge applies the same rule (twinsmith_bridge/knobs.py).
+# word. docs/MIGRATING.md maps each one to its new name. The Kit bridge applies the same rule (twinsmith_bridge/knobs.py).
 OLD_PREFIXES = ("ISAAC_MCP_", "UR5E_DT_")
 OLD_VARIABLES = ("ISAAC_SIM_PORT", "ISAAC_SIM_PYTHON", "ISAACLAB_JOBS_DIR")
 OLD_USER_FILE = ".config/isaac-mcp/config.toml"     # now .config/twinsmith/config.toml
 OLD_PROJECT_FILE = "isaac-mcp.toml"                 # now twinsmith.toml
+# What an old variable became, from the table in docs/MIGRATING.md. Any other ISAAC_MCP_<X> became TWINSMITH_<X>; any
+# other old name has no replacement. The bridge keeps an identical table (twinsmith_bridge/knobs.py; a test compares them).
+_TOOLSETS = "TWINSMITH_TOOLSETS (it takes toolset names: docs/TOOLSETS.md)"
+_ASSET_ROOT = "TWINSMITH_ASSET_ROOT (the one folder that holds <pack id>/<version>/pack.yaml)"
+_NO_DOWNLOADS = "nothing: remove it (nothing is downloaded; put the files in a pack under TWINSMITH_ASSET_ROOT)"
+OLD_REPLACEMENTS = {
+    "ISAAC_MCP_PORT": "TWINSMITH_PORT", "UR5E_DT_PORT": "TWINSMITH_PORT", "ISAAC_SIM_PORT": "TWINSMITH_PORT",
+    "ISAAC_MCP_PYTHON": "TWINSMITH_SIM_PYTHON", "UR5E_DT_PYTHON": "TWINSMITH_SIM_PYTHON",
+    "ISAAC_SIM_PYTHON": "TWINSMITH_SIM_PYTHON",
+    "UR5E_DT_HEADLESS": "TWINSMITH_HEADLESS",
+    "ISAACLAB_JOBS_DIR": "TWINSMITH_JOBS_DIR",
+    "ISAAC_MCP_LOCAL_TOOLS": _TOOLSETS, "ISAAC_MCP_NAMESPACE": _TOOLSETS, "ISAAC_MCP_BUILTINS": _TOOLSETS,
+    "ISAAC_MCP_SCENE_TOOLS": _TOOLSETS, "ISAAC_MCP_GROUP_TOOLS": _TOOLSETS,
+    "ISAAC_MCP_ASSET_ROOT": "TWINSMITH_ASSET_ROOT", "ISAAC_MCP_ASSET_PATH": _ASSET_ROOT, "UR5E_DT_ASSET_CACHE": _ASSET_ROOT,
+    "ISAAC_MCP_ASSET_PACK": 'nothing: remove it, and name the pack as "pack": "<id>/<version>" in twinsmith.json',
+    "ISAAC_MCP_ASSET_STRICT": _NO_DOWNLOADS, "UR5E_DT_OFFLINE": _NO_DOWNLOADS,
+    "ISAAC_MCP_ASSET_REMOTE_ROOT": _NO_DOWNLOADS, "UR5E_DT_ASSET_ROOT": _NO_DOWNLOADS,
+}
 
 
 def old_settings(env: Mapping[str, str]) -> list[str]:
     """The isaac-mcp variables that are set in ``env``, sorted."""
-    return sorted(name for name, value in env.items() if str(value).strip() and name != ASSET_ROOT_ALIAS
+    return sorted(name for name, value in env.items() if str(value).strip()
                   and (name.startswith(OLD_PREFIXES) or name in OLD_VARIABLES))
 
 
+def replacement(name: str) -> str:
+    """What to set instead of the old variable ``name``."""
+    if name in OLD_REPLACEMENTS:
+        return OLD_REPLACEMENTS[name]
+    return "TWINSMITH_" + name[len("ISAAC_MCP_"):] if name.startswith("ISAAC_MCP_") else "nothing: remove it"
+
+
 def refuse_old_settings(env: Mapping[str, str]) -> None:
-    """Raise ValueError naming every isaac-mcp variable set in ``env``."""
+    """Raise ValueError naming every isaac-mcp variable set in ``env`` and what replaces it."""
     old = old_settings(env)
     if old:
-        raise ValueError(f"isaac-mcp settings are set and no longer read: {', '.join(old)}. Rename each ISAAC_MCP_<X> "
-                         "to TWINSMITH_<X>, or remove it; docs/MIGRATING.md lists the exceptions and the settings that "
-                         "were removed (TWINSMITH_TOOLSETS replaces the old tool-selection settings).")
+        raise ValueError(f"isaac-mcp settings are set and no longer read: "
+                         f"{'; '.join(f'{name} -> {replacement(name)}' for name in old)}. Set the new name or remove "
+                         "the old one, in your shell profile and every client entry (docs/MIGRATING.md).")
 
 
 def _refuse_old_file(old: Path, new: Path) -> None:
@@ -115,16 +138,26 @@ def _minimal_sim_table(text: str, path: Path) -> dict:
     return {"sim": found} if found else {}
 
 
+def refuse_old_files(cwd: Path | None = None, home: Path | None = None) -> None:
+    """Raise ValueError for an isaac-mcp config file that would be read where its new file is missing."""
+    current = (Path.cwd() if cwd is None else Path(cwd)).resolve()
+    base = Path.home() if home is None else Path(home)
+    _refuse_old_file(base / OLD_USER_FILE, base / ".config/twinsmith/config.toml")
+    for directory in (current, *current.parents):
+        _refuse_old_file(directory / OLD_PROJECT_FILE, directory / "twinsmith.toml")
+        if (directory / "twinsmith.toml").is_file():
+            break
+
+
 def _config_files(cwd: Path | None = None, home: Path | None = None, minimal: bool = False):
     """The user and project configuration files that exist, lowest priority first, as (label, data).
     With ``minimal`` a Python that has no TOML reader still yields the physics setting."""
     current = (Path.cwd() if cwd is None else Path(cwd)).resolve()
     base = Path.home() if home is None else Path(home)
     user = base / ".config/twinsmith/config.toml"
-    _refuse_old_file(base / OLD_USER_FILE, user)
+    refuse_old_files(current, base)
     project = None
     for directory in (current, *current.parents):
-        _refuse_old_file(directory / OLD_PROJECT_FILE, directory / "twinsmith.toml")
         if (directory / "twinsmith.toml").is_file():
             project = directory / "twinsmith.toml"
             break
@@ -188,13 +221,19 @@ def physics_backend(**kwargs) -> str:
 
 def main(argv=None) -> int:
     """``python3 -m twinsmith.config --print physics_backend``: what a launcher needs, with only the
-    standard library. ``physics_backend_source`` says where the value came from."""
+    standard library. ``physics_backend_source`` says where the value came from. ``--check`` prints
+    nothing and only refuses an old setting or config file (run.sh runs it before it starts anything)."""
     import argparse
     parser = argparse.ArgumentParser(prog="python3 -m twinsmith.config", description=main.__doc__)
-    parser.add_argument("--print", dest="field", required=True, choices=["physics_backend", "physics_backend_source"])
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--print", dest="field", choices=["physics_backend", "physics_backend_source"])
+    mode.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
     try:
-        refuse_old_settings(os.environ)      # run.sh asks first, so an old setting stops it before Kit starts
+        refuse_old_settings(os.environ)
+        refuse_old_files()
+        if args.check:
+            return 0
         backend, source = resolve_physics_backend()
     except ValueError as error:
         print(f"twinsmith configuration: {error}", file=__import__("sys").stderr)
