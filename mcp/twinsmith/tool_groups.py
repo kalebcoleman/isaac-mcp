@@ -55,6 +55,9 @@ GROUPS: Dict[str, tuple] = {
     "assets__pack": ("Named asset packs: list, check, dependencies, adopt a folder, pin, build.", {
         "list": "assets__packs", "doctor": "assets__pack_doctor", "dependencies": "assets__dependencies",
         "adopt": "assets__pack_adopt", "pin": "assets__pack_pin", "build": "assets__pack_build"}),
+    "assets__mesh": ("Mesh preparation: inspect, decimate render meshes, collision shapes, split render and collision.", {
+        "inspect": "assets__mesh_inspect", "decimate": "assets__mesh_decimate", "hulls": "assets__mesh_hulls",
+        "split": "assets__mesh_split"}),
     "workcell__cell": ("Build and inspect the pack-backed workcell.", {
         "quick_start": "workcell__workcell_quick_start", "status": "workcell__workcell_status",
         "shutdown": "workcell__workcell_shutdown"}),
@@ -62,9 +65,6 @@ GROUPS: Dict[str, tuple] = {
     "workcell__perception": ("Inspect workcell cameras.", {"status": "workcell__perception_status"}),
     "workcell__jenga": ("Build and inspect the workcell Jenga tower.", {
         "build": "workcell__jenga_build", "status": "workcell__jenga_status"}),
-    "workcell__real2sim": ("Real-to-simulation interface (not implemented).", {"status": "workcell__real2sim_status"}),
-    "workcell__planning": ("Planning interface (not implemented).", {"status": "workcell__planning_status"}),
-    "workcell__eval": ("Evaluation interface (not implemented).", {"status": "workcell__eval_status"}),
     "files": ("Files on the simulator's machine: write, read, check size and hash.", {
         "put": "put_file", "get": "get_file", "stat": "stat_file"}),
     "jobs": ("Every job, simulator or process: list, status (with wait_s), log tail, cancel.", {

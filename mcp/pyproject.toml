@@ -28,12 +28,21 @@ test = [
     "pytest",
     "pyyaml",  # RViz config validity in test_ros2_tools.py
 ]
-scene-test = ["usd-core>=25.11,<27", "numpy"]  # numpy: occupancy-map tests
+scene-test = ["usd-core>=25.11,<27", "numpy", "twinsmith[mesh]"]  # numpy: occupancy-map tests; mesh: the mesh and rule tests
 # The synthetic recovery in test_sysid.py; the sysid tool itself runs MuJoCo in its own environment, never here.
 sysid-test = ["mujoco[sysid]==4.0.1; python_version >= '3.11'"]
 # Isaac Lab tool pack: TensorBoard event-file readout (isaaclab__metrics_*, isaaclab__tensorboard_tail).
 isaaclab = [
     "tensorboard>=2.14",
+]
+# Mesh preparation and validation (assets__mesh, assets__validate): run in a subprocess of this interpreter.
+mesh = [
+    "trimesh>=4,<5",
+    "scipy>=1.11",  # trimesh needs it for convex hulls and oriented boxes
+    "coacd==1.0.11",
+    "fast-simplification>=0.1.7",
+    "usd-core>=25.11,<27",
+    "numpy",
 ]
 
 # LLM-facing MCP server entry point (the TCP client to the Kit bridge).

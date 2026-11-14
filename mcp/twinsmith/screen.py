@@ -5,8 +5,8 @@ exposes both the simulation tools discovered from the running Kit app and the
 desktop capture tools below. Captures stay on this machine.
 
 X11 only. No audio. Monitor captures show the desktop as displayed. Window
-captures read that window's own pixels, so a window can be captured even when
-another window covers it.
+captures read that window's own pixels, so with a compositing window manager (GNOME, KDE) a window can be
+captured even when another window covers it; without one, covered parts are lost (doctor says which).
 """
 
 from __future__ import annotations
@@ -1004,8 +1004,9 @@ def _placement_line(r: dict) -> str:
 
 RAISE_LOCKED = ("the screen is locked (the PC is probably used remotely), so no window can be raised or "
                 "focused: the lock screen covers the desktop. Raising is not needed for captures: "
-                "screenshot(window_id=...) and start_screen_recording(window_id=... or window_ids=[...]) read "
-                "each window's own pixels even when it is covered; for Isaac Sim's UI use sim__ui__act.")
+                "screenshot(window_id=...) and screen_recording(action=\"start\", window_id=... or window_ids=[...]) read "
+                "each window's own pixels, even when it is covered if the window manager composites; for Isaac Sim's "
+                "UI use sim__ui(action=\"act\").")
 LOCKED_NOTE = ("\nwarning: the screen is locked or blanked, so monitor captures are black. Capture a "
                "window instead (window=... or window_id=...): window captures read the window's own pixels.")
 LOCKED_RECORD_NOTE = ("\nnote: the screen is locked or blanked, so each frame is composed from the visible "
@@ -1685,8 +1686,8 @@ def doctor_report(port: int | None, host: str | None, enabled: Iterable[str], ru
         sim_ui = "this Kit is headless: sim__ui needs a windowed Isaac Sim"
     elif "reason" in bridge:
         sim_ui = bridge["reason"]
-    elif "kit_debug" not in enabled:
-        sim_ui = "the kit_debug toolset is off. " + toolsets.enable_hint(["kit_debug"], runtime_enable)
+    elif "sim" not in enabled:
+        sim_ui = "the sim toolset is off. " + toolsets.enable_hint(["sim"], runtime_enable)
     else:
         sim_ui = True
     blockers = [f"{name}: {why.rstrip('.')}" for name, why in (("computer", computer), ("sim__ui", sim_ui)) if why is not True]
@@ -1953,7 +1954,8 @@ def register_screen_tools(
     ):
         """Capture the screen, a monitor or a window to see the result of your work. Returns the image
         and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise
-        the primary monitor. A window capture works even when another window covers it.
+        the primary monitor. A window capture works when another window covers it if the window manager
+        composites (GNOME, KDE); doctor reports whether it does.
 
         Privacy: the image (and any text visible in it) is sent to the model and saved on this machine.
         """
@@ -1974,9 +1976,9 @@ def register_screen_tools(
         stop_on_log_marker: Annotated[str | None, Field(description="End when this text is added to the selected bridge's Kit log or stop_log_file.")] = None,
         stop_log_file: Annotated[str | None, Field(description="A .log file in Kit's log folder or under ~/.local/share/twinsmith, for stop_on_log_marker.")] = None,
     ) -> str:
-        """Start a desktop MP4 recording; one at a time, no audio. E.g. for a demo. Stop it with
+        """Start a desktop MP4 recording; one at a time, no audio. Stop it with
         stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window
-        if one is open; a window recording works when covered or on a locked screen. The recording ends
+        if one is open; a window recording works on a locked screen, or covered with a compositor. The recording ends
         if this MCP server process exits, so keep one client connected from start to stop.
         Details: docs/TOOLS-HOST.md. UR5e work cell render: workcell__start_recording; to combine clips, join_videos.
 

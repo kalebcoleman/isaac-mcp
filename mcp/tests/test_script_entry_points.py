@@ -21,7 +21,7 @@ def test_scene_client_keeps_exported_tool_groups_and_still_pins_the_port(monkeyp
     monkeypatch.delenv("TWINSMITH_TOOLSETS", raising=False)
     monkeypatch.setenv("TWINSMITH_PORT", "1")
     env = client.parameters(18781).env
-    assert env["TWINSMITH_TOOLSETS"] == "default,-code"
+    assert env["TWINSMITH_TOOLSETS"] == "default,+sim,+assets,+screen,+extensions"
     assert env["TWINSMITH_PORT"] == "18781"
     monkeypatch.setenv("TWINSMITH_TOOLSETS", "default,+input")
     assert client.parameters(18781).env["TWINSMITH_TOOLSETS"] == "default,+input"

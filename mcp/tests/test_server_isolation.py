@@ -80,7 +80,7 @@ def world(monkeypatch, tmp_path):
 OFFLINE = {gw._mcp_name(canonical) for canonical in host_catalog.catalog_tool_names()}
 
 
-def build(groups="default"):
+def build(groups="default,+extensions"):
     return gw.build_server({"TWINSMITH_TOOLSETS": groups})
 
 

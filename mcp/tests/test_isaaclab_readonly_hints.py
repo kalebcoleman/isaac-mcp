@@ -26,7 +26,7 @@ class EmptyBridge:
 @pytest.fixture
 def host(monkeypatch):
     monkeypatch.setattr(server, "BridgeClient", EmptyBridge)
-    return server.build_server({"TWINSMITH_TOOLSETS": "minimal,+lab,+code"})
+    return server.build_server({"TWINSMITH_TOOLSETS": "default,+lab,+sim"})
 
 
 def call(host, name, arguments=None):

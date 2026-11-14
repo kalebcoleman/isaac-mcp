@@ -14,40 +14,7 @@ except ModuleNotFoundError:          # Python before 3.11: tomli, if it is insta
     except ModuleNotFoundError:
         tomllib = None
 
-from .pack_manifest import ASSET_ROOT_ALIAS
 from .toolsets import DEFAULT, PROFILES, TOOLSETS
-
-# isaac-mcp, this project's name before 0.3.0, read these settings and files; 0.3 still honoured them, and nothing
-# reads them now. A server that finds one refuses to start rather than ignore it: a leftover ISAAC_MCP_READ_ONLY,
-# ISAAC_MCP_TOOLSETS or isaac-mcp.toml would otherwise change what a client may do, or the physics engine, without a
-# word. docs/MIGRATING.md maps each one to its new name. ISAAC_MCP_ASSET_ROOT is not one of them: it is a permanent
-# alias of TWINSMITH_ASSET_ROOT. The Kit bridge applies the same rule (twinsmith_bridge/knobs.py).
-OLD_PREFIXES = ("ISAAC_MCP_", "UR5E_DT_")
-OLD_VARIABLES = ("ISAAC_SIM_PORT", "ISAAC_SIM_PYTHON", "ISAACLAB_JOBS_DIR")
-OLD_USER_FILE = ".config/isaac-mcp/config.toml"     # now .config/twinsmith/config.toml
-OLD_PROJECT_FILE = "isaac-mcp.toml"                 # now twinsmith.toml
-
-
-def old_settings(env: Mapping[str, str]) -> list[str]:
-    """The isaac-mcp variables that are set in ``env``, sorted."""
-    return sorted(name for name, value in env.items() if str(value).strip() and name != ASSET_ROOT_ALIAS
-                  and (name.startswith(OLD_PREFIXES) or name in OLD_VARIABLES))
-
-
-def refuse_old_settings(env: Mapping[str, str]) -> None:
-    """Raise ValueError naming every isaac-mcp variable set in ``env``."""
-    old = old_settings(env)
-    if old:
-        raise ValueError(f"isaac-mcp settings are set and no longer read: {', '.join(old)}. Rename each ISAAC_MCP_<X> "
-                         "to TWINSMITH_<X>, or remove it; docs/MIGRATING.md lists the exceptions and the settings that "
-                         "were removed (TWINSMITH_TOOLSETS replaces the old tool-selection settings).")
-
-
-def _refuse_old_file(old: Path, new: Path) -> None:
-    if old.is_file() and not new.is_file():
-        raise ValueError(f"{old} is the isaac-mcp name of {new} and is no longer read. With nothing running, "
-                         f"move it: mv {old} {new} (see docs/MIGRATING.md).")
-
 
 def select(value) -> frozenset[str]:
     if isinstance(value, str):
@@ -121,10 +88,8 @@ def _config_files(cwd: Path | None = None, home: Path | None = None, minimal: bo
     current = (Path.cwd() if cwd is None else Path(cwd)).resolve()
     base = Path.home() if home is None else Path(home)
     user = base / ".config/twinsmith/config.toml"
-    _refuse_old_file(base / OLD_USER_FILE, user)
     project = None
     for directory in (current, *current.parents):
-        _refuse_old_file(directory / OLD_PROJECT_FILE, directory / "twinsmith.toml")
         if (directory / "twinsmith.toml").is_file():
             project = directory / "twinsmith.toml"
             break
@@ -160,7 +125,6 @@ def resolve_physics_backend(env: Mapping[str, str] | None = None, cwd: Path | No
 def resolve(env: Mapping[str, str] | None = None, cli_toolsets: str | None = None,
             cwd: Path | None = None, home: Path | None = None) -> Config:
     env = os.environ if env is None else env
-    refuse_old_settings(env)
     enabled, runtime, badge = DEFAULT, True, False
     for _, data in _config_files(cwd, home):
         if "toolsets" in data.get("tools", {}):
@@ -194,7 +158,6 @@ def main(argv=None) -> int:
     parser.add_argument("--print", dest="field", required=True, choices=["physics_backend", "physics_backend_source"])
     args = parser.parse_args(argv)
     try:
-        refuse_old_settings(os.environ)      # run.sh asks first, so an old setting stops it before Kit starts
         backend, source = resolve_physics_backend()
     except ValueError as error:
         print(f"twinsmith configuration: {error}", file=__import__("sys").stderr)

@@ -175,8 +175,19 @@ def test_a_gpu_memory_check_needs_a_gpu_script(tmp_path):
 
 # ---- run_script: the same runner under a general name ----
 
+_LAB = None
+
+
+def lab_server():
+    """A server with the lab toolset, which holds run_script."""
+    global _LAB
+    if _LAB is None:
+        _LAB = gw.build_server({"TWINSMITH_TOOLSETS": "default,+lab"})
+    return _LAB
+
+
 def tool(name):
-    return gw.mcp._tool_manager._tools[name]
+    return lab_server()._tool_manager._tools[name]
 
 
 def test_run_script_needs_no_install(tmp_path, monkeypatch):
@@ -185,7 +196,7 @@ def test_run_script_needs_no_install(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "_probe_kit_bridges", lambda: [{"host": "127.0.0.1", "port": 8766, "pid": 1}])
     general = tool("run_script")
     assert "no simulator and no Isaac Lab" in general.description and "help(tool=" in general.description   # the full text is one call away
-    assert "jobs action=status" in gw._tool_help(gw.mcp, "run_script")   # named as a client is shown it
+    assert "jobs action=status" in gw._tool_help(lab_server(), "run_script")   # named as a client is shown it
     assert general.parameters["properties"]["uses_gpu"]["default"] is False
     body = "import sys\nprint('TWINSMITH_PROGRESS: 1/1 done')\nprint(sys.argv[1])\n"
     out = json.loads(asyncio.run(general.fn(script=str(script(tmp_path, body)), args=["hello"], label="convert")))

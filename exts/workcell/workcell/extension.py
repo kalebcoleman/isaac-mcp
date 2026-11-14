@@ -10,7 +10,7 @@ from .commands import Commands
 
 MCP_TOOL_REGISTRY = {
     "workcell_quick_start": {
-        "description": "Build a stopped workcell from an external asset pack; qualified on PhysX only, so a Newton session refuses it. Refuses unsaved stage changes unless explicitly allowed.",
+        "description": "Build a stopped workcell from an external asset pack, on PhysX or Newton (Newton uses the config's per-engine drives; mirror_real needs PhysX). Refuses unsaved stage changes unless explicitly allowed.",
         "parameters": {
             "config_path": {"type": "string", "description": "Optional hardware configuration path."},
             "mode": {"type": "string", "enum": ["physics", "mirror_real"], "default": "physics", "description": "Physics mode, or zero-gravity mirror mode."},
@@ -29,9 +29,6 @@ MCP_TOOL_REGISTRY = {
             "seed": {"type": "integer", "description": "Optional integer seed; omitted uses the configured variation_seed. A selected profile requires a seed."},
         },
     },
-    "real2sim_status": {"description": "Report the real-to-simulation interface availability; no synchronization is implemented.", "parameters": {}},
-    "planning_status": {"description": "Report the planning interface availability; no planner is implemented.", "parameters": {}},
-    "eval_status": {"description": "Report the evaluation interface availability; no evaluation is implemented.", "parameters": {}},
 }
 
 

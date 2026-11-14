@@ -18,6 +18,10 @@ def test_instructions_tell_agents_to_prefer_the_tools():
     assert "Prefer listed tools" in gw.SERVER_INSTRUCTIONS and "status" in gw.SERVER_INSTRUCTIONS
 
 
+# The toolsets that were on by default before only core was: what these help answers assume.
+EVERYDAY = frozenset({"core", "sim", "assets", "screen", "extensions"})
+
+
 def test_session_check_never_fails_and_nudges():
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / "session_check.py"), "--port", "1"],
                        capture_output=True, text=True, timeout=30)
@@ -25,12 +29,12 @@ def test_session_check_never_fails_and_nudges():
 
 
 def test_help_routes_by_task_and_falls_back():
-    one = gw._help("why did the grasp fail")
+    one = gw._help("why did the grasp fail", enabled=EVERYDAY)
     assert "sim__physics__contacts" in one and "isaaclab__train" not in one
-    assert "Toolsets off: lab" in gw._help("train a policy")
-    both = gw._help("something odd")
+    assert "Toolsets off: lab" in gw._help("train a policy", enabled=EVERYDAY)
+    both = gw._help("something odd", enabled=EVERYDAY)
     assert "No twinsmith tool is known to fit" in both and "screenshot" in both and "Toolsets off: lab" in both
-    assert "launch" in gw._help(None) and "sim__launch" not in gw._help(None)
+    assert "launch" in gw._help(None, enabled=EVERYDAY) and "sim__launch" not in gw._help(None, enabled=EVERYDAY)
 
 
 def test_session_check_survives_bad_port_env_and_args():
@@ -43,8 +47,8 @@ def test_session_check_survives_bad_port_env_and_args():
 
 
 def test_help_matches_word_starts_not_substrings():
-    assert "isaaclab__train" not in gw._help("build a world")
-    assert "sim__quick_start" in gw._help("build a world")
+    assert "isaaclab__train" not in gw._help("build a world", enabled=EVERYDAY)
+    assert "sim__quick_start" in gw._help("build a world", enabled=EVERYDAY)
 
 
 def test_screenshot_label_is_not_shadowed_by_the_window_caption():
@@ -54,7 +58,7 @@ def test_screenshot_label_is_not_shadowed_by_the_window_caption():
 
 
 def test_help_finds_contact_sheets_and_job_workflow_tools():
-    sheet = gw._help("make a contact sheet from two videos to attach to a message")
+    sheet = gw._help("make a contact sheet from two videos to attach to a message", enabled=EVERYDAY)
     assert 'join_videos(mode="sheet"' in sheet and "home folder" in sheet
     work = gw._help("wait for a job, register a baseline and summarise pass counts", enabled=gw.toolsets.PROFILES["all"])
     for name in ("isaaclab__preflight", "isaaclab__runs_status(job_id, wait_s=45)", "isaaclab__checkpoint_register", "eval_json"):
