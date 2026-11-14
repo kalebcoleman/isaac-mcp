@@ -78,7 +78,7 @@ never its value. A malformed `config.toml` or a `[planning]` value that is not `
 | `tools` | `gap tools list --format json` | The skill catalog. Read-only |
 | `check` | `gap check --format json` | Which tool bundles are ready here and which skills can run. Read-only; no `--probe`, so no model is called |
 | `generate` | `gap generate <instruction> --out ...` | A job, no GPU. Needs `allow_paid`. The graph lands in `<workspace>/runs/gap/<name>/output/` |
-| `run` | `gap run --sim <SUITE/TASK> ... <graph>` | A job that uses the GPU. `graph` is a workflow directory or `workflow.json` in `<workspace>/runs/gap/` (a relative path is read from there), the Graph-as-Policy checkout or the VABAR checkout. Traces go to `<workspace>/runs/gap/<name>/output/` |
+| `run` | `gap run --sim <SUITE/TASK> ... [--checkpoints off] <graph>` | A job that uses the GPU. `graph` is a workflow directory or `workflow.json` in `<workspace>/runs/gap/` (a relative path is read from there), the Graph-as-Policy checkout or the VABAR checkout. Traces go to `<workspace>/runs/gap/<name>/output/` |
 
 At the pin, `gap check` takes no graph: it is the capability report. Graph validation (`gap run --validate-only`) is not
 wrapped.
@@ -90,21 +90,28 @@ to it) before anything else, and the built argument list is scanned again before
 `REAL_ROBOT_REFUSED`, "twinsmith does not run Graph-as-Policy on real hardware". The process never sees `ROS_DOMAIN_ID`
 or any other `ROS_*` variable.
 
-That guard covers the command line only. A graph's `script` and `router` nodes are Python files that Graph-as-Policy
-imports and runs, and they can do anything the user can. So before `run` starts, twinsmith reads the `workflow.json` and
-its `subgraphs`:
+That guard covers the command line only. Graph-as-Policy runs Python from a graph's folder in two ways: `script` and
+`router` nodes, and `checkpoints/<subgraph>.py`, which it executes after each subgraph. Either can do anything the user
+can. So before `run` starts, twinsmith reads the `workflow.json` (with its `subgraphs`) and the graph folder:
 
-- every `script` path must be relative, without `..`, and resolve inside the graph's own folder, or the run is refused
-  with `PATH_NOT_ALLOWED`;
-- a graph inside the Graph-as-Policy or VABAR checkout runs its scripts when that checkout is at its tested pin;
-- any other graph with script or router nodes (one in `<workspace>/runs/gap/`, or one in a checkout at another commit) is
-  refused with `SCRIPT_NOT_ALLOWED` unless the owner sets, in their own file:
+- every `script` path must be relative and resolve inside the graph's own folder (without `..`), or, for a graph that
+  ships in the Graph-as-Policy or VABAR checkout, inside that checkout; otherwise the run is refused with
+  `PATH_NOT_ALLOWED`;
+- a graph in one of those checkouts runs as it is when the checkout is at its tested pin and git sees the graph folder
+  and every script tracked and unmodified (nothing edited, untracked or ignored);
+- any other graph with script or router nodes or `*.py` files (one in `<workspace>/runs/gap/`, such as a `generate`
+  output with its checkpoint files, or a changed graph in a checkout) is refused with `SCRIPT_NOT_ALLOWED` unless the
+  owner sets, in their own file:
 
 ```toml
 # ~/.config/twinsmith/config.toml
 [planning]
 allow_scripts = true
 ```
+
+Without it, a graph that passes (it has no Python) runs with `--checkpoints off`, so a checkpoint file added after the
+check does not run. The graph is read again when the job starts, so a change to it in between is not seen by the
+check; the folders are the owner's.
 
 Like `allow_paid`, a project `twinsmith.toml` cannot set it. Read a generated graph's scripts before turning it on.
 

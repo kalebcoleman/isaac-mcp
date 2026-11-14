@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
+from pathlib import Path
 from typing import Annotated, Literal
 
 from mcp.types import ToolAnnotations
@@ -28,6 +30,7 @@ _LABEL = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}")
 _EPISODES = re.compile(r"[0-9]+(:[0-9]+(:[0-9]+)?|(,[0-9]+)+)?")
 RESULT_FILES = 200
 RESULT_BYTES = 8 * 1024 * 1024   # read at most this much of one episode_results.jsonl
+WALK_ENTRIES = 200_000            # stop walking a run folder after this many entries
 
 
 def checkout(workspace=None, root=None) -> sibling.Checkout:
@@ -56,6 +59,20 @@ def argv(co: sibling.Checkout, action: str, *, task=None, solve="routine", graph
             "--workers", str(workers), "--out", str(out)]
 
 
+def _result_files(folder: Path):
+    """``episode_results.jsonl`` files under a run folder in sorted order, never following a link and never walking
+    more than ``WALK_ENTRIES`` entries."""
+    seen = 0
+    for top, dirs, files in os.walk(folder, followlinks=False):
+        dirs.sort()
+        seen += len(dirs) + len(files)
+        if seen > WALK_ENTRIES:
+            return
+        path = Path(top) / "episode_results.jsonl"
+        if "episode_results.jsonl" in files and not path.is_symlink() and path.is_file():
+            yield path
+
+
 def results(co: sibling.Checkout, run=None) -> dict:
     """The summary table of one run folder (success per task and solver), or the newest run folders."""
     runs = co.workspace / "runs/vabar"
@@ -66,8 +83,7 @@ def results(co: sibling.Checkout, run=None) -> dict:
     if folder.is_symlink() or not folder.is_dir():
         raise sibling.Refusal("NOT_FOUND", f"No run folder {folder}.")
     inside = folder.resolve()
-    found = (path for path in sorted(folder.glob("**/episode_results.jsonl"))
-             if not path.is_symlink() and path.is_file() and path.resolve().is_relative_to(inside))
+    found = (path for path in _result_files(folder) if path.resolve().is_relative_to(inside))
     table, files, cut = {}, [], []
     for path in found:
         if len(files) == RESULT_FILES:

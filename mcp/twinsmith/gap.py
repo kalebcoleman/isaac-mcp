@@ -139,36 +139,70 @@ def graph_scripts(workflow: Path) -> list[tuple[str, str]]:
     return found
 
 
-def check_graph_scripts(workflow: Path, trusted: bool, allow_scripts: bool) -> list[str]:
-    """A graph's script and router nodes must name files inside the graph's own folder. They are arbitrary Python run
-    inside Graph-as-Policy, so outside the pinned checkouts (``trusted``) they also need the owner's ``allow_scripts``.
-    Returns the scripts it found."""
-    folder = workflow.parent.resolve()
-    scripts = graph_scripts(workflow)
-    for node, script in scripts:
-        path = Path(script)
-        if not script or path.is_absolute() or ".." in path.parts or not (folder / path).resolve().is_relative_to(folder):
-            raise sibling.Refusal("PATH_NOT_ALLOWED", f"node {node}: script {script!r} must be a relative path inside "
-                                  f"the graph's folder {folder}.")
-    if scripts and not trusted and not allow_scripts:
-        raise sibling.Refusal("SCRIPT_NOT_ALLOWED", f"this graph has {len(scripts)} script or router node(s), which run "
-                              "arbitrary Python inside Graph-as-Policy (twinsmith's --real guard covers only the command "
-                              "line). The owner allows them for graphs outside the pinned checkouts with [planning] "
-                              "allow_scripts = true in ~/.config/twinsmith/config.toml.")
-    return [script for _, script in scripts]
+GRAPH_FILES = 10000   # a graph folder with more entries than this is refused rather than walked
 
 
-def trusted_graph(path: Path, co: sibling.Checkout) -> bool:
-    """Whether a graph ships in one of the two pinned checkouts, each at its tested commit."""
+def python_files(folder: Path) -> list[str]:
+    """Every ``*.py`` under a graph folder, links included and never followed. Graph-as-Policy runs two kinds from the
+    folder: script and router nodes, and ``checkpoints/<subgraph>.py`` after each subgraph (exec'd)."""
+    found, seen = [], 0
+    for top, dirs, files in os.walk(folder, followlinks=False):
+        seen += len(dirs) + len(files)
+        if seen > GRAPH_FILES:
+            raise sibling.Refusal("INVALID_VALUE", f"{folder} has more than {GRAPH_FILES} entries; a graph folder is small.")
+        found += [str((Path(top) / name).relative_to(folder)) for name in (*files, *dirs) if name.endswith(".py")]
+    return sorted(found)
+
+
+def graph_checkout(path: Path, co: sibling.Checkout) -> sibling.Checkout | None:
+    """The Graph-as-Policy or VABAR checkout a graph sits in, or None for a graph in the run folder."""
     from . import vabar
 
     for checkout in (co, vabar.checkout(workspace=co.workspace)):
-        if path.is_relative_to(checkout.root.resolve()) and checkout.info().get("pin_match"):
-            return True
-    return False
+        if path.is_relative_to(checkout.root.resolve()):
+            return checkout
+    return None
 
 
-def argv(co: sibling.Checkout, action: str, *, sim=None, graph=None, instruction=None, model=None, out=None) -> list[str]:
+def unchanged(checkout: sibling.Checkout, paths: list[Path]) -> bool:
+    """Whether git sees every path as tracked and unmodified: nothing changed, untracked or ignored under them."""
+    root = checkout.root.resolve()
+    done = sibling.run(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all", "--ignored", "--",
+                        *(str(path.relative_to(root)) for path in paths)], timeout_s=30, stdout_chars=sibling.WHOLE)
+    return done["exit_code"] == 0 and not done["stdout"].strip()
+
+
+def check_graph_code(workflow: Path, co: sibling.Checkout, allow_scripts: bool) -> dict:
+    """Decide whether a graph's own Python may run. Script and router paths must stay inside the graph's folder or, for
+    a graph that ships in a checkout, inside that checkout. A graph is trusted when its checkout is at the tested pin
+    and git sees the graph folder and every script unchanged; any other graph with script or router nodes or ``*.py``
+    files needs the owner's ``allow_scripts``. Returns ``{trusted, scripts, python_files}``."""
+    folder = workflow.parent.resolve()
+    checkout = graph_checkout(folder, co)
+    home = checkout.root.resolve() if checkout else folder
+    scripts = graph_scripts(workflow)
+    resolved = []
+    for node, script in scripts:
+        path = Path(script)
+        target = (folder / path).resolve()
+        if not script or path.is_absolute() or (checkout is None and ".." in path.parts) \
+                or not target.is_relative_to(home):
+            raise sibling.Refusal("PATH_NOT_ALLOWED", f"node {node}: script {script!r} must be a relative path inside "
+                                  f"{'the checkout' if checkout else 'the graph folder'} {home}.")
+        resolved.append(target)
+    code = python_files(folder)
+    trusted = bool(checkout and checkout.info().get("pin_match") and unchanged(checkout, [folder, *resolved]))
+    if (scripts or code) and not trusted and not allow_scripts:
+        raise sibling.Refusal("SCRIPT_NOT_ALLOWED", f"this graph has {len(scripts)} script or router node(s) and "
+                              f"{len(code)} Python file(s), which Graph-as-Policy runs (twinsmith's --real guard covers "
+                              "only the command line). A graph that ships unchanged in a pinned checkout runs as it is; "
+                              "for any other graph the owner allows them with [planning] allow_scripts = true in "
+                              "~/.config/twinsmith/config.toml.")
+    return {"trusted": trusted, "scripts": [script for _, script in scripts], "python_files": code}
+
+
+def argv(co: sibling.Checkout, action: str, *, sim=None, graph=None, instruction=None, model=None, out=None,
+         checkpoints_off=False) -> list[str]:
     """The command line for one action, from validated values only."""
     gap, library = str(co.bin("gap")), ["--skills", str(skills(co).root)]
     if action == "tools":
@@ -177,7 +211,8 @@ def argv(co: sibling.Checkout, action: str, *, sim=None, graph=None, instruction
         return [gap, "check", "--format", "json", *library]
     if action == "generate":
         return [gap, "generate", instruction, *library, "--out", str(out), *(["--model", model] if model else [])]
-    return [gap, "run", "--sim", sim, *library, "--trace-dir", str(out), graph]
+    return [gap, "run", "--sim", sim, *library, "--trace-dir", str(out),
+            *(["--checkpoints", "off"] if checkpoints_off else []), graph]
 
 
 def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=None, model=None, name=None,
@@ -218,11 +253,15 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
                 raise sibling.Refusal("INVALID_VALUE", "sim is required for run: SUITE/TASK, such as libero_object/0.")
             graph = _graph(graph, co)
             workflow = Path(graph) if Path(graph).is_file() else Path(graph) / "workflow.json"
-            check_graph_scripts(workflow, trusted_graph(Path(graph), co), scripts_allowed)
+            code = check_graph_code(workflow, co, scripts_allowed)
         if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not 0 < timeout_s <= 86400:
             raise sibling.Refusal("INVALID_VALUE", "timeout_s must be more than 0 and at most 86400 seconds.")
         folder = co.workspace / "runs/gap" / sibling.run_name(name, action)
-        command = argv(co, action, sim=sim, graph=graph, instruction=instruction, model=model, out=folder / "output")
+        # An untrusted graph without the owner's allow_scripts had no Python when it was checked; checkpoints off keeps
+        # a checkpoint file added after the check from running.
+        off = action == "run" and not code["trusted"] and not scripts_allowed
+        command = argv(co, action, sim=sim, graph=graph, instruction=instruction, model=model, out=folder / "output",
+                       checkpoints_off=off)
         refuse_real(command)
         sibling.new_run_folder(folder)
         started = sibling.start_job(command, task=f"gap-{folder.name}", kind=f"gap-{action}", cwd=folder,

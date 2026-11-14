@@ -3,6 +3,7 @@
 import asyncio
 import inspect
 import json
+import subprocess
 
 import pytest
 from mcp.server.fastmcp import FastMCP
@@ -45,7 +46,7 @@ def test_run_builds_exactly_the_sim_command(workspace):
     graph = str(workspace / "runs/gap/graph1")
     assert result["result"]["command"] == [str(co.root / ".venv/bin/gap"), "run", "--sim", "libero/0",
                                            "--skills", str(workspace / "tools/open-robot-skills"),
-                                           "--trace-dir", str(folder / "output"), graph]
+                                           "--trace-dir", str(folder / "output"), "--checkpoints", "off", graph]
     assert wait_for(result["result"]["job_id"])["state"] == "succeeded"
     (call,) = calls(co.root)
     assert call["argv"] == result["result"]["command"] and call["cwd"] == str(folder)
@@ -229,15 +230,61 @@ def test_script_nodes_outside_the_pinned_checkouts_need_allow_scripts(workspace,
     wait_for(started["result"]["job_id"])
 
 
-def test_a_graph_in_the_checkout_runs_its_scripts_only_at_the_pin(workspace, monkeypatch):
+def commit_all(root):
+    git = ["git", "-C", str(root), "-c", "user.name=test", "-c", "user.email=test@example.invalid"]
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "graph"], check=True)
+    return sibling.commit(root)
+
+
+def test_a_graph_in_the_checkout_runs_its_scripts_only_unchanged_at_the_pin(workspace, monkeypatch):
     co = gap.checkout(workspace=workspace)
-    write_graph(co.root / "examples/scripted", SCRIPT)
-    refused = gap.call(co, "run", sim="libero/0", graph=str(co.root / "examples/scripted"), name="other-commit")
+    graph = write_graph(co.root / "examples/scripted", SCRIPT)
+    (graph / "pick.py").write_text("x = 1\n")
+    refused = gap.call(co, "run", sim="libero/0", graph=str(graph), name="other-commit")
     assert refused["code"] == "SCRIPT_NOT_ALLOWED"
-    monkeypatch.setattr(gap, "PIN", sibling.commit(co.root))
+    monkeypatch.setattr(gap, "PIN", commit_all(co.root))
     co = gap.checkout(workspace=workspace)
-    started = gap.call(co, "run", sim="libero/0", graph=str(co.root / "examples/scripted/workflow.json"), name="pinned")
+    started = gap.call(co, "run", sim="libero/0", graph=str(graph / "workflow.json"), name="pinned")
     assert started["ok"], started
+    assert "--checkpoints" not in started["result"]["command"]
+    wait_for(started["result"]["job_id"])
+    (graph / "pick.py").write_text("x = 2\n")                      # edited after the pin
+    assert gap.call(co, "run", sim="libero/0", graph=str(graph), name="edited")["code"] == "SCRIPT_NOT_ALLOWED"
+    subprocess.run(["git", "-C", str(co.root), "checkout", "-q", "--", "."], check=True)
+    (graph / "checkpoints").mkdir()
+    (graph / "checkpoints/extra.py").write_text("CHECKPOINTS = []\n")   # untracked beside the pinned graph
+    assert gap.call(co, "run", sim="libero/0", graph=str(graph), name="untracked")["code"] == "SCRIPT_NOT_ALLOWED"
+
+
+def test_a_pinned_graph_may_use_scripts_elsewhere_in_its_checkout(workspace, monkeypatch, tmp_path):
+    co = gap.checkout(workspace=workspace)
+    (co.root / "graphs/shared/scripts").mkdir(parents=True)
+    (co.root / "graphs/shared/scripts/perceive.py").write_text("x = 1\n")
+    graph = write_graph(co.root / "graphs/level2", {"p": {"type": "script", "script": "../shared/scripts/perceive.py"}})
+    monkeypatch.setattr(gap, "PIN", commit_all(co.root))
+    co = gap.checkout(workspace=workspace)
+    started = gap.call(co, "run", sim="libero/0", graph=str(graph), name="level2")
+    assert started["ok"], started
+    wait_for(started["result"]["job_id"])
+    escape = write_graph(co.root / "graphs/escape", {"p": {"type": "script", "script": "../../../outside.py"}})
+    assert gap.call(co, "run", sim="libero/0", graph=str(escape), name="escape")["code"] == "PATH_NOT_ALLOWED"
+    owner_config(tmp_path, "[planning]\nallow_scripts = true\n")
+    outside = write_graph(workspace / "runs/gap/dots", {"p": {"type": "script", "script": "../graph1/x.py"}})
+    assert gap.call(co, "run", sim="libero/0", graph=str(outside), name="dots")["code"] == "PATH_NOT_ALLOWED"
+
+
+def test_checkpoint_files_count_as_graph_code(workspace, tmp_path):
+    graph = write_graph(workspace / "runs/gap/generated", {"a": {"type": "tool", "tool": "grasp"}})
+    (graph / "checkpoints").mkdir()
+    (graph / "checkpoints/grasp_sg.py").write_text("CHECKPOINTS = []\n")
+    co = gap.checkout(workspace=workspace)
+    refused = gap.call(co, "run", sim="libero/0", graph="generated", name="g")
+    assert refused["code"] == "SCRIPT_NOT_ALLOWED" and "1 Python file" in refused["error"] and calls(co.root) == []
+    owner_config(tmp_path, "[planning]\nallow_scripts = true\n")
+    started = gap.call(co, "run", sim="libero/0", graph="generated", name="g")
+    assert started["ok"], started
+    assert "--checkpoints" not in started["result"]["command"]     # the owner allowed graph code, so upstream's default
     wait_for(started["result"]["job_id"])
 
 
