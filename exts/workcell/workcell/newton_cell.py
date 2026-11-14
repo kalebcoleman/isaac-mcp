@@ -73,9 +73,9 @@ def prepare(stage, config, assembly_path, timeline):
         for prim in stage.Traverse():   # Newton reads only dynamicFriction; give it the static value
             if prim.HasAPI(UsdPhysics.MaterialAPI):
                 api = UsdPhysics.MaterialAPI(prim)
-                static = api.GetStaticFrictionAttr().Get()
-                if static is not None:
-                    api.CreateDynamicFrictionAttr().Set(float(static))
+                static = api.GetStaticFrictionAttr()
+                if static and static.HasAuthoredValue():   # unauthored reads the default 0.0: keep dynamic then
+                    api.CreateDynamicFrictionAttr().Set(float(static.Get()))
                     newton_mu += 1
     colliders = 0
     for prim in stage.Traverse():

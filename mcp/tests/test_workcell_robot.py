@@ -393,7 +393,7 @@ def test_finger_measurement_is_explicit_and_never_fabricated():
     assert result["measurement"] == [[1, 2, 3], [0, 0, 0]]
     assert result["quantity"] == "whole_finger_net_contact_force"
     assert sensors.read_finger_contacts(None, config, **args)["status"] == "unavailable"
-    assert sensors.read_finger_contacts(Contacts(), config, **{**args, "backend": "mujoco"})["status"] == "unsupported"
+    assert sensors.read_finger_contacts(Contacts(), config, **{**args, "backend": "newton"})["status"] == "unsupported"
     config["finger_force_sensors"]["body_paths"].reverse()
     assert sensors.read_finger_contacts(Contacts(), config, **args)["measurement"] is None
 

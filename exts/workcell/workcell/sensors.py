@@ -34,9 +34,9 @@ def _numpy(values):
     return np.asarray(values, dtype=float)
 
 
-def _view_ready(view, backend):
-    if backend not in ENGINES:
-        return _unavailable(f"Sensor sampling supports {', '.join(ENGINES)}, not {backend!r}", "unsupported")
+def _view_ready(view, backend, engines=ENGINES):
+    if backend not in engines:
+        return _unavailable(f"This sensor reads on {', '.join(engines)}, not {backend!r}", "unsupported")
     try:
         ready = view is not None and view.check()
     except Exception:
@@ -119,7 +119,7 @@ def read_finger_contacts(view, config, *, physics_time_s, physics_dt_s, backend)
     settings = config.get("finger_force_sensors", {})
     if settings.get("measurement") != "net_contact_force":
         return _unavailable("Finger contact measurement is not configured; no load-cell readings", "unsupported")
-    invalid = _view_ready(view, backend)
+    invalid = _view_ready(view, backend, engines=("physx",))   # Newton's contact snapshot is not wired yet
     if invalid:
         return invalid
     timestamp = _time(physics_time_s)
@@ -129,7 +129,7 @@ def read_finger_contacts(view, config, *, physics_time_s, physics_dt_s, backend)
         paths = settings.get("body_paths", [])
         if len(paths) != 2 or len(set(paths)) != 2 or list(view.sensor_paths) != paths:
             return _unavailable("Contact view must target exactly the two configured finger bodies")
-        values = _numpy(view.get_net_contact_forces(dt=physics_dt_s)).reshape(-1, 3)
+        values = _numpy(view.get_net_contact_forces(dt=physics_dt_s))
         if values.shape != (2, 3) or not np.isfinite(values).all():
             return _unavailable("PHYSICS_STATE_INVALID: invalid net contact force array")
         return {"status": "measured", "measurement": values.tolist(), "force_n": values.tolist(),

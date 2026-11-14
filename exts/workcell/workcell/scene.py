@@ -132,8 +132,9 @@ def check_contact(contact):
         raise ValueError("contact default friction must be finite numbers >= 0")
     if values[1] > values[0]:
         raise ValueError("contact.default_dynamic_friction must not exceed default_static_friction")
-    if contact["combine_mode"] not in ("average", "min", "multiply", "max"):
-        raise ValueError("contact.combine_mode must be average, min, multiply or max")
+    if contact["combine_mode"] != "max":
+        raise ValueError("contact.combine_mode must be max: MuJoCo (Newton) always combines by max, so any other "
+                         "PhysX mode would make the two engines disagree")
     if contact["newton_friction"] not in ("static", "dynamic"):
         raise ValueError("contact.newton_friction must be static or dynamic")
 
@@ -465,8 +466,9 @@ class Workcell:
         masses = sensors._numpy(view.get_masses()).reshape(-1)
         links = {name: float(masses[names[name]]) for name in below if name in names}
         total = sum(links.values())
+        gravity = 0.0 if self._report.get("robot_gravity_disabled") else abs(self._report.get("gravity_m_s2", -9.81))
         reading["load_below_sensor"] = {"links_kg": links, "missing": sorted(set(below) - set(links)),
-                                        "mass_kg": total, "weight_n": total * 9.81,
+                                        "mass_kg": total, "gravity_m_s2": gravity, "weight_n": total * gravity,
                                         "note": "Engine masses. At rest the force magnitude should equal weight_n; "
                                                 "it includes the whole modelled Bota body, which a real Rokubi "
                                                 "measures only partly and tares."}

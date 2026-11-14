@@ -20,10 +20,13 @@ POSES = {   # degrees
     "tool_down": (0, -80, 100, -110, -90, 0),        # the config's presentation pose
     "tool_horizontal": (0, -80, 100, -10, -90, 0),   # wrist_1 turned so the tool axis lies flat
 }
+# With the tool axis (the Bota's +x) pointing down, the parent holds the load up: the force lies along -x.
+EXPECTED_AXIS = {"tool_down": (0, -1.0)}
 
 
-def check(reading, tolerance_fraction, tolerance_n):
-    """PASS when |F| is within tolerance of the weight carried; the reading and expected values are returned."""
+def check(reading, tolerance_fraction, tolerance_n, axis=None):
+    """PASS when |F| is within tolerance of the weight carried and, given axis=(index, sign), the force points along
+    that sensor axis (a wrong frame or sign keeps |F| but fails this); the reading and expected values are returned."""
     force = reading.get("force_n")
     load = reading.get("load_below_sensor") or {}
     if reading.get("status") != "measured" or not force or "weight_n" not in load:
@@ -31,7 +34,12 @@ def check(reading, tolerance_fraction, tolerance_n):
     magnitude = math.sqrt(sum(value * value for value in force))
     expected = load["weight_n"]
     allowed = tolerance_fraction * expected + tolerance_n
-    return {"pass": abs(magnitude - expected) <= allowed, "force_magnitude_n": magnitude, "expected_n": expected,
+    aligned = None
+    if axis is not None and magnitude > 0:
+        index, sign = axis
+        aligned = sign * force[index] / magnitude
+    passed = abs(magnitude - expected) <= allowed and (aligned is None or aligned >= 0.999)
+    return {"pass": passed, "alignment": aligned, "force_magnitude_n": magnitude, "expected_n": expected,
             "allowed_n": allowed, "error_n": magnitude - expected, "force_n": force,
             "torque_nm": reading.get("torque_nm"), "mass_below_kg": load.get("mass_kg"),
             "physics_time_s": reading.get("physics_time_s")}
@@ -70,7 +78,8 @@ def main():
             bridge.call("sim.joints.command", {**ids, "path": root, "targets": targets})
             for _ in range(-(-args.settle_steps // 120)):
                 bridge.call("sim.simulation.step", {**ids, "steps": 120}, timeout=300)
-            result = check(bridge.call("workcell.robot_wrench", {}), args.tolerance, args.tolerance_n)
+            result = check(bridge.call("workcell.robot_wrench", {}), args.tolerance, args.tolerance_n,
+                           EXPECTED_AXIS.get(name))
             state = bridge.call("sim.joints.state", {**ids, "path": root})
             reached = dict(zip(state.get("names", ARM), state.get("positions", [])))
             result["max_joint_error_deg"] = max(abs(math.degrees(reached.get(joint, float("nan"))) - value)

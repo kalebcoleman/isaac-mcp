@@ -66,7 +66,7 @@ def place(stage, name, url, bench_path="/World/Bench"):
     from pxr import UsdLux
 
     deinstanced = 0
-    for _ in range(MAX_INSTANCE_DEPTH):   # instance proxies cannot be edited: open instanced parts, outermost first
+    for _ in range(MAX_INSTANCE_DEPTH + 1):   # instance proxies cannot be edited: open instanced parts, outermost first
         instanced = [prim for prim in Usd.PrimRange(room) if prim.IsInstanceable()]
         if not instanced:
             break
@@ -113,7 +113,7 @@ def place(stage, name, url, bench_path="/World/Bench"):
     removed = []
     for child in room.GetChildren():
         box = _box(cache, child)
-        holds_ground = any(path.startswith(str(child.GetPath()) + "/") for path in keep)
+        holds_ground = any(path == str(child.GetPath()) or path.startswith(str(child.GetPath()) + "/") for path in keep)
         if box is not None and not holds_ground and _overlaps(box, bench):
             child.SetActive(False)
             removed.append(child.GetName())

@@ -276,6 +276,10 @@ def test_the_static_wrench_check_passes_only_within_tolerance():
     assert module.check(reading, 0.01, 0.02)["pass"]
     assert not module.check(dict(reading, force_n=[0.0, 0.0, 16.0]), 0.01, 0.02)["pass"]
     assert not module.check({"status": "unavailable", "reason": "not initialized"}, 0.01, 0.02)["pass"]
+    down = dict(reading, force_n=[-15.0, 0.0, 0.03])
+    assert module.check(down, 0.01, 0.02, axis=(0, -1.0))["pass"]
+    assert not module.check(dict(down, force_n=[15.0, 0.0, 0.03]), 0.01, 0.02, axis=(0, -1.0))["pass"]   # sign flipped
+    assert not module.check(dict(down, force_n=[0.0, -15.0, 0.0]), 0.01, 0.02, axis=(0, -1.0))["pass"]  # wrong axis
 
 
 def test_articulated_props_nested_instances_emissive_meshes_and_the_floor_holder(tmp_path):
@@ -350,7 +354,8 @@ def test_every_collider_gets_a_material_that_combines_like_mujoco_and_does_not_b
 
 
 @pytest.mark.parametrize("change, message", [
-    ({"combine_mode": "sum"}, "combine_mode"), ({"newton_friction": "mean"}, "newton_friction"),
+    ({"combine_mode": "sum"}, "combine_mode"), ({"combine_mode": "average"}, "must be max"),
+    ({"newton_friction": "mean"}, "newton_friction"),
     ({"default_dynamic_friction": 0.6}, "must not exceed"), ({"default_static_friction": True}, "finite"),
 ])
 def test_a_malformed_contact_section_is_refused(change, message):
