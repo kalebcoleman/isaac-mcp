@@ -269,3 +269,11 @@ def test_the_work_cell_check_needs_no_pxr_on_the_host_and_the_command_is_quoted(
     err = capsys.readouterr().err
     assert "has no mcp," in err and "pxr" not in err    # the check's pxr code runs inside Kit
     assert err.rstrip().endswith("smoke.py workcell --output-dir '/tmp/my runs;x' --check workcell_smoke")
+
+
+def test_the_one_check_that_imports_pxr_on_the_host_is_probed_for_it(monkeypatch, capsys):
+    module = runner()
+    real = module.importlib.util.find_spec
+    monkeypatch.setattr(module.importlib.util, "find_spec", lambda name: None if name == "pxr" else real(name))
+    assert module.main(["sim", "--check", "validate_scene_edges"]) == 2
+    assert "has no pxr," in capsys.readouterr().err

@@ -29,7 +29,7 @@ from .scene_contracts import DISABLED
 def helper_python(project: Path, interpreter: str) -> str:
     if (project / "pyproject.toml").is_file():
         return f"uv run --locked --isolated --project {shlex.quote(str(project))} --python 3.12 python"
-    return shlex.quote(interpreter)
+    return shlex.quote(interpreter) if interpreter else "python3"
 
 
 HELPER_PYTHON = helper_python(Path(__file__).resolve().parents[1], sys.executable)

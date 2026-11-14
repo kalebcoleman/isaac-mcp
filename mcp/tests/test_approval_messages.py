@@ -337,4 +337,5 @@ def test_an_installed_wheel_prints_the_servers_own_python(tmp_path):
     site = tmp_path / "lib/python3.12/site-packages"
     site.mkdir(parents=True)
     assert a.helper_python(site, "/opt/tools/twin smith/bin/python") == "'/opt/tools/twin smith/bin/python'"
+    assert a.helper_python(site, "") == "python3"
     assert a.helper_python(Path(a.__file__).resolve().parents[1], "/x").startswith("uv run --locked --isolated --project ")
