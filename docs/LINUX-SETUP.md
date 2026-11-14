@@ -125,7 +125,7 @@ then reconnect the client. The server command is `twinsmith`, not the simulator 
 it also replaces the host tool and handles the shim as described above.
 
 In the MCP client, call `refresh_tools`, select the intended endpoint with `use_bridge` if needed,
-then `status` and `sim__stage__info` with empty arguments. Verify PID, port, build, stage identity
+then `status` and `sim__stage(action="info")` with no other arguments. Verify PID, port, build, stage identity
 and readiness before any editing, reset or playback. If the client does not honor tool-list change
 notifications, reconnect it. No bridge, missing extension or missing Lab installation is a failure
 or unavailable capability, not a successful simulation operation.
@@ -142,7 +142,7 @@ python3 mcp/twinsmith/client.py status --host "$BRIDGE_HOST" --port "$BRIDGE_POR
 python3 mcp/twinsmith/client.py sim.stage.info '{}' --host "$BRIDGE_HOST" --port "$BRIDGE_PORT"
 ```
 
-The direct bridge CLI uses **`sim.stage.info`**; the MCP name is **`sim__stage__info`**.
+The direct bridge CLI uses **`sim.stage.info`**; an MCP client calls **`sim__stage`** with `action="info"`.
 `--list-bridges` returns `[]` and exit 2 when no bridge is advertised. With several bridges,
 automatic selection refuses; explicitly choose the host/port you intend. These commands do not
 build the demo or start physics. Once identity is confirmed, use the [agent workflow](../AGENTS.md)
@@ -191,7 +191,7 @@ viewport and URDF follow-ups have superseded some early pending checks, while th
 
 ## Prepare the work cell's asset pack
 
-The host connection and `sim__stage__info` do not require a robot or workstation, and NVIDIA's public robots
+The host connection and `sim__stage(action="info")` do not require a robot or workstation, and NVIDIA's public robots
 (`ur5e`, `franka`, `unitree_g1`, ...) load by name from the running simulator's own asset root. The UR5e Jenga work cell uses
 [a private asset pack](../exts/workcell/workcell/README.md#private-asset-pack) (`ur5e-jenga-workcell/v1`) that you supply. The
 repository ships **no assets**, `install.sh` installs packages, not assets, and nothing is ever downloaded for you.
@@ -235,7 +235,7 @@ connection and generic scene work require neither.
 | `No module named 'Xlib'` when starting the MCP host | You ran the host with Isaac Sim's Python. It has its own dependencies: use the installed `twinsmith`, or `cd mcp && uv run --locked --isolated ...` |
 | `ModuleNotFoundError: No module named 'mcp'` from a helper script | Scene helpers need the MCP SDK, and the validators `pxr` and `numpy`: `uv run --locked --isolated --project mcp --extra scene-test --python 3.12 python scripts/<name>` from the checkout root. Do not use plain `uv run` in the root |
 | `PHYSICS_NOT_READY` from a joint tool | Pass the articulation root, not the robot's parent Xform; `sim__ros2__tf_setup` reports it. See the [typical session](TOOLS-SCENE.md#a-typical-session) |
-| `/scan` missing after reopening a saved scene | Open it with `sim__stage__open`, which repairs stale LiDAR products. See [saved LiDAR scenes](TOOLS-SCENE.md#saved-lidar-scenes-and-scan) |
+| `/scan` missing after reopening a saved scene | Open it with `sim__stage(action="open")`, which repairs stale LiDAR products. See [saved LiDAR scenes](TOOLS-SCENE.md#saved-lidar-scenes-and-scan) |
 | `refresh_tools` selected another port | It found no bridge on the pinned port and one session this server launched. The result names it; verify with `status` |
 | `status` shows `host.stale: true` | This MCP server predates your `git pull`. Restart the MCP connection |
 | `SAVE_UNSUPPORTED` | Inspect returned properties/retry guidance; pause and follow the explicit normalization contract in [scene tools](TOOLS-SCENE.md) |
@@ -269,7 +269,7 @@ If a Kit module or renderer extension appears missing, first check the selected 
 running Kit extension manager/startup log. Do not try to fix a Kit import by installing `omni` or `.pyi` files
 into the host Python. The supplied launcher requests `twinsmith.bridge`, `sim-tools`, `workcell` (the work cell) and
 `isaacsim.ros2.bridge`. After connecting the correct bridge, `status` and
-`sim__stage__info` help verify the running process and build; listing catalog tools by itself does not.
+`sim__stage(action="info")` help verify the running process and build; listing catalog tools by itself does not.
 
 ## Optional Lab, desktop controls and project assets
 
@@ -277,7 +277,7 @@ into the host Python. The supplied launcher requests `twinsmith.bridge`, `sim-to
 which is off by default: add `+lab` ([toolsets](TOOLSETS.md#choosing-toolsets)). Set
 `ISAACLAB_PYTHON=<workspace>/envs/lab-3.0/bin/python` and
 `ISAACLAB_ROOT=<workspace>/IsaacLab` (example locations; use your own) in the host/client environment, then call
-`isaaclab__install_info` before launching jobs. Invalid explicit paths fail discovery; they do
+`isaaclab__inspect(action="install")` before launching jobs. Invalid explicit paths fail discovery; they do
 not silently install Lab. The host's `isaaclab` extra supplies TensorBoard metrics support,
 not the Lab runtime. For the inspected Lab 3 video workflow, MoviePy
 `>=1.0.3,<2.0.0.dev0` and `imageio-ffmpeg` belong in the **Lab interpreter**; use that
