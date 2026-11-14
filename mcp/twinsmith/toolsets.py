@@ -14,17 +14,19 @@ class Toolset:
 
 TOOLSETS = {
     "core": Toolset("Connection, discovery, help, jobs and toolsets", True),
-    "screen": Toolset("Capture, record and arrange desktop windows"),
-    "sim": Toolset("Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim"),
-    "assets": Toolset("Import and manage robot and scene assets"),
-    "real2sim": Toolset("RoboSimStudio real-to-sim and MuJoCo system identification"),
-    "lab": Toolset("Isaac Lab jobs and script jobs"),
-    "ros2": Toolset("ROS 2 transforms, graphs and occupancy maps"),
-    "workcell": Toolset("UR5e workcell tools"),
-    "cad": Toolset("PCB checks, fab files and renders"),
-    "input": Toolset("Desktop mouse and keyboard input", explicit_only=True),
-    "launch": Toolset("Launch and stop simulator processes", explicit_only=True),
-    "extensions": Toolset("Tools from uncatalogued extension namespaces"),
+    "screen": Toolset("Capture, record and arrange windows"),
+    "sim": Toolset("Scenes, physics, sensors, code, Kit log and UI in Isaac Sim"),
+    "assets": Toolset("Import and manage assets"),
+    "real2sim": Toolset("RoboSimStudio real-to-sim and MuJoCo sysid"),
+    "lab": Toolset("Isaac Lab and script jobs"),
+    "ros2": Toolset("ROS 2 TF, graphs and occupancy maps"),
+    "workcell": Toolset("UR5e work cell"),
+    "cad": Toolset("PCB checks, fab files, renders"),
+    "planning": Toolset("Graph-as-Policy skill graphs"),
+    "eval": Toolset("VABAR benchmark"),
+    "input": Toolset("Desktop mouse and keyboard", explicit_only=True),
+    "launch": Toolset("Start and stop simulators", explicit_only=True),
+    "extensions": Toolset("Tools of uncatalogued Kit extensions"),
 }
 
 _ROOTS = {
@@ -40,6 +42,8 @@ _ROOTS = {
     "input": "computer",
     "launch": "sim__session",
     "cad": "hardware",
+    "planning": "gap",
+    "eval": "vabar",
 }
 
 MEMBERS = {

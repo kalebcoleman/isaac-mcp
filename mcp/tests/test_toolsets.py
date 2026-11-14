@@ -63,6 +63,8 @@ LISTED = {
     "assets": {"assets__import_path", "assets__library", "assets__mesh", "assets__pack", "assets__validate"},
     "real2sim": {"robosim", "sysid"},
     "cad": {"hardware"},
+    "planning": {"gap"},
+    "eval": {"vabar"},
     "lab": {"isaaclab__launch", "isaaclab__inspect", "isaaclab__metrics", "isaaclab__checkpoint_register", "run_script"},
     "ros2": {"sim__ros2__tf_setup", "sim__graph", "sim__map__occupancy"},
     "workcell": {"workcell__cell", "workcell__robot", "workcell__perception", "workcell__jenga"},
@@ -150,11 +152,12 @@ def test_live_visibility_uses_same_selection():
 # Estimated tokens of each toolset on top of core, and of all: the measured size plus about 5 percent. Measured
 # 2026-11-13 with scripts/measure_tool_list.py: default (core) 1,586; sim 12,213; screen 3,561; assets 4,286 (with
 # assets__mesh and assets__validate, #112);
-# real2sim 3,053 (with sysid, #116); lab 4,561; ros2 3,532; workcell 2,275; input 2,393; launch 2,022; extensions 1,586; cad 2,018 (#118); all 24,394.
+# real2sim 3,053 (with sysid, #116); lab 4,561; ros2 3,532; workcell 2,275; input 2,393; launch 2,022; extensions 1,586; cad 2,018 (#118);
+# planning 1,979 and eval 2,110 (gap and vabar, #115); all 25,310 (with gap and vabar).
 BUDGETS = {"default": 1670, "default,+sim": 12830, "default,+screen": 3740, "default,+assets": 4500,
            "default,+real2sim": 3210, "default,+lab": 4790, "default,+ros2": 3710, "default,+workcell": 2390,
            "default,+input": 2520, "default,+launch": 2130, "default,+extensions": 1670, "default,+cad": 2120,
-           "all": 25600}
+           "default,+planning": 2080, "default,+eval": 2220, "all": 26600}
 
 
 @pytest.mark.parametrize("profile,budget", BUDGETS.items())

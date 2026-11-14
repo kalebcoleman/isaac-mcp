@@ -15,8 +15,8 @@ workcell integration provides four grouped tools and seven actions:
 | `workcell__jenga` | `build`, `status` |
 
 `quick_start` resolves the external `ur5e-jenga-workcell/v2` pack and builds a stopped
-PhysX scene. `physics` mode uses gravity; `mirror_real` uses zero gravity but does not
-synchronize with hardware. An unsaved stage is replaced only with explicit consent.
+scene on the session's engine, PhysX or Newton. `physics` mode uses gravity; `mirror_real` uses zero gravity (PhysX only)
+but does not synchronize with hardware. An unsaved stage is replaced only with explicit consent.
 `shutdown` releases workcell state without clearing the stage. Robot, perception and
 Jenga status actions read build reports; perception status is not sensor capture.
 Real-to-simulation synchronization, planning and evaluation are not part of the work cell.

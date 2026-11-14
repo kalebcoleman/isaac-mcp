@@ -29,6 +29,7 @@ over both.
 | [RoboSimStudio](ROBOSIM.md) | The `robosim` tool: real-to-sim runs in RoboSimStudio's own environment |
 | [System identification](SYSID.md) | The `sysid` tool: fit damping, friction, gains and mass to recorded trajectories with MuJoCo |
 | [Hardware](HARDWARE.md) | The `hardware` tool (`cad`): KiCad checks, fab files and renders from tools beside twinsmith |
+| [Planning and evaluation](PLANNING-EVAL.md) | The `gap` and `vabar` tools: Graph-as-Policy skill graphs in simulation and VABAR benchmark runs, from pinned checkouts |
 | [Work cell](../exts/workcell/workcell/README.md) | The lab's UR5e Jenga work cell: BOM, private pack, tools. [Jenga variation contract](TOOLS-WORKCELL.md) |
 | [BrickSim](BRICKSIM.md) | LEGO bricks with these tools: the bridge next to BrickSim, which tools work on bricks, its RL task |
 | [Agent skill](AGENT-SKILLS.md) | The `twinsmith` skill and where each client finds it |

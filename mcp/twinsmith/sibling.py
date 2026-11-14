@@ -1,30 +1,40 @@
 """Run a tool that lives beside twinsmith: a bounded subprocess or a job, with a scrubbed environment.
 
 The child sees only ``PATH``, ``HOME``, the GPU selection variables and the names a caller passes in
-``env_pass`` or sets in ``env_set``: no credentials, no ``ROS_DOMAIN_ID``, no Python or virtual
+``env_pass`` or sets in ``env_set``: no credentials, nothing named ``ROS_*``, no Python or virtual
 environment of this server. A job is a record in the shared jobs folder, so ``jobs`` follows and
 cancels it like an Isaac Lab job.
+
+A pinned sibling (RoboSimStudio, Graph-as-Policy, VABAR) is a git checkout under
+``<workspace>/tools/<name>`` with its own ``.venv``: ``Checkout`` finds it and reports its commit
+against the tested pin. The host never installs, updates or imports one.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import threading
 import time
 from pathlib import Path
 
+from . import pack_manifest
+
 KEEP = ("PATH", "HOME")
 GPU = ("CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES", "NVIDIA_DRIVER_CAPABILITIES")
 TAIL = 4000
+WHOLE = 1 << 20                     # stdout_chars for a caller that parses the output
+_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}")
 
 
 def environment(env_pass=(), env_set=None, source=None) -> dict:
-    """The child's environment: ``KEEP``, ``GPU`` and ``env_pass`` copied from *source*, then *env_set*."""
+    """The child's environment: ``KEEP``, ``GPU`` and ``env_pass`` copied from *source*, then *env_set*.
+    Nothing named ``ROS_*`` passes: a sibling never joins a ROS graph."""
     source = os.environ if source is None else source
     env = {name: source[name] for name in (*KEEP, *GPU, *env_pass) if name in source}
     env.update(env_set or {})
-    return env
+    return {name: value for name, value in env.items() if not name.startswith("ROS_")}
 
 
 def commit(folder) -> str | None:
@@ -37,8 +47,9 @@ def commit(folder) -> str | None:
     return done.stdout.strip() or None if done.returncode == 0 else None
 
 
-def run(argv, *, cwd=None, env_pass=(), env_set=None, timeout_s=120.0) -> dict:
-    """Run *argv* (no shell) and return its exit code and the tails of its output."""
+def run(argv, *, cwd=None, env_pass=(), env_set=None, timeout_s=120.0, stdout_chars=TAIL) -> dict:
+    """Run *argv* (no shell) and return its exit code and the tails of its output: the last *stdout_chars* of
+    stdout (``WHOLE`` for output the caller parses) and the last ``TAIL`` of stderr."""
     argv = [str(part) for part in argv]
     try:
         done = subprocess.run(argv, cwd=cwd, env=environment(env_pass, env_set), stdin=subprocess.DEVNULL,
@@ -48,7 +59,7 @@ def run(argv, *, cwd=None, env_pass=(), env_set=None, timeout_s=120.0) -> dict:
     except OSError as error:
         return {"argv": argv, "exit_code": None, "timed_out": False, "stdout": "", "stderr": str(error)}
     return {"argv": argv, "exit_code": done.returncode, "timed_out": False,
-            "stdout": done.stdout[-TAIL:], "stderr": done.stderr[-TAIL:]}
+            "stdout": done.stdout[-stdout_chars:], "stderr": done.stderr[-TAIL:]}
 
 
 def start_job(argv, *, task, kind, cwd=None, env_pass=(), env_set=None, timeout_s=None, uses_gpu=False,
@@ -88,3 +99,66 @@ def start_job(argv, *, task, kind, cwd=None, env_pass=(), env_set=None, timeout_
             jobs._active[job_id] = proc
         threading.Thread(target=jobs._watcher, args=(folder, job_id, proc, timeout_s), daemon=True).start()
     return {"ok": True, "job_id": job_id, "log_dir": str(folder.resolve()), "command": argv}
+
+
+class Refusal(ValueError):
+    """A request a wrapper will not run, with a stable code for the answer."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
+class Checkout:
+    """One pinned checkout: ``root`` if given, else ``$<env_var>``, else ``<workspace>/tools/<name>``."""
+
+    def __init__(self, name, env_var, pin, repository, *, workspace=None, root=None):
+        self.name, self.env_var, self.pin, self.repository = name, env_var, pin, repository
+        self.workspace = Path(workspace or pack_manifest.workspace_dir()).expanduser().resolve()
+        configured = root or (os.environ.get(env_var) if env_var else None)
+        self.root = Path(configured or self.workspace / "tools" / name).expanduser().resolve()
+
+    def bin(self, program: str = "python") -> Path:
+        return self.root / ".venv/bin" / program
+
+    def info(self, program: str = "python") -> dict:
+        """``{checkout, commit, pin, pin_match, environment_present, warnings}``, plus ``setup`` when it is not usable."""
+        found = commit(self.root)
+        executable = self.bin(program)
+        present = executable.is_file() and os.access(executable, os.X_OK)
+        info = {"checkout": str(self.root), "commit": found, "pin": self.pin,
+                "pin_match": bool(found and found.startswith(self.pin)), "environment_present": present,
+                "warnings": []}
+        if not info["pin_match"]:
+            info["warnings"].append(f"{self.name} checkout commit {found or 'unknown'} differs from tested pin {self.pin}.")
+        if not found or not present:
+            info["setup"] = (f"The owner sets this up; twinsmith never installs it. Clone {self.repository} into {self.root}, "
+                             f"check out {self.pin}, and create its own environment so that {executable} exists"
+                             + (f" (or point {self.env_var} at an existing checkout)." if self.env_var else "."))
+        return info
+
+
+def run_name(value, prefix: str) -> str:
+    """A run folder name: the caller's (letters, digits, underscores, hyphens), else ``<prefix>-<timestamp>``."""
+    if value is None:
+        return f"{prefix}-{time.strftime('%Y%m%d-%H%M%S')}"
+    if not isinstance(value, str) or not _NAME.fullmatch(value):
+        raise Refusal("INVALID_VALUE", "name must be 1 to 80 letters, digits, underscores or hyphens.")
+    return value
+
+
+def answer(tool: str, action: str, info: dict, *, warnings=(), **fields) -> dict:
+    """The result envelope a checkout wrapper returns: ``{ok, tool, action, commit, pin, pin_match, exit_code,
+    result | error, warnings}``."""
+    return {"ok": "error" not in fields, "tool": tool, "action": action, "commit": info["commit"], "pin": info["pin"],
+            "pin_match": info["pin_match"], "exit_code": fields.pop("exit_code", None), **fields,
+            "warnings": [*info["warnings"], *warnings]}
+
+
+def new_run_folder(folder: Path) -> None:
+    """Create a run folder that must not exist yet, so two calls with one name cannot share it."""
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        folder.mkdir()
+    except FileExistsError:
+        raise Refusal("ALREADY_EXISTS", f"{folder} exists; choose another name.") from None

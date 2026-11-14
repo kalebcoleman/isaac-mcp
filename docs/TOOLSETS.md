@@ -17,17 +17,19 @@ rows for the server you have installed, with the current state of each.
 | Toolset | Default | Listed tools |
 |---|---|---|
 | `core`: Connection, discovery, help, jobs and toolsets | on | `help`, `jobs`, `refresh_tools`, `status`, `toolsets`, `use_bridge` |
-| `screen`: Capture, record and arrange desktop windows | off | `doctor`, `join_videos`, `screen_recording`, `screenshot`, `windows` |
-| `sim`: Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim | off | `files`, `reload_tools`, `run_python`, `sim__arm`, `sim__camera`, `sim__controller`, `sim__joints`, `sim__lidar`, `sim__light`, `sim__logs`, `sim__material`, `sim__physics`, `sim__prim`, `sim__quick_start`, `sim__simulation`, `sim__stage`, `sim__timeline__control`, `sim__ui`, `sim__viewport__frame` |
-| `assets`: Import and manage robot and scene assets | off | `assets__import_path`, `assets__library`, `assets__mesh`, `assets__pack`, `assets__validate` |
-| `real2sim`: RoboSimStudio real-to-sim and MuJoCo system identification | off | `robosim`, `sysid` |
-| `lab`: Isaac Lab jobs and script jobs | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics`, `run_script` |
-| `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
-| `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__jenga`, `workcell__perception`, `workcell__robot` |
-| `cad`: PCB checks, fab files and renders | off | `hardware` |
-| `input`: Desktop mouse and keyboard input | explicit only | `computer` |
-| `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
-| `extensions`: Tools from uncatalogued extension namespaces | off | none |
+| `screen`: Capture, record and arrange windows | off | `doctor`, `join_videos`, `screen_recording`, `screenshot`, `windows` |
+| `sim`: Scenes, physics, sensors, code, Kit log and UI in Isaac Sim | off | `files`, `reload_tools`, `run_python`, `sim__arm`, `sim__camera`, `sim__controller`, `sim__joints`, `sim__lidar`, `sim__light`, `sim__logs`, `sim__material`, `sim__physics`, `sim__prim`, `sim__quick_start`, `sim__simulation`, `sim__stage`, `sim__timeline__control`, `sim__ui`, `sim__viewport__frame` |
+| `assets`: Import and manage assets | off | `assets__import_path`, `assets__library`, `assets__mesh`, `assets__pack`, `assets__validate` |
+| `real2sim`: RoboSimStudio real-to-sim and MuJoCo sysid | off | `robosim`, `sysid` |
+| `lab`: Isaac Lab and script jobs | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics`, `run_script` |
+| `ros2`: ROS 2 TF, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
+| `workcell`: UR5e work cell | off | `workcell__cell`, `workcell__jenga`, `workcell__perception`, `workcell__robot` |
+| `cad`: PCB checks, fab files, renders | off | `hardware` |
+| `planning`: Graph-as-Policy skill graphs | off | `gap` |
+| `eval`: VABAR benchmark | off | `vabar` |
+| `input`: Desktop mouse and keyboard | explicit only | `computer` |
+| `launch`: Start and stop simulators | explicit only | `sim__session` |
+| `extensions`: Tools of uncatalogued Kit extensions | off | none |
 <!-- /generated -->
 
 - `core` is always on and cannot be turned off. It is the only toolset on by default: name the others you want.
@@ -45,6 +47,8 @@ rows for the server you have installed, with the current state of each.
   runs RoboSimStudio ([ROBOSIM.md](ROBOSIM.md)) and `sysid` fits model parameters with MuJoCo ([SYSID.md](SYSID.md)).
 - `cad` holds `hardware`: KiCad checks, fab files and renders from the tools beside twinsmith (KiCad, KiKit, Blender);
   it needs no Kit bridge and never uploads or orders. See [HARDWARE.md](HARDWARE.md).
+- `planning` holds `gap` (Graph-as-Policy, simulation only) and `eval` holds `vabar` (the VABAR benchmark). Each runs a
+  pinned checkout with its own environment and needs no Kit bridge. See [PLANNING-EVAL.md](PLANNING-EVAL.md).
 
 ## Choosing toolsets
 
@@ -125,8 +129,8 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 | Profile | Toolsets | Listed tools |
 |---|---|--:|
 | `default` | `core` | 6 |
-| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `extensions` | 50 |
-| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `input`, `launch`, `extensions` | 52 |
+| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `planning`, `eval`, `extensions` | 52 |
+| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `planning`, `eval`, `input`, `launch`, `extensions` | 54 |
 <!-- /generated -->
 
 Measured on 2026-11-13. Each `default,+name` row is `core` plus that one toolset.
@@ -144,9 +148,11 @@ Measured on 2026-11-13. Each `default,+name` row is `core` plus that one toolset
 | `default,+workcell` | 10 | 9,103 | 2,275 |
 | `default,+input` | 7 | 9,575 | 2,393 |
 | `default,+launch` | 7 | 8,090 | 2,022 |
+| `default,+planning` | 7 | 7,916 | 1,979 |
+| `default,+eval` | 7 | 8,440 | 2,110 |
 | `default,+sim,+assets,+screen,+extensions` | 35 | 67,554 | 16,888 |
-| `all` | 50 | 97,579 | 24,394 |
-| `all,+input,+launch` | 52 | 102,552 | 25,638 |
+| `all` | 52 | 101,243 | 25,310 |
+| `all,+input,+launch` | 54 | 106,216 | 26,554 |
 
 Before toolsets existed the server always listed 48 tools, about 28,450 estimated tokens. The listed text is a summary:
 `action="help"` on a grouped tool and `help(tool="<name>")` return the full description. A test

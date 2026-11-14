@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Smoke test for a machine: does this checkout's MCP server work here?
 
-    "$(uv tool dir)/twinsmith/bin/python" scripts/smoke_test.py [--task Isaac-Cartpole] [--no-lab]
+    cd mcp && uv run --locked --isolated --python 3.12 --extra test --extra isaaclab python ../scripts/smoke_test.py [--task Isaac-Cartpole] [--no-lab]
 
 Checks, in order, and prints PASS / FAIL / SKIP for each (exit 1 on any FAIL):
   1. the host server builds and lists help and the Isaac Lab tools;
