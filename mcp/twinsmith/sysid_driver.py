@@ -11,7 +11,14 @@ fit episodes (another scores the held-out ones), ``build_residual_fn``, then ``o
 the iteration limit. ``fit.json`` goes beside it.
 """
 
+import os
+import sys
+
+if not sys.flags.isolated:  # never the server's PYTHONPATH, PYTHONHOME or user site: the environment status checked
+    os.execv(sys.executable, [sys.executable, "-I", *sys.argv])
+
 import argparse
+import hashlib
 import json
 import math
 import time
@@ -90,9 +97,13 @@ def main():
     request = json.loads(request_path.read_text())
     dataset, out, holdout = Path(request["dataset"]), request_path.parent, set(request["holdout"])
     declared = request["parameters"]
+    for relative, digest in request["files"].items():   # fit exactly what the host checked, unchanged since
+        path = dataset / relative
+        if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise SystemExit(f"{relative} changed after the fit was requested (or is a link); nothing was fitted.")
     spec = mujoco.MjSpec.from_file(str(dataset / "model.xml"))
     model = spec.compile()
-    files = sorted((dataset / "episodes").glob("*.npz"))
+    files = sorted(dataset / relative for relative in request["files"] if relative.startswith("episodes/"))
     fit_files = [f for f in files if f.stem not in holdout]
     held_files = [f for f in files if f.stem in holdout]
     fit_seq, held_seq = sequences(spec, model, fit_files, "fit"), sequences(spec, model, held_files, "holdout")
@@ -117,10 +128,10 @@ def main():
     rows = []
     for item, value in zip(declared, x_hat):
         span = item["max"] - item["min"]
-        near = 1e-6 * span if span > 0 else 0.0
+        near = 1e-6 * span
+        at_bound = None if span <= 0 else ("min" if value <= item["min"] + near else "max" if value >= item["max"] - near else None)
         rows.append({"name": item["name"], "target": item["target"]["text"], "nominal": item["nominal"],
-                     "fitted": float(value), "min": item["min"], "max": item["max"],
-                     "at_bound": ("min" if value <= item["min"] + near else "max" if value >= item["max"] - near else None)})
+                     "fitted": float(value), "min": item["min"], "max": item["max"], "at_bound": at_bound})
     report = {
         "ok": True, "mujoco_version": mujoco.__version__, "optimizer": "mujoco", "max_iters": request["max_iters"],
         "parameters": rows, "bounds_hit": [row["name"] for row in rows if row["at_bound"]],

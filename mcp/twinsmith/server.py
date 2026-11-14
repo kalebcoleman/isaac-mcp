@@ -1243,11 +1243,19 @@ def _register_host_tools(server: FastMCP, state: _BridgeState, groups: Iterable[
         strip_schema_titles(server, "robosim")
         grouped_tools.shorten_listed(tool)
         from .sysid import register_sysid_tools
-        register_sysid_tools(server, roots=lambda: [root for root, _ in getattr(getattr(state, "asset_broker", None), "roots", {}).values()])
+        register_sysid_tools(server, roots=lambda: _approved_roots(state))
         tool = server._tool_manager._tools["sysid"]
         tool.description = inspect.cleandoc(tool.description)
         strip_schema_titles(server, "sysid")
         grouped_tools.shorten_listed(tool)
+
+
+def _approved_roots(state) -> list:
+    """The user-approved asset roots, reading the approval file now if no assets tool has run yet."""
+    if not hasattr(state, "asset_broker"):
+        from .project_assets import Broker
+        state.asset_broker = Broker()
+    return [root for root, _ in state.asset_broker.roots.values()]
 
 
 def _drop_unselected(server: FastMCP, state: _BridgeState) -> None:

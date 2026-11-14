@@ -293,3 +293,52 @@ def test_synthetic_recovery(tmp_path, monkeypatch):
     assert report["bounds_hit"] == []
     assert report["residual"]["after"] < report["residual"]["before"]
     assert report["held_out"]["after"] < report["held_out"]["before"]
+
+
+def test_files_and_model_paths_cannot_leave_the_approved_folder(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.npz").write_bytes(b"")
+    folder = dataset(tmp_path / "linked")
+    (folder / "episodes" / "0004.npz").symlink_to(outside / "x.npz")
+    assert code(lambda: check_dataset(str(folder), [tmp_path])) == "EPISODE_INVALID"
+    folder = dataset(tmp_path / "linked-dir")
+    (folder / "episodes").rename(folder / "real-episodes")
+    (folder / "episodes").symlink_to(folder / "real-episodes")
+    assert code(lambda: check_dataset(str(folder), [tmp_path])) == "DATASET_INVALID"
+    for bad in ('<mujoco><include file="/etc/model.xml"/></mujoco>', '<mujoco><compiler meshdir="../../meshes"/></mujoco>'):
+        folder = dataset(tmp_path / f"model-{len(bad)}")
+        (folder / "model.xml").write_text(bad)
+        assert code(lambda: check_dataset(str(folder), [tmp_path])) == "DATASET_INVALID"
+
+
+def test_report_on_an_unreadable_fit_or_an_unknown_job_is_coded(tmp_path):
+    sysid = tool(tmp_path, job_status=lambda job_id: (_ for _ in ()).throw(ValueError("no such job")))
+    sysid.call("fit", dataset=str(dataset(tmp_path)), name="first")
+    unknown = sysid.call("report", name="first")
+    assert unknown["code"] == "STATE_UNKNOWN" and unknown["state"] == "unknown"
+    (tmp_path / "runs/sysid/first/fit.json").write_text('{"parameters": []}')
+    assert sysid.call("report", name="first")["code"] == "REPORT_INVALID"
+
+
+def test_a_launch_that_cannot_start_a_process_leaves_no_fit_folder(tmp_path):
+    def broken(**kwargs):
+        raise OSError("exec format error")
+
+    result = tool(tmp_path, launch=broken).call("fit", dataset=str(dataset(tmp_path)), name="first")
+    assert result["code"] == "LAUNCH_REFUSED" and not (tmp_path / "runs/sysid/first").exists()
+
+
+def test_approved_roots_are_read_even_before_any_assets_tool(tmp_path, monkeypatch):
+    from twinsmith import server
+
+    approved = tmp_path / "approved"
+    approved.mkdir()
+    staging = tmp_path / "staging"
+    staging.mkdir(mode=0o700)
+    config = tmp_path / "approval.json"
+    config.write_text(json.dumps(dict(version=1, profile="trusted_project", roots={"data": str(approved)}, staging=str(staging))))
+    monkeypatch.setenv("TWINSMITH_ASSET_CONFIG", str(config))
+    state = server._BridgeState()
+    assert not hasattr(state, "asset_broker")
+    assert [str(root) for root in server._approved_roots(state)] == [str(approved)]

@@ -118,6 +118,8 @@ def _episodes(folder: Path) -> list[dict]:
         raise SysidError("EPISODE_INVALID", f"episodes/ must hold 1 to {MAX_EPISODES} .npz files.")
     episodes = []
     for file in files:
+        if file.is_symlink():
+            raise SysidError("EPISODE_INVALID", f"{file.name} is a symbolic link; episodes must be files in the dataset.")
         try:
             shapes = npz_shapes(file)
         except (OSError, ValueError, SyntaxError, KeyError, zipfile.BadZipFile, struct.error, IndexError) as exc:
@@ -144,12 +146,32 @@ def check_dataset(dataset, roots) -> dict:
         from .project_assets import approval_help
 
         raise SysidError("ROOT_NOT_APPROVED", "The dataset is outside every user-approved root." + approval_help(folder))
+    for name in ("SOURCE.md", "model.xml", "params.json", "episodes"):
+        if (folder / name).is_symlink():
+            raise SysidError("DATASET_INVALID", f"{name} is a symbolic link; every dataset file must be inside the approved folder.")
     if not (folder / "SOURCE.md").is_file():
         raise SysidError("SOURCE_MISSING", "The dataset has no SOURCE.md: who recorded it, when, on what, and who approved "
                          "the export. A dataset without a recorded approval is refused.")
     if not (folder / "model.xml").is_file():
         raise SysidError("DATASET_INVALID", "The dataset has no model.xml (the MuJoCo model).")
+    _model_paths_stay_inside(folder / "model.xml")
     return {"dataset": str(folder), "parameters": _parameters(folder / "params.json"), "episodes": _episodes(folder / "episodes")}
+
+
+def _model_paths_stay_inside(model: Path) -> None:
+    """MuJoCo resolves include, mesh and texture paths itself: refuse any that could leave the dataset folder."""
+    import xml.etree.ElementTree as ET
+
+    try:
+        root = ET.parse(model).getroot()
+    except (ET.ParseError, OSError) as exc:
+        raise SysidError("DATASET_INVALID", f"model.xml is not readable XML: {exc}") from None
+    for node in root.iter():
+        for key in ("file", "meshdir", "texturedir", "assetdir"):
+            value = node.get(key)
+            if value and (os.path.isabs(value) or ".." in Path(value).parts):
+                raise SysidError("DATASET_INVALID", f"model.xml names {key}={value!r}, which leaves the dataset folder; "
+                                 "keep every file the model uses inside it, by a relative path.")
 
 
 def _sha256(path: Path) -> str:
@@ -242,7 +264,7 @@ class Sysid:
             launched = self._launch(python=str(self.python), script=str(folder / "driver.py"), args=[str(folder / "request.json")],
                                     cwd=str(folder), label=f"sysid-{name}", timeout_s=float(timeout_s), uses_gpu=False,
                                     env={"CUDA_VISIBLE_DEVICES": ""}, single_instance_key=f"sysid:{name}")
-        except ValueError as exc:  # run_script's own argument checks
+        except (ValueError, OSError) as exc:  # run_script's own checks, or the process could not start
             launched = {"error": str(exc)}
         if "error" in launched:
             shutil.rmtree(folder)
@@ -257,10 +279,14 @@ class Sysid:
             raise SysidError("FIT_NOT_FOUND", f"No fit named {folder.name!r} in {self.runs}.")
         result = folder / "fit.json"
         if result.is_file():
-            fit = json.loads(result.read_text())
+            try:
+                fit = json.loads(result.read_text())
+                table, bounds, residual, episodes = fit["parameters"], fit["bounds_hit"], fit["residual"], fit["episodes"]
+            except (ValueError, KeyError, TypeError) as exc:
+                raise SysidError("REPORT_INVALID", f"{result} is not a fit this tool wrote: {exc}") from None
             return {"ok": True, "state": "finished", "name": folder.name, "fit_dir": str(folder), "fit_json": str(result),
-                    "mujoco_version": fit.get("mujoco_version"), "table": fit["parameters"], "bounds_hit": fit["bounds_hit"],
-                    "residual": fit["residual"], "held_out": fit.get("held_out"), "episodes": fit["episodes"],
+                    "mujoco_version": fit.get("mujoco_version"), "table": table, "bounds_hit": bounds,
+                    "residual": residual, "held_out": fit.get("held_out"), "episodes": episodes,
                     "warnings": [f"MuJoCo {fit.get('mujoco_version')} differs from the pin {PIN}."]
                     if fit.get("mujoco_version") != PIN else []}
         job_id = json.loads((folder / "job.json").read_text())["job_id"] if (folder / "job.json").is_file() else None
@@ -272,6 +298,10 @@ class Sysid:
         if state == "running":
             return {"ok": True, "state": "running", "name": folder.name, "job_id": job_id,
                     "next": f'jobs(action="status", job_id="{job_id}", wait_s=60)'}
+        if state == "unknown":
+            return {"ok": False, "state": "unknown", "name": folder.name, "job_id": job_id, "code": "STATE_UNKNOWN",
+                    "error": "No fit.json and no record of the job (the server restarted, or the record was removed); "
+                             "the fit may still be running. jobs(action=\"list\") shows what runs."}
         return {"ok": False, "state": state, "name": folder.name, "job_id": job_id, "code": "FIT_FAILED",
                 "error": "The fit ended without fit.json.", "exit_code": job.get("exit_code"),
                 "log_dir": job.get("log_dir"), "last_stderr_lines": job.get("last_stderr_lines")}

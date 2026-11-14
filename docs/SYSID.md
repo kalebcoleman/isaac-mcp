@@ -83,6 +83,8 @@ The residual is `mujoco.sysid`'s normalised sensor residual: an RMS without unit
 
 ## Verified
 
+A local result on the ASU PC: CI does not install the `sysid-test` extra, so `test_synthetic_recovery` is skipped there.
+
 - **Synthetic recovery** (`test_sysid.py::test_synthetic_recovery`, run with the `sysid-test` extra): a one-joint pendulum.
   Three episodes were generated with damping 0.30 and armature 0.010, and the fit started from 0.10 and 0.002 with
   episode 3 held out. It recovered 0.3000 and 0.01000 (both within 1e-12). The residual fell from 0.057 to 9e-15, the
