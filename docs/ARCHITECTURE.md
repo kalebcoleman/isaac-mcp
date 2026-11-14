@@ -294,8 +294,6 @@ The `sim__` prefix stays only on tools that need Kit. Tools that work without a 
 
 | Namespace | Tool | Actions | Runs in | Plan |
 |---|---|---|---|---|
-| `assets` | `mesh` | `inspect`, `decimate`, `hulls`, `split` | Host job, optional `mesh` extra | [01](plans/01-assets-mesh-collision.md) |
-| `assets` | `validate` | none: one call, `engine="newton"` or `"physx"` | Host; Kit's Asset Validator when asked | [01](plans/01-assets-mesh-collision.md) |
 | none | `gap` | `status`, `tools`, `check`, `generate`, `run` | Graph-as-Policy's environment | [03](plans/03-planning-eval-wrappers.md) |
 | none | `vabar` | `status`, `list`, `run`, `bench`, `results` | VABAR's environment | [03](plans/03-planning-eval-wrappers.md) |
 | none | `sysid` | `status`, `fit`, `report` | Its own MuJoCo environment | [04](plans/04-robosim-bump-and-sysid.md) |

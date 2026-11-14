@@ -40,7 +40,7 @@ What `origin/main` shows today. Each line is from the code or a recorded result,
 |---|---|
 | Tool surface | 15 toolsets, 8 of them on by default. Three work-cell tools are stubs that answer "not implemented". |
 | Generic scenes on Newton | The 54-block tower holds for 10 s at 500 Hz (1.7 mm; Isaac Sim 6.2, Newton 1.6.1). Raycast is refused; a Franka joint move does not settle yet. |
-| Work cell on Newton | Refused. A probe that bypassed the refusal found the blockers: the bench's 385 triangle-mesh colliders (1.63 M triangles) ask for 7,500,052 triangle pairs against a buffer of 1,000,000; the RG2's zero-force drives, its separate articulation and the pack's drive gains fail in MuJoCo-Warp. With those adapted the tower drifted 0.2 to 0.3 mm in 11 s. The RG2 fingers do not move yet ([details](OPEN-ITEMS.md#work-cell-on-newton)). |
+| Work cell on Newton | Builds and holds since #112 (pack `ur5e-jenga-workcell/v2` and per-engine drives). Live on Isaac Sim 6.2 / Newton 1.6.1: the arm holds within 0.05 degrees at the presentation pose, the RG2 fingers move with the mimic followers within 0.003 degrees, and the tower drifts at most 0.54 mm over 11 s after settling. Not yet: the force/torque read, cameras, `mirror_real` and measured finger widths ([details](OPEN-ITEMS.md#work-cell-on-newton)). |
 | Jenga variation | Seeded per-block variation of size, mass and friction exists (`measured_pending` profile); every number in it is unconfirmed. |
 | Real-to-sim | `robosim` reproduced one real push by image displacement on CPU and GPU. It does not fit mass or friction, match rotation, or estimate the camera. Pinned to RoboSimStudio `87b5e32`. |
 | Perception, planning, evaluation | Nothing. The work cell reads its camera configuration only. |
@@ -142,8 +142,7 @@ it will load on Newton before a simulator is started.
 
 **Scope.**
 - `mesh` in the `assets` group: inspect, decimate, convex hulls (CoACD) or fitted boxes, and split into render and collision
-  layers. `validate` in the same group: USD structure plus the Newton limits found in the probe
-  ([plan](plans/01-assets-mesh-collision.md)).
+  layers. `validate` in the same group: USD structure plus the Newton limits found in the probe. Done in #112.
 - Rebuild the work-cell pack as a new version: the bench renders from its full mesh and collides with boxes or hulls.
 
 **Exit criteria.**
@@ -154,6 +153,11 @@ it will load on Newton before a simulator is started.
 - The collision layer's shape count and triangle count are in the pack manifest's `fidelity` field.
 
 **Depends on.** Nothing in Phase 0 blocks it; the `assets` group already exists.
+
+**Status.** Done (#112):
+- `validate` flags `v1`'s faults.
+- Pack `v2` has a box collision layer, and its bench loads on Newton with no overflow.
+- The render comparison and the manifest's collision counts are not recorded yet.
 
 ### Phase 2: the work cell on Newton
 
@@ -172,6 +176,11 @@ wrist and overhead renders, then `workcell_smoke.py` on both engines.
 - The gripper reaches measured finger widths at open, mid and closed within 1 mm.
 - At rest the flange wrench equals the weight below the sensor within 5 percent, on both engines.
 - Cell, wrist and overhead renders exist for Newton; the PhysX smoke still passes; both run reports are kept.
+
+**Status.** #112 met the build and tower criteria:
+- The refusal is gone, and the cell builds and holds on Newton.
+- The tower drifts 0.54 mm.
+- The finger widths, the flange wrench and the Newton renders are still open.
 
 **Depends on.** Phase 1 (the bench must load).
 
@@ -291,7 +300,7 @@ the real robot runs the result as approved ROS 2 code.
 | Order | Pull request | Phase | Plan |
 |--:|---|---|---|
 | 0 | Computer use (#108, merged 2026-11-13) | 0 | Done |
-| 1 | Mesh preparation, validation, and the work-cell pack rebuild | 1 | [01-assets-mesh-collision](plans/01-assets-mesh-collision.md) |
+| 1 | Mesh preparation, validation, and the work-cell pack rebuild | 1 | Merged as #112 (with the work cell on Newton) |
 | 2 | Toolset groups, stubs deleted, README table | 0 | [02-toolset-groups](plans/02-toolset-groups.md) |
 | 3 | `gap` and `vabar` wrappers | 6 | [03-planning-eval-wrappers](plans/03-planning-eval-wrappers.md) |
 | 4 | RoboSimStudio bump and `sysid` | 4 | [04-robosim-bump-and-sysid](plans/04-robosim-bump-and-sysid.md) |

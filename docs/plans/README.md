@@ -6,7 +6,6 @@ problem, the design, the files, the tests and the checks that say it is done. Th
 
 | Order | Plan | Adds | Needs the ASU PC's GPU or the private pack? |
 |--:|---|---|---|
-| 1 | [01-assets-mesh-collision](01-assets-mesh-collision.md) | `assets__mesh`, `assets__validate`, work-cell pack `v2` | Part A no. Part B yes, with the owner |
 | 2 | [02-toolset-groups](02-toolset-groups.md) | Off-by-default groups, three stubs deleted, the README table | No |
 | 3 | [03-planning-eval-wrappers](03-planning-eval-wrappers.md) | `gap` and `vabar` | No for the pull request; yes to use it |
 | 4 | [04-robosim-bump-and-sysid](04-robosim-bump-and-sysid.md) | RoboSimStudio at a newer pin, `sysid` | No |
