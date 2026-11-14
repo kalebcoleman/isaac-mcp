@@ -341,7 +341,7 @@ Decided by the owner on 2026-11-13. Plan 02 builds on these.
 5. **Graph-as-Policy runs on the ASU PC.** It asks for 24 GB of GPU memory: the ASU PC has about 96 GB, the home PC's RTX 5080
    has 16 GB. See [hardware and hosts](#hardware-and-hosts).
 6. **Old toolset names are not aliased.** A configuration that names `scene`, `physics` or another removed group stops the
-   server at startup with the list of valid names; [MIGRATING.md](MIGRATING.md) gets one table of old to new.
+   server at startup with the list of valid names; [TOOLSETS.md](TOOLSETS.md) gets one table of old to new.
 7. **The `planned` list in `status` is deleted.** `planning`, `real2sim` and `eval` become real groups; `backend`, `params` and
    `compare` had no plan.
 8. **The desktop group keeps the name `screen`** that #108 left it with, so it is not renamed twice; `computer` stays the

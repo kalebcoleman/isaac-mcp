@@ -49,7 +49,7 @@ the owner accepts here, so names change once.
 | `mcp/tests/test_toolsets.py`, `test_smoke_runner.py`, `test_workcell_*.py`, `test_status_and_help.py`, `test_robosim_bridge.py` | Below |
 | `README.md`, `AGENTS.md`, `.agents/skills/twinsmith/SKILL.md` | Generated table; quick start says to enable `sim` |
 | `docs/TOOLSETS.md`, `docs/MCP-SERVER.md`, `docs/TOOLS-SCENE.md`, `docs/VERIFICATION.md`, `docs/ROBOSIM.md`, `docs/TOOLS-WORKCELL.md`, `exts/workcell/workcell/README.md`, `exts/workcell/docs/README.md` | Names, examples, the work cell's tool table |
-| `docs/MIGRATING.md` | One table: old toolset name to new; the three deleted tools; `minimal` to `default` |
+| `docs/TOOLSETS.md` | One table: old toolset name to new; the three deleted tools; `minimal` to `default` |
 | `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/OPEN-ITEMS.md` | Move the mapping from "target" to "is"; close the items this resolves |
 
 Find the rest with `git grep -n -w -e scene -e physics -e sensors -e kit_debug -e robosim -e minimal -- mcp scripts docs
