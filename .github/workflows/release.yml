@@ -1,4 +1,4 @@
-# Publishes twinsmith to PyPI when a v<version> tag is pushed, and at no other time.
+# Publishes twinsmith to PyPI when a v<version> tag is pushed (v0.4.0, v0.5.0rc1), and at no other time.
 #
 # Trusted publishing (OIDC): PyPI trusts this file in kalebcoleman/twinsmith, run in the `pypi`
 # environment. No token is stored anywhere. The one-time PyPI and GitHub setup, and how to bump the
@@ -9,7 +9,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]*"
 
 permissions: {}
 

@@ -32,7 +32,8 @@ PACKAGE = "twinsmith"
 
 # Canonical PEP 440 public versions only (1.2.3, 1.2.3rc1, 1.2.3.post1, 1.2.3.dev2): the tag, the
 # wheel name and PyPI then all spell the version the same way.
-VERSION = re.compile(r"\d+(?:\.\d+)*(?:(?:a|b|rc)\d+)?(?:\.post\d+)?(?:\.dev\d+)?")
+_N = r"(?:0|[1-9]\d*)"   # no leading zeros: 01 is not canonical
+VERSION = re.compile(rf"{_N}(?:\.{_N})*(?:(?:a|b|rc){_N})?(?:\.post{_N})?(?:\.dev{_N})?")
 
 # The version line of a pyproject's [project] table: after "[project]" and before the next table.
 PROJECT_VERSION = re.compile(r'(^\[project\]\n(?:(?!\[).*\n)*?version = ")([^"]*)(")', re.M)

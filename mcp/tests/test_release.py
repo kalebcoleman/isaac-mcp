@@ -65,7 +65,7 @@ def test_a_drifted_copy_fails_the_check(tree, capsys):
     assert "scripts/version.py set" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("bad", ["v1.0", "1.0.0-rc1", "1.0.0.RC1", "", "1.0 ", "01.2.x"])
+@pytest.mark.parametrize("bad", ["v1.0", "1.0.0-rc1", "1.0.0.RC1", "", "1.0 ", "01.2.3", "1.0.0rc01"])
 def test_set_refuses_a_non_canonical_version(tree, bad):
     old = version.current()
     with pytest.raises(SystemExit):
@@ -98,9 +98,9 @@ def _workflow(name):
     return document
 
 
-def test_release_runs_only_on_a_v_tag_and_publishes_through_oidc():
+def test_release_runs_only_on_a_version_tag_and_publishes_through_oidc():
     release = _workflow("release.yml")
-    assert release["on"] == {"push": {"tags": ["v*"]}}
+    assert release["on"] == {"push": {"tags": ["v[0-9]*"]}}
     assert release["permissions"] == {}
     build, publish = release["jobs"]["build"], release["jobs"]["publish"]
     assert build["uses"] == "./.github/workflows/build-dist.yml"

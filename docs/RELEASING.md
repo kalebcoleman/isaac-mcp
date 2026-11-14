@@ -1,6 +1,6 @@
 # Releasing twinsmith
 
-A release is a `v<version>` tag on a commit of `main`. Pushing it runs
+A release is a `v<version>` tag (`v0.4.0`) on a commit of `main`. Pushing it runs
 [`release.yml`](../.github/workflows/release.yml), which builds the host package in `mcp/` with uv, checks it
 and uploads it to [PyPI](https://pypi.org/project/twinsmith/) through **trusted publishing**: PyPI trusts that
 workflow, run in the `pypi` environment of `kalebcoleman/twinsmith`, and no token is stored anywhere. Nothing
@@ -45,7 +45,8 @@ Versions are canonical [PEP 440](https://peps.python.org/pep-0440/): `0.4.0`, `0
    git commit -am "Release 0.4.0"
    git push -u origin release/v0.4.0          # then open a PR against main
    ```
-   The PR's `Package build and metadata` job builds exactly what will be published and checks it.
+   The PR's `Package build and metadata` job runs the release build and its checks on this commit, with the same
+   pinned build backend and twine.
 3. **Merge the PR, then tag the merged commit** (an annotated tag, on `main`):
    ```bash
    git fetch origin
@@ -67,6 +68,10 @@ The client configuration for an installed release is `{"command": "uvx", "args":
 - **The build job failed:** nothing reached PyPI. Fix the cause on `main` and release again. A tag that never
   published can be deleted and re-created (`git push origin :refs/tags/v0.4.0`, `git tag -d v0.4.0`), or skipped in
   favour of the next patch version.
+- **The publish job failed** (most likely on the first release: a publisher field or the environment name does not
+  match, or the deployment was rejected): fix the setup, then *Re-run failed jobs* on the same run. It uploads the
+  same checked files; re-tagging would build them again. If one file was uploaded and the other was not, the re-run
+  stops at "File already exists": release the next patch version instead.
 - **The upload succeeded and the release is bad:** a version on PyPI cannot be replaced, and a deleted file name can
   never be uploaded again. Yank it on PyPI (Manage → Releases → Options → Yank) and release the next patch version.
 
@@ -87,9 +92,9 @@ Do these once before the first tag. None of them stores a secret.
 
    If an API token was made for the placeholder upload, revoke it under *Account settings* → *API tokens*.
 2. **GitHub environment.** In the repository: *Settings* → *Environments* → *New environment* named `pypi`. Under
-   *Deployment branches and tags* choose *Selected branches and tags* and add the tag pattern `v*`. Optionally add
+   *Deployment branches and tags* choose *Selected branches and tags* and add the tag pattern `v[0-9]*`. Optionally add
    yourself as a *Required reviewer*, so that every upload waits for a click. Add no secrets.
-3. **Optional: protect release tags.** *Settings* → *Rules* → *Rulesets* → *New tag ruleset*, target `v*`, restrict
+3. **Optional: protect release tags.** *Settings* → *Rules* → *Rulesets* → *New tag ruleset*, target `v[0-9]*`, restrict
    creation, update and deletion, and bypass for repository admins only.
 
 The publisher names the workflow file. Renaming `release.yml` or the `pypi` environment breaks publishing until the
@@ -101,7 +106,7 @@ publisher is changed to match.
 |---|---|---|
 | [`build-dist.yml`](../.github/workflows/build-dist.yml) | called by the two below | Checks the version copies (and, for a release, the tag and that its commit is on `main`); `uv build --no-sources`; checks the file names; `twine check --strict`; installs the wheel in a clean environment and runs `twinsmith --version`. For a release it keeps the files as the `dist` artifact. |
 | [`ci.yml`](../.github/workflows/ci.yml), job `package` | every push and pull request | `build-dist.yml` without a tag. Never publishes. |
-| [`release.yml`](../.github/workflows/release.yml) | a pushed `v*` tag only | `build-dist.yml` with the tag, then the `publish` job: the `pypi` environment, `id-token: write`, and `pypa/gh-action-pypi-publish` on those exact files. |
+| [`release.yml`](../.github/workflows/release.yml) | a pushed `v[0-9]*` tag only | `build-dist.yml` with the tag, then the `publish` job: the `pypi` environment, `id-token: write`, and `pypa/gh-action-pypi-publish` on those exact files. |
 
 `mcp/tests/test_release.py` keeps this true: one tag trigger, OIDC and no secret in any workflow, and no publishing
 step outside `release.yml`.
@@ -109,5 +114,6 @@ step outside `release.yml`.
 The publish action is pinned to a commit (v1.14.3), and `build-dist.yml` checks the files with the twine that
 release bundles (7.0.0). To update the action, take the new release's commit from
 [its releases](https://github.com/pypa/gh-action-pypi-publish/releases), read its twine pin in
-`requirements/runtime.txt`, and change both in one pull request. Hatchling, the build backend, now writes
-Metadata-Version 2.5; that twine and PyPI accept it.
+`requirements/runtime.txt`, and change both in one pull request. The build backend is pinned too (`hatchling==1.33.0`
+in `mcp/pyproject.toml`). It writes Metadata-Version 2.5, which twine 7 and PyPI accept; a newer hatchling may need a
+newer twine, so move them together and let the PR's package job confirm it.
