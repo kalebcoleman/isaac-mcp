@@ -10,11 +10,13 @@ from .commands import Commands
 
 MCP_TOOL_REGISTRY = {
     "workcell_quick_start": {
-        "description": "Build a stopped workcell from an external asset pack, on PhysX or Newton (Newton uses the config's per-engine drives; mirror_real needs PhysX). Refuses unsaved stage changes unless explicitly allowed.",
+        "description": "Build a stopped workcell from an external asset pack, on PhysX or Newton (Newton uses the config's per-engine drives; mirror_real needs PhysX). Refuses unsaved stage changes unless explicitly allowed. Returns a summary; action=status returns the full report.",
         "parameters": {
             "config_path": {"type": "string", "description": "Optional hardware configuration path."},
             "mode": {"type": "string", "enum": ["physics", "mirror_real"], "default": "physics", "description": "Physics mode, or zero-gravity mirror mode."},
             "discard_changes": {"type": "boolean", "default": False, "description": "Allow replacement of an unsaved stage."},
+            "environment": {"type": "string", "enum": ["none", "simple_room"], "default": "none",
+                            "description": "A room around the cell: simple_room references NVIDIA's Simple Room from the Isaac Sim assets server (needs network), floor level with the bench feet."},
         },
     },
     "workcell_status": {"description": "Read the current workcell build report.", "parameters": {}},

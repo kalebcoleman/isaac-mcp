@@ -21,6 +21,13 @@ synchronize with hardware. An unsaved stage is replaced only with explicit conse
 Jenga status actions read build reports; perception status is not sensor capture.
 Real-to-simulation synchronization, planning and evaluation are not part of the work cell.
 
+`quick_start` answers with a summary (paths, engine, BOM verdict, Newton buffers, engine limitations);
+`workcell__cell(action="status")` returns the full report. `environment="simple_room"` stands the cell in NVIDIA's Simple
+Room, referenced from the Isaac Sim assets server (it needs network, and is checked before the stage is replaced): the room's
+ground is level with the bench feet, room parts inside the bench (its own table) are deactivated, and every room collider but
+the ground plane is off. The config's `bench_top` section colours the top panel and gives it a friction material on both
+engines (black HDPE; the friction values are placeholders until a tilt test measures them).
+
 There is no legacy extension ROS graph setup or custom `rclpy` build prerequisite for
 this API. Generic `sim__*` tools are separate from the workcell interface.
 

@@ -3,7 +3,7 @@
   "namespace": "workcell",
   "tools": {
     "workcell.workcell_quick_start": {
-      "description": "Build a stopped workcell from an external asset pack, on PhysX or Newton (Newton uses the config's per-engine drives; mirror_real needs PhysX). Refuses unsaved stage changes unless explicitly allowed.",
+      "description": "Build a stopped workcell from an external asset pack, on PhysX or Newton (Newton uses the config's per-engine drives; mirror_real needs PhysX). Refuses unsaved stage changes unless explicitly allowed. Returns a summary; action=status returns the full report.",
       "parameters": {
         "config_path": {
           "type": "string",
@@ -22,6 +22,15 @@
           "type": "boolean",
           "default": false,
           "description": "Allow replacement of an unsaved stage."
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "none",
+            "simple_room"
+          ],
+          "default": "none",
+          "description": "A room around the cell: simple_room references NVIDIA's Simple Room from the Isaac Sim assets server (needs network), floor level with the bench feet."
         }
       },
       "fields": [
@@ -54,6 +63,18 @@
           "default": false,
           "has_default": true,
           "description": "Allow replacement of an unsaved stage."
+        },
+        {
+          "name": "environment",
+          "kind": "enum",
+          "enum": [
+            "none",
+            "simple_room"
+          ],
+          "required": false,
+          "default": "none",
+          "has_default": true,
+          "description": "A room around the cell: simple_room references NVIDIA's Simple Room from the Isaac Sim assets server (needs network), floor level with the bench feet."
         }
       ],
       "namespace": "workcell",

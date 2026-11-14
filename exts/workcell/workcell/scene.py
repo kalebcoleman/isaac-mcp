@@ -161,7 +161,44 @@ def _finish_scene(stage, config, assets, parts, rows, engine="physx"):
                         binding.Bind(material, materialPurpose="physics")
     bench_colliders(stage, engine=engine)
     bom.verify_config_assets(config, rows)
-    return bom.audit_parts(parts, rows, stage=stage, strict=True)
+    from .environment import ROOT
+    return bom.audit_parts(parts, rows, stage=stage, strict=True, ignore=(ROOT,))
+
+
+def bench_top(stage, top, bench="/World/Bench"):
+    """Give the bench's top panel the configured look (its render mesh) and friction (its colliders), on both
+    engines: a UsdPreviewSurface colour and a UsdPhysics material. Returns what was bound."""
+    from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
+
+    panel = stage.GetPrimAtPath(f"{bench}/{top['panel_path']}")
+    if not panel or not panel.IsValid():
+        raise ValueError(f"bench_top.panel_path {top['panel_path']!r} is not a prim under {bench}")
+    material = UsdShade.Material.Define(stage, "/World/BenchTopMaterial")
+    shader = UsdShade.Shader.Define(stage, "/World/BenchTopMaterial/Surface")
+    shader.CreateIdAttr("UsdPreviewSurface")
+    shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*top["color_rgb"]))
+    shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(float(top["roughness"]))
+    material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
+    physics = UsdPhysics.MaterialAPI.Apply(material.GetPrim())
+    physics.CreateStaticFrictionAttr().Set(float(top["static_friction"]))
+    physics.CreateDynamicFrictionAttr().Set(float(top["dynamic_friction"]))
+    physics.CreateRestitutionAttr().Set(0.0)
+    meshes, colliders = [], []
+    for prim in Usd.PrimRange(panel):
+        binding = None
+        if prim.HasAPI(UsdPhysics.CollisionAPI):
+            binding = UsdShade.MaterialBindingAPI.Apply(prim)
+            binding.Bind(material, materialPurpose="physics")
+            colliders.append(str(prim.GetPath()))
+        if prim.IsA(UsdGeom.Mesh) and UsdGeom.Imageable(prim).ComputePurpose() != UsdGeom.Tokens.guide:
+            (binding or UsdShade.MaterialBindingAPI.Apply(prim)).Bind(
+                material, bindingStrength=UsdShade.Tokens.strongerThanDescendants)
+            meshes.append(str(prim.GetPath()))
+    if not colliders:
+        raise ValueError(f"bench_top.panel_path {top['panel_path']!r} has no collider to carry the friction")
+    return {"material": str(material.GetPath()), "color_rgb": list(top["color_rgb"]),
+            "static_friction": float(top["static_friction"]), "dynamic_friction": float(top["dynamic_friction"]),
+            "render_meshes": meshes, "colliders": colliders}
 
 
 def _replace_tower(stage, config, assets, rows, parts, profile=None, seed=None, engine="physx"):
@@ -201,12 +238,16 @@ class Workcell:
     def status(self):
         return copy.deepcopy(self._report)
 
-    async def quick_start(self, config_path=None, mode="physics", discard_changes=False):
+    async def quick_start(self, config_path=None, mode="physics", discard_changes=False, environment="none"):
         if type(discard_changes) is not bool:
             raise ValueError("discard_changes must be a boolean")
+        from . import environment as rooms
+        if environment not in rooms.NAMES:
+            raise ValueError(f"environment must be one of {list(rooms.NAMES)}, not {environment!r}")
         config, raw, pack, assets = _preflight(config_path, mode)
         rows = _bom_rows(config, config_path)
         engine = _engine(config, mode)
+        room_url = rooms.resolve(environment)       # checked (reachable) before the stage is replaced
         import omni.usd
         import omni.timeline
         from sim_tools.stage_open import stage_has_unsaved_work
@@ -259,6 +300,8 @@ class Workcell:
                 raise ValueError(f"Physical assets missing from BOM part mappings: {sorted(missing)}")
             _tag_parts(stage, parts)
             audit = _finish_scene(stage, config, assets, parts, rows, engine)
+            top_report = bench_top(stage, config["bench_top"]) if "bench_top" in config else None
+            room_report = rooms.place(stage, environment, room_url) if room_url else None
             newton_report = None
             if engine == "newton":
                 from . import newton_cell
@@ -272,6 +315,8 @@ class Workcell:
                             "pack": copy.deepcopy(pack.manifest), "robot": robot_report,
                             "cameras": camera_report["cameras"], "jenga": block_report, "parts": parts,
                             "bom_audit": audit, **({"newton": newton_report} if newton_report else {}),
+                            **({"bench_top": top_report} if top_report else {}),
+                            **({"environment": room_report} if room_report else {}),
                             "limitations": [line for line in robot_report["limitations"]
                                             if not (engine == "newton" and "drives are preserved" in line)]
                             + camera_report["limitations"] + block_report["limitations"]
