@@ -466,3 +466,18 @@ def test_frame_only_body_and_dangling_disabled_joint_are_neutralized(cell):
         if prim.IsA(UsdPhysics.Joint):
             assert UsdPhysics.Joint(prim).GetBody1Rel().GetTargets()  # no dangling active joint
     assert {key: path.read_bytes() for key, path in pack.paths.items()} == saved != originals
+
+
+def test_a_replaced_mass_keeps_the_shape_of_its_authored_inertia(cell):
+    stage, pack, config = cell
+    source = Usd.Stage.Open(str(pack.paths["pack/quick_changer"]))
+    authored = next(p for p in source.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI))
+    UsdPhysics.MassAPI(authored).CreateDiagonalInertiaAttr().Set(Gf.Vec3f(1e-4, 1e-4, 2e-4))
+    source.Save()
+    config["quick_changer"]["mass_kg"] = 0.2          # pack body 0.1 kg -> inertia doubles, same shape
+    report = robot.build_robot(stage, pack, config)
+    built = [p for p in Usd.PrimRange(stage.GetPrimAtPath(report["assembly_path"]))
+             if p.HasAPI(UsdPhysics.RigidBodyAPI) and p.GetName() == authored.GetName()]
+    api = UsdPhysics.MassAPI(built[0])
+    assert api.GetMassAttr().Get() == pytest.approx(0.2)
+    assert list(api.GetDiagonalInertiaAttr().Get()) == pytest.approx([2e-4, 2e-4, 4e-4])
