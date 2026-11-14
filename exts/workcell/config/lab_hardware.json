@@ -56,7 +56,7 @@
     "color_rgb": {
       "value": [0.02, 0.02, 0.02],
       "status": "unconfirmed",
-      "source": "Kaleb (2026-11-14): the real tabletop is black. Vention sells black 1/4 in HDPE table panels; the pack's render material was a light rubber. Colour not measured."
+      "source": "Kaleb (2026-11-13): the real tabletop is black. Vention sells black 1/4 in HDPE table panels; the pack's render material was a light rubber. Colour not measured."
     },
     "roughness": {
       "value": 0.6,
@@ -117,7 +117,7 @@
         ]
       },
       "status": "unconfirmed",
-      "source": "Provisional 5 mm candidate base plate on tabletop; measure real plate and base elevation. Yaw 180 degrees about z (Kaleb, 2026-11-14): the shoulder faces the table, as on the real cell; the imported UR base_link faced away from it."
+      "source": "Provisional 5 mm candidate base plate on tabletop; measure real plate and base elevation. Yaw 180 degrees about z (Kaleb, 2026-11-13): the shoulder faces the table, as on the real cell; the imported UR base_link faced away from it."
     }
   },
   "stack": {

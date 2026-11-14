@@ -2,7 +2,10 @@
 
 The room is moved so its ground plane is level with the bottom of the bench. Room parts that overlap the
 bench are deactivated (Simple Room's own table stands where the bench goes), and every room collider except the
-ground plane is switched off, so the room adds one static floor to the physics and nothing else.
+ground plane is switched off, so the room adds one static floor to the physics and nothing else: a physics scene
+the room brings is deactivated (the cell has its own), its rigid bodies are made kinematic, instanced parts are
+de-instanced so their colliders can be switched off, and its lights are deactivated so renders keep the cell's
+lighting.
 """
 
 ENVIRONMENTS = {"simple_room": "Isaac/Environments/Simple_Room/simple_room.usd"}
@@ -59,6 +62,29 @@ def place(stage, name, url, bench_path="/World/Bench"):
     offset.Set(Gf.Vec3d(0, 0, 0))
     room = stage.DefinePrim(f"{ROOT}/{name}", "Xform")
     room.GetReferences().AddReference(url)
+    from pxr import UsdLux
+
+    deinstanced = 0
+    while True:      # instance proxies cannot be edited: open each instanced part, outermost first
+        instanced = [prim for prim in Usd.PrimRange(room) if prim.IsInstanceable()]
+        if not instanced:
+            break
+        for prim in instanced:
+            prim.SetInstanceable(False)
+        deinstanced += len(instanced)
+    scenes, lights = [], []
+    for prim in Usd.PrimRange(room):
+        if prim.IsA(UsdPhysics.Scene):
+            scenes.append(prim)
+        elif prim.HasAPI(UsdLux.LightAPI) or prim.GetTypeName().endswith("Light"):
+            lights.append(prim)
+    for prim in scenes + lights:
+        prim.SetActive(False)
+    kinematic = 0
+    for prim in Usd.PrimRange(room):
+        if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            UsdPhysics.RigidBodyAPI(prim).CreateKinematicEnabledAttr().Set(True)
+            kinematic += 1
     planes = [prim for prim in Usd.PrimRange(room)
               if prim.GetTypeName() == "Plane" and prim.HasAPI(UsdPhysics.CollisionAPI)]
     if planes:
@@ -85,4 +111,6 @@ def place(stage, name, url, bench_path="/World/Bench"):
             switched_off += 1
     return {"name": name, "path": str(room.GetPath()), "url": url, "floor_z_m": round(bench.GetMin()[2], 4),
             "lifted_m": round(lift, 4), "deactivated_for_overlap": removed,
-            "colliders": {"ground_plane": sorted(keep)[0] if keep else None, "switched_off": switched_off}}
+            "colliders": {"ground_plane": sorted(keep)[0] if keep else None, "switched_off": switched_off},
+            "physics_scenes_deactivated": len(scenes), "rigid_bodies_made_kinematic": kinematic,
+            "deinstanced": deinstanced, "lights_deactivated": len(lights)}
