@@ -54,7 +54,7 @@ Toolsets control what is listed, not what is allowed: the bridge token and `TWIN
 | `screen` | off | 5 | Capture, record and arrange desktop windows |
 | `sim` | off | 19 | Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim |
 | `assets` | off | 5 | Import and manage robot and scene assets |
-| `real2sim` | off | 1 | RoboSimStudio real-to-sim runs in its own private environment |
+| `real2sim` | off | 2 | RoboSimStudio real-to-sim and MuJoCo system identification |
 | `lab` | off | 5 | Isaac Lab jobs and script jobs |
 | `ros2` | off | 3 | ROS 2 transforms, graphs and occupancy maps |
 | `workcell` | off | 4 | UR5e workcell tools |
