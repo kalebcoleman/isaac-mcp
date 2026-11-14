@@ -1579,7 +1579,7 @@ RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a sce
 - `all` (bool, default `False`): status without run: every run in full, not live servers and the 5 newest.
 - `max_trials` (int | None, default `None`): tune_push: most rollouts to try (default 6, at most 12).
 
-## `planning`: Graph-as-Policy skill graphs, generated and run in simulation
+## `planning`: Graph-as-Policy skill graphs in simulation
 
 Toolset `planning` is off until you select it with `+planning`. Reference: [PLANNING-EVAL.md](PLANNING-EVAL.md#gap). 1 tools, listed as 1: `gap`.
 
@@ -1596,7 +1596,7 @@ Graph-as-Policy skill graphs, from its own pinned checkout: status (checkout, GP
 - `timeout_s` (float, default `3600`): generate/run: job time limit in seconds.
 - `allow_concurrent_gpu` (bool, default `False`): run: knowingly start beside another GPU job or a running Isaac Sim.
 
-## `eval`: VABAR benchmark runs and their results
+## `eval`: VABAR benchmark runs
 
 Toolset `eval` is off until you select it with `+eval`. Reference: [PLANNING-EVAL.md](PLANNING-EVAL.md#vabar). 1 tools, listed as 1: `vabar`.
 

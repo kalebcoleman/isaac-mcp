@@ -64,7 +64,8 @@ allow_paid = true
 ```
 
 A project `twinsmith.toml` cannot set it. Without it, the tools also keep `OPENROUTER_API_KEY` and `GAP_VLM_*` from every
-run, so graph nodes that ask a VLM fail instead of spending money; the answer says so. `HF_TOKEN` is always passed,
+process they start, so graph nodes that ask a VLM fail instead of spending money (the answer says so), and `check` reports
+the key as missing. `HF_TOKEN` is always passed,
 because model weights are free downloads. `status` reports whether each key is set and never its value.
 
 ## `gap`

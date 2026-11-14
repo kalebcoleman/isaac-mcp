@@ -126,7 +126,7 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
         if action in ("tools", "check"):
             command = argv(co, action)
             refuse_real(command)
-            done = sibling.run(command, cwd=co.root, env_pass=["HF_TOKEN", *paid_env(action == "check")], timeout_s=300)
+            done = sibling.run(command, cwd=co.root, env_pass=["HF_TOKEN", *paid_env(allowed)], timeout_s=300)
             try:
                 result = json.loads(done["stdout"])
             except ValueError:

@@ -180,7 +180,7 @@ def test_the_recording_tool_says_it_ends_with_its_server_process(single):
 def test_a_client_is_shown_groups_and_no_single_purpose_member(listed, single):
     names = {t.name for t in listed}
     old = {t.name for t in single}
-    assert len(names) < len(old) / 2.5 and len(names) <= 51
+    assert len(names) < len(old) / 2.4 and len(names) <= 53
     assert set(tool_groups.GROUPS) <= names
     assert not names & set(tool_groups.members())
     assert names - set(tool_groups.GROUPS) == old - set(tool_groups.members()), "ungrouped tools are listed as they were"

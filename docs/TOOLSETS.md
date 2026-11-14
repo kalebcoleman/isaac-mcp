@@ -28,8 +28,8 @@ rows for the server you have installed, with the current state of each.
 | `kit_debug`: Inspect Kit logs and operate its UI | off | `sim__logs`, `sim__ui` |
 | `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__eval`, `workcell__jenga`, `workcell__perception`, `workcell__planning`, `workcell__real2sim`, `workcell__robot` |
 | `robosim`: RoboSimStudio real-to-sim runs in its own private environment | off | `robosim` |
-| `planning`: Graph-as-Policy skill graphs, generated and run in simulation | off | `gap` |
-| `eval`: VABAR benchmark runs and their results | off | `vabar` |
+| `planning`: Graph-as-Policy skill graphs in simulation | off | `gap` |
+| `eval`: VABAR benchmark runs | off | `vabar` |
 | `input`: Desktop mouse and keyboard input | explicit only | `computer` |
 | `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
 | `extensions`: Tools from uncatalogued extension namespaces | on | none |
@@ -137,8 +137,8 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 |---|--:|--:|--:|
 | `minimal` | 6 | 6,346 | 1,586 |
 | `default` | 32 | 61,863 | 15,465 |
-| `all` | 49 | 92,518 | 23,129 |
-| `all,+input,+launch` | 51 | 97,491 | 24,372 |
+| `all` | 51 | 96,234 | 24,058 |
+| `all,+input,+launch` | 53 | 101,209 | 25,302 |
 | `core,lab,code` | 15 | 22,027 | 5,506 |
 | `core,workcell` | 13 | 10,470 | 2,617 |
 
