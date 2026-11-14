@@ -13,6 +13,13 @@ with open(pathlib.Path(__file__).resolve().parents[2] / "calls.jsonl", "a") as s
     stream.write(json.dumps(record) + "\n")
 if sys.argv[1:4] == ["-m", "vabar", "list"]:
     print("tool_hanging/wrenches_level1\nusbc_insert/insert_easy")
+elif "--validate-only" in sys.argv:
+    if "broken" in sys.argv[-1]:
+        print("[error] grasp_sg.pick: unknown skill 'pick_up'")
+        print("FAIL: 1 error(s), 0 warning(s)")
+        sys.exit(1)
+    print("[warning] grasp_sg: output 'pose' is never read")
+    print("OK: 0 errors, 1 warning(s)")
 else:
     print(json.dumps(record))
 '''

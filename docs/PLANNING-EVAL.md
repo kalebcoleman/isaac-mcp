@@ -65,10 +65,39 @@ allow_paid = true
 
 A project `twinsmith.toml` cannot set it. Without it, the tools also keep `OPENROUTER_API_KEY`, `GAP_VLM_*` and `GAP_LLM_*`
 from every process they start, so graph nodes that ask a model fail instead of spending money (the answer says so), and
-`check` reports the key as missing. `HF_TOKEN` is always passed, because model weights are free downloads, and so are the
-paths `HF_HOME`, `GAP_VAB_ROOT` and `GAP_LIBERO_PRO_ROOT` when they are set. `status` reports whether each key is set and
-never its value. A malformed `config.toml` or a `[planning]` value that is not `true` or `false` is refused with
-`CONFIG_INVALID`; nothing runs.
+`check` reports the key as missing. `HF_TOKEN` is always passed, because model weights are free downloads, and so are
+these settings when they are set: `HF_HOME`, `GAP_VAB_ROOT`, `GAP_LIBERO_PRO_ROOT`, `GAP_SAM3_DEVICE`, `GAP_DINO_DEVICE`,
+`GAP_DINO_MODEL` and `GAP_MOLMO_MODEL`. `GAP_MOLMO_BASE_URL` passes only when it points at this machine; otherwise it is
+dropped with a warning. `status` reports whether each key is set and never its value. A malformed `config.toml` or a
+`[planning]` value of the wrong type is refused with `CONFIG_INVALID`; nothing runs.
+
+### A VLM endpoint for graph nodes
+
+Graph nodes that ask a VLM can use an endpoint the owner names, without `allow_paid`: a hosted OpenAI-compatible API
+(NVIDIA's `https://integrate.api.nvidia.com/v1`, a university gateway) or a server on this machine.
+
+```toml
+# ~/.config/twinsmith/config.toml
+[planning]
+vlm_url = "https://integrate.api.nvidia.com/v1"   # https to any host, or http only to localhost, 127.0.0.0/8 or ::1
+vlm_model = "<model id>"                          # optional; the endpoint's model name
+vlm_api_key_file = "~/.config/agent-secrets/nvidia_api_key"   # optional
+```
+
+The tools then set `GAP_VLM_PROVIDER=openrouter` (upstream's OpenAI-compatible client), `GAP_VLM_BASE_URL`,
+`GAP_VLM_MODEL` and, from the key file, `GAP_VLM_API_KEY` on the `gap` and `vabar` processes. They never read these
+from the environment, and these settings override any `GAP_VLM_*` that `allow_paid` let through. With no key file, no
+`GAP_VLM_API_KEY` reaches the endpoint. `OPENROUTER_API_KEY` still passes only with `allow_paid`, so `generate` stays off.
+
+- The URL must have a host and no user or password in it. Anything else is `CONFIG_INVALID` and nothing runs.
+- The key file must be a regular file (not a link), owned by the owner and readable by no one else (`chmod 600`),
+  holding one key on one line. It is read when a process starts. Answers, job records and `status` never contain the key.
+- `status` reports the URL, host and model, the key file's path and whether it is usable.
+- `validate` asks no model, so it gets no endpoint and no key.
+
+The owner chooses the endpoint and pays whatever it costs: a free tier's limits, or a paid API behind a local server,
+are theirs. Graph nodes send the endpoint their prompts and camera images. Only VLM nodes use it; `generate`'s planner is
+a separate model and still needs `allow_paid`.
 
 ## `gap`
 
@@ -77,11 +106,29 @@ never its value. A malformed `config.toml` or a `[planning]` value that is not `
 | `status` | Nothing upstream | Checkout, commit and pin; the skill library's commit and pin; GPU memory against the 24 GB requirement; whether `HF_TOKEN` and `OPENROUTER_API_KEY` are set; `allow_paid` |
 | `tools` | `gap tools list --format json` | The skill catalog. Read-only |
 | `check` | `gap check --format json` | Which tool bundles are ready here and which skills can run. Read-only; no `--probe`, so no model is called |
+| `validate` | `gap run --validate-only --skills <library> <graph>` | Structure, types and skill contracts of a graph, with no simulator, GPU, model or job; returns the issues and a verdict. Upstream imports each script node's module to read its signature, so a graph with Python that is not trusted (see the safety rule) and not allowed is not handed to it: the answer lists its nodes, scripts and `*.py` files instead, to read before setting `allow_scripts` |
 | `generate` | `gap generate <instruction> --out ...` | A job, no GPU. Needs `allow_paid`. The graph lands in `<workspace>/runs/gap/<name>/output/` |
 | `run` | `gap run --sim <SUITE/TASK> ... [--checkpoints off] <graph>` | A job that uses the GPU. `graph` is a workflow directory or `workflow.json` in `<workspace>/runs/gap/` (a relative path is read from there), the Graph-as-Policy checkout or the VABAR checkout. Traces go to `<workspace>/runs/gap/<name>/output/` |
 
-At the pin, `gap check` takes no graph: it is the capability report. Graph validation (`gap run --validate-only`) is not
-wrapped.
+At the pin, `gap check` takes no graph: it is the capability report; `validate` checks one graph.
+
+### Author a graph with your coding agent
+
+`generate` is upstream's own planner and needs a paid model. A coding agent you already use (Claude Code, Codex) can
+write the graph instead. Upstream's own agent skill says so: inside Claude Code the agent is the code generator and
+should not call `gap generate`, but author the graph and drive `gap run --validate-only` to a clean pass
+(`agent/skills/gap/SKILL.md`, section 3, at the pin). Then:
+
+1. Write `<workspace>/runs/gap/<name>/workflow.json`, plus any `scripts/` and `checkpoints/` files, from the schema in
+   `docs/source/reference/workflow-schema.md` (hand-written JSON is a supported way to author a graph), the digest in
+   `agent/skills/gap/references/authoring-graphs.md` and the example in `examples/libero_quickstart/graph/`. All three are in
+   the Graph-as-Policy checkout. `gap(action="tools")` lists the skills a node can call.
+2. `gap(action="validate", graph="<name>")` until it is valid. A graph with no Python is validated straight away; one with
+   scripts returns the files to read, and the owner turns on `allow_scripts` once they have.
+3. `gap(action="run", sim="<SUITE/TASK>", graph="<name>")` to simulate it.
+
+Subscription CLIs (`claude -p`, `codex exec`) are not a supported model provider for `generate` or for graph nodes: the
+providers' terms point automation at API keys.
 
 **Safety rule: twinsmith does not run Graph-as-Policy on real hardware.** Upstream's `gap run` has `--real franka` and
 `--real ur_zed`. The tool has no argument that produces `--real`, no free-form argument and no `extra_args`; `sim` is

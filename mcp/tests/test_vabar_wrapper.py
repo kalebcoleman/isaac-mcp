@@ -44,7 +44,7 @@ def test_graph_runs_take_a_shipped_label(workspace):
     co = vabar.checkout(workspace=workspace)
     result = vabar.call(co, "run", task="tool_hanging/scissors_level1", solve="graph", graph="gt", name="g")
     assert result["result"]["command"][6:10] == ["--solve", "graph", "--graph", "gt"]
-    assert "Paid model calls are off" in result["warnings"][-1]
+    assert "No model is available" in result["warnings"][-1]
     wait_for(result["result"]["job_id"])
     assert vabar.call(co, "run", task="a/b", solve="routine", graph="gt")["code"] == "INVALID_VALUE"
     assert vabar.call(co, "run", task="a/b", solve="graph", graph="../x")["code"] == "INVALID_VALUE"

@@ -26,7 +26,7 @@ PIN = "06dd6193e13eab816123febef1369deda0849d91"
 REPOSITORY = "https://github.com/KeplerC/graph-as-policy"
 SKILLS_PIN = "b15859a244658abc6060f3aa3b6827780746a5fe"
 SKILLS_REPOSITORY = "https://github.com/KeplerC/open-robot-skills"
-ACTIONS = ("status", "tools", "check", "generate", "run")
+ACTIONS = ("status", "tools", "check", "validate", "generate", "run")
 REQUIRED_GPU_MIB = 23_000          # upstream asks for 24 GB; a 24 GB card reports a little under 24,576 MiB
 KEYS = ("HF_TOKEN", "OPENROUTER_API_KEY")
 REAL_REFUSAL = "twinsmith does not run Graph-as-Policy on real hardware"
@@ -52,8 +52,12 @@ def skills_info(gap: sibling.Checkout) -> dict:
     return info
 
 
-# Not secrets: where weights are cached and where upstream finds its benchmark roots. Always passed when set.
-PLAIN_ENV = ("HF_HOME", "GAP_VAB_ROOT", "GAP_LIBERO_PRO_ROOT")
+# Not secrets: where weights are cached, where upstream finds its benchmark roots, and which local perception models
+# run on which device. Always passed when set.
+PLAIN_ENV = ("HF_HOME", "GAP_VAB_ROOT", "GAP_LIBERO_PRO_ROOT", "GAP_SAM3_DEVICE", "GAP_DINO_DEVICE", "GAP_DINO_MODEL",
+             "GAP_MOLMO_MODEL")
+# A model server URL taken from the environment passes only when it points at this machine.
+LOOPBACK_ENV = ("GAP_MOLMO_BASE_URL",)
 
 
 def paid_env(allowed: bool) -> list[str]:
@@ -64,7 +68,7 @@ def paid_env(allowed: bool) -> list[str]:
 
 
 def run_env(allowed: bool) -> list[str]:
-    """Every variable a Graph-as-Policy or VABAR process may see beyond the scrubbed base."""
+    """Every variable a Graph-as-Policy or VABAR process may see beyond the scrubbed base, ``model_env``'s aside."""
     return ["HF_TOKEN", *PLAIN_ENV, *paid_env(allowed)]
 
 
@@ -74,6 +78,68 @@ def owner_flags() -> tuple[bool, bool]:
         return config.allow_paid(), config.allow_scripts()
     except (ValueError, TypeError) as error:
         raise sibling.Refusal("CONFIG_INVALID", f"~/.config/twinsmith/config.toml: {error}") from None
+
+
+def owner_vlm() -> dict | None:
+    """The owner's ``[planning] vlm_url``, ``vlm_model`` and ``vlm_api_key_file``, or None; a bad value is
+    CONFIG_INVALID."""
+    try:
+        return config.vlm_endpoint()
+    except (ValueError, TypeError) as error:
+        raise sibling.Refusal("CONFIG_INVALID", f"~/.config/twinsmith/config.toml: {error}") from None
+
+
+def vlm_report(vlm: dict | None) -> dict | None:
+    """What ``status`` shows of the endpoint: host, model and the key file's state, never the key."""
+    if vlm is None:
+        return None
+    report = {"url": vlm["url"], "host": vlm["host"], "model": vlm["model"],
+              "api_key_file": str(vlm["api_key_file"]) if vlm["api_key_file"] else None}
+    if vlm["api_key_file"]:
+        try:
+            config.read_secret_file(vlm["api_key_file"], "planning.vlm_api_key_file")
+            report["api_key_ready"] = True
+        except ValueError as error:
+            report.update(api_key_ready=False, api_key_problem=str(error))
+    return report
+
+
+def model_env(allowed: bool, local: dict | None, environ=None) -> tuple[list[str], dict, list[str]]:
+    """``(env_pass, env_set, warnings)`` for a process that may ask a model. Paid keys and ``GAP_VLM_*``/``GAP_LLM_*``
+    pass only with ``allow_paid``. The owner's VLM endpoint (``local``) is set from their config, never from the
+    environment, with the key from their key file when they name one; it overrides any ``GAP_VLM_*`` that passed. A
+    loopback-only URL from the environment is dropped when it is not."""
+    environ = os.environ if environ is None else environ
+    env_pass, warnings = run_env(allowed), []
+    for name in LOOPBACK_ENV:
+        if name in environ:
+            try:
+                config.loopback_url(environ[name], name)
+                env_pass.append(name)
+            except ValueError as error:
+                warnings.append(f"{name} was not passed: {error}")
+    env_set = {}
+    if local:
+        env_set = {"GAP_VLM_PROVIDER": "openrouter", "GAP_VLM_BASE_URL": local["url"]}
+        if local.get("model"):
+            env_set["GAP_VLM_MODEL"] = local["model"]
+        # The endpoint's own key, or none: without it no GAP_VLM_API_KEY may reach it, even one allow_paid passed.
+        env_pass = [name for name in env_pass if name != "GAP_VLM_API_KEY"]
+        if local.get("api_key_file"):
+            try:
+                env_set["GAP_VLM_API_KEY"] = config.read_secret_file(local["api_key_file"], "planning.vlm_api_key_file")
+            except ValueError as error:
+                raise sibling.Refusal("CONFIG_INVALID", f"~/.config/twinsmith/config.toml: {error}") from None
+    return env_pass, env_set, warnings
+
+
+def no_model_warning(allowed: bool, local: dict | None) -> list[str]:
+    if allowed or local:
+        return []
+    return ["No model is available to graph nodes: paid calls are off (OPENROUTER_API_KEY, GAP_VLM_* and GAP_LLM_* were "
+            "not passed) and no VLM endpoint is set, so nodes that ask a VLM fail. The owner can set [planning] vlm_url "
+            "(and vlm_model, vlm_api_key_file) in ~/.config/twinsmith/config.toml, or allow_paid. Subscription CLIs "
+            "(claude -p, codex exec) are not a provider."]
 
 
 def _real(token: str) -> bool:
@@ -172,11 +238,12 @@ def unchanged(checkout: sibling.Checkout, paths: list[Path]) -> bool:
     return done["exit_code"] == 0 and not done["stdout"].strip()
 
 
-def check_graph_code(workflow: Path, co: sibling.Checkout, allow_scripts: bool) -> dict:
+def inspect_graph_code(workflow: Path, co: sibling.Checkout) -> dict:
     """Decide whether a graph's own Python may run. Script and router paths must stay inside the graph's folder or, for
     a graph that ships in a checkout, inside that checkout. A graph is trusted when its checkout is at the tested pin
     and git sees the graph folder and every script unchanged; any other graph with script or router nodes or ``*.py``
-    files needs the owner's ``allow_scripts``. Returns ``{trusted, scripts, python_files}``."""
+    files needs the owner's ``allow_scripts``. Returns ``{trusted, scripts, nodes, python_files}`` (absolute paths) and
+    refuses only a script path that leaves its folder or checkout."""
     folder = workflow.parent.resolve()
     checkout = graph_checkout(folder, co)
     home = checkout.root.resolve() if checkout else folder
@@ -192,13 +259,21 @@ def check_graph_code(workflow: Path, co: sibling.Checkout, allow_scripts: bool) 
         resolved.append(target)
     code = python_files(folder)
     trusted = bool(checkout and checkout.info().get("pin_match") and unchanged(checkout, [folder, *resolved]))
-    if (scripts or code) and not trusted and not allow_scripts:
+    return {"trusted": trusted, "folder": str(folder), "scripts": [str(path) for path in resolved],
+            "nodes": [node for node, _ in scripts], "python_files": [str(folder / name) for name in code]}
+
+
+def check_graph_code(workflow: Path, co: sibling.Checkout, allow_scripts: bool) -> dict:
+    """``inspect_graph_code``, then SCRIPT_NOT_ALLOWED for a graph with Python that is neither trusted nor allowed."""
+    found = inspect_graph_code(workflow, co)
+    scripts, code = found["nodes"], found["python_files"]
+    if (scripts or code) and not found["trusted"] and not allow_scripts:
         raise sibling.Refusal("SCRIPT_NOT_ALLOWED", f"this graph has {len(scripts)} script or router node(s) and "
                               f"{len(code)} Python file(s), which Graph-as-Policy runs (twinsmith's --real guard covers "
                               "only the command line). A graph that ships unchanged in a pinned checkout runs as it is; "
                               "for any other graph the owner allows them with [planning] allow_scripts = true in "
-                              "~/.config/twinsmith/config.toml.")
-    return {"trusted": trusted, "scripts": [script for _, script in scripts], "python_files": code}
+                              "~/.config/twinsmith/config.toml. gap(action=\"validate\") lists the files to read first.")
+    return found
 
 
 def argv(co: sibling.Checkout, action: str, *, sim=None, graph=None, instruction=None, model=None, out=None,
@@ -209,6 +284,8 @@ def argv(co: sibling.Checkout, action: str, *, sim=None, graph=None, instruction
         return [gap, "tools", "list", "--format", "json", *library]
     if action == "check":
         return [gap, "check", "--format", "json", *library]
+    if action == "validate":
+        return [gap, "run", "--validate-only", *library, graph]
     if action == "generate":
         return [gap, "generate", instruction, *library, "--out", str(out), *(["--model", model] if model else [])]
     return [gap, "run", "--sim", sim, *library, "--trace-dir", str(out),
@@ -223,8 +300,9 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
         if action not in ACTIONS:
             raise sibling.Refusal("INVALID_VALUE", f"action must be one of {', '.join(ACTIONS)}.")
         allowed, scripts_allowed = owner_flags()
+        local = owner_vlm()
         if action == "status":
-            return sibling.answer("gap", action, info, result=_status(co, info, allowed))
+            return sibling.answer("gap", action, info, result=_status(co, info, allowed, local))
         if "setup" in info:
             raise sibling.Refusal("NOT_INSTALLED", info["setup"])
         if action in ("tools", "check"):
@@ -238,6 +316,8 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
                 return sibling.answer("gap", action, info, exit_code=done["exit_code"], error="gap did not print JSON.",
                                       code="UPSTREAM_FAILED", stdout=done["stdout"][-sibling.TAIL:], stderr=done["stderr"])
             return sibling.answer("gap", action, info, exit_code=done["exit_code"], result=result)
+        if action == "validate":
+            return validate(co, info, graph, scripts_allowed)
         if action == "generate":
             if not allowed:
                 raise sibling.Refusal("PAID_NOT_ALLOWED", "generate calls a paid model. The owner allows it with "
@@ -263,23 +343,52 @@ def call(co: sibling.Checkout, action: str, sim=None, graph=None, instruction=No
         command = argv(co, action, sim=sim, graph=graph, instruction=instruction, model=model, out=folder / "output",
                        checkpoints_off=off)
         refuse_real(command)
+        env_pass, env_set, env_warnings = model_env(allowed, local)
         sibling.new_run_folder(folder)
         started = sibling.start_job(command, task=f"gap-{folder.name}", kind=f"gap-{action}", cwd=folder,
-                                    env_pass=run_env(allowed),
-                                    env_set={"MUJOCO_GL": "egl", "PYTHONUNBUFFERED": "1"}, timeout_s=timeout_s,
+                                    env_pass=env_pass,
+                                    env_set={**env_set, "MUJOCO_GL": "egl", "PYTHONUNBUFFERED": "1"}, timeout_s=timeout_s,
                                     uses_gpu=action == "run", allow_concurrent_gpu=allow_concurrent_gpu)
         if not started["ok"]:
             folder.rmdir()
             return sibling.answer("gap", action, info, error=started["message"], code=started["code"], hint=started["hint"])
-        warnings = [] if allowed or action == "generate" else [
-            "Paid model calls are off: OPENROUTER_API_KEY and GAP_VLM_* were not passed, so graph nodes that ask a VLM fail."]
+        warnings = env_warnings + ([] if action == "generate" else no_model_warning(allowed, local))
         return sibling.answer("gap", action, info, warnings=warnings,
                               result={"job_id": started["job_id"], "log_dir": started["log_dir"], "run": folder.name, "output": str(folder / "output"), "command": command})
     except sibling.Refusal as refusal:
         return sibling.answer("gap", action, info, error=str(refusal), code=refusal.code)
 
 
-def _status(co, info, allowed) -> dict:
+def validate(co: sibling.Checkout, info: dict, graph, scripts_allowed: bool) -> dict:
+    """Upstream's ``gap run --validate-only``: the graph's structure, types and skill contracts, without a simulator,
+    GPU or model. Upstream imports every script node's module to read its signature, so a graph with Python that is
+    neither trusted nor allowed is not handed to it: the answer lists the nodes, scripts and Python files to read."""
+    graph = _graph(graph, co)
+    workflow = Path(graph) if Path(graph).is_file() else Path(graph) / "workflow.json"
+    found = inspect_graph_code(workflow, co)
+    listing = {key: found[key] for key in ("folder", "trusted", "nodes", "scripts", "python_files")}
+    if (found["nodes"] or found["python_files"]) and not found["trusted"] and not scripts_allowed:
+        return sibling.answer("gap", "validate", info, result={
+            "validated": False, **listing,
+            "note": "Not validated: upstream's validator imports the graph's scripts, which are arbitrary Python. Read "
+                    "them, then the owner may set [planning] allow_scripts = true in ~/.config/twinsmith/config.toml."})
+    command = argv(co, "validate", graph=graph)
+    refuse_real(command)
+    done = sibling.run(command, cwd=co.root, env_pass=["HF_TOKEN", *PLAIN_ENV], timeout_s=300,
+                       stdout_chars=sibling.WHOLE)
+    lines = [line.strip() for line in done["stdout"].splitlines() if line.strip()]
+    verdict = next((line for line in reversed(lines) if line.startswith(("OK:", "FAIL"))), None)
+    if done["exit_code"] not in (0, 1) or verdict is None:
+        return sibling.answer("gap", "validate", info, exit_code=done["exit_code"], code="UPSTREAM_FAILED",
+                              error="gap run --validate-only did not finish with a verdict.",
+                              stdout=done["stdout"][-sibling.TAIL:], stderr=done["stderr"])
+    issues = [line for line in lines if line != verdict]
+    return sibling.answer("gap", "validate", info, exit_code=done["exit_code"], result={
+        "validated": True, "valid": done["exit_code"] == 0, "verdict": verdict, "issues": issues[:200],
+        **({"issues_truncated": len(issues)} if len(issues) > 200 else {}), **listing})
+
+
+def _status(co, info, allowed, local=None) -> dict:
     memory = gpu_memory_mib()
     largest = max(memory) if memory else None
     gpu = {"memory_mib": memory, "required_gb": 24, "enough": bool(largest and largest >= REQUIRED_GPU_MIB)}
@@ -288,7 +397,7 @@ def _status(co, info, allowed) -> dict:
                        f"The largest GPU has {largest} MiB; Graph-as-Policy asks for 24 GB. Run it on a PC that has that.")
     return {**{key: info[key] for key in ("checkout", "environment_present") if key in info},
             **({"setup": info["setup"]} if "setup" in info else {}), "skills": skills_info(co), "gpu": gpu,
-            "keys": {key: bool(os.environ.get(key)) for key in KEYS}, "allow_paid": allowed,
+            "keys": {key: bool(os.environ.get(key)) for key in KEYS}, "allow_paid": allowed, "vlm": vlm_report(local),
             "runs": str(co.workspace / "runs/gap")}
 
 
@@ -299,9 +408,9 @@ def register(server, *, workspace=None, root=None):
         readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True,
     ))
     async def gap(
-        action: Annotated[Literal["status", "tools", "check", "generate", "run"], Field(description="Action to perform.")],
+        action: Annotated[Literal["status", "tools", "check", "validate", "generate", "run"], Field(description="Action to perform.")],
         sim: Annotated[str | None, Field(description="run (required): simulated SUITE/TASK, such as libero_object/0. Simulation only.")] = None,
-        graph: Annotated[str | None, Field(description="run (required): workflow directory or workflow.json, in this tool's run folder or the GaP or VABAR checkout.")] = None,
+        graph: Annotated[str | None, Field(description="validate/run (required): workflow directory or workflow.json, in this tool's run folder or the GaP or VABAR checkout.")] = None,
         instruction: Annotated[str | None, Field(description="generate (required): the task in words, one line.")] = None,
         model: Annotated[str | None, Field(description="generate: provider model name; omit for the upstream default.")] = None,
         name: Annotated[str | None, Field(description="generate/run: run folder name under <workspace>/runs/gap; default action and time.")] = None,
@@ -309,9 +418,10 @@ def register(server, *, workspace=None, root=None):
         allow_concurrent_gpu: Annotated[bool, Field(description="run: knowingly start beside another GPU job or a running Isaac Sim.")] = False,
     ) -> str:
         """Graph-as-Policy skill graphs, from its own pinned checkout: status (checkout, GPU, keys), tools (the skill
-        catalog), check (which tool bundles are ready), generate (a graph from an instruction; calls a paid model, only
-        when the owner allows it), run (a graph in simulation, as a job; uses the GPU). Never --real; script nodes of a
-        graph outside the pinned checkouts need the owner's allow_scripts.
+        catalog), check (which tool bundles are ready), validate (a graph's structure and skill contracts; no GPU or
+        model, for a graph you wrote), generate (a graph from an instruction; calls a paid model, only when the owner
+        allows it), run (a graph in simulation, as a job; uses the GPU). Never --real; script nodes of a graph outside
+        the pinned checkouts need the owner's allow_scripts.
         Follow jobs with jobs(action="status").
         """
         arguments = dict(sim=sim, graph=graph, instruction=instruction, model=model, name=name, timeout_s=timeout_s,

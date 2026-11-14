@@ -124,14 +124,15 @@ def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=No
             return sibling.answer("vabar", action, info, result={
                 **{key: info[key] for key in ("checkout", "environment_present", "setup") if key in info},
                 "graph_as_policy": beside, "skills": gap.skills_info(library), "warmup": warmup(co),
-                "allow_paid": gap.owner_flags()[0], "runs": str(co.workspace / "runs/vabar")})
+                "allow_paid": gap.owner_flags()[0], "vlm": gap.vlm_report(gap.owner_vlm()),
+                "runs": str(co.workspace / "runs/vabar")})
         if action == "results":
             return sibling.answer("vabar", action, info, result=results(co, run))
         if "setup" in info:
             raise sibling.Refusal("NOT_INSTALLED", info["setup"])
-        allowed = gap.owner_flags()[0]
-        env = {"VABAR_OPEN_ROBOT_SKILLS": str(gap.skills(gap.checkout(workspace=co.workspace)).root)}
-        env_pass = gap.run_env(allowed)
+        allowed, local = gap.owner_flags()[0], gap.owner_vlm()
+        env_pass, env, env_warnings = gap.model_env(allowed, local)
+        env["VABAR_OPEN_ROBOT_SKILLS"] = str(gap.skills(gap.checkout(workspace=co.workspace)).root)
         if action == "list":
             done = sibling.run(argv(co, action), cwd=co.root, env_pass=env_pass, env_set=env, timeout_s=300,
                                stdout_chars=sibling.WHOLE)
@@ -171,8 +172,7 @@ def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=No
         if not started["ok"]:
             folder.rmdir()
             return sibling.answer("vabar", action, info, error=started["message"], code=started["code"], hint=started["hint"])
-        warnings = [] if allowed or solve != "graph" else [
-            "Paid model calls are off: graphs whose nodes ask a VLM fail. The owner allows them with [planning] allow_paid."]
+        warnings = env_warnings + (gap.no_model_warning(allowed, local) if solve == "graph" else [])
         return sibling.answer("vabar", action, info, warnings=warnings, result={
             "job_id": started["job_id"], "log_dir": started["log_dir"], "run": folder.name, "command": command,
             "next": f'jobs(action="status", job_id="{started["job_id"]}"), then vabar(action="results", run="{folder.name}")'})

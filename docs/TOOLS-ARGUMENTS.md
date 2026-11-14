@@ -1639,11 +1639,11 @@ Toolset `planning` is off until you select it with `+planning`. Reference: [PLAN
 
 ### `gap`
 
-Graph-as-Policy skill graphs, from its own pinned checkout: status (checkout, GPU, keys), tools (the skill catalog), check (which tool bundles are ready), generate (a graph from an instruction; calls a paid model, only when the owner allows it), run (a graph in simulation, as a job; uses the GPU). Never --real; script nodes of a graph outside the pinned checkouts need the owner's allow_scripts. Follow jobs with jobs(action="status").
+Graph-as-Policy skill graphs, from its own pinned checkout: status (checkout, GPU, keys), tools (the skill catalog), check (which tool bundles are ready), validate (a graph's structure and skill contracts; no GPU or model, for a graph you wrote), generate (a graph from an instruction; calls a paid model, only when the owner allows it), run (a graph in simulation, as a job; uses the GPU). Never --real; script nodes of a graph outside the pinned checkouts need the owner's allow_scripts. Follow jobs with jobs(action="status").
 
-- `action` (Literal['status', 'tools', 'check', 'generate', 'run'], required): Action to perform.
+- `action` (Literal['status', 'tools', 'check', 'validate', 'generate', 'run'], required): Action to perform.
 - `sim` (str | None, default `None`): run (required): simulated SUITE/TASK, such as libero_object/0. Simulation only.
-- `graph` (str | None, default `None`): run (required): workflow directory or workflow.json, in this tool's run folder or the GaP or VABAR checkout.
+- `graph` (str | None, default `None`): validate/run (required): workflow directory or workflow.json, in this tool's run folder or the GaP or VABAR checkout.
 - `instruction` (str | None, default `None`): generate (required): the task in words, one line.
 - `model` (str | None, default `None`): generate: provider model name; omit for the upstream default.
 - `name` (str | None, default `None`): generate/run: run folder name under <workspace>/runs/gap; default action and time.
