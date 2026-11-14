@@ -9,23 +9,25 @@ ROLES = ("robot", "bench", "base_plate", "bota", "quick_changer", "rg2", "finger
          "jenga_block", "materials")
 
 
-NEWTON_REFUSAL = (
-    "The UR5e work cell is not yet qualified on Newton, the selected engine; no scene was built and no engine was switched. "
-    "Live findings (Isaac Sim 6.2, Newton 1.6.1): the bench's triangle-mesh colliders overflow Newton's triangle-pair buffer; "
-    "the separate RG2 articulation is mis-indexed by Newton's USD importer, ending in MuJoCo's error that a moving body's mass "
-    "and inertia must exceed mjMINVAL; the pack's drive gains are unstable in "
-    "MuJoCo-Warp; the RG2 closed chain did not move under command; and the flange force/torque read is unqualified. "
-    "For the work cell use a PhysX session: `run.sh --physics-backend physx`, `[sim] physics_backend = \"physx\"` in the "
-    "twinsmith config, or TWINSMITH_PHYSICS_BACKEND=physx. Details: docs/OPEN-ITEMS.md, \"Work cell on Newton\"."
-)
+# What a Newton build has not shown yet. PhysX is the work cell's qualified engine; see the README's Newton section.
+NEWTON_LIMITATIONS = [
+    "Newton: the arm's drives are the config's newton.drives (per engine), not the pack's PhysX gains; tracking differs.",
+    "Newton: the Bota force/torque read and the cameras are not qualified on this engine.",
+]
 
 
-def _require_physx():
+def _engine(config, mode):
+    """The selected engine, checked against what the work cell can build on it. Never switches engines."""
     from .physics_compat import selected_engine
 
     engine = selected_engine()
-    if engine != "physx":
-        raise RuntimeError(f"{NEWTON_REFUSAL} Selected engine: {engine}.")
+    if engine == "newton":
+        if "newton" not in config:
+            raise RuntimeError("This configuration has no newton section (per-engine drives and solver settings); "
+                               "the work cell cannot be built on Newton without it. Use a PhysX session or add the section.")
+        if mode == "mirror_real":
+            raise RuntimeError("mirror_real (gravity off on the robot) is not qualified on Newton; use physics mode or PhysX.")
+    return engine
 
 
 def _bom_rows(config, config_path=None):
@@ -192,7 +194,7 @@ class Workcell:
             raise ValueError("discard_changes must be a boolean")
         config, raw, pack, assets = _preflight(config_path, mode)
         rows = _bom_rows(config, config_path)
-        _require_physx()
+        engine = _engine(config, mode)
         import omni.usd
         import omni.timeline
         from sim_tools.stage_open import stage_has_unsaved_work
@@ -245,16 +247,21 @@ class Workcell:
                 raise ValueError(f"Physical assets missing from BOM part mappings: {sorted(missing)}")
             _tag_parts(stage, parts)
             audit = _finish_scene(stage, config, assets, parts, rows)
+            newton_report = None
+            if engine == "newton":
+                from . import newton_cell
+                newton_report = newton_cell.prepare(stage, config, robot_report["assembly_path"], timeline)
             from sim_tools.compat import composition_errors
             errors = composition_errors(stage)
             if errors:
                 raise RuntimeError(f"Workcell has USD composition errors: {errors}")
-            self._report = {"state": "ready", "mode": mode, "backend": "physx", "timeline": "stopped",
+            self._report = {"state": "ready", "mode": mode, "backend": engine, "timeline": "stopped",
                             "gravity_m_s2": -9.81, "robot_gravity_disabled": mode == "mirror_real", "tabletop_z_m": 0.0,
                             "pack": copy.deepcopy(pack.manifest), "robot": robot_report,
                             "cameras": camera_report["cameras"], "jenga": block_report, "parts": parts,
-                            "bom_audit": audit,
-                            "limitations": robot_report["limitations"] + camera_report["limitations"] + block_report["limitations"]}
+                            "bom_audit": audit, **({"newton": newton_report} if newton_report else {}),
+                            "limitations": robot_report["limitations"] + camera_report["limitations"] + block_report["limitations"]
+                            + (NEWTON_LIMITATIONS if engine == "newton" else [])}
             self._runtime = (stage, config, assets, rows)
         except Exception as exc:
             self._report = {"state": "failed", "mode": mode, "error": str(exc), "stage_replaced": True}
@@ -271,8 +278,13 @@ class Workcell:
             raise RuntimeError("Workcell stage changed; quick_start is required")
         if not omni.timeline.get_timeline_interface().is_stopped():
             raise RuntimeError("Stop the timeline before rebuilding the tower")
-        _require_physx()
+        engine = _engine(config, self._report.get("mode", "physics"))
         report, parts, audit = _replace_tower(stage, config, assets, rows, self._report["parts"], profile, seed)
+        if engine == "newton":
+            import omni.timeline
+            from . import newton_cell
+            self._report["newton"] = newton_cell.prepare(stage, config, self._report["robot"]["assembly_path"],
+                                                         omni.timeline.get_timeline_interface())
         self._report.update(jenga=report, parts=parts, bom_audit=audit)
         return copy.deepcopy(report)
 

@@ -78,7 +78,7 @@ away. Scripts that import `mcp` need `uv run --locked --isolated --project mcp -
 | Find and prepare | `env.py` (find an install, create a workspace), `assets.py` (asset packs), `install.py` (register the bridge in a Kit app), `check_machine.sh` (6.2 preflight; can use the GPU) |
 | Start | `run_kit.py` (what `run.sh` runs) |
 | Project checks (CPU, also in CI) | `check_docs.py`, `check_assets.py`, `check_portable_paths.py`, `check_private_paths.py`, `gen_host_catalog.py`, `gen_tool_reference.py` (also rewrites the generated count blocks) |
-| Work-cell check (live, disposable) | `workcell_smoke.py` (requires an explicitly selected disposable bridge and lab config; PhysX only) |
+| Work-cell check (live, disposable) | `workcell_smoke.py` (requires an explicitly selected disposable bridge and lab config; PhysX or Newton) |
 | Smoke checks (live, disposable) | `smoke.py <toolset>`; `smoke.py --list` lists GPU/simulator requirements offline. Validators live in `scripts/smoke/`; helpers: `scene_mcp_client.py`, `smoke_mcp_surface.py`, `make_scene_fixture.py`, `make_scene_package_fixture.py` |
 | Offline surface audits | `measure_tool_list.py [KEY=VALUE ...] [--json]`, `check_names.py --audit [--json]` (name enforcement is opt-in, not yet CI) |
 | ROS 2 | `ros_env.sh` (source it), `ros2_rviz_config.py`, `ros2_tf_doctor.py`, `cmd_vel_sequence.py` |

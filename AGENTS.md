@@ -14,7 +14,7 @@ Start here if you are an AI agent working in or with this repository. It is a ma
   upgrade their Isaac Sim or Isaac Lab environment. If `find` shows nothing, stop and ask where Isaac Sim is installed
   (`ISAACSIM_PATH` or `TWINSMITH_SIM_PYTHON`) instead of installing one.
 - **The physics engine.** Newton is the default; PhysX is opt-in. The statement (500 Hz step rate, raised contact buffers), how to choose an engine and the known limits are in
-  [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md#target-engine). **The UR5e work cell is PhysX-only: on a Newton session it refuses; start a PhysX session for it** ([open item](docs/OPEN-ITEMS.md#work-cell-on-newton)). Cautions that stay: verify the selected
+  [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md#target-engine). **The UR5e work cell builds on both engines: PhysX keeps the pack's drives, Newton uses the per-engine drives and solver settings in its config; its force/torque read and cameras are not qualified on Newton** ([work cell on Newton](docs/OPEN-ITEMS.md#work-cell-on-newton)). Cautions that stay: verify the selected
   engine (`status` reports it); never switch an open scene's engine; never fall back silently in either direction (a request for
   Newton must not become PhysX, and a request for PhysX must not become Newton); a CPU device does not identify the solver; Lab
   results do not qualify the work cell. Isaac Sim 5.1 and Isaac Lab 2.x are PhysX only. Do not claim a Newton result without a recorded

@@ -1584,7 +1584,7 @@ No arguments.
 
 Listed as `workcell__cell(action="quick_start")`.
 
-Build a stopped workcell from an external asset pack; qualified on PhysX only, so a Newton session refuses it. Refuses unsaved stage changes unless explicitly allowed.
+Build a stopped workcell from an external asset pack, on PhysX or Newton (Newton uses the config's per-engine drives; mirror_real needs PhysX). Refuses unsaved stage changes unless explicitly allowed.
 
 - `config_path` (string, optional): Optional hardware configuration path.
 - `mode` (physics|mirror_real, default `"physics"`): Physics mode, or zero-gravity mirror mode.

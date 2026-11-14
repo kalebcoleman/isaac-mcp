@@ -893,5 +893,29 @@
       "status": "unconfirmed",
       "source": "Candidate pack plate is 5 mm thick; provisional position below robot base, not lab measurement"
     }
+  },
+  "newton": {
+    "physics_hz": {
+      "value": 500,
+      "status": "confirmed",
+      "source": "Live Newton tower check (scripts/smoke/newton_checks.py) and the 2026-11-13 work-cell probe: the tower holds at 500 Hz and collapses at 250."
+    },
+    "impratio": {
+      "value": 10,
+      "status": "unconfirmed",
+      "source": "2026-11-13 work-cell Newton probe: without impratio 10 the top layer crept 0.4 mm/s."
+    },
+    "drives": {
+      "value": {
+        "shoulder_pan_joint": {"stiffness_nm_per_rad": 25000, "damping_nms_per_rad": 300, "armature_kgm2": 0.1},
+        "shoulder_lift_joint": {"stiffness_nm_per_rad": 50000, "damping_nms_per_rad": 600, "armature_kgm2": 0.1},
+        "elbow_joint": {"stiffness_nm_per_rad": 25000, "damping_nms_per_rad": 250, "armature_kgm2": 0.1},
+        "wrist_1_joint": {"stiffness_nm_per_rad": 5000, "damping_nms_per_rad": 50, "armature_kgm2": 0.1},
+        "wrist_2_joint": {"stiffness_nm_per_rad": 5000, "damping_nms_per_rad": 50, "armature_kgm2": 0.1},
+        "wrist_3_joint": {"stiffness_nm_per_rad": 5000, "damping_nms_per_rad": 50, "armature_kgm2": 0.1}
+      },
+      "status": "unconfirmed",
+      "source": "Chosen 2026-11-14 for Newton's MuJoCo-Warp at 500 Hz: armature 0.1 kg m^2 on every arm joint (as MuJoCo Menagerie's UR5e), stiffness so that dt^2 k / armature <= 2 against the explicit-spring limit of at least 4, damping near critical; validated live, see the work cell README."
+    }
   }
 }

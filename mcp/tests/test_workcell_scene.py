@@ -220,16 +220,32 @@ def test_tower_layout_and_cached_status(modules):
     assert cell.shutdown()["stage_preserved"]
 
 
-def test_refuses_non_physx_before_stage_access(modules, monkeypatch, tmp_path):
+@pytest.mark.parametrize("values,mode,message", [
+    ({}, "physics", "no newton section"),
+    ({"newton": {"physics_hz": 500}}, "mirror_real", "mirror_real"),
+])
+def test_newton_refusals_come_before_stage_access(modules, monkeypatch, tmp_path, values, mode, message):
     scene, _ = modules
-    install_contracts(monkeypatch, scene, tmp_path, config(scene))
+    install_contracts(monkeypatch, scene, tmp_path, {**config(scene), **values})
     physics = types.ModuleType("workcell_test.physics_compat")
     physics.selected_engine = lambda: "newton"
     monkeypatch.setitem(sys.modules, physics.__name__, physics)
-    with pytest.raises(RuntimeError, match="not yet qualified on Newton") as refused:
-        asyncio.run(scene.Workcell().quick_start())
-    for way in ("--physics-backend physx", 'physics_backend = "physx"', "TWINSMITH_PHYSICS_BACKEND=physx", "Work cell on Newton"):
-        assert way in str(refused.value)
+    with pytest.raises(RuntimeError, match=message):
+        asyncio.run(scene.Workcell().quick_start(mode=mode))
+
+
+def test_newton_drives_are_checked_and_their_stability_reported():
+    spec = importlib.util.spec_from_file_location("workcell_test_newton_cell", PACKAGE / "newton_cell.py")
+    cell = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cell)
+    drives = {"wrist_1_joint": {"stiffness_nm_per_rad": 5000, "damping_nms_per_rad": 50, "armature_kgm2": 0.1}}
+    assert cell._drives({"newton": {"drives": drives}}) == drives
+    report = cell.stability(drives, 500, {})
+    assert report["wrist_1_joint"] == {"ratio": 0.2, "limit": 6.0}           # dt^2 k / I and 4 + 2 dt c / I
+    for bad in ({}, {"newton": {}}, {"newton": {"drives": {"j": {"stiffness_nm_per_rad": 1}}}},
+                {"newton": {"drives": {"j": dict(drives["wrist_1_joint"], armature_kgm2=-1)}}}):
+        with pytest.raises(ValueError):
+            cell._drives(bad)
 
 
 def test_unsaved_stage_refused_without_replacement(modules, monkeypatch, tmp_path):

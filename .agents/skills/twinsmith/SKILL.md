@@ -16,8 +16,8 @@ For setup use `docs/LINUX-SETUP.md#choose-a-simulator-build` and `docs/COMPATIBI
 extensions; do not pip-install `omni` or `.pyi` stubs. External system ROS and Isaac Lab are separate and only needed for the
 workflows that use them. Do not claim builds or pending tests are supported that the compatibility page does not.
 
-**Physics engine.** Newton is the default engine; PhysX is opt-in. The UR5e work cell is qualified on PhysX only and refuses
-to build on a Newton session, with no engine switch. Details are in `docs/COMPATIBILITY.md#target-engine`. Ask for an engine with `TWINSMITH_PHYSICS_BACKEND`, `./run.sh --physics-backend physx|newton` or
+**Physics engine.** Newton is the default engine; PhysX is opt-in. The UR5e work cell builds on both: on Newton it uses the
+per-engine drives in its config, and its force/torque read and cameras are not qualified there. Details are in `docs/COMPATIBILITY.md#target-engine`. Ask for an engine with `TWINSMITH_PHYSICS_BACKEND`, `./run.sh --physics-backend physx|newton` or
 `sim__session(action="launch", physics_backend=...)`. `status` reports the stage's `physics_engine`. Never switch an open scene's
 engine, never fall back silently in either direction, and do not infer the solver from a device name (a CPU device does not mean
 PhysX).
@@ -52,8 +52,8 @@ server. `+workcell` is the lab's UR5e work cell and `+lab` is Isaac Lab. Toolset
 4. **Put a USD or URDF and its files into a pack in your asset root:** `assets__pack(action="build")`, then
    `sim__quick_start robot="<pack id>/<version>/<file>"`.
 5. **Train, evaluate or play a policy:** `isaaclab__inspect(action="install")`, then `isaaclab__launch(action="train")`. No bridge is needed. (`lab` toolset.)
-6. **The UR5e work cell:** `workcell__cell(action="quick_start")`, only when that is what was asked for, and on a PhysX
-   session: it refuses on Newton. (`workcell` toolset.)
+6. **The UR5e work cell:** `workcell__cell(action="quick_start")`, only when that is what was asked for. It builds on PhysX or
+   Newton; `mirror_real` needs PhysX. (`workcell` toolset.)
 7. **See the result:** `screenshot`; for video, `screen_recording(action="start")`.
 
 **Tool names.** The server lists related tools as one tool with an `action` argument, and this guide writes that form:

@@ -286,11 +286,48 @@ optional USD stage. It checks that:
 The audit walks the stage instead of trusting a manually curated list. A mesh anywhere
 outside a mapped part, or a report part whose prim is missing, fails the audit.
 
-## PhysX authoring/BOM smoke
+## Newton
 
-The work cell is qualified on PhysX only: start a PhysX session (`run.sh --physics-backend physx`); a Newton session refuses it
-(see [Work cell on Newton](../../../docs/OPEN-ITEMS.md#work-cell-on-newton)). Run the smoke only against an explicitly selected bridge and
-configuration:
+The cell builds on the session's engine and never switches it. On PhysX it keeps the pack's drives. On Newton (MuJoCo-Warp
+integrates a drive's stiffness explicitly, so the pack's 9400 N m per degree diverges at 500 Hz) `newton_cell.prepare` authors,
+on the stage and never in the pack:
+
+- the config's `newton.drives` for the six arm joints. Each joint gets stiffness and damping in SI per radian, written in USD's
+  per-degree units, and an armature of 0.1 kg m² on both `newton:armature` and `physxJoint:armature`. The gains keep
+  `dt² k / armature` at or below 2, against an explicit-spring limit of at least 4:
+
+  | Joints | Stiffness (N m/rad) | Damping (N m s/rad) |
+  |---|--:|--:|
+  | Shoulder pan | 25,000 | 300 |
+  | Shoulder lift | 50,000 | 600 |
+  | Elbow | 25,000 | 250 |
+  | Wrists | 5,000 | 50 |
+
+  Their maximum forces are the pack's 150 and 28 N m. The report's `stability` lists the margin per joint.
+- the tower's settings at `newton.physics_hz` (500 Hz): an elliptic friction cone, 100 iterations, `impratio` 10 and a 4 mm
+  contact gap on every collider;
+- contact buffers sized for the bodies in the scene.
+
+`mirror_real` (gravity off on the robot) is refused on Newton until it is qualified there.
+
+**Live on Newton (2026-11-14, Isaac Sim 6.2.0, Newton 1.6.1 / MuJoCo-Warp, headless, RTX PRO 6000 Blackwell, 500 Hz, pack
+`v2`).**
+- `scripts/workcell_smoke.py` passes: 70 bodies, contact buffers of 2240 and 17920 with no warnings, 455 colliders with the gap.
+- At the presentation pose `[0, -80, 100, -110, -90, 0]` degrees, with gravity on, every joint holds within 0.05 degrees, creeping
+  about 0.0002 degrees per second.
+- A 0.05 rad step on each joint in turn settles within 0.2 s to the same offset, with no oscillation.
+- The RG2 fingers move (they were locked on Newton with `v1`), and the four mimic followers stay within 0.003 degrees of their
+  ratios.
+- After a 1.2 s settle the 54-block tower drifts at most 0.54 mm (median 0.23 mm) over 11 s.
+- No physics warnings in Kit's log.
+- Commanding every joint at once from the zero pose (arm stretched out) drove the arm into the cell, so start from a pose
+  inside the workspace.
+- Not qualified on Newton: the Bota force/torque read, the cameras and `mirror_real`.
+
+## Authoring/BOM smoke
+
+The cell builds on the session's engine (`run.sh --physics-backend physx|newton`). Run the smoke only against an explicitly
+selected bridge and configuration:
 
 ```bash
 python3 <repo>/scripts/workcell_smoke.py --host 127.0.0.1 --port <port> \
