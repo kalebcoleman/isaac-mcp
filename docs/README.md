@@ -44,7 +44,7 @@ over both.
 
 | Page | Use it for |
 |---|---|
-| [How it works](ARCHITECTURE.md) | The whole system with a diagram: client, host server, bridge, Kit extensions, Isaac Lab jobs, asset packs, RoboSimStudio, where each setting is read |
+| [How it works](ARCHITECTURE.md) | The whole system with a diagram: client, host server, bridge, Kit extensions, Isaac Lab jobs, asset packs, RoboSimStudio, where each setting is read. Its last section is the [target layout](ARCHITECTURE.md#target-layout-planned): groups, process boundaries, version pins, safety boundaries |
 | [Host package readme](../mcp/README.md) | The server package, install, layout |
 | [Tool authoring](../mcp/docs/tool-authoring.md) | Your own tool package: arguments, errors, flags, reloading, Kit surprises |
 | [Bridge protocol](../mcp/docs/protocol.md) | Messages, finding a bridge, the token, scheduling, read-only mode, jobs, access from another machine |
@@ -54,6 +54,8 @@ over both.
 
 | Page | Use it for |
 |---|---|
+| [Roadmap](ROADMAP.md) | The phases from cleanup to the real-to-sim-to-real Jenga loop, each with goal, scope, exit criteria and dependencies; the pull request queue; decisions needed |
+| [Plans](plans/README.md) | One specification per upcoming pull request, ready to hand to an agent |
 | [Open items](OPEN-ITEMS.md) | Unfinished work by topic, including the Newton qualification list |
 | [Publishing](PUBLISHING.md) | PyPI release steps |
 | [Vendoring](VENDORING.md) · [Third-party notices](../THIRD-PARTY-NOTICES.md) | Licenses and origins |
