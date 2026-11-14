@@ -250,3 +250,13 @@ def test_every_tool_a_check_calls_is_listed_by_the_toolsets_the_runner_starts_it
         for tool in set(re.findall(r'"((?:sim|assets)__[a-z0-9_]+)"', source)) - {"sim__prim__create_many"}:
             if tool in tool_groups.members() or tool in toolsets._OWNERS:
                 assert toolsets.owner(tool) in enabled, (name, tool)
+
+
+def test_a_python_without_the_mcp_sdk_is_told_the_command_that_has_it(monkeypatch, capsys):
+    module = runner()
+    real = module.importlib.util.find_spec
+    monkeypatch.setattr(module.importlib.util, "find_spec", lambda name: None if name == "mcp" else real(name))
+    assert module.main(["sim", "--port", "8766", "--check", "validate_scene_joints"]) == 2
+    err = capsys.readouterr().err
+    assert "has no mcp" in err and "uv run --locked --isolated" in err
+    assert err.rstrip().endswith("../scripts/smoke.py sim --port 8766 --check validate_scene_joints")

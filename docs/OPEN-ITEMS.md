@@ -18,9 +18,9 @@ version.
 - [ ] Make a Franka joint move settle within the PhysX tolerance on Newton.
 - [ ] Decide `sim__physics(action="raycast")` on Newton: implement a query, or keep it refused and say so.
 - [ ] The UR5e work cell on Newton: it builds and holds; the force/torque read, cameras and `mirror_real` remain (see [Work cell on Newton](#work-cell-on-newton)).
-- [ ] Record the live runs that show exact stepping, the one-off push and camera capture after motion passing on Newton; they
-  are reported, not yet recorded in this repository. Run `scripts/smoke.py sim --backend newton --discard-changes
-  --check newton_checks` on a free GPU and keep the JSON report. If a step-timing mismatch remains, read `newton.clocks_before`,
+- [x] Record the live runs that show exact stepping, the one-off push and camera capture after motion passing on Newton:
+  [recorded 2026-11-14](VERIFICATION.md#headless-newton-check). To repeat it, run `smoke.py sim --backend newton --discard-changes
+  --check newton_checks` (the [command](VERIFICATION.md#test-matrix) needs the `mcp/` environment). If a step-timing mismatch remains, read `newton.clocks_before`,
   `newton.clocks_after` and `newton.timestep_check` in the step error. Check solver steps, clock and body state independently
   before changing the timing guard.
 - [ ] Qualify the Isaac Sim, Newton, Warp, MuJoCo and GPU/driver versions that actually load. Document installation and
