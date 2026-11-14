@@ -363,3 +363,68 @@ def test_a_malformed_contact_section_is_refused(change, message):
     scene.check_contact(CONTACT)
     with pytest.raises(ValueError, match=message):
         scene.check_contact(dict(CONTACT, **change))
+
+
+def _robot_module():
+    pytest.importorskip("pxr.Usd")
+    sys.path.insert(0, str(PACKAGE))
+    try:
+        spec = importlib.util.spec_from_file_location("workcell.robot", PACKAGE / "robot.py",
+                                                      submodule_search_locations=None)
+        package = types.ModuleType("workcell")
+        package.__path__ = [str(PACKAGE)]
+        sys.modules.setdefault("workcell", package)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.remove(str(PACKAGE))
+
+
+GOOD = {"mass_kg": 1.37, "com_m": [0.0, -0.01634, -0.0018], "diagonal_inertia_kgm2": [0.0012, 0.0014, 0.0017],
+        "principal_axes_wxyz": [1, 0, 0, 0]}
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"mass_kg": 0}, "positive"), ({"com_m": [0, 0]}, "malformed"), ({"diagonal_inertia_kgm2": [0.001, 0.001, 0.01]}, "triangle"),
+    ({"principal_axes_wxyz": [1, 1, 0, 0]}, "unit quaternion"), ({"mass_kg": float("inf")}, "non-finite"),
+    ({"extra": 1}, "needs exactly"),
+])
+def test_malformed_inertials_are_refused(change, message):
+    robot = _robot_module()
+    robot.check_inertials({"arm": {"wrist_1_link": GOOD}})
+    with pytest.raises(ValueError, match=message):
+        robot.check_inertials({"arm": {"wrist_1_link": dict(GOOD, **change)}})
+    with pytest.raises(ValueError, match="twice"):
+        robot.check_inertials({"a": {"wrist_1_link": GOOD}, "b": {"wrist_1_link": GOOD}})
+
+
+def test_inertials_are_authored_on_the_named_body_and_a_missing_one_is_refused():
+    robot = _robot_module()
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    stage = Usd.Stage.CreateInMemory()
+    UsdGeom.Xform.Define(stage, "/A")
+    body = UsdGeom.Xform.Define(stage, "/A/robot/wrist_1_link").GetPrim()
+    UsdPhysics.RigidBodyAPI.Apply(body)
+    assert robot._inertials(stage, "/A", {"arm": {"wrist_1_link": GOOD}}) == {"wrist_1_link": 1.37}
+    api = UsdPhysics.MassAPI(body)
+    assert api.GetMassAttr().Get() == pytest.approx(1.37)
+    assert list(api.GetCenterOfMassAttr().Get()) == pytest.approx([0.0, -0.01634, -0.0018])
+    assert list(api.GetDiagonalInertiaAttr().Get()) == pytest.approx([0.0012, 0.0014, 0.0017])
+    with pytest.raises(ValueError, match="expected one rigid body"):
+        robot._inertials(stage, "/A", {"arm": {"wrist_2_link": GOOD}})
+
+
+def test_the_shipped_inertials_are_ur5e_and_the_datasheet_rg2():
+    sys.path.insert(0, str(PACKAGE))
+    try:
+        values, raw = load("hardware_config").load_config()
+    finally:
+        sys.path.remove(str(PACKAGE))
+    arm = values["inertials"]["ur5e_links"]
+    assert [arm[f"{n}_link"]["mass_kg"] for n in ("shoulder", "upper_arm", "forearm", "wrist_1", "wrist_2", "wrist_3")] == [
+        3.761, 8.058, 2.846, 1.37, 1.3, 0.365]                      # UR's UR5e table, not the CB-series UR5
+    assert sum(link["mass_kg"] for link in values["inertials"]["rg2_links"].values()) == pytest.approx(0.78, abs=1e-5)
+    assert values["bota"]["mass_kg"] == 0.113 and values["bota"]["sensor_origin_along_axis_m"] == 0.032
+    assert raw["inertials"]["ur5e_links"]["status"] == "confirmed" and raw["inertials"]["rg2_links"]["status"] == "unconfirmed"

@@ -96,6 +96,267 @@
       "source": "Newton reads one coefficient, dynamicFriction (newton import_usd.py:3982); the work cell sets it to the static value on Newton because Jenga depends mostly on when a block starts to slide. Sliding then runs about 0.05 grippier than on PhysX."
     }
   },
+  "inertials": {
+    "ur5e_links": {
+      "value": {
+        "shoulder_link": {
+          "mass_kg": 3.761,
+          "com_m": [
+            0.0,
+            -0.00193,
+            -0.02561
+          ],
+          "diagonal_inertia_kgm2": [
+            0.006024776,
+            0.007000305,
+            0.007030789
+          ],
+          "principal_axes_wxyz": [
+            0.674731213,
+            0.20206706,
+            -0.365097645,
+            0.608777794
+          ]
+        },
+        "upper_arm_link": {
+          "mass_kg": 8.058,
+          "com_m": [
+            -0.2125,
+            0.0,
+            0.11336
+          ],
+          "diagonal_inertia_kgm2": [
+            0.015058841,
+            0.332472068,
+            0.333880871
+          ],
+          "principal_axes_wxyz": [
+            -0.706652155,
+            0.70756111,
+            5.3654e-05,
+            -6.6119e-05
+          ]
+        },
+        "forearm_link": {
+          "mass_kg": 2.846,
+          "com_m": [
+            -0.2422,
+            0.0,
+            0.0265
+          ],
+          "diagonal_inertia_kgm2": [
+            0.003971029,
+            0.078510222,
+            0.078792709
+          ],
+          "principal_axes_wxyz": [
+            -0.698448894,
+            0.715600664,
+            -0.006368275,
+            -0.006654075
+          ]
+        },
+        "wrist_1_link": {
+          "mass_kg": 1.37,
+          "com_m": [
+            0.0,
+            -0.01634,
+            -0.0018
+          ],
+          "diagonal_inertia_kgm2": [
+            0.001198676,
+            0.001423627,
+            0.001655017
+          ],
+          "principal_axes_wxyz": [
+            0.621150497,
+            -0.334307835,
+            -0.61716497,
+            0.348593934
+          ]
+        },
+        "wrist_2_link": {
+          "mass_kg": 1.3,
+          "com_m": [
+            0.0,
+            0.01634,
+            -0.0018
+          ],
+          "diagonal_inertia_kgm2": [
+            0.00095814,
+            0.001286066,
+            0.001356374
+          ],
+          "principal_axes_wxyz": [
+            0.545738875,
+            0.444067223,
+            0.528847091,
+            0.474651593
+          ]
+        },
+        "wrist_3_link": {
+          "mass_kg": 0.365,
+          "com_m": [
+            0.0,
+            0.0,
+            -0.001159
+          ],
+          "diagonal_inertia_kgm2": [
+            0.000186938,
+            0.000189069,
+            0.000257573
+          ],
+          "principal_axes_wxyz": [
+            0.999884854,
+            0.006732397,
+            -0.00111788,
+            -0.013553714
+          ]
+        }
+      },
+      "status": "confirmed",
+      "source": "Universal Robots ROS 2 description, config/ur5e/physical_parameters.yaml (rolling; sha256 0e58b89069d8d87b24cce0c2c02832d88de0f3229baf42916953ce1c71f0fa2d): link masses and CoMs in the URDF link frames the pack's robot uses; each tensor rotated by the file's inertia rotation into the link frame and decomposed into principal moments and axes. Masses match UR's DH article (UR5e table). Replaces the CB-series UR5 values the pack carried (4.0/3.7/8.393/2.275/1.219/1.219/0.1879)."
+    },
+    "rg2_links": {
+      "value": {
+        "onrobot_rg2_base_link": {
+          "mass_kg": 0.638567,
+          "com_m": [
+            0.0,
+            0.0002,
+            0.0641
+          ],
+          "diagonal_inertia_kgm2": [
+            0.001234989,
+            0.001166662,
+            0.000385695
+          ],
+          "principal_axes_wxyz": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        "left_outer_knuckle": {
+          "mass_kg": 0.032801,
+          "com_m": [
+            -0.0004,
+            -0.0146,
+            0.0133
+          ],
+          "diagonal_inertia_kgm2": [
+            1.2235e-05,
+            7.348e-06,
+            7.052e-06
+          ],
+          "principal_axes_wxyz": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        "right_outer_knuckle": {
+          "mass_kg": 0.032801,
+          "com_m": [
+            -0.0004,
+            -0.0146,
+            0.0133
+          ],
+          "diagonal_inertia_kgm2": [
+            1.2235e-05,
+            7.348e-06,
+            7.052e-06
+          ],
+          "principal_axes_wxyz": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        "left_inner_finger": {
+          "mass_kg": 0.01771,
+          "com_m": [
+            -0.0004,
+            0.0088,
+            0.024
+          ],
+          "diagonal_inertia_kgm2": [
+            4.233e-06,
+            4.162e-06,
+            1.098e-06
+          ],
+          "principal_axes_wxyz": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        "right_inner_finger": {
+          "mass_kg": 0.01771,
+          "com_m": [
+            -0.0004,
+            0.0088,
+            0.024
+          ],
+          "diagonal_inertia_kgm2": [
+            4.233e-06,
+            4.162e-06,
+            1.098e-06
+          ],
+          "principal_axes_wxyz": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        "left_inner_knuckle": {
+          "mass_kg": 0.020205,
+          "com_m": [
+            -0.0004,
+            -0.018,
+            0.0178
+          ],
+          "diagonal_inertia_kgm2": [
+            6.465e-06,
+            4.263e-06,
+            4.445e-06
+          ],
+          "principal_axes_wxyz": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        "right_inner_knuckle": {
+          "mass_kg": 0.020205,
+          "com_m": [
+            -0.0004,
+            -0.018,
+            0.0178
+          ],
+          "diagonal_inertia_kgm2": [
+            6.465e-06,
+            4.263e-06,
+            4.445e-06
+          ],
+          "principal_axes_wxyz": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "status": "unconfirmed",
+      "source": "Total 0.78 kg from the OnRobot RG2 datasheet v1.8 (https://onrobot.com/storage/datasheets/rg2/datasheet_rg2_v1.8_en.pdf, \"Weight 0.78 [kg]\"), split over the links by convex-hull volume of pack v2's collision hulls (uniform density); CoMs and principal moments from the same hulls with small off-diagonal terms dropped. The base CoM (0, 0.0002, 0.0641) agrees with OnRobot's own model (base 0.193 kg + body 0.464 kg, body 47.3 mm up). Whether 0.78 kg includes the Quick Changer tool side is not stated: weigh it."
+    }
+  },
   "robot": {
     "model": {
       "value": "UR5e",
@@ -171,23 +432,23 @@
     },
     "diameter_m": {
       "value": 0.048,
-      "status": "unconfirmed",
-      "source": "Kaleb's approximate figure (~48 mm); datasheet/caliper not checked."
+      "status": "confirmed",
+      "source": "Bota Rokubi serial datasheet: diameter 48 mm (\u00d848 x 32 mm); the lab's adapter plates are separate and unmeasured."
     },
     "length_m": {
       "value": 0.032,
-      "status": "unconfirmed",
-      "source": "Kaleb's approximate figure (~32 mm); the real stack height depends on the adapter plates used, not measured."
+      "status": "confirmed",
+      "source": "Bota Rokubi serial datasheet: height 32 mm. The real stack height also includes the lab's custom adapter plates (both Rokubi faces have M3 patterns, not ISO-50), which are not modelled yet: measure them."
     },
     "mass_kg": {
-      "value": 0.12,
-      "status": "unconfirmed",
-      "source": "Kaleb's approximate figure (~0.12 kg); weigh it."
+      "value": 0.113,
+      "status": "confirmed",
+      "source": "Bota Rokubi BFT-ROKS-SER-M8 datasheet (serial version): weight 113 g. Excludes the lab's adapter plates."
     },
     "sensor_origin_along_axis_m": {
-      "value": 0.016,
-      "status": "unconfirmed",
-      "source": "Assumed measurement frame at the mid-height of the body; Bota datasheet shows the true origin."
+      "value": 0.032,
+      "status": "confirmed",
+      "source": "Bota's URDF and documentation: the wrench is expressed at the tool-side face, 32.0 mm from the robot-side face, same axes."
     },
     "frame_id": {
       "value": "bota_ft_sensor",
@@ -227,9 +488,9 @@
       "source": "Aldrin CAD value (robot.py STANDOFF_M); supersedes the URDF's 15.0 mm."
     },
     "mass_kg": {
-      "value": 0.41,
+      "value": 0.2,
       "status": "unconfirmed",
-      "source": "Value in a robot.py comment; not weighed."
+      "source": "OnRobot Quick Changer datasheet v2.0: robot side 0.06 kg + tool side 0.14 kg (0.41 kg was the Dual Quick Changer). Unconfirmed: the RG2's 0.78 kg may already include its tool side, and whether the lab's unit is v2 or v3 is unknown; weigh it."
     }
   },
   "rg2": {
@@ -250,8 +511,8 @@
     },
     "datasheet_mass_kg": {
       "value": 0.78,
-      "status": "unconfirmed",
-      "source": "Kaleb's figure for the official onrobot/onrobot-isaacsim RG2 (~0.78 kg); confirm on the OnRobot datasheet."
+      "status": "confirmed",
+      "source": "OnRobot RG2 datasheet v1.8 (https://onrobot.com/storage/datasheets/rg2/datasheet_rg2_v1.8_en.pdf): \"Weight 0.78 [kg]\" (v1.4 said 0.65). It does not say whether the Quick Changer tool side is included."
     },
     "width_command_units_per_mm": {
       "value": 10,
@@ -445,9 +706,9 @@
       "source": "Placeholder: Guess for a printed bracket."
     },
     "camera_mass_kg": {
-      "value": 0.072,
+      "value": 0.064,
       "status": "unconfirmed",
-      "source": "D415 datasheet mass as recalled (72 g)."
+      "source": "Intel RealSense D400 datasheet (2023): D415 64 g (the 2020 edition says 72 g). Unconfirmed until weighed with its cable strain relief."
     },
     "ros_namespace": {
       "value": "wrist_camera",

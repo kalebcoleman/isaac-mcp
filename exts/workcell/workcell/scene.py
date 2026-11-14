@@ -82,6 +82,9 @@ def _preflight(config_path, mode):
         check_bench_top(config["bench_top"])
     if "contact" in config:
         check_contact(config["contact"])
+    if "inertials" in config:
+        from .robot import check_inertials
+        check_inertials(config["inertials"])
     tower.realize(config)
     _bom_rows(config, config_path)
     pack = asset_pack.resolve_pack(config)
