@@ -196,11 +196,12 @@ printf 'DISPLAY=%s XDG_SESSION_TYPE=%s\n' "${DISPLAY:-unset}" "${XDG_SESSION_TYP
 SIM_PYTHON="${TWINSMITH_SIM_PYTHON:-$PWD/.venv/bin/python}"
 "$SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.executable); print(sys.version); print({n:m.version(n) for n in ("isaacsim", "isaacsim-kernel", "numpy", "torch", "mcp")})'
 uv pip check --python "$SIM_PYTHON"
-uv tool list
+readlink -f ~/.local/bin/twinsmith
 ```
 
 For the host, retain `uv pip freeze --python <host-python>` and `uv pip check --python <host-python>`
-using the interpreter of the installed uv tool (located under `uv tool dir`). Record Lab and
+using the host environment's interpreter, `mcp/.venv/bin/python` in the checkout (`./install.sh` links that environment's
+`twinsmith` as `~/.local/bin/twinsmith`). Record Lab and
 external ROS in their own interpreters/terminals. Do not use a system ROS Python environment
 to stand in for Sim's bundled bridge.
 

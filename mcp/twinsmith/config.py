@@ -14,39 +14,39 @@ except ModuleNotFoundError:          # Python before 3.11: tomli, if it is insta
     except ModuleNotFoundError:
         tomllib = None
 
-from . import legacy
+from .pack_manifest import ASSET_ROOT_ALIAS
 from .toolsets import DEFAULT, PROFILES, TOOLSETS
 
-LEGACY = tuple(legacy.STOPS_STARTUP)      # removed selection settings: a server that finds one set stops
+# isaac-mcp, this project's name before 0.3.0, read these settings and files; 0.3 still honoured them, and nothing
+# reads them now. A server that finds one refuses to start rather than ignore it: a leftover ISAAC_MCP_READ_ONLY,
+# ISAAC_MCP_TOOLSETS or isaac-mcp.toml would otherwise change what a client may do, or the physics engine, without a
+# word. docs/MIGRATING.md maps each one to its new name. ISAAC_MCP_ASSET_ROOT is not one of them: it is a permanent
+# alias of TWINSMITH_ASSET_ROOT. The Kit bridge applies the same rule (twinsmith_bridge/knobs.py).
+OLD_PREFIXES = ("ISAAC_MCP_", "UR5E_DT_")
+OLD_VARIABLES = ("ISAAC_SIM_PORT", "ISAAC_SIM_PYTHON", "ISAACLAB_JOBS_DIR")
+OLD_USER_FILE = ".config/isaac-mcp/config.toml"     # now .config/twinsmith/config.toml
+OLD_PROJECT_FILE = "isaac-mcp.toml"                 # now twinsmith.toml
 
 
-def replacement(variable: str, value: str) -> str:
-    """Give an explicit migration command, never interpret legacy settings at runtime."""
-    kind = legacy.STOPS_STARTUP.get(variable)
-    if kind == "local_tools":
-        mapping = {"all": "all", "none": "minimal", "readonly": "minimal,+lab,+screen",
-                   "gateway": "+core", "screen_input": "+input", "sim_launch": "+launch"}
-        parts = []
-        for item in (value or "all").split(","):
-            item = item.strip().lower()
-            part = mapping.get(item, "+lab" if item.startswith("isaaclab_") else "+screen")
-            if part not in parts:
-                parts.append(part)
-        if parts[0].startswith("+"):
-            parts.insert(0, "minimal")
-        selection = ",".join(parts)
-    elif kind == "namespace":
-        mapping = {"sim": "+scene,+physics,+sensors,+ros2,+kit_debug", "assets": "+assets",
-                   "workcell": "+workcell", legacy.OLD_WORKCELL_NAMESPACE: "+workcell"}
-        selection = "minimal,+code,+screen" + "".join("," + mapping.get(part.strip(), "+extensions")
-                                                       for part in value.split(",") if part.strip())
-    elif kind == "builtins":
-        selection = "default,-code" if value.lower() in {"0", "false", "no"} else "default,+code"
-    elif kind == "scene_tools":
-        selection = "default,-scene,-physics,-sensors,-assets,-ros2,-kit_debug" if value.lower() in {"0", "false", "no"} else "default"
-    else:
-        selection = "default"
-    return "TWINSMITH_TOOLSETS=" + selection
+def old_settings(env: Mapping[str, str]) -> list[str]:
+    """The isaac-mcp variables that are set in ``env``, sorted."""
+    return sorted(name for name, value in env.items() if str(value).strip() and name != ASSET_ROOT_ALIAS
+                  and (name.startswith(OLD_PREFIXES) or name in OLD_VARIABLES))
+
+
+def refuse_old_settings(env: Mapping[str, str]) -> None:
+    """Raise ValueError naming every isaac-mcp variable set in ``env``."""
+    old = old_settings(env)
+    if old:
+        raise ValueError(f"isaac-mcp settings are set and no longer read: {', '.join(old)}. Rename each ISAAC_MCP_<X> "
+                         "to TWINSMITH_<X>, or remove it; docs/MIGRATING.md lists the exceptions and the settings that "
+                         "were removed (TWINSMITH_TOOLSETS replaces the old tool-selection settings).")
+
+
+def _refuse_old_file(old: Path, new: Path) -> None:
+    if old.is_file() and not new.is_file():
+        raise ValueError(f"{old} is the isaac-mcp name of {new} and is no longer read. With nothing running, "
+                         f"move it: mv {old} {new} (see docs/MIGRATING.md).")
 
 
 def select(value) -> frozenset[str]:
@@ -120,10 +120,14 @@ def _config_files(cwd: Path | None = None, home: Path | None = None, minimal: bo
     With ``minimal`` a Python that has no TOML reader still yields the physics setting."""
     current = (Path.cwd() if cwd is None else Path(cwd)).resolve()
     base = Path.home() if home is None else Path(home)
-    user = legacy.choose_file(base / ".config/twinsmith/config.toml", base / legacy.OLD_CONFIG_DIR / "config.toml") \
-        or base / ".config/twinsmith/config.toml"
-    project = next((found for found in (legacy.choose_file(directory / "twinsmith.toml", directory / legacy.OLD_PROJECT_TOML)
-                                        for directory in (current, *current.parents)) if found is not None), None)
+    user = base / ".config/twinsmith/config.toml"
+    _refuse_old_file(base / OLD_USER_FILE, user)
+    project = None
+    for directory in (current, *current.parents):
+        _refuse_old_file(directory / OLD_PROJECT_FILE, directory / "twinsmith.toml")
+        if (directory / "twinsmith.toml").is_file():
+            project = directory / "twinsmith.toml"
+            break
     for label, path in (("user file", user), ("project file", project)):
         if path is not None and path.is_file():
             if tomllib is None:
@@ -156,11 +160,7 @@ def resolve_physics_backend(env: Mapping[str, str] | None = None, cwd: Path | No
 def resolve(env: Mapping[str, str] | None = None, cli_toolsets: str | None = None,
             cwd: Path | None = None, home: Path | None = None) -> Config:
     env = os.environ if env is None else env
-    retired = [name for name in LEGACY if name in env]
-    if retired:
-        raise ValueError("Retired settings: " + "; ".join(
-            f"{name} is no longer supported; remove it and use {replacement(name, env[name])}"
-            for name in retired))
+    refuse_old_settings(env)
     enabled, runtime, badge = DEFAULT, True, False
     for _, data in _config_files(cwd, home):
         if "toolsets" in data.get("tools", {}):
@@ -194,6 +194,7 @@ def main(argv=None) -> int:
     parser.add_argument("--print", dest="field", required=True, choices=["physics_backend", "physics_backend_source"])
     args = parser.parse_args(argv)
     try:
+        refuse_old_settings(os.environ)      # run.sh asks first, so an old setting stops it before Kit starts
         backend, source = resolve_physics_backend()
     except ValueError as error:
         print(f"twinsmith configuration: {error}", file=__import__("sys").stderr)

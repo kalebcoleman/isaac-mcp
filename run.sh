@@ -4,7 +4,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-[ -f "$ROOT/scripts/legacy_env.sh" ] && . "$ROOT/scripts/legacy_env.sh"   # old variable names, for one release
 PORT="${TWINSMITH_PORT:-8766}"
 HEADLESS=0
 PHYSICS_BACKEND=""     # --physics-backend; else the configured one (see below)

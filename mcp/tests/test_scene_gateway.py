@@ -163,9 +163,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
 
 
 def test_scene_opt_out_rejects_typo_and_keeps_managed_sessions():
-    from twinsmith import legacy
-
-    retired = next(name for name in legacy.STOPS_STARTUP if name.endswith("SCENE_TOOLS"))
+    retired = gw.config.OLD_PREFIXES[0] + "SCENE_TOOLS"
     with pytest.raises(ValueError, match=retired):
         gw.build_server({retired: "of"})
     server = gw.build_server(

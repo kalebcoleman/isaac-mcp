@@ -20,7 +20,7 @@ SPEC = importlib.util.spec_from_file_location("workcell_asset_pack", REPO / "ext
 workcell = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(workcell)
 
-SETTINGS = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_WORKSPACE", "TWINSMITH_PROJECT", *pm.REMOVED_ENVIRONMENT)
+SETTINGS = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_WORKSPACE", "TWINSMITH_PROJECT")
 
 
 def sha(data: bytes) -> str:
@@ -48,7 +48,6 @@ def clean(monkeypatch, tmp_path):
     for name in SETTINGS:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.setattr(pm, "_announced", set())
     return tmp_path
 
 
@@ -165,28 +164,6 @@ def test_a_relative_setting_is_refused(clean, monkeypatch):
 def test_the_module_has_no_literal_home_path():
     source = (REPO / "mcp/twinsmith/pack_manifest.py").read_text()
     assert "~/" not in source and "expanduser(\"~" not in source
-
-
-# ---------------------------------------------------------------- removed settings
-
-
-@pytest.mark.parametrize("name", sorted(pm.REMOVED_ENVIRONMENT))
-def test_a_removed_variable_is_announced_once_not_ignored_silently(clean, monkeypatch, caplog, name):
-    monkeypatch.setenv(name, "1")
-    monkeypatch.setenv("TWINSMITH_ASSET_ROOT", str(clean / "root"))
-    with caplog.at_level("WARNING"):
-        first = pm.resolve_asset_root()
-        pm.resolve_asset_root()
-    assert any(name in warning and "no longer read" in warning for warning in first.warnings)
-    assert len([r for r in caplog.records if name in r.getMessage()]) == 1  # logged once per process
-    assert pm.REMOVED_ENVIRONMENT[name] in first.warnings[0]
-
-
-def test_the_replacement_variable_is_named(clean, monkeypatch):
-    for name, text in pm.REMOVED_ENVIRONMENT.items():
-        assert "TWINSMITH_ASSET_ROOT" in text or "pack" in text
-    monkeypatch.setenv(next(iter(pm.REMOVED_ENVIRONMENT)), "/x")
-    assert pm.removed_environment() and pm.removed_environment({}) == []
 
 
 # ---------------------------------------------------------------- project file

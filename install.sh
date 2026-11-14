@@ -23,7 +23,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-[ -f "$ROOT/scripts/legacy_env.sh" ] && . "$ROOT/scripts/legacy_env.sh"   # old variable names, for one release
 PORT=8766
 DISPLAY_NAME="${DISPLAY:-:0}"
 NO_SIM=0

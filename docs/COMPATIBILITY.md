@@ -84,7 +84,7 @@ A listed tool does not establish that a compatible bridge is running.
 | `6.0.0.1` | Best effort; partial test | Headless and windowed 20-check smoke runs completed, including a decodable recording. Simulated object and camera transforms were received. Kit logged asynchronous task errors. Lab and physical hardware were not tested. |
 | `6.0.0.0` | Best effort; partial test | The initial object-pose graph failed because this release uses an older ROS publisher. With the compatibility fix, headless and windowed 20-check smoke runs passed, and simulated object and camera transforms were received. Kit logged asynchronous task errors; Lab and physical hardware were not tested. |
 | Other 6.x releases | Not tested | A shared major version does not establish that this bridge, the work cell or Lab jobs work on a new release. |
-| `5.1.0.0` | **Claimed, with Isaac Lab 2.3.2.** Not auto-detected for the Sim tools, so name its interpreter with `TWINSMITH_SIM_PYTHON`; the Isaac Lab job tools can target it per call with `install` (for example `install="lab-2.3.2"`) while 3.0.0 stays the default. `run.sh` finds its bundled ROS libraries and `sim-tools` has adapters for its older APIs | Representative USD, URDF, xacro, SDF, MJCF, glTF and ROS map imports; warehouse quick start with a Carter driving 15.7 m; and Lab train, resume, compare, eval and play were exercised. On 2026-11-06, the previously failing SO-101 and Panda MJCF models imported and each moved one joint; Go2 imported with a floating base and fell under gravity. Limits: URDF export writes an empty robot on this build, so it is refused with a reason; `sim__lidar__create` needs `config`; USD scenes keep their own units, so check them. Earlier: the PR 70 retest and one project scene, where most generic tools worked. Isaac Sim 5.1 has no Newton, so it runs PhysX only. The work cell's full workflow was not verified on this build. |
+| `5.1.0.0` | **Claimed, with Isaac Lab 2.3.2.** Not auto-detected for the Sim tools, so name its interpreter with `TWINSMITH_SIM_PYTHON`; the Isaac Lab job tools can target it per call with `install` (for example `install="lab-2.3.2"`) while 3.0.0 stays the default. `run.sh` finds its bundled ROS libraries and `sim-tools` has adapters for its older APIs | Representative USD, URDF, xacro, SDF, MJCF, glTF and ROS map imports; warehouse quick start with a Carter driving 15.7 m; and Lab train, resume, compare, eval and play were exercised. On 2026-11-06, the previously failing SO-101 and Panda MJCF models imported and each moved one joint; Go2 imported with a floating base and fell under gravity. Limits: URDF export writes an empty robot on this build, so it is refused with a reason; `sim__lidar(action="create")` needs `config`; USD scenes keep their own units, so check them. Earlier: the PR 70 retest and one project scene, where most generic tools worked. Isaac Sim 5.1 has no Newton, so it runs PhysX only. The work cell's full workflow was not verified on this build. |
 | Earlier releases | Not tested | No compatibility claim. |
 
 The 6.2 lock selects NumPy 2.3.1, matching the inspected `isaacsim-kernel` 6.2.0.0 wheel.
@@ -95,7 +95,7 @@ Existing environments made from an older lock may differ; inspect them before ch
 - Historical short training and windowed play checks used Isaac Lab **3.0.0 / Isaac Sim 6.2.0.0** on the machines
   described in the [Lab guide](TOOLS-ISAACLAB.md#verified-vs-version-and-platform-limitations). Those checks do not
   establish long-running training, every task, or Lab behavior on the older Sim probes above.
-- The two claimed Lab pairs are **3.0.0 with Sim 6.2** and **2.3.2 with Sim 5.1**; `isaaclab__install_info` reports `tested: true` for them and false for any other. On both, a real Cartpole job went through train, resume, compare, eval and play with `rsl_rl` through the tools; 2.3.2 also ran tiny jobs with `rl_games`, `skrl` and `sb3`. That is not proof of every task or of long training. Task ids differ between them (`Isaac-Cartpole-v0` on 2.3.2, `Isaac-Cartpole` on 3.0.0), and 2.3.2 needs `rl_library` because its scripts are per library. Lab 3 tasks can default to Newton; pass `physics="physx"` to the MCP job tool to select PhysX where the task has that preset. See the [Lab guide](TOOLS-ISAACLAB.md#isaaclab__train) for task-specific limits.
+- The two claimed Lab pairs are **3.0.0 with Sim 6.2** and **2.3.2 with Sim 5.1**; `isaaclab__inspect(action="install")` reports `tested: true` for them and false for any other. On both, a real Cartpole job went through train, resume, compare, eval and play with `rsl_rl` through the tools; 2.3.2 also ran tiny jobs with `rl_games`, `skrl` and `sb3`. That is not proof of every task or of long training. Task ids differ between them (`Isaac-Cartpole-v0` on 2.3.2, `Isaac-Cartpole` on 3.0.0), and 2.3.2 needs `rl_library` because its scripts are per library. Lab 3 tasks can default to Newton; pass `physics="physx"` to the MCP job tool to select PhysX where the task has that preset. See the [Lab guide](TOOLS-ISAACLAB.md#isaaclab__train) for task-specific limits.
 - NVIDIA's published Isaac Lab and Sim pairings are shown below. The release dates are UTC. They describe NVIDIA's
   versions, not additional MCP tests: the 6.0 and 6.1 Sim smoke checks above did **not** test Isaac Lab.
 
@@ -132,7 +132,7 @@ package-version segment, so use the package metadata to distinguish exact builds
 NVIDIA also documents Help > About and the installation's `VERSION` file.
 
 An existing separate environment can be selected with `TWINSMITH_SIM_PYTHON=/absolute/path/to/sim-env/bin/python` for
-`./run.sh`, or in the MCP server's environment before using `sim__launch`. Selecting an interpreter is not a version
+`./run.sh`, or in the MCP server's environment before using `sim__session(action="launch")`. Selecting an interpreter is not a version
 or dependency check. Keep the locked 6.2 environment intact when experimenting, use a disposable scene and an
 unused bridge port and ROS domain, and verify the selected PID before scene-changing calls. See
 [host tools](TOOLS-HOST.md#optional-simulator-sessions) for managed-session safeguards and
@@ -172,8 +172,8 @@ Isaac Sim 6.2.0 (Ubuntu 22.04, bundled Humble bridge, RoboStack Humble client, 2
 `run_python` and `ros2 topic echo`. The 6.0 behaviour is what the tutorials describe; it was not
 re-run here.
 
-Before building a graph, look the node up with `sim__graph__node_types` (by type id or UI name): it
-returns this build's exact type id, ports and allowed token values. `sim__graph__build` creates a
+Before building a graph, look the node up with `sim__graph(action="node_types")` (by type id or UI name): it
+returns this build's exact type id, ports and allowed token values. `sim__graph(action="build")` creates a
 whole graph in one call and handles notes (b) and (c) for you: it stores a token's value when you
 give its key, and it creates Make Array's extra `inputs:inputN` ports. See
 [TOOLS-SCENE.md](TOOLS-SCENE.md).
@@ -194,7 +194,7 @@ og.Controller.connect("/Graph/frame_name.inputs:value", "/Graph/make_array.input
 `{"toStage": "Convert to stage units", "toMeters": "Convert to meters"}`; the default is
 `Convert to stage units`). Set the **value** string. A key such as `toStage` is not one of the allowed
 values; such a wrong token makes the node output zeros without an error (found while building
-`sim__graph__build`; `sim__graph__inspect` lists the node's compute errors). `sim__graph__build` stores the value when given the key.
+`sim__graph(action="build")`; `sim__graph(action="inspect")` lists the node's compute errors). `sim__graph(action="build")` stores the value when given the key.
 
 ### (c) Make Array needs its second input created
 
@@ -207,7 +207,7 @@ og.Controller.create_attribute(node, "inputs:input1", og.Type(og.BaseDataType.TO
                                og.AttributePortType.ATTRIBUTE_PORT_TYPE_INPUT)
 ```
 
-`sim__graph__build` creates these inputs itself.
+`sim__graph(action="build")` creates these inputs itself.
 
 ### (d) The 2D RTX lidar
 
@@ -262,7 +262,7 @@ graphs unless the lab asks for its own graph.
 - A flattened checkpoint is large (about 97 MB for the RAS545 scene), because saves flatten everything.
 - A LiDAR topic missing after reopening a saved scene has a known cause and fix; see [saved LiDAR scenes](TOOLS-SCENE.md#saved-lidar-scenes-and-scan).
 - In the RAS545 starter, the ground plane is at z=-0.75, and it reports `composition_errors: 2` on opening. Neither is a fault of the tools.
-- Lab instructions that assume ROS domain 0 need adapting if another simulator holds it. A saved graph can author its own domain: a `ROS2Context` node with `useDomainIDEnvVar` off publishes on its authored `domain_id`, whatever `ROS_DOMAIN_ID` and `sim__stage__info` say, so a shell on another domain sees no topics. Lab files were seen authoring different domains, so check the graph; `sim__graph__inspect` adds `ros_domain_note` when they differ.
+- Lab instructions that assume ROS domain 0 need adapting if another simulator holds it. A saved graph can author its own domain: a `ROS2Context` node with `useDomainIDEnvVar` off publishes on its authored `domain_id`, whatever `ROS_DOMAIN_ID` and `sim__stage(action="info")` say, so a shell on another domain sees no topics. Lab files were seen authoring different domains, so check the graph; `sim__graph(action="inspect")` adds `ros_domain_note` when they differ.
 - OpenCode Code Mode has no timers, so agents use shell sleeps, and tool results arrive as JSON inside a `result` string.
 
 ### ROS 2 distro
