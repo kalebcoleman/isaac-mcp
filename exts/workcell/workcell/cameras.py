@@ -66,7 +66,7 @@ REQUIRED_CONFIG_PATHS = (
     "robot.reach_m",
     "interfaces.wrist_camera_topics", "interfaces.overhead_camera_topics",
 )
-FORBIDDEN_PATH_TOKENS = ("ur5e-digital-twin", "isaac-mcp-salvage", "/.cache/", "/raw/")
+FORBIDDEN_PATH_TOKENS = ("ur5e-digital-twin", "/.cache/", "/raw/")
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 

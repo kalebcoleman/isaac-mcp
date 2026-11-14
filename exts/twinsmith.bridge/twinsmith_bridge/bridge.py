@@ -476,10 +476,6 @@ class McpBridge:
         address cannot be bound: a bridge on some other port is one no client would find."""
         if self._socket is not None:
             raise RuntimeError(f"the bridge is already listening on port {self._port}")
-        old = knobs.old_settings()      # every way of opening the socket comes here, the work cell's too
-        if old:
-            raise RuntimeError(f"isaac-mcp settings are set and no longer read: {', '.join(old)}. Rename each "
-                               "ISAAC_MCP_<X> to TWINSMITH_<X>, or remove it (see docs/MIGRATING.md); nothing listens until then.")
         listener = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET, socket.SOCK_STREAM)
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:

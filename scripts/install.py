@@ -33,7 +33,6 @@ sys.path.insert(0, os.path.join(REPO, "exts", "twinsmith.bridge"))
 from twinsmith_bridge.knobs import BIND, PORT, SETTINGS_SUBTREE, TOOL_MODULES, TOOL_PATHS  # noqa: E402
 
 EXTENSIONS = ["twinsmith.bridge"]
-OLD_BRIDGE_EXTENSION = "isaac.mcp.bridge"  # the id before 0.3.0; --remove cleans up its registration too
 DEFAULT_PORT = 8766
 BRIDGE_KEY = SETTINGS_SUBTREE.rsplit("/", 1)[1]
 
@@ -133,9 +132,6 @@ def install(settings, args):
     enabled = as_list(settings.app.get("enabled"))
     others = [item for item in enabled if not any(item == name or item.startswith(name + "-") for name in names)]
     if args.remove:
-        others = [item for item in others if item != OLD_BRIDGE_EXTENSION and not item.startswith(OLD_BRIDGE_EXTENSION + "-")]
-        if settings.extensions.pop(OLD_BRIDGE_EXTENSION, None) is not None:
-            settings.changes.append(f"- /persistent/exts/{OLD_BRIDGE_EXTENSION}")
         settings.edit(settings.app, "userFolders", [folder for folder in search if folder not in folders])
         settings.edit(settings.app, "enabled", others)
         settings.put(PORT.leaf, None)

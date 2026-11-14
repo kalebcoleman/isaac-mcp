@@ -162,10 +162,7 @@ def test_scene_opt_out_is_per_server_offline_and_after_live_refresh(monkeypatch)
         asyncio.run(run())
 
 
-def test_scene_opt_out_rejects_typo_and_keeps_managed_sessions():
-    retired = gw.config.OLD_PREFIXES[0] + "SCENE_TOOLS"
-    with pytest.raises(ValueError, match=retired):
-        gw.build_server({retired: "of"})
+def test_minimal_toolsets_keep_managed_sessions():
     server = gw.build_server(
         {"TWINSMITH_TOOLSETS": "minimal,+launch"}
     )
