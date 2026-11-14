@@ -1542,7 +1542,7 @@ Read the current workcell build report.
 
 No arguments.
 
-## `robosim`: RoboSimStudio real-to-sim runs and MuJoCo system identification, each in its own environment
+## `robosim`: RoboSimStudio real-to-sim and MuJoCo system identification
 
 Toolset `robosim` is off until you select it with `+robosim`. Reference: [ROBOSIM.md](ROBOSIM.md). 2 tools, listed as 2: `robosim`, `sysid`.
 

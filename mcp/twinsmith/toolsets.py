@@ -24,7 +24,7 @@ TOOLSETS = {
     "ros2": Toolset("ROS 2 transforms, graphs and occupancy maps"),
     "kit_debug": Toolset("Inspect Kit logs and operate its UI"),
     "workcell": Toolset("UR5e workcell tools"),
-    "robosim": Toolset("RoboSimStudio real-to-sim runs and MuJoCo system identification, each in its own environment"),
+    "robosim": Toolset("RoboSimStudio real-to-sim and MuJoCo system identification"),
     "input": Toolset("Desktop mouse and keyboard input", explicit_only=True),
     "launch": Toolset("Launch and stop simulator processes", explicit_only=True),
     "extensions": Toolset("Tools from uncatalogued extension namespaces", True),

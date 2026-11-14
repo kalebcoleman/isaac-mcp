@@ -95,7 +95,7 @@ which keeps the tool list small. The counts below are listed tools; related tool
 | `ros2` | off | 3 | ROS 2 transforms, graphs and occupancy maps |
 | `kit_debug` | off | 2 | Inspect Kit logs and operate its UI |
 | `workcell` | off | 7 | UR5e workcell tools |
-| `robosim` | off | 2 | RoboSimStudio real-to-sim runs and MuJoCo system identification, each in its own environment |
+| `robosim` | off | 2 | RoboSimStudio real-to-sim and MuJoCo system identification |
 | `input` | explicit only | 1 | Desktop mouse and keyboard input |
 | `launch` | explicit only | 1 | Launch and stop simulator processes |
 | `extensions` | on | 0 | Tools from uncatalogued extension namespaces |

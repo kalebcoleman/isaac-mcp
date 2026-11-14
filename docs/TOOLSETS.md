@@ -27,7 +27,7 @@ rows for the server you have installed, with the current state of each.
 | `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
 | `kit_debug`: Inspect Kit logs and operate its UI | off | `sim__logs`, `sim__ui` |
 | `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__eval`, `workcell__jenga`, `workcell__perception`, `workcell__planning`, `workcell__real2sim`, `workcell__robot` |
-| `robosim`: RoboSimStudio real-to-sim runs and MuJoCo system identification, each in its own environment | off | `robosim`, `sysid` |
+| `robosim`: RoboSimStudio real-to-sim and MuJoCo system identification | off | `robosim`, `sysid` |
 | `input`: Desktop mouse and keyboard input | explicit only | `computer` |
 | `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
 | `extensions`: Tools from uncatalogued extension namespaces | on | none |
