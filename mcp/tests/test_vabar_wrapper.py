@@ -67,7 +67,20 @@ def test_bench_defaults_to_upstreams_plan_and_starts_nothing(workspace):
 def test_a_planned_bench_reports_upstreams_refusal(workspace):
     result = vabar.call(vabar.checkout(workspace=workspace), "bench", cell="nope/L1")
     assert result["code"] == "UPSTREAM_FAILED" and result["exit_code"] == 2 and "no cell 'nope/L1'" in result["error"]
-    assert not (workspace / "runs/vabar").exists()
+    assert "refused the cell" in result["error"] and not (workspace / "runs/vabar").exists()
+
+
+def test_a_planned_bench_that_times_out_is_not_a_refused_cell(workspace, monkeypatch):
+    monkeypatch.setattr(vabar.sibling, "run", lambda *a, **k: {"exit_code": None, "timed_out": True, "stdout": "", "stderr": ""})
+    result = vabar.call(vabar.checkout(workspace=workspace), "bench", cell="tool_hanging/L1")
+    assert result["code"] == "UPSTREAM_FAILED" and result["error"] == "vabar bench --print failed: did not finish in 120 s."
+
+
+def test_a_planned_bench_refuses_a_taken_name(workspace):
+    (workspace / "runs/vabar/taken").mkdir(parents=True)
+    co = vabar.checkout(workspace=workspace)
+    assert vabar.call(co, "bench", cell="tool_hanging/L1", name="taken")["code"] == "ALREADY_EXISTS"
+    assert calls(co.root) == []
 
 
 def test_run_passes_a_bus_timeout(workspace):

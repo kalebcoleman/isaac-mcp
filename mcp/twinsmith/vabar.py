@@ -174,13 +174,16 @@ def call(co: sibling.Checkout, action: str, task=None, solve="routine", graph=No
         if action == "bench" and print_only:
             # Upstream's --print resolves the cell's jobs and exits before any warmup, MPS daemon or folder; the GPU is
             # hidden from it anyway. It asks no model, so it gets no key, endpoint or token.
+            if folder.exists():
+                raise sibling.Refusal("ALREADY_EXISTS", f"{folder} exists; choose another name.")
             done = sibling.run([*command, "--print"], cwd=co.root, env_pass=gap.PLAIN_ENV,
                                env_set={**skills_env, "CUDA_VISIBLE_DEVICES": ""}, timeout_s=120, stdout_chars=sibling.WHOLE)
             summary = [line for line in done["stderr"].splitlines() if line.strip()]
             if done["exit_code"] != 0:
+                reason = "did not finish in 120 s." if done["timed_out"] else summary[-1] if summary else "gave no reason."
+                what = "refused the cell or config" if done["exit_code"] == 2 else "failed"
                 return sibling.answer("vabar", action, info, exit_code=done["exit_code"], code="UPSTREAM_FAILED",
-                                      error="vabar bench --print refused the cell: " + (summary[-1] if summary else "no reason given."),
-                                      stderr=done["stderr"])
+                                      error=f"vabar bench --print {what}: {reason}", stderr=done["stderr"])
             return sibling.answer("vabar", action, info, exit_code=0, result={
                 "planned": command, "summary": summary, "jobs": [line for line in done["stdout"].splitlines() if line.strip()],
                 "note": "Nothing ran. Call again with print_only=false (and the same name) to run it as a job; it uses the GPU."})
@@ -219,7 +222,7 @@ def register(server, *, workspace=None, root=None):
         workers: Annotated[int, Field(description="bench: worker processes, 1 to 4.", ge=1, le=4)] = 1,
         print_only: Annotated[bool, Field(description="bench: return upstream's resolved jobs (--print, CPU, writes nothing) without running.")] = True,
         name: Annotated[str | None, Field(description="run/bench: run folder name under <workspace>/runs/vabar; default action and time.")] = None,
-        bus_timeout_s: Annotated[int | None, Field(description="run: seconds a graph's tool call may wait (upstream --bus-timeout, default 30; bench uses 180).", ge=30, le=3600)] = None,
+        bus_timeout_s: Annotated[int | None, Field(description="run: seconds a graph's tool call may wait (upstream --bus-timeout, default 30; bench cells use 180, cable cells 600).", ge=30, le=3600)] = None,
         run: Annotated[str | None, Field(description="results: run folder name; omit to list the newest runs.")] = None,
         timeout_s: Annotated[float, Field(description="run/bench: job time limit in seconds.", gt=0, le=604800)] = 21600,
         allow_concurrent_gpu: Annotated[bool, Field(description="run/bench: knowingly start beside another GPU job or a running Isaac Sim.")] = False,

@@ -274,8 +274,9 @@ own evaluated the same way.
 **Status.** The wrappers are done (#115, #127), and the refusal test is in place:
 - The environments are built on the ASU PC. `vabar list`, `bench` plans and `gap validate` run on CPU, and one `gt`
   graph episode has run on the GPU ([details](PLANNING-EVAL.md#what-has-been-verified)).
-- The published-cell rerun is still open. The bench cells' perception graphs need SAM 3, whose gated weights the owner's
-  Hugging Face account must be granted. `cable_routing/L1` uses the `gt` graph and can run without them.
+- The published-cell rerun is still open. Eight of the twelve bench cells need SAM 3, whose gated weights the owner's
+  Hugging Face account must be granted. The cable cells (`cable_routing/L1` uses the `gt` graph) run with upstream's
+  palette segmenter and need no access.
 - The Jenga skill graph is still open.
 
 ### Phase 7: parts beyond Jenga

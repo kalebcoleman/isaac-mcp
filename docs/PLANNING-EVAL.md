@@ -45,8 +45,11 @@ Graph-as-Policy's base dependencies include cuRobo and `cuda-core[cu12]`, and VA
 ```
 
 `gap skills check --download` needs `HF_TOKEN`, and the SAM 3 weights are gated: the Hugging Face account behind the
-token must also be granted access at `https://huggingface.co/facebook/sam3`. VABAR's perception graphs (every bench cell's
-`gap_perception` reference graph calls `sam3.segment_text`) fail without it; the `gt` graphs and the routines do not use it. VABAR's `warmup` compiles the renderer's
+token must also be granted access at `https://huggingface.co/facebook/sam3`. Eight of VABAR's twelve bench cells fail
+without it: their reference graphs, `gap_perception` (tool hanging, gear meshing, syringe packing) and `gap_perception_loop`
+(tool sorting), call `sam3.segment_text`. The four cable cells run with upstream's palette segmenter, which `bench` selects
+(`ROBOSIMSTUDIO_SEGMENTATION_BACKEND=palette`); a plain `run` of a cable graph does not set it, and the runtime then picks
+SAM 3. The routines do not use it. VABAR's `warmup` compiles the renderer's
 shader cache and Warp kernels once, in 5 to 8 minutes; a graph cell's first run fails without it. Graph-as-Policy asks
 for 24 GB of GPU memory: run it on a PC that has that. `gap(action="status")` reports a smaller GPU rather than working
 around it.
@@ -175,8 +178,8 @@ Like `allow_paid`, a project `twinsmith.toml` cannot set it. Read a generated gr
 |---|---|---|
 | `status` | Nothing upstream | Checkout, commit and pin; the commits and pins of the Graph-as-Policy and skill checkouts; whether `warmup` has run (its stamps in the renderer cache) |
 | `list` | `python -m vabar list` | Every `suite/variant`. Read-only |
-| `run` | `python -m vabar run --task <t> --solve routine\|graph\|idle [--graph <label>] [--episodes ...] [--bus-timeout <s>]` | A job that uses the GPU. `graph` is a label the task ships, such as `gt`. `bus_timeout_s` (30 to 3600) is how long a graph's tool call may wait; upstream's default is 30 s, and its README and every bench job use 180 because a cold tool server takes longer to build |
-| `bench` | `python -m vabar bench --cell <c> --solve ... [--limit n] --workers <1-4>` | `print_only=true` (the default) runs upstream's `--print` with the GPU hidden: it writes nothing and returns the resolved jobs (tasks, episodes, flags) or upstream's refusal of an unknown cell. `false` runs it as a job that uses the GPU; pass the same `name` to get the folder the plan printed |
+| `run` | `python -m vabar run --task <t> --solve routine\|graph\|idle [--graph <label>] [--episodes ...] [--bus-timeout <s>]` | A job that uses the GPU. `graph` is a label the task ships, such as `gt`. `bus_timeout_s` (30 to 3600) is how long a graph's tool call may wait; upstream's default is 30 s; bench cells use 180 (the cable cells 600), because a cold tool server takes longer to build |
+| `bench` | `python -m vabar bench --cell <c> --solve ... [--limit n] --workers <1-4>` | `print_only=true` (the default) runs upstream's `--print` with the GPU hidden: it writes nothing and returns the resolved jobs (tasks, episodes, flags) or upstream's refusal of an unknown cell. `false` runs it as a job that uses the GPU; pass the same `name` to get the folder the plan printed (a name whose folder exists is refused either way) |
 | `results` | Nothing upstream | Reads the `episode_results.jsonl` files in a run folder (at most 200, 8 MB each; links and files outside the folder are skipped) and returns successes per task and solver, with the three commonest reasons the others failed (upstream's `termination_reason`); without `run`, the newest run folders |
 
 `warmup` and `studio` are not wrapped: the owner runs the one-time warmup, and `studio` serves a viewer on the network.
