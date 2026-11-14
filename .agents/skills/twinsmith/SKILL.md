@@ -31,8 +31,8 @@ what is off and how to enable more; `help` names the toolset when the tool for a
 | Profile | Toolsets | Listed tools |
 |---|---|--:|
 | `default` | `core` | 6 |
-| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `extensions` | 49 |
-| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `input`, `launch`, `extensions` | 51 |
+| `all` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `extensions` | 50 |
+| `all,+input,+launch` | `core`, `screen`, `sim`, `assets`, `real2sim`, `lab`, `ros2`, `workcell`, `cad`, `input`, `launch`, `extensions` | 52 |
 <!-- /generated -->
 
 To find the tool for a task, call `help(task="...")`: it names the tool, and the toolset when that is off. Only `core` is on by
@@ -40,7 +40,8 @@ default. A toolset that is off can be turned on without a restart with `toolsets
 `launch` (desktop input, managed simulator sessions) are never enabled that way and are never in a profile. The groups:
 - `+sim` is every tool that works inside Kit: scene, physics, sensors, `run_python`, Kit's log and UI.
 - `+assets` imports, `+screen` captures the desktop, and `+workcell` is the lab's UR5e work cell.
-- `+lab` is Isaac Lab and `run_script`, and `+real2sim` is RoboSimStudio.
+- `+lab` is Isaac Lab and `run_script`, `+real2sim` is RoboSimStudio, and `+cad` is the `hardware` tool (KiCad checks,
+  fab files and renders).
 To change the selection for every session, set `~/.config/twinsmith/config.toml` (`[tools] toolsets = ["default", "+sim",
 "+lab"]`) or `TWINSMITH_TOOLSETS` and restart the server. Toolsets control what is listed, not what is allowed: the bridge
 token and read-only mode do that.

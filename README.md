@@ -100,6 +100,7 @@ argument.
 | `lab`: Isaac Lab jobs and script jobs | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics`, `run_script` |
 | `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
 | `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__jenga`, `workcell__perception`, `workcell__robot` |
+| `cad`: PCB checks, fab files and renders | off | `hardware` |
 | `input`: Desktop mouse and keyboard input | explicit only | `computer` |
 | `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
 | `extensions`: Tools from uncatalogued extension namespaces | off | none |

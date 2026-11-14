@@ -21,6 +21,7 @@ TOOLSETS = {
     "lab": Toolset("Isaac Lab jobs and script jobs"),
     "ros2": Toolset("ROS 2 transforms, graphs and occupancy maps"),
     "workcell": Toolset("UR5e workcell tools"),
+    "cad": Toolset("PCB checks, fab files and renders"),
     "input": Toolset("Desktop mouse and keyboard input", explicit_only=True),
     "launch": Toolset("Launch and stop simulator processes", explicit_only=True),
     "extensions": Toolset("Tools from uncatalogued extension namespaces"),
@@ -38,6 +39,7 @@ _ROOTS = {
     "ros2": "sim__ros2__tf_setup sim__graph sim__map__occupancy",
     "input": "computer",
     "launch": "sim__session",
+    "cad": "hardware",
 }
 
 MEMBERS = {

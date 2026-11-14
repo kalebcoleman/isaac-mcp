@@ -58,6 +58,7 @@ Toolsets control what is listed, not what is allowed: the bridge token and `TWIN
 | `lab` | off | 5 | Isaac Lab jobs and script jobs |
 | `ros2` | off | 3 | ROS 2 transforms, graphs and occupancy maps |
 | `workcell` | off | 4 | UR5e workcell tools |
+| `cad` | off | 1 | PCB checks, fab files and renders |
 | `input` | explicit only | 1 | Desktop mouse and keyboard input |
 | `launch` | explicit only | 1 | Launch and stop simulator processes |
 | `extensions` | off | 0 | Tools from uncatalogued extension namespaces |
