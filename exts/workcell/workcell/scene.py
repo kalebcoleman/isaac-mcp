@@ -12,7 +12,7 @@ ROLES = ("robot", "bench", "base_plate", "bota", "quick_changer", "rg2", "finger
 # What a Newton build has not shown yet. PhysX is the work cell's qualified engine; see the README's Newton section.
 NEWTON_LIMITATIONS = [
     "Newton: the arm's drives are the config's newton.drives (per engine), not the pack's PhysX gains; tracking differs.",
-    "Newton: the Bota force/torque read and the cameras are not qualified on this engine.",
+    "Newton: the cameras are not qualified on this engine; the Bota force/torque read passes the static gravity check.",
 ]
 
 
@@ -80,6 +80,8 @@ def _preflight(config_path, mode):
         raise ValueError("invalid jenga tower position")
     if "bench_top" in config:
         check_bench_top(config["bench_top"])
+    if "contact" in config:
+        check_contact(config["contact"])
     tower.realize(config)
     _bom_rows(config, config_path)
     pack = asset_pack.resolve_pack(config)
@@ -93,6 +95,50 @@ def _preflight(config_path, mode):
     return config, raw, pack, assets
 
 
+def contact_materials(stage, contact, root="/World"):
+    """Same contact on both engines: bind a default material to every collider without one (Newton would give it
+    mu 1.0, PhysX 0.5), make every physics material combine by the configured mode (MuJoCo's rule is max) and
+    not bounce. Returns counts. Newton's single coefficient is set in newton_cell.prepare."""
+    from pxr import Sdf, Usd, UsdPhysics, UsdShade
+
+    default = UsdShade.Material.Define(stage, f"{root}/CellDefaultContactMaterial")
+    api = UsdPhysics.MaterialAPI.Apply(default.GetPrim())
+    api.CreateStaticFrictionAttr().Set(float(contact["default_static_friction"]))
+    api.CreateDynamicFrictionAttr().Set(float(contact["default_dynamic_friction"]))
+    bound = 0
+    for prim in Usd.PrimRange(stage.GetPrimAtPath(root)):
+        if prim.HasAPI(UsdPhysics.CollisionAPI):
+            material, _ = UsdShade.MaterialBindingAPI(prim).ComputeBoundMaterial(materialPurpose="physics")
+            if not material or not material.GetPrim().HasAPI(UsdPhysics.MaterialAPI):
+                UsdShade.MaterialBindingAPI.Apply(prim).Bind(default, materialPurpose="physics")
+                bound += 1
+    materials = [prim for prim in Usd.PrimRange(stage.GetPrimAtPath(root)) if prim.HasAPI(UsdPhysics.MaterialAPI)]
+    for prim in materials:
+        UsdPhysics.MaterialAPI(prim).CreateRestitutionAttr().Set(0.0)
+        prim.AddAppliedSchema("PhysxMaterialAPI")
+        prim.CreateAttribute("physxMaterial:frictionCombineMode", Sdf.ValueTypeNames.Token).Set(contact["combine_mode"])
+        prim.CreateAttribute("physxMaterial:restitutionCombineMode", Sdf.ValueTypeNames.Token).Set("min")
+    return {"default_bound_to": bound, "materials": len(materials), "combine_mode": contact["combine_mode"]}
+
+
+CONTACT_KEYS = {"default_static_friction", "default_dynamic_friction", "combine_mode", "newton_friction"}
+
+
+def check_contact(contact):
+    if not isinstance(contact, dict) or set(contact) != CONTACT_KEYS:
+        raise ValueError(f"contact needs exactly {sorted(CONTACT_KEYS)}")
+    values = (contact["default_static_friction"], contact["default_dynamic_friction"])
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0 for v in values):
+        raise ValueError("contact default friction must be finite numbers >= 0")
+    if values[1] > values[0]:
+        raise ValueError("contact.default_dynamic_friction must not exceed default_static_friction")
+    if contact["combine_mode"] != "max":
+        raise ValueError("contact.combine_mode must be max: MuJoCo (Newton) always combines by max, so any other "
+                         "PhysX mode would make the two engines disagree")
+    if contact["newton_friction"] not in ("static", "dynamic"):
+        raise ValueError("contact.newton_friction must be static or dynamic")
+
+
 BENCH_TOP_KEYS = {"panel_path", "color_rgb", "roughness", "static_friction", "dynamic_friction"}
 
 
@@ -102,9 +148,14 @@ def check_bench_top(top):
         raise ValueError(f"bench_top needs exactly {sorted(BENCH_TOP_KEYS)}")
     if not isinstance(top["panel_path"], str) or not top["panel_path"] or top["panel_path"].startswith("/"):
         raise ValueError("bench_top.panel_path must be a path relative to /World/Bench")
+    from pxr import Sdf
+
+    if not Sdf.Path.IsValidPathString(f"/World/Bench/{top['panel_path']}"):
+        raise ValueError(f"bench_top.panel_path {top['panel_path']!r} is not a valid USD prim path")
     rgb = top["color_rgb"]
     if (not isinstance(rgb, (list, tuple)) or len(rgb) != 3
-            or not all(isinstance(v, (int, float)) and math.isfinite(v) and 0 <= v <= 1 for v in rgb)):
+            or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and 0 <= v <= 1
+                       for v in rgb)):
         raise ValueError("bench_top.color_rgb must be three numbers from 0 to 1")
     numbers = {key: top[key] for key in ("roughness", "static_friction", "dynamic_friction")}
     if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0
@@ -247,12 +298,31 @@ def _replace_tower(stage, config, assets, rows, parts, profile=None, seed=None, 
                 raise RuntimeError("Could not replace Jenga tower")
             _tag_parts(stage, updated)
             audit = _finish_scene(stage, config, assets, updated, rows, engine)
+            if "contact" in config:
+                contact_materials(stage, config["contact"])
             if stage.GetCompositionErrors():
                 raise RuntimeError("Replacement tower has USD composition errors")
     except Exception:
         root.ImportFromString(snapshot)
         raise
     return report, updated, audit
+
+
+def bodies_below(stage, start):
+    """Rigid-body names reached from ``start`` through joints, start included: what the start body carries."""
+    from pxr import Usd, UsdPhysics
+
+    joints = [UsdPhysics.Joint(prim) for prim in Usd.PrimRange(stage.GetPseudoRoot()) if prim.IsA(UsdPhysics.Joint)]
+    found, frontier = {str(start)}, [str(start)]
+    while frontier:
+        parent = frontier.pop()
+        for joint in joints:
+            if [str(p) for p in joint.GetBody0Rel().GetTargets()] == [parent]:
+                for child in joint.GetBody1Rel().GetTargets():
+                    if str(child) not in found:
+                        found.add(str(child))
+                        frontier.append(str(child))
+    return [stage.GetPrimAtPath(path).GetName() for path in sorted(found)]
 
 
 class Workcell:
@@ -327,6 +397,7 @@ class Workcell:
             audit = _finish_scene(stage, config, assets, parts, rows, engine)
             top_report = bench_top(stage, config["bench_top"]) if "bench_top" in config else None
             room_report = rooms.place(stage, environment, room_url) if room_url else None
+            contact_report = contact_materials(stage, config["contact"]) if "contact" in config else None
             newton_report = None
             if engine == "newton":
                 from . import newton_cell
@@ -342,6 +413,7 @@ class Workcell:
                             "bom_audit": audit, **({"newton": newton_report} if newton_report else {}),
                             **({"bench_top": top_report} if top_report else {}),
                             **({"environment": room_report} if room_report else {}),
+                            **({"contact": contact_report} if contact_report else {}),
                             "limitations": [line for line in robot_report["limitations"]
                                             if not (engine == "newton" and "drives are preserved" in line)]
                             + camera_report["limitations"] + block_report["limitations"]
@@ -370,6 +442,37 @@ class Workcell:
             self._report["newton"] = newton_cell.prepare(stage, config, self._report["robot"]["assembly_path"],
                                                          omni.timeline.get_timeline_interface())
         return copy.deepcopy(report)
+
+    def read_wrench(self):
+        """The Bota reading now, plus the engine's mass of every body below the sensor (bota and everything its
+        mount chain carries), so a caller can compare the static force with that weight."""
+        if self._runtime is None or self._report.get("state") != "ready":
+            raise RuntimeError("Build the workcell before reading its sensor")
+        import omni.usd
+        from sim_tools import physics
+        from .physics_compat import selected_engine
+        from . import sensors
+
+        stage, config, _, _ = self._runtime
+        if omni.usd.get_context().get_stage() != stage:
+            raise RuntimeError("Workcell stage changed; quick_start is required")
+        robot = self._report["robot"]
+        engine = selected_engine()
+        view = physics.view_for(robot["articulation_root"], articulation=True)
+        reading = sensors.read_bota_wrench(stage, view, robot, config,
+                                           physics_time_s=physics.manager().get_simulation_time(), backend=engine)
+        below = bodies_below(stage, robot["bota_body_path"])
+        names = view.shared_metatype.link_indices
+        masses = sensors._numpy(view.get_masses()).reshape(-1)
+        links = {name: float(masses[names[name]]) for name in below if name in names}
+        total = sum(links.values())
+        gravity = 0.0 if self._report.get("robot_gravity_disabled") else abs(self._report.get("gravity_m_s2", -9.81))
+        reading["load_below_sensor"] = {"links_kg": links, "missing": sorted(set(below) - set(links)),
+                                        "mass_kg": total, "gravity_m_s2": gravity, "weight_n": total * gravity,
+                                        "note": "Engine masses. At rest the force magnitude should equal weight_n; "
+                                                "it includes the whole modelled Bota body, which a real Rokubi "
+                                                "measures only partly and tares."}
+        return reading
 
     def shutdown(self):
         self._runtime = None

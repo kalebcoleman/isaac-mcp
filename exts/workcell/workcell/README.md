@@ -27,7 +27,7 @@ default: add `+workcell`):
 | Group | Actions | Purpose |
 | --- | --- | --- |
 | `workcell__cell` | `quick_start`, `status`, `shutdown` | Build a stopped pack-backed scene, read its report, or release workcell state without clearing the stage |
-| `workcell__robot` | `status` | Read the robot build report |
+| `workcell__robot` | `status`, `wrench` | Read the robot build report, or the simulated Bota F/T sensor with the weight it carries |
 | `workcell__perception` | `status` | Read camera configuration, not captured sensor data |
 | `workcell__jenga` | `build`, `status` | Replace the tower on a stopped timeline or read its build report |
 
@@ -36,10 +36,11 @@ default: add `+workcell`):
 `workcell__cell(action="status")` returns the full report. `simple_room` references NVIDIA's
 Simple Room from the Isaac Sim assets server (checked before the stage is replaced) with its
 ground level with the bench feet; room parts inside the bench are deactivated, every room
-collider but the ground plane is off, and a room physics scene, room rigid bodies, instancing
-and room lights are neutralised (deactivated, kinematic, de-instanced). Physics mode uses gravity; mirror mode uses zero gravity, not a
+collider but the ground plane is off. A physics scene, joints and lights the room brings are
+deactivated, its articulation roots removed, its rigid bodies made kinematic and its instanced
+parts de-instanced. Physics mode uses gravity; mirror mode uses zero gravity, not a
 real-robot connection. Replacing an unsaved stage requires explicit consent. There is no
-extension panel or legacy ROS graph setup, and no implemented force capture, planning,
+extension panel or legacy ROS graph setup, and no planning,
 real-hardware control or evaluation. Generic scene tools remain separate. See the
 [tool reference](../../../docs/TOOLS-WORKCELL.md) for the baseline contract.
 
@@ -330,7 +331,8 @@ It also refuses a bench without its own collision layer, as in pack `v1`.
 - No physics warnings in Kit's log.
 - Commanding every joint at once from the zero pose (arm stretched out) drove the arm into the cell, so start from a pose
   inside the workspace.
-- Not qualified on Newton: the Bota force/torque read, the cameras and `mirror_real`.
+- Not qualified on Newton: the cameras and `mirror_real`. The Bota force/torque read passes the static check on both
+  engines (`scripts/workcell_static_wrench.py`).
 
 ## Authoring/BOM smoke
 

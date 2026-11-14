@@ -213,6 +213,10 @@ def test_black_pads_follow_finger_frames_and_export(cell):
         shader = UsdShade.Shader(material.GetPrim().GetChild("surface"))
         assert list(shader.GetInput("diffuseColor").Get()) == [0, 0, 0]
         assert UsdPhysics.MaterialAPI(material).GetStaticFrictionAttr().Get() == pytest.approx(0.8)
+        shapes = [p for p in Usd.PrimRange(prim) if p.IsA(UsdGeom.Gprim)]
+        assert shapes and all(p.HasAPI(UsdPhysics.CollisionAPI) for p in shapes)   # the pad, not the bare link, touches
+        assert all(UsdPhysics.MeshCollisionAPI(p).GetApproximationAttr().Get() == "convexHull"
+                   for p in shapes if p.IsA(UsdGeom.Mesh))
     reopened = Usd.Stage.Open(stage.Flatten())
     assert reopened.GetPrimAtPath(report["bota_sensor_path"])
     before = stage.GetSessionLayer().ExportToString()
@@ -343,6 +347,30 @@ def test_bota_measured_wrench_origin_and_axes(cell, rotated):
     assert result["measurement"] is None
     view.shared_metatype.link_indices.clear()
     assert sensors.read_bota_wrench(stage, view, report, config, **args)["status"] == "unavailable"
+
+
+class WarpLike:
+    """What Isaac Sim 6.x tensor views return: an array object with .numpy(), flat on Newton."""
+
+    def __init__(self, values):
+        self.values = values
+
+    def numpy(self):
+        return self.values
+
+
+def test_bota_wrench_reads_a_warp_frontend_on_newton_and_refuses_an_unknown_engine(cell):
+    stage, pack, config = cell
+    config["bota"]["measurement"] = "incoming_joint_wrench"
+    report = robot.build_robot(stage, pack, config)
+    view = Articulation(report)
+    flat = view.wrench.reshape(-1).copy()
+    view.get_link_incoming_joint_force = lambda: WarpLike(flat)
+    result = sensors.read_bota_wrench(stage, view, report, config, physics_time_s=0.5, backend="newton")
+    assert result["status"] == "measured" and result["backend"] == "newton"
+    assert result["force_n"] == pytest.approx([0, 10, 0], abs=1e-6)
+    refused = sensors.read_bota_wrench(stage, view, report, config, physics_time_s=0.5, backend="mujoco")
+    assert refused["status"] == "unsupported" and refused["measurement"] is None
 
 
 class Contacts:

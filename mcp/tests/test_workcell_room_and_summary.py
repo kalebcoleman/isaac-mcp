@@ -233,9 +233,12 @@ def test_a_room_with_its_own_physics_bodies_instancing_and_lights_is_neutralised
     ({"static_friction": float("nan")}, "finite"),
     ({"roughness": 1.5}, "roughness must be from 0 to 1"),
     ({"panel_path": "/World/Bench/Panel"}, "relative"),
+    ({"panel_path": "a b/../c"}, "not a valid USD prim path"),
+    ({"color_rgb": [True, False, True]}, "three numbers"),
     ({"extra": 1}, "needs exactly"),
 ])
 def test_a_malformed_bench_top_is_refused_before_the_stage_is_touched(change, message):
+    pytest.importorskip("pxr.Sdf")
     scene = load("scene")
     top = {"panel_path": "Panel", "color_rgb": [0.02, 0.02, 0.02], "roughness": 0.6,
            "static_friction": 0.3, "dynamic_friction": 0.25}
@@ -246,3 +249,117 @@ def test_a_malformed_bench_top_is_refused_before_the_stage_is_touched(change, me
     del without["roughness"]
     with pytest.raises(ValueError, match="needs exactly"):
         scene.check_bench_top(without)
+
+
+def test_bodies_below_the_sensor_follow_the_joint_chain_downward():
+    pytest.importorskip("pxr.Usd")
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    scene = load("scene")
+    stage = Usd.Stage.CreateInMemory()
+    for name in ("wrist", "bota", "changer", "gripper", "finger"):
+        UsdGeom.Xform.Define(stage, f"/R/{name}")
+    for parent, child in (("wrist", "bota"), ("bota", "changer"), ("changer", "gripper"), ("gripper", "finger")):
+        joint = UsdPhysics.FixedJoint.Define(stage, f"/R/joints/{child}")
+        joint.CreateBody0Rel().SetTargets([f"/R/{parent}"])
+        joint.CreateBody1Rel().SetTargets([f"/R/{child}"])
+    assert sorted(scene.bodies_below(stage, "/R/bota")) == ["bota", "changer", "finger", "gripper"]
+    assert scene.bodies_below(stage, "/R/finger") == ["finger"]
+
+
+def test_the_static_wrench_check_passes_only_within_tolerance():
+    spec = importlib.util.spec_from_file_location("static_wrench", ROOT / "scripts/workcell_static_wrench.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    reading = {"status": "measured", "force_n": [0.0, 0.0, 15.0], "torque_nm": [0, 0, 0],
+               "load_below_sensor": {"weight_n": 15.009, "mass_kg": 1.53}}
+    assert module.check(reading, 0.01, 0.02)["pass"]
+    assert not module.check(dict(reading, force_n=[0.0, 0.0, 16.0]), 0.01, 0.02)["pass"]
+    assert not module.check({"status": "unavailable", "reason": "not initialized"}, 0.01, 0.02)["pass"]
+    down = dict(reading, force_n=[-15.0, 0.0, 0.03])
+    assert module.check(down, 0.01, 0.02, axis=(0, -1.0))["pass"]
+    assert not module.check(dict(down, force_n=[15.0, 0.0, 0.03]), 0.01, 0.02, axis=(0, -1.0))["pass"]   # sign flipped
+    assert not module.check(dict(down, force_n=[0.0, -15.0, 0.0]), 0.01, 0.02, axis=(0, -1.0))["pass"]  # wrong axis
+
+
+def test_articulated_props_nested_instances_emissive_meshes_and_the_floor_holder(tmp_path):
+    pytest.importorskip("pxr.Usd")
+    from pxr import Gf, Usd, UsdGeom, UsdLux, UsdPhysics
+
+    room = Usd.Stage.Open(_room_file(tmp_path))
+    door = UsdGeom.Cube.Define(room, "/Room/Door/leaf")       # a hinged door: an articulation in the room
+    door.AddTranslateOp().Set(Gf.Vec3d(3, -3, 1))
+    UsdPhysics.RigidBodyAPI.Apply(door.GetPrim())
+    UsdPhysics.ArticulationRootAPI.Apply(room.GetPrimAtPath("/Room/Door"))
+    hinge = UsdPhysics.RevoluteJoint.Define(room, "/Room/Door/hinge")
+    hinge.CreateBody1Rel().SetTargets(["/Room/Door/leaf"])
+    glow = UsdGeom.Mesh.Define(room, "/Room/GlowPanel")       # an emissive mesh, not a light prim
+    UsdLux.MeshLightAPI.Apply(glow.GetPrim())
+    UsdGeom.Xform.Define(room, "/Room/Outer/Inner")           # an instance inside an instance
+    board = UsdGeom.Cube.Define(room, "/Room/Outer/Inner/board")
+    board.AddTranslateOp().Set(Gf.Vec3d(-3, -3, 0.7))
+    UsdPhysics.CollisionAPI.Apply(board.GetPrim())
+    room.GetPrimAtPath("/Room/Outer/Inner").SetInstanceable(True)
+    room.GetPrimAtPath("/Room/Outer").SetInstanceable(True)
+    big = UsdGeom.Cube.Define(room, "/Room/GroundPlane/slab")  # the floor holder reaches into the bench's box
+    big.AddTranslateOp().Set(Gf.Vec3d(0, 0, 0.6))
+    big.AddScaleOp().Set(Gf.Vec3f(3, 3, 0.8))
+    room.Save()
+
+    rooms = load("environment")
+    stage = _cell(tmp_path)
+    UsdLux.DistantLight.Define(stage, "/World/Light")
+    report = rooms.place(stage, "simple_room", str(tmp_path / "room.usda"))
+    base = "/World/Environment/simple_room"
+    assert report["joints_deactivated"] == 1 and not stage.GetPrimAtPath(f"{base}/Door/hinge").IsActive()
+    assert report["articulation_roots_removed"] == 1
+    assert not stage.GetPrimAtPath(f"{base}/Door").HasAPI(UsdPhysics.ArticulationRootAPI)
+    assert stage.GetPrimAtPath(f"{base}/GlowPanel").IsActive() and report["lights_deactivated"] == 0
+    assert report["deinstanced"] == 2
+    nested = stage.GetPrimAtPath(f"{base}/Outer/Inner/board")
+    assert not nested.IsInstanceProxy() and UsdPhysics.CollisionAPI(nested).GetCollisionEnabledAttr().Get() is False
+    assert "GroundPlane" not in report["deactivated_for_overlap"] and "Table" in report["deactivated_for_overlap"]
+    assert stage.GetPrimAtPath(f"{base}/GroundPlane").IsActive()
+    assert stage.GetPrimAtPath("/World/Light").IsActive()      # the cell's own lights are never touched
+
+
+CONTACT = {"default_static_friction": 0.5, "default_dynamic_friction": 0.5, "combine_mode": "max",
+           "newton_friction": "static"}
+
+
+def test_every_collider_gets_a_material_that_combines_like_mujoco_and_does_not_bounce():
+    pytest.importorskip("pxr.Usd")
+    from pxr import Usd, UsdGeom, UsdPhysics, UsdShade
+
+    scene = load("scene")
+    stage = Usd.Stage.CreateInMemory()
+    bare = UsdGeom.Cube.Define(stage, "/World/Robot/link").GetPrim()
+    UsdPhysics.CollisionAPI.Apply(bare)
+    wood = UsdShade.Material.Define(stage, "/World/Wood")
+    UsdPhysics.MaterialAPI.Apply(wood.GetPrim()).CreateStaticFrictionAttr(0.3)
+    block = UsdGeom.Cube.Define(stage, "/World/Block").GetPrim()
+    UsdPhysics.CollisionAPI.Apply(block)
+    UsdShade.MaterialBindingAPI.Apply(block).Bind(wood, materialPurpose="physics")
+    report = scene.contact_materials(stage, CONTACT)
+    assert report["default_bound_to"] == 1 and report["materials"] == 2
+    bound, _ = UsdShade.MaterialBindingAPI(bare).ComputeBoundMaterial(materialPurpose="physics")
+    assert bound.GetPath() == "/World/CellDefaultContactMaterial"
+    kept, _ = UsdShade.MaterialBindingAPI(block).ComputeBoundMaterial(materialPurpose="physics")
+    assert kept.GetPath() == "/World/Wood"
+    for material in ("/World/Wood", "/World/CellDefaultContactMaterial"):
+        prim = stage.GetPrimAtPath(material)
+        assert prim.GetAttribute("physxMaterial:frictionCombineMode").Get() == "max"
+        assert "PhysxMaterialAPI" in prim.GetMetadata("apiSchemas").GetAddedOrExplicitItems()   # hidden by usd-core
+        assert UsdPhysics.MaterialAPI(prim).GetRestitutionAttr().Get() == 0.0
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"combine_mode": "sum"}, "combine_mode"), ({"combine_mode": "average"}, "must be max"),
+    ({"newton_friction": "mean"}, "newton_friction"),
+    ({"default_dynamic_friction": 0.6}, "must not exceed"), ({"default_static_friction": True}, "finite"),
+])
+def test_a_malformed_contact_section_is_refused(change, message):
+    scene = load("scene")
+    scene.check_contact(CONTACT)
+    with pytest.raises(ValueError, match=message):
+        scene.check_contact(dict(CONTACT, **change))

@@ -67,6 +67,16 @@ def prepare(stage, config, assembly_path, timeline):
     if not impratio or not impratio.Set(float(newton["impratio"])):
         raise ValueError("the Newton scene has no mjc:option:impratio; the work cell needs the MuJoCo-Warp solver")
     settings["mjc:option:impratio"] = float(newton["impratio"])
+    newton_mu = None
+    if config.get("contact", {}).get("newton_friction") == "static":
+        newton_mu = 0
+        for prim in stage.Traverse():   # Newton reads only dynamicFriction; give it the static value
+            if prim.HasAPI(UsdPhysics.MaterialAPI):
+                api = UsdPhysics.MaterialAPI(prim)
+                static = api.GetStaticFrictionAttr()
+                if static and static.HasAuthoredValue():   # unauthored reads the default 0.0: keep dynamic then
+                    api.CreateDynamicFrictionAttr().Set(float(static.Get()))
+                    newton_mu += 1
     colliders = 0
     for prim in stage.Traverse():
         if prim.HasAPI(UsdPhysics.CollisionAPI):
@@ -86,6 +96,10 @@ def prepare(stage, config, assembly_path, timeline):
             prim.CreateAttribute(attr, Sdf.ValueTypeNames.Float).Set(float(d["armature_kgm2"]))
         authored[name] = dict(d)
     buffers_config, buffers = prepare_buffers(stage, scene, timeline)
+    # The Bota reading is the incoming reaction of its mount joint; Newton computes it only when asked before Play.
+    buffers_config.solver_outputs.link_incoming_joint_force = True
     apply_buffers(buffers_config)
+    buffers["link_incoming_joint_force"] = True
     return dict(settings=settings, colliders_with_contact_gap=colliders, drives=authored, buffers=buffers,
+                materials_with_static_mu=newton_mu,
                 stability=stability(drives, newton["physics_hz"]))

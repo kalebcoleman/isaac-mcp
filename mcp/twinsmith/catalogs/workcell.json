@@ -101,6 +101,13 @@
       "namespace": "workcell",
       "owner_id": "workcell"
     },
+    "workcell.robot_wrench": {
+      "description": "Read the simulated Bota F/T sensor (its mount joint's reaction, sensor frame, N and N m) on PhysX or Newton, with the engine's mass of everything below the sensor and its weight. Needs an initialized, paused or playing simulation; not gravity-compensated or hardware-calibrated.",
+      "parameters": {},
+      "fields": [],
+      "namespace": "workcell",
+      "owner_id": "workcell"
+    },
     "workcell.perception_status": {
       "description": "Read camera build details; this does not capture sensor data.",
       "parameters": {},

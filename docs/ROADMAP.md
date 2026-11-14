@@ -180,7 +180,7 @@ wrist and overhead renders, then `workcell_smoke.py` on both engines.
 **Status.** #112 met the build and tower criteria:
 - The refusal is gone, and the cell builds and holds on Newton.
 - The tower drifts 0.54 mm.
-- The finger widths, the flange wrench and the Newton renders are still open.
+- The finger widths and the Newton renders are still open. The flange wrench passes the static check on both engines.
 
 **Depends on.** Phase 1 (the bench must load).
 

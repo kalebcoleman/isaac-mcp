@@ -128,6 +128,17 @@ def test_bad_configuration_never_mutates_stage(modules, monkeypatch, tmp_path):
         asyncio.run(scene.Workcell().quick_start())
 
 
+def test_a_malformed_bench_top_never_mutates_stage(modules, monkeypatch, tmp_path):
+    pytest.importorskip("pxr.Sdf")
+    scene, _ = modules
+    values = config(scene)
+    values["bench_top"] = {"panel_path": "Panel", "color_rgb": [0.02, 0.02, 0.02], "roughness": 0.6,
+                           "static_friction": 0.3, "dynamic_friction": 0.4}
+    install_contracts(monkeypatch, scene, tmp_path, values)
+    with pytest.raises(ValueError, match="bench_top.dynamic_friction"):
+        asyncio.run(scene.Workcell().quick_start())
+
+
 def test_bad_variation_never_reaches_pack_or_stage(modules, monkeypatch, tmp_path):
     scene, _ = modules
     values = config(scene)
@@ -279,24 +290,32 @@ def test_prepare_writes_per_degree_gains_and_both_armatures(monkeypatch):
         drive.CreateDampingAttr(0.4)
     box = stage.DefinePrim("/World/Bench/box", "Cube")
     UsdPhysics.CollisionAPI.Apply(box)
+    wood = UsdPhysics.MaterialAPI.Apply(stage.DefinePrim("/World/Wood", "Material"))
+    wood.CreateStaticFrictionAttr(0.3)
+    wood.CreateDynamicFrictionAttr(0.25)
     seen = []
     support = types.ModuleType("sim_tools.newton_support")
     support.scene_settings = lambda prim, rate, tower: {"newton:timeStepsPerSecond": rate}
     support.collision_settings = lambda prim: seen.append(str(prim.GetPath()))
-    support.prepare_buffers = lambda *args: ("config", {"rigid_bodies": 0})
-    support.apply_buffers = lambda config: None
+    pending = types.SimpleNamespace(solver_outputs=types.SimpleNamespace(link_incoming_joint_force=False))
+    applied = []
+    support.prepare_buffers = lambda *args: (pending, {"rigid_bodies": 0})
+    support.apply_buffers = lambda config: applied.append(config.solver_outputs.link_incoming_joint_force)
     package = types.ModuleType("sim_tools")
     package.__path__ = []
     monkeypatch.setitem(sys.modules, "sim_tools", package)
     monkeypatch.setitem(sys.modules, "sim_tools.newton_support", support)
-    report = cell.prepare(stage, {"newton": newton_section(stiffness_nm_per_rad=25000, damping_nms_per_rad=300)},
+    report = cell.prepare(stage, {"newton": newton_section(stiffness_nm_per_rad=25000, damping_nms_per_rad=300),
+                                  "contact": {"newton_friction": "static"}},
                           "/World/RobotAssembly", timeline=None)
+    assert wood.GetDynamicFrictionAttr().Get() == pytest.approx(0.3) and report["materials_with_static_mu"] == 1
     joint = stage.GetPrimAtPath("/World/RobotAssembly/robot/joints/elbow_joint")
     assert joint.GetAttribute("drive:angular:physics:stiffness").Get() == pytest.approx(25000 * 3.141592653589793 / 180)
     assert joint.GetAttribute("drive:angular:physics:damping").Get() == pytest.approx(300 * 3.141592653589793 / 180)
     assert joint.GetAttribute("newton:armature").Get() == joint.GetAttribute("physxJoint:armature").Get() == pytest.approx(0.1)
     assert scene.GetAttribute("mjc:option:impratio").Get() == 10.0 and seen == ["/World/Bench/box"]
     assert set(report["drives"]) == set(ARM) and report["colliders_with_contact_gap"] == 1
+    assert applied == [True] and report["buffers"]["link_incoming_joint_force"] is True   # the Bota reading on Newton
 
 
 def test_a_bench_without_its_own_colliders_is_refused_on_newton(modules):
