@@ -53,6 +53,8 @@ A project's `twinsmith.json` is a different file, read for asset packs and the I
 | `TWINSMITH_LOG_DIR` | `$XDG_STATE_HOME/twinsmith`, else `~/.local/state/twinsmith` | host | Directory of the `server-<pid>.log` files (1 MB x 3, private). |
 | `XDG_STATE_HOME` | `~/.local/state` | host | Base of the default log directory. |
 | `DISPLAY` | `:0` | host | X11 display for the screen and desktop-input tools. Match your session. |
+| `TWINSMITH_KIKIT` | `<workspace>/tools/kikit/.venv/bin/kikit` | host | The KiKit command `hardware` runs for `fab`. See [HARDWARE.md](HARDWARE.md). |
+| `TWINSMITH_BLENDER` | `blender` on `PATH` | host | The Blender `hardware` runs for `render`. See [HARDWARE.md](HARDWARE.md). |
 | `TWINSMITH_ROBOSIM_ROOT` | `<workspace>/tools/robosimstudio` | host | The RoboSimStudio checkout the `robosim` tool runs. See [ROBOSIM.md](ROBOSIM.md). |
 
 Toolsets are visibility preferences, not security: the token and read-only mode are enforced by the bridge.

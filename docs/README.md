@@ -27,6 +27,7 @@ over both.
 | [Host and bridge](TOOLS-HOST.md) | Gateway, desktop, opt-in input and sessions, bridge built-ins |
 | [Isaac Lab](TOOLS-ISAACLAB.md) | `isaaclab__*`: discovery, jobs, guards, metrics |
 | [RoboSimStudio](ROBOSIM.md) | The `robosim` tool: real-to-sim runs in RoboSimStudio's own environment |
+| [Hardware](HARDWARE.md) | The `hardware` tool (`cad`): KiCad checks, fab files and renders from tools beside twinsmith |
 | [Work cell](../exts/workcell/workcell/README.md) | The lab's UR5e Jenga work cell: BOM, private pack, tools. [Jenga variation contract](TOOLS-WORKCELL.md) |
 | [BrickSim](BRICKSIM.md) | LEGO bricks with these tools: the bridge next to BrickSim, which tools work on bricks, its RL task |
 | [Agent skill](AGENT-SKILLS.md) | The `twinsmith` skill and where each client finds it |

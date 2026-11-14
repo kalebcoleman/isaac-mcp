@@ -20,7 +20,7 @@ three kinds:
 
 | Kind | Examples | Where the work happens |
 |---|---|---|
-| Host tool | `help`, `screenshot`, `join_videos`, `robosim` | In the server process itself |
+| Host tool | `help`, `screenshot`, `join_videos`, `robosim`, `hardware` | In the server process itself |
 | Simulator tool | `sim__*`, `assets__*`, `status`, `run_python`, the work cell's `workcell__*` | Inside a running Isaac Sim, reached over a local TCP connection |
 | Job tool | `isaaclab__launch`, `run_script` | In a separate process the server starts and watches |
 
@@ -35,6 +35,7 @@ three kinds:
 | Work cell | `exts/workcell/` | One lab's UR5e Jenga work cell: the `workcell.*` tools on the same bridge. Its assets come from an [asset pack](ASSET-PACKS.md). See its [README](../exts/workcell/workcell/README.md). |
 | Isaac Lab jobs | `mcp/twinsmith/isaaclab/` | Train, evaluate, play and record in separate processes the host starts. |
 | RoboSimStudio bridge | `mcp/twinsmith/robosim/` | Runs RoboSimStudio in its own Python environment from one grouped tool. |
+| Hardware | `mcp/twinsmith/hardware.py`, `sibling.py` | Runs `kicad-cli`, KiKit and Blender beside twinsmith with a scrubbed environment. |
 | Launch and checks | `run.sh`, `install.sh`, `scripts/` | Start Isaac Sim with the extensions, install the host, run checks. |
 
 They are separate on purpose. The host must start instantly and must never need the 20 GB simulator environment just to
@@ -180,6 +181,13 @@ See [Asset packs](ASSET-PACKS.md) and [importing](ASSET-IMPORT.md).
 `robosim` is one grouped tool, registered by the `robosim` toolset (off by default). It does not use the Kit bridge: it runs
 RoboSimStudio commands with RoboSimStudio's own Python environment, so the host never imports it, and keeps each run's files
 under `<workspace>/runs/robosim/`. See [ROBOSIM.md](ROBOSIM.md).
+
+## Hardware
+
+`hardware` is one tool, registered by the `cad` toolset (off by default). Authoring a board, an enclosure or a scene in
+Blender stays in the servers beside twinsmith; `hardware` only runs the deterministic steps (`kicad-cli` checks, KiKit fab
+files, a headless Blender render) on files in an approved folder, and writes each result to a new folder under
+`<workspace>/runs/hardware/`. See [HARDWARE.md](HARDWARE.md).
 
 ## Seeing and recording
 

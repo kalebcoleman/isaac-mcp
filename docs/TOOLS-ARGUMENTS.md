@@ -1579,6 +1579,25 @@ RoboSimStudio real-to-sim in its own Python, no Isaac bridge needed. start a sce
 - `all` (bool, default `False`): status without run: every run in full, not live servers and the 5 newest.
 - `max_trials` (int | None, default `None`): tune_push: most rollouts to try (default 6, at most 12).
 
+## `cad`: PCB checks, fab files and renders from tools beside twinsmith
+
+Toolset `cad` is off until you select it with `+cad`. Reference: [HARDWARE.md](HARDWARE.md). 1 tools, listed as 1: `hardware`.
+
+### `hardware`
+
+PCB and enclosure outputs from tools beside twinsmith; no simulator. status: versions, pins, gaps. check: KiCad ERC and DRC counts. fab: check, then KiKit JLCPCB/PCBWay files, board.step and board.glb in a new folder; never uploads or orders. render: a Blender job that uses the GPU (follow with jobs). Inputs in approved folders only.
+
+- `action` (Literal['status', 'check', 'fab', 'render'], required): Action to perform.
+- `board` (str | None, default `None`): check/fab: absolute .kicad_pcb path inside an approved folder.
+- `schematic` (str | None, default `None`): check/fab: absolute .kicad_sch path; default: the board's, renamed.
+- `vendor` (Literal['jlcpcb', 'pcbway'], default `'jlcpcb'`): fab: which fab house's file set KiKit writes. Nothing is sent to it.
+- `inputs` (list[str] | None, default `None`): render: absolute .glb, .gltf or .stl paths (GLB in metres, STL in millimetres).
+- `name` (str | None, default `None`): fab/render: new folder name under <workspace>/runs/hardware; default a timestamp.
+- `width` (int, default `1600`): render: image width in pixels.
+- `height` (int, default `1200`): render: image height in pixels.
+- `samples` (int, default `128`): render: Cycles samples per pixel.
+- `allow_concurrent_gpu` (bool, default `False`): render: knowingly start next to another GPU job or a running simulator.
+
 ## `input`: Desktop mouse and keyboard input
 
 Toolset `input` is off until you select it with `+input` (never enabled by `all`). Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-desktop-input). 6 tools, listed as 1: `computer` (click, drag, scroll, type, key, batch).

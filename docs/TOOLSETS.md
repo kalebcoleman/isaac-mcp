@@ -28,6 +28,7 @@ rows for the server you have installed, with the current state of each.
 | `kit_debug`: Inspect Kit logs and operate its UI | off | `sim__logs`, `sim__ui` |
 | `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__eval`, `workcell__jenga`, `workcell__perception`, `workcell__planning`, `workcell__real2sim`, `workcell__robot` |
 | `robosim`: RoboSimStudio real-to-sim runs in its own private environment | off | `robosim` |
+| `cad`: PCB checks, fab files and renders from tools beside twinsmith | off | `hardware` |
 | `input`: Desktop mouse and keyboard input | explicit only | `computer` |
 | `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
 | `extensions`: Tools from uncatalogued extension namespaces | on | none |
@@ -44,6 +45,8 @@ rows for the server you have installed, with the current state of each.
   planning and evaluation answer that they are not implemented.
 - `robosim` is one grouped tool that runs RoboSimStudio in its own Python environment; it needs no Kit bridge. See
   [ROBOSIM.md](ROBOSIM.md).
+- `cad` is one tool, `hardware`, that runs `kicad-cli`, KiKit and Blender beside twinsmith: PCB checks, fab files and
+  renders. It needs no Kit bridge and never uploads or orders. See [HARDWARE.md](HARDWARE.md).
 - The status also names toolsets that are **planned** and not built yet; they list no tools.
 
 ## Choosing toolsets
@@ -125,8 +128,8 @@ characters of what `tools/list` returns. Tokens are estimated as characters divi
 |---|---|--:|
 | `minimal` | `core` | 6 |
 | `default` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `extensions` | 32 |
-| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `extensions` | 49 |
-| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `input`, `launch`, `extensions` | 51 |
+| `all` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `cad`, `extensions` | 50 |
+| `all,+input,+launch` | `core`, `scene`, `physics`, `sensors`, `assets`, `code`, `screen`, `lab`, `ros2`, `kit_debug`, `workcell`, `robosim`, `cad`, `input`, `launch`, `extensions` | 52 |
 <!-- /generated -->
 
 | Selection | Listed tools | Characters | Estimated tokens |

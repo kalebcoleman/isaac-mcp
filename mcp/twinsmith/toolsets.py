@@ -25,6 +25,7 @@ TOOLSETS = {
     "kit_debug": Toolset("Inspect Kit logs and operate its UI"),
     "workcell": Toolset("UR5e workcell tools"),
     "robosim": Toolset("RoboSimStudio real-to-sim runs in its own private environment"),
+    "cad": Toolset("PCB checks, fab files and renders from tools beside twinsmith"),
     "input": Toolset("Desktop mouse and keyboard input", explicit_only=True),
     "launch": Toolset("Launch and stop simulator processes", explicit_only=True),
     "extensions": Toolset("Tools from uncatalogued extension namespaces", True),
@@ -52,6 +53,7 @@ _ROOTS = {
     "input": "computer",
     "launch": "sim__session",
     "robosim": "robosim",
+    "cad": "hardware",
 }
 
 MEMBERS = {

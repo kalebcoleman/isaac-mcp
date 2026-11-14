@@ -1234,13 +1234,20 @@ def _register_host_tools(server: FastMCP, state: _BridgeState, groups: Iterable[
     register_sim_session_tools(server, groups=groups, env=env,
                                on_launch=lambda record: state.launched_sessions.add(record["id"]))
     register_isaaclab_tools(server, groups=groups)
+    single = []
     if "robosim" in groups:
         from .robosim import register_robosim_tools
         register_robosim_tools(server)
+        single.append("robosim")
+    if "cad" in groups:
+        from .hardware import register_hardware_tools
+        register_hardware_tools(server)
+        single.append("hardware")
+    for name in single:
         # Listed like every other host tool: no generated titles, no docstring indentation.
-        tool = server._tool_manager._tools["robosim"]
+        tool = server._tool_manager._tools[name]
         tool.description = inspect.cleandoc(tool.description)
-        strip_schema_titles(server, "robosim")
+        strip_schema_titles(server, name)
         grouped_tools.shorten_listed(tool)
 
 

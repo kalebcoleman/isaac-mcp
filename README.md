@@ -96,6 +96,7 @@ which keeps the tool list small. The counts below are listed tools; related tool
 | `kit_debug` | off | 2 | Inspect Kit logs and operate its UI |
 | `workcell` | off | 7 | UR5e workcell tools |
 | `robosim` | off | 1 | RoboSimStudio real-to-sim runs in its own private environment |
+| `cad` | off | 1 | PCB checks, fab files and renders from tools beside twinsmith |
 | `input` | explicit only | 1 | Desktop mouse and keyboard input |
 | `launch` | explicit only | 1 | Launch and stop simulator processes |
 | `extensions` | on | 0 | Tools from uncatalogued extension namespaces |

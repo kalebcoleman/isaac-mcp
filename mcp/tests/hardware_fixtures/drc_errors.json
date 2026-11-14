@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schemas.kicad.org/drc.v1.json",
+  "coordinate_units": "mm",
+  "date": "2026-11-13T16:56:16",
+  "ignored_checks": 5,
+  "included_severities": 3,
+  "kicad_version": "10.0.8",
+  "schematic_parity": [
+    {"description": "Missing footprint R9", "severity": "error", "type": "missing_footprint",
+     "items": [{"description": "Symbol R9 [10k]", "pos": {"x": 0.0, "y": 0.0}, "uuid": "00000000-0000-0000-0000-000000000004"}]}
+  ],
+  "source": "fixture.kicad_pcb",
+  "unconnected_items": [
+    {"description": "Missing connection between items", "severity": "error", "type": "unconnected_items",
+     "items": [{"description": "Pad 2 [GND] of C1 on F.Cu", "pos": {"x": 100.0, "y": 104.0}, "uuid": "00000000-0000-0000-0000-000000000005"},
+               {"description": "Pad 1 [GND] of J1 on F.Cu", "pos": {"x": 110.0, "y": 104.0}, "uuid": "00000000-0000-0000-0000-000000000006"}]}
+  ],
+  "violations": [
+    {"description": "Silkscreen clipped by board edge", "severity": "warning", "type": "silk_edge_clearance",
+     "items": [{"description": "Segment on Edge.Cuts", "pos": {"x": 101.0, "y": 100.0}, "uuid": "00000000-0000-0000-0000-000000000002"}]},
+    {"description": "Clearance violation (netclass 'Default' clearance 0.2000 mm; actual 0.1200 mm)", "severity": "error",
+     "type": "clearance",
+     "items": [{"description": "Track [3V3] on F.Cu, length 4.1000 mm", "pos": {"x": 102.0, "y": 101.0}, "uuid": "00000000-0000-0000-0000-000000000007"},
+               {"description": "Pad 1 [EN] of R1 on F.Cu", "pos": {"x": 102.1, "y": 101.1}, "uuid": "00000000-0000-0000-0000-000000000008"}]}
+  ]
+}
