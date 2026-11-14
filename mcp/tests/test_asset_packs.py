@@ -287,7 +287,12 @@ USD = packs.ClosureBackend(sys.executable)
 
 
 def usda(*references):
-    body = "".join(f'def "R{i}" (\n  references = @{ref}@\n) {{}}\n' for i, ref in enumerate(references))
+    """A layer referencing each path. A path that contains ``@`` (a login such as ``user@domain``) is written between
+    USD's triple delimiters, ``@@@...@@@``, as the Sdf API writes it; single ``@`` would end the path early."""
+    def asset(ref):
+        return f"@@@{ref}@@@" if "@" in ref else f"@{ref}@"
+
+    body = "".join(f'def "R{i}" (\n  references = {asset(ref)}\n) {{}}\n' for i, ref in enumerate(references))
     return "#usda 1.0\n" + body
 
 
