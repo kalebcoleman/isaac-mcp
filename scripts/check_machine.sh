@@ -3,7 +3,6 @@
 # disk space, network to the sites install needs, the display, and the bridge port.
 # Usage: scripts/check_machine.sh      (prints PASS/FAIL per item; exit 1 if any required item fails)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-[ -f "$ROOT/scripts/legacy_env.sh" ] && . "$ROOT/scripts/legacy_env.sh"   # old variable names, for one release
 fail=0
 ok()   { echo "PASS  $1"; }
 bad()  { echo "FAIL  $1"; fail=1; }

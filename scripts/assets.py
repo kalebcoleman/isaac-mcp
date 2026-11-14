@@ -65,7 +65,6 @@ def _pack(args, key: str = "pack", what: str = "pack") -> tuple[str, str]:
 
 
 def cmd_where(args) -> int:
-    removed = pack_manifest.announce_removed_environment()
     try:
         resolved = pack_manifest.resolve_asset_root()
         root, source, warnings, error = str(resolved.path), resolved.source, list(resolved.warnings), None
@@ -78,12 +77,12 @@ def cmd_where(args) -> int:
     project = pack_manifest.project_file()
     if args.json:
         print(json.dumps(dict(asset_root=root, source=source, project_file=str(project) if project else None,
-                              selected_pack=selected, warnings=warnings, removed_environment=removed, error=error), indent=2))
+                              selected_pack=selected, warnings=warnings, error=error), indent=2))
         return 0 if error is None else 2
     print(f"asset root:   {root or 'none'}" + (f" ({source})" if source else ""))
     print(f"project file: {project if project else 'none'}")
     print(f"pack:         {selected or 'none selected'}")
-    for item in dict.fromkeys([*warnings, *removed]):
+    for item in warnings:
         print(f"warning: {item}")
     if error:
         print(error, file=sys.stderr)

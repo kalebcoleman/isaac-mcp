@@ -241,15 +241,6 @@ def test_public_robot_the_simulators_root_lacks_is_refused_with_the_names(kit):
     assert not kit.stage.GetPrimAtPath("/World")
 
 
-def test_nothing_is_downloaded_whatever_the_old_settings_say(kit, monkeypatch):
-    from twinsmith import pack_manifest
-
-    for name in pack_manifest.REMOVED_ENVIRONMENT:
-        monkeypatch.setenv(name, "https://example.invalid/mirror")
-    out = kit.run(robot="ur5e")
-    assert out["assets"][0]["location"].startswith(str(kit.nvidia)) and "example.invalid" not in json.dumps(out["assets"])
-
-
 def test_a_project_file_does_not_name_a_robot_or_a_folder(kit, tmp_path, monkeypatch):
     repo = tmp_path / "cloned"
     repo.mkdir()

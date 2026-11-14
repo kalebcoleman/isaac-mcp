@@ -20,7 +20,7 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from . import asset_formats, legacy, material_refs, mjcf_refs, pack_manifest, urdf_refs
+from . import asset_formats, material_refs, mjcf_refs, pack_manifest, urdf_refs
 from .pack_manifest import MANIFEST_NAME
 
 
@@ -974,7 +974,9 @@ def adopt_folder(root: Path, pack_id: str, version: str, source: Path, *, source
     return dict(written, dry_run=False, notes=notes, **extra)
 
 
-OLD_FORMAT_FILES = ("SHA256SUMS", legacy.OLD_PACK_FILE)
+# The pins and the build description of the old pack format (isaac-mcp, before 0.3.0). Packs in that format are
+# still on lab machines' disks, so the converter keeps leaving these two files out of the new version.
+OLD_FORMAT_FILES = ("SHA256SUMS", "isaac-mcp-pack.json")
 
 
 def convert_old(old_folder: Path, *, pack_id: str | None = None, version: str = "v1", source_note, license_,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from pathlib import Path
 
@@ -27,8 +28,8 @@ ALL_GROUPS = "all,+input,+launch"
 
 
 def _listing(monkeypatch, tmp_path, single_purpose):
-    for name in gw.config.LEGACY:
-        monkeypatch.delenv(name, raising=False)
+    for name in gw.config.old_settings(os.environ):
+        monkeypatch.delenv(name)
     server = gw.build_server({"TWINSMITH_TOOLSETS": ALL_GROUPS, "TWINSMITH_SIM_SESSIONS_DIR": str(tmp_path)})
 
     if single_purpose:
