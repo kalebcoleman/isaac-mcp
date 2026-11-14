@@ -49,10 +49,11 @@ Done:
 
 - [x] Bench collisions within Newton's contact buffer: 385 boxes instead of 1.63 M triangles, with no overflow.
 - [x] One articulation; no zero-force drives; the RG2 fingers move, the mimic followers within 0.003 degrees.
-- [x] Stable arm drives on MuJoCo-Warp at 500 Hz. With gravity on, every joint holds within 0.05 degrees and joint steps
-  settle in 0.2 s. The pack's PhysX gains went non-finite there.
+- [x] Stable arm drives on MuJoCo-Warp at 500 Hz. At the presentation pose with gravity on, every joint holds within 0.05
+  degrees, and 0.05 rad joint steps settle in 0.2 s. The pack's PhysX gains went non-finite there.
 - [x] The tower in the cell: at most 0.54 mm over 11 s after a 1.2 s settle.
-- [x] `workcell_smoke.py` takes the session's engine; the tests cover both engines' build paths.
+- [x] `workcell_smoke.py` takes the session's engine. The host tests cover the engine gating, the `newton` section's
+  validation and the per-degree drive authoring. The Newton build itself is covered by the live run, not the host tests.
 
 Still open:
 
@@ -63,8 +64,8 @@ Still open:
 - [ ] `mirror_real` (robot-only gravity off) on Newton. It is refused today. Newton's PhysX resolver may read
   `physxRigidBody:disableGravity`, which needs a live check.
 - [ ] Per-engine friction profiles in `lab_hardware.json` (unconfirmed; they start equal to the PhysX values).
-- [ ] Measured finger width at open, mid and closed on both engines. The RG2 knuckle drives (1 N m) are slow: -17.7 degrees of
-  a -20 degree target after 0.6 s.
+- [ ] Measured finger width at open, mid and closed on both engines. The RG2 knuckle drives (1 N m) are slow. Of a -20 degree
+  target, they reached -17.7 degrees on PhysX after 360 steps, and -15.2 and -15.5 degrees on Newton after 0.72 s.
 - [ ] The static check at rest (flange wrench equals the weight below the sensor) on both engines.
 - [ ] Renders (cell, wrist, overhead) on Newton.
 

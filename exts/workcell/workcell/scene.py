@@ -22,11 +22,20 @@ def _engine(config, mode):
 
     engine = selected_engine()
     if engine == "newton":
+        from . import newton_cell
+
         if "newton" not in config:
             raise RuntimeError("This configuration has no newton section (per-engine drives and solver settings); "
                                "the work cell cannot be built on Newton without it. Use a PhysX session or add the section.")
+        try:
+            newton_cell.validate(config)
+        except ValueError as exc:
+            raise RuntimeError(f"Invalid newton section, so no stage was replaced: {exc}") from exc
         if mode == "mirror_real":
             raise RuntimeError("mirror_real (gravity off on the robot) is not qualified on Newton; use physics mode or PhysX.")
+        if config.get("asset_layout", {}).get("rg2", {}).get("articulation_root"):
+            raise RuntimeError("A separate RG2 articulation does not load on Newton (its importer mis-lists the bodies); "
+                               "use a pack whose RG2 joins the arm, such as ur5e-jenga-workcell/v2.")
     return engine
 
 
@@ -107,7 +116,7 @@ def _tag_parts(stage, parts):
         prim.CreateAttribute("workcell:bom_id", Sdf.ValueTypeNames.String, custom=True).Set(bom_id)
 
 
-def bench_colliders(stage, path="/World/Bench") -> str:
+def bench_colliders(stage, path="/World/Bench", engine="physx") -> str:
     """Keep a bench's own collision layer (assets__mesh split: boxes or hulls, purpose guide); without one,
     make every bench mesh a triangle-mesh collider, which PhysX handles and Newton cannot. Says which."""
     from pxr import Usd, UsdGeom, UsdPhysics
@@ -118,13 +127,16 @@ def bench_colliders(stage, path="/World/Bench") -> str:
     meshes = [prim for prim in bench if prim.IsA(UsdGeom.Mesh)]
     if not meshes:
         raise ValueError("Bench pack asset has no editable mesh colliders")
+    if engine == "newton":
+        raise ValueError("The bench has no collision layer of its own, and its triangle meshes overflow Newton's contact "
+                         "buffer; use a pack with the split bench, such as ur5e-jenga-workcell/v2.")
     for prim in meshes:
         UsdPhysics.CollisionAPI.Apply(prim)
         UsdPhysics.MeshCollisionAPI.Apply(prim).CreateApproximationAttr().Set("none")
     return "triangle meshes"
 
 
-def _finish_scene(stage, config, assets, parts, rows):
+def _finish_scene(stage, config, assets, parts, rows, engine="physx"):
     from pxr import Usd, UsdGeom, UsdPhysics, UsdShade
     from . import bom
 
@@ -147,12 +159,12 @@ def _finish_scene(stage, config, assets, parts, rows):
                     binding.Bind(material)
                     if role != "jenga_block":
                         binding.Bind(material, materialPurpose="physics")
-    bench_colliders(stage)
+    bench_colliders(stage, engine=engine)
     bom.verify_config_assets(config, rows)
     return bom.audit_parts(parts, rows, stage=stage, strict=True)
 
 
-def _replace_tower(stage, config, assets, rows, parts, profile=None, seed=None):
+def _replace_tower(stage, config, assets, rows, parts, profile=None, seed=None, engine="physx"):
     from pxr import Sdf, Usd, UsdGeom, UsdPhysics
     from . import jenga
 
@@ -172,7 +184,7 @@ def _replace_tower(stage, config, assets, rows, parts, profile=None, seed=None):
             if not Sdf.CopySpec(temporary.GetRootLayer(), "/World/Jenga", root, "/World/Jenga"):
                 raise RuntimeError("Could not replace Jenga tower")
             _tag_parts(stage, updated)
-            audit = _finish_scene(stage, config, assets, updated, rows)
+            audit = _finish_scene(stage, config, assets, updated, rows, engine)
             if stage.GetCompositionErrors():
                 raise RuntimeError("Replacement tower has USD composition errors")
     except Exception:
@@ -246,7 +258,7 @@ class Workcell:
             if missing:
                 raise ValueError(f"Physical assets missing from BOM part mappings: {sorted(missing)}")
             _tag_parts(stage, parts)
-            audit = _finish_scene(stage, config, assets, parts, rows)
+            audit = _finish_scene(stage, config, assets, parts, rows, engine)
             newton_report = None
             if engine == "newton":
                 from . import newton_cell
@@ -260,7 +272,9 @@ class Workcell:
                             "pack": copy.deepcopy(pack.manifest), "robot": robot_report,
                             "cameras": camera_report["cameras"], "jenga": block_report, "parts": parts,
                             "bom_audit": audit, **({"newton": newton_report} if newton_report else {}),
-                            "limitations": robot_report["limitations"] + camera_report["limitations"] + block_report["limitations"]
+                            "limitations": [line for line in robot_report["limitations"]
+                                            if not (engine == "newton" and "drives are preserved" in line)]
+                            + camera_report["limitations"] + block_report["limitations"]
                             + (NEWTON_LIMITATIONS if engine == "newton" else [])}
             self._runtime = (stage, config, assets, rows)
         except Exception as exc:
@@ -279,13 +293,12 @@ class Workcell:
         if not omni.timeline.get_timeline_interface().is_stopped():
             raise RuntimeError("Stop the timeline before rebuilding the tower")
         engine = _engine(config, self._report.get("mode", "physics"))
-        report, parts, audit = _replace_tower(stage, config, assets, rows, self._report["parts"], profile, seed)
+        report, parts, audit = _replace_tower(stage, config, assets, rows, self._report["parts"], profile, seed, engine)
+        self._report.update(jenga=report, parts=parts, bom_audit=audit)      # the tower is replaced: report it first
         if engine == "newton":
-            import omni.timeline
             from . import newton_cell
             self._report["newton"] = newton_cell.prepare(stage, config, self._report["robot"]["assembly_path"],
                                                          omni.timeline.get_timeline_interface())
-        self._report.update(jenga=report, parts=parts, bom_audit=audit)
         return copy.deepcopy(report)
 
     def shutdown(self):

@@ -308,7 +308,12 @@ on the stage and never in the pack:
   contact gap on every collider;
 - contact buffers sized for the bodies in the scene.
 
-`mirror_real` (gravity off on the robot) is refused on Newton until it is qualified there.
+On Newton the build also refuses, before replacing the stage:
+- a `newton` section that does not name all six arm joints with positive gains;
+- `mirror_real` (gravity off on the robot);
+- an RG2 with its own articulation root.
+
+It also refuses a bench without its own collision layer, as in pack `v1`.
 
 **Live on Newton (2026-11-14, Isaac Sim 6.2.0, Newton 1.6.1 / MuJoCo-Warp, headless, RTX PRO 6000 Blackwell, 500 Hz, pack
 `v2`).**
