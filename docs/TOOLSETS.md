@@ -208,7 +208,7 @@ valid names. Rename them in `[tools] toolsets`, `TWINSMITH_TOOLSETS` and `--tool
 
 | Before | Now |
 |---|---|
-| `screen`, `input`, `launch` | `computer` (explicit only, as `input` and `launch` were). `screen` alone could be enabled at run time; `computer` cannot |
+| `screen`, `input`, `launch` | `computer` (explicit only, as `input` and `launch` were). `screen` alone could be enabled at run time; `computer` cannot, and selecting it for screenshots also lists mouse and keyboard and simulator launch |
 | `lab`, `ros2`, `workcell`, `extensions` | `sim` |
 | `scene`, `physics`, `sensors`, `kit_debug`, `code` | `sim` |
 | `robosim` | `real2sim` (the tool keeps its name, `robosim`) |
