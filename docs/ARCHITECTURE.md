@@ -21,7 +21,7 @@ default. A tool is one of three kinds:
 
 | Kind | Examples | Where the work happens |
 |---|---|---|
-| Host tool | `help`, `screenshot`, `join_videos`, `robosim`, `sysid`, `hardware` | In the server process itself |
+| Host tool | `help`, `screenshot`, `join_videos`, `robosim`, `sysid`, `hardware`, `gap`, `vabar` | In the server process itself |
 | Simulator tool | `sim__*`, `assets__*`, `status`, `run_python`, the work cell's `workcell__*` | Inside a running Isaac Sim, reached over a local TCP connection |
 | Job tool | `isaaclab__launch`, `run_script` | In a separate process the server starts and watches |
 
@@ -37,7 +37,9 @@ default. A tool is one of three kinds:
 | Isaac Lab jobs | `mcp/twinsmith/isaaclab/` | Train, evaluate, play and record in separate processes the host starts. |
 | RoboSimStudio bridge | `mcp/twinsmith/robosim/` | Runs RoboSimStudio in its own Python environment from one grouped tool. |
 | System identification | `mcp/twinsmith/sysid.py`, `sysid_driver.py` | Fits model parameters with `mujoco.sysid` in its own environment; the driver is the only file that imports MuJoCo. |
-| Hardware | `mcp/twinsmith/hardware.py`, `sibling.py` | Runs `kicad-cli`, KiKit and Blender beside twinsmith with a scrubbed environment. |
+| Hardware | `mcp/twinsmith/hardware.py` | Runs `kicad-cli`, KiKit and Blender beside twinsmith. |
+| Planning and evaluation | `mcp/twinsmith/gap.py`, `mcp/twinsmith/vabar.py` | Run Graph-as-Policy and VABAR from their own pinned checkouts. |
+| Tools beside twinsmith | `mcp/twinsmith/sibling.py` | What `hardware`, `robosim`, `gap` and `vabar` share: a scrubbed environment, bounded runs, jobs, and a pinned checkout's commit. |
 | Launch and checks | `run.sh`, `install.sh`, `scripts/` | Start Isaac Sim with the extensions, install the host, run checks. |
 
 They are separate on purpose. The host must start instantly and must never need the 20 GB simulator environment just to
@@ -190,6 +192,14 @@ system identification in its own environment as a job and writes under `<workspa
 Blender stays in the servers beside twinsmith; `hardware` only runs the deterministic steps (`kicad-cli` checks, KiKit fab
 files, a headless Blender render) on files in an approved folder, and writes each result to a new folder under
 `<workspace>/runs/hardware/`. See [HARDWARE.md](HARDWARE.md).
+
+## Graph-as-Policy and VABAR
+
+`gap` (toolset `planning`) and `vabar` (toolset `eval`), both off by default, wrap two more pinned checkouts the same way:
+the checkout is found under `<workspace>/tools/`, its commit is reported against a `PIN` in the code, arguments are typed
+and allow-listed, long work is a job in the shared jobs folder, and run files go under `<workspace>/runs/gap/` and
+`<workspace>/runs/vabar/`. `gap` refuses anything that would reach Graph-as-Policy's real-hardware option. See
+[PLANNING-EVAL.md](PLANNING-EVAL.md).
 
 ## Seeing and recording
 

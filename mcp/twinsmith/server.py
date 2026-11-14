@@ -1254,6 +1254,14 @@ def _register_host_tools(server: FastMCP, state: _BridgeState, groups: Iterable[
         from .hardware import register_hardware_tools
         register_hardware_tools(server)
         single.append("hardware")
+    if "planning" in groups:
+        from .gap import register as register_gap
+        register_gap(server)
+        single.append("gap")
+    if "eval" in groups:
+        from .vabar import register as register_vabar
+        register_vabar(server)
+        single.append("vabar")
     for name in single:
         # Listed like every other host tool: no generated titles, no docstring indentation.
         tool = server._tool_manager._tools[name]
@@ -1811,9 +1819,15 @@ _HELP_TOPICS = (
     ("fit physical parameters (damping, armature, friction, gains, mass) to recorded trajectories (system identification)",
      ("system identification", "sysid", "identify", "fit damping", "fit friction", "fit mass", "armature", "damping",
       "recorded trajectories"),
-     "sysid, in the robosim toolset (off by default: toolsets action=enable names=[\"robosim\"]). It needs no simulator bridge. "
+     "sysid, in the real2sim toolset (off by default: toolsets action=enable names=[\"real2sim\"]). It needs no simulator bridge. "
      "sysid action=status checks its MuJoCo environment; fit (a dataset folder inside an approved root, with SOURCE.md) "
      "starts a job; jobs action=status follows it; report returns nominal, fitted and bounds per parameter."),
+    ("plan a task as a skill graph or score it on a benchmark (Graph-as-Policy, VABAR)",
+     ("graph-as-policy", "skill graph", "gap ", "vabar", "benchmark", "workflow graph", "open-robot-skills"),
+     "gap in the planning toolset and vabar in the eval toolset (both off by default: toolsets action=enable "
+     "names=[\"planning\", \"eval\"]). They need no simulator bridge and run their own pinned checkouts. gap action=status, "
+     "tools, check, generate (paid model, only when the owner allows it), run (simulation only, a job). vabar action=status, "
+     "list, run (a job), bench (print_only=true shows the plan), results. Simulation only."),
     ("operate a desktop app (FreeCAD, RViz, any X11 window) or Isaac Sim's own UI with mouse and keyboard",
      ("click", "typing", "type into", "type text", "keyboard", "mouse", "button", "menu", "toolbar", "dialog", "widget",
       "desktop", "gui", "freecad", "rviz", "computer use", "operate", "scroll"),

@@ -51,17 +51,19 @@ Toolsets control what is listed, not what is allowed: the bridge token and `TWIN
 | Toolset | Default | Tools | What it holds |
 |---|---|--:|---|
 | `core` | on | 6 | Connection, discovery, help, jobs and toolsets |
-| `screen` | off | 5 | Capture, record and arrange desktop windows |
-| `sim` | off | 19 | Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim |
-| `assets` | off | 5 | Import and manage robot and scene assets |
-| `real2sim` | off | 2 | RoboSimStudio real-to-sim and MuJoCo system identification |
-| `lab` | off | 5 | Isaac Lab jobs and script jobs |
-| `ros2` | off | 3 | ROS 2 transforms, graphs and occupancy maps |
-| `workcell` | off | 4 | UR5e workcell tools |
-| `cad` | off | 1 | PCB checks, fab files and renders |
-| `input` | explicit only | 1 | Desktop mouse and keyboard input |
-| `launch` | explicit only | 1 | Launch and stop simulator processes |
-| `extensions` | off | 0 | Tools from uncatalogued extension namespaces |
+| `screen` | off | 5 | Capture, record and arrange windows |
+| `sim` | off | 19 | Scenes, physics, sensors, code, Kit log and UI in Isaac Sim |
+| `assets` | off | 5 | Import and manage assets |
+| `real2sim` | off | 2 | RoboSimStudio real-to-sim and MuJoCo sysid |
+| `lab` | off | 5 | Isaac Lab and script jobs |
+| `ros2` | off | 3 | ROS 2 TF, graphs and occupancy maps |
+| `workcell` | off | 4 | UR5e work cell |
+| `cad` | off | 1 | PCB checks, fab files, renders |
+| `planning` | off | 1 | Graph-as-Policy skill graphs |
+| `eval` | off | 1 | VABAR benchmark |
+| `input` | explicit only | 1 | Desktop mouse and keyboard |
+| `launch` | explicit only | 1 | Start and stop simulators |
+| `extensions` | off | 0 | Tools of uncatalogued Kit extensions |
 <!-- /generated -->
 
 The counts are listed tools (a grouped tool with an `action` argument counts once) and are generated from the code. The sizes of

@@ -77,7 +77,8 @@ are on. Every tool and its arguments are in [TOOLS-ARGUMENTS.md](TOOLS-ARGUMENTS
 - **Isaac Lab and script jobs** (`lab`, which holds `run_script` too): see the [Isaac Lab reference](TOOLS-ISAACLAB.md).
 - **Opt-in only** (`input`, `launch`): desktop input (`computer`) and managed simulator sessions (`sim__session`). Neither is
   part of any profile, not even `all`; name them (`+input`, `+launch`). `real2sim` (RoboSimStudio, the `robosim` tool) is off
-  by default like `lab`; see [ROBOSIM.md](ROBOSIM.md).
+  by default like `lab`; see [ROBOSIM.md](ROBOSIM.md). So are `planning` (Graph-as-Policy, the `gap` tool) and `eval` (VABAR,
+  the `vabar` tool); see [planning and evaluation](PLANNING-EVAL.md).
 
 See the [host and bridge reference](TOOLS-HOST.md) for behaviour and limits.
 
