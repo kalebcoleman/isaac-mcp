@@ -58,7 +58,7 @@ port. The runner verifies the engine before each check, prints a results table, 
 | `screen` | `test_screen_*`, `test_contact_sheet`, `test_frames_video`, `test_capture_grid` | none registered; take one `screenshot` on a desktop session | A file is written | no for the tools; the desktop session needs a display |
 | `code` | `test_run_python`, `test_sim_reload`, `test_tool_packages` | none registered; `run_python` returns a value and a file round-trips | | yes |
 | `kit_debug` | `test_sim_ui`, `test_scene_advanced` | none registered; tail the Kit log | | yes |
-| `workcell` | `test_workcell_*`, `test_lab_hardware_config` | `smoke.py workcell --port 8766 --config <absolute-config> --mutate-stage` (delegates to `scripts/workcell_smoke.py`; PhysX only) | Stopped-stage authoring and BOM validation, not dynamics or renders | yes |
+| `workcell` | `test_workcell_*`, `test_lab_hardware_config` | `smoke.py workcell --port 8766 --config <absolute-config> --mutate-stage` (delegates to `scripts/workcell_smoke.py`; PhysX or Newton, the session's engine) | Stopped-stage authoring and BOM validation, not dynamics or renders | yes |
 | `robosim` | `test_robosim_bridge` | none registered | | no |
 | `input`, `launch` | `test_desktop_input`, `test_sim_sessions`, `test_launch_script_newton` | manual, on request only | | yes for `launch` |
 | BrickSim | `test_sim_compat`, `test_sim_versions`, the external-bridge cases in `test_sim_sessions` | the launch line in [BRICKSIM.md](BRICKSIM.md) on an Isaac Sim 5.1 BrickSim environment, then `status`, `sim__stage(action="info")` and one body-state read | `status` reports app version 5.1.0 and the tools answer. Not yet verified live since the toolsets change | yes |
@@ -195,11 +195,12 @@ printf 'DISPLAY=%s XDG_SESSION_TYPE=%s\n' "${DISPLAY:-unset}" "${XDG_SESSION_TYP
 SIM_PYTHON="${TWINSMITH_SIM_PYTHON:-$PWD/.venv/bin/python}"
 "$SIM_PYTHON" -c 'import importlib.metadata as m, sys; print(sys.executable); print(sys.version); print({n:m.version(n) for n in ("isaacsim", "isaacsim-kernel", "numpy", "torch", "mcp")})'
 uv pip check --python "$SIM_PYTHON"
-uv tool list
+readlink -f ~/.local/bin/twinsmith
 ```
 
 For the host, retain `uv pip freeze --python <host-python>` and `uv pip check --python <host-python>`
-using the interpreter of the installed uv tool (located under `uv tool dir`). Record Lab and
+using the host environment's interpreter, `mcp/.venv/bin/python` in the checkout (`./install.sh` links that environment's
+`twinsmith` as `~/.local/bin/twinsmith`). Record Lab and
 external ROS in their own interpreters/terminals. Do not use a system ROS Python environment
 to stand in for Sim's bundled bridge.
 

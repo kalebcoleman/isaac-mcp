@@ -8,14 +8,15 @@ exact schema of the seeded Jenga variation.
 
 The work cell uses externally supplied, pack-resolved assets and ships no robot binaries. It builds a stopped scene; the default
 mode uses gravity and `mirror_real` uses zero gravity. Replacing an unsaved stage requires explicit consent, and the stage
-remains in place after shutdown. It is qualified on PhysX only; see [compatibility](COMPATIBILITY.md#target-engine). There is no
+remains in place after shutdown. It builds on PhysX (the pack's drives) and on Newton (the config's `newton` drives and solver
+settings; `mirror_real` refused there); see [compatibility](COMPATIBILITY.md#target-engine). There is no
 force capture, motion planning, real-hardware control or evaluation implementation.
 
 ## Seeded Jenga variation
 
 Use the `build` action of the `workcell__jenga` group
 with `profile="measured_pending", seed=42` (single-purpose alias
-`workcell__jenga_build`) to rebuild
+`workcell__jenga(action="build")`) to rebuild
 the tower in the current workcell. This is destructive: it replaces the old tower,
 not the rest of the workcell. Stop the timeline first. Omitted `profile` and `seed`
 use `jenga.variation_profile` and `jenga.variation_seed` from the hardware configuration.

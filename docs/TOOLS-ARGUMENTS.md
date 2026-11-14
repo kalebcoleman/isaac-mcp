@@ -739,7 +739,7 @@ Point the active viewport camera, e.g. before a screenshot. path alone frames a 
 
 ## `assets`: Import and manage robot and scene assets
 
-Toolset `assets` is on by default. Reference: [ASSET-IMPORT.md](ASSET-IMPORT.md). 11 tools, listed as 3: `assets__import_path`, `assets__library` (roots, scan, search, info), `assets__pack` (list, doctor, dependencies, adopt, pin, build).
+Toolset `assets` is on by default. Reference: [ASSET-IMPORT.md](ASSET-IMPORT.md). 16 tools, listed as 5: `assets__import_path`, `assets__library` (roots, scan, search, info), `assets__mesh` (inspect, decimate, hulls, split), `assets__pack` (list, doctor, dependencies, adopt, pin, build), `assets__validate`.
 
 ### `assets__dependencies`
 
@@ -784,6 +784,59 @@ Inspect a USER-TRUSTED project on the selected Kit. Takes a snapshot of it. Nati
 - `stage_id` (string, required): Exact stage_id from sim__stage__info (call it first); stale stages are refused.
 - `root_id` (string, required): Approved trusted project root ID.
 - `relative_path` (string, required): Relative path of the USD file within that root.
+
+### `assets__mesh_decimate`
+
+Listed as `assets__mesh(action="decimate")`.
+
+Write a copy of a USD file whose render meshes are decimated (quadric) into a new folder, as a job. For render cost; it does not fix a collider overflow (use split). The source is never changed. Normals and texture coordinates of a decimated mesh are blocked because they no longer match its faces.
+
+- `source_path` (string, optional): Absolute USD file under an approved root or the asset root; or give pack and asset_id.
+- `pack` (string, optional): "<pack id>/<version>" holding asset_id. Default: the project file's pack.
+- `asset_id` (string, optional): Asset id of a file in pack, e.g. bench.
+- `prims` (array, optional): Only meshes at or under these prim paths.
+- `output` (string, required): New absolute folder under an approved root, outside the asset root.
+- `target_tris` (integer, optional): About this many triangles in all, shared by mesh size. Give this or ratio.
+- `ratio` (number, optional): Keep this fraction of each mesh's triangles, above 0 and at most 1. Give this or target_tris.
+
+### `assets__mesh_hulls`
+
+Listed as `assets__mesh(action="hulls")`.
+
+Write a collision layer for a USD file into a new folder, as a job: for each mesh, <parent>/<mesh>_collision with an oriented box or convex hulls (purpose guide, CollisionAPI, convexHull approximation), in the mesh parent's frame so rigid bodies and joints are untouched. Shapes go to the meshes under prims; else to the file's mesh colliders; else, when no mesh is a collider, to every mesh. Sublayer it over the asset, or use split for the composed result.
+
+- `source_path` (string, optional): Absolute USD file under an approved root or the asset root; or give pack and asset_id.
+- `pack` (string, optional): "<pack id>/<version>" holding asset_id. Default: the project file's pack.
+- `asset_id` (string, optional): Asset id of a file in pack, e.g. bench.
+- `prims` (array, optional): Only meshes at or under these prim paths.
+- `output` (string, required): New absolute folder under an approved root, outside the asset root.
+- `method` (string, default `"box"`): box (oriented box per mesh), convex (one hull), coacd (decomposition) or auto (box unless over twice the hull's volume, then coacd).
+- `max_hulls` (integer, default `16`): coacd/auto: most convex pieces per mesh, 1 to 256.
+- `threshold` (number, default `0.05`): coacd/auto: concavity, 0.01 to 1; lower is finer and slower.
+
+### `assets__mesh_inspect`
+
+Listed as `assets__mesh(action="inspect")`.
+
+Report every mesh of a USD file: triangles, bounds, closed or not, whether it is a collider and its approximation, and totals including the triangles in triangle-mesh colliders (what overflows Newton). Read-only; parses USD in a subprocess of this server's interpreter (the mesh extra). Native USD parsing is not sandboxed.
+
+- `source_path` (string, optional): Absolute USD file under an approved root or the asset root; or give pack and asset_id.
+- `pack` (string, optional): "<pack id>/<version>" holding asset_id. Default: the project file's pack.
+- `asset_id` (string, optional): Asset id of a file in pack, e.g. bench.
+- `prims` (array, optional): Only meshes at or under these prim paths.
+
+### `assets__mesh_split`
+
+Listed as `assets__mesh(action="split")`.
+
+Write a USD asset as a render layer and a collision layer plus the file that composes them, into a new folder, as a job: <stem>_render (the source; the replaced meshes lose their collision schemas, other colliders stay), <stem>_collision.usdc (explicit shapes, purpose guide) and <stem>.usda (sublayers both, keeps the units, up axis and default prim). Point an asset at <stem>.usda; make it a pack version with assets__pack action=build. The source is never changed.
+
+- `source_path` (string, optional): Absolute USD file under an approved root or the asset root; or give pack and asset_id.
+- `pack` (string, optional): "<pack id>/<version>" holding asset_id. Default: the project file's pack.
+- `asset_id` (string, optional): Asset id of a file in pack, e.g. bench.
+- `prims` (array, optional): Only meshes at or under these prim paths.
+- `output` (string, required): New absolute folder under an approved root, outside the asset root.
+- `collision` (object, optional): Collision shape options: method, max_hulls, threshold (as for hulls).
 
 ### `assets__pack_adopt`
 
@@ -870,6 +923,17 @@ Fresh filename search across approved project/library roots. No network discover
 
 - `query` (string, default `""`): Case-insensitive filename substring <=128 characters.
 - `limit` (integer, default `50`): Maximum results 1..100.
+
+### `assets__validate`
+
+Check from the file alone whether a USD asset loads on Newton or PhysX: units, triangle-mesh colliders over budget, rendered collision shapes, zero-force drives, nested articulations, massless moving bodies, drive gains too stiff for 500 Hz, invalid mimic joints. File only: colliders a scene adds at build time are not seen. Returns ok and each check's level, prim, detail and fix; on physx the Newton-only rules are info. Read-only, in a subprocess (the mesh extra).
+
+- `source_path` (string, optional): Absolute USD file under an approved root or the asset root; or give pack and asset_id.
+- `pack` (string, optional): "<pack id>/<version>" holding asset_id. Default: the project file's pack.
+- `asset_id` (string, optional): Asset id of a file in pack, e.g. bench.
+- `engine` (string, default `"newton"`): newton or physx.
+- `triangle_budget` (integer, default `200000`): Triangle-mesh collider triangles allowed.
+- `kit` (boolean, default `false`): Also run Isaac Sim's Asset Validator: not available yet, refused.
 
 ## `code`: Execute code and scripts, transfer files
 
@@ -1032,7 +1096,7 @@ No arguments.
 
 ### `screenshot`
 
-Capture the screen, a monitor or a window to see the result of your work. Returns the image and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise the primary monitor. A window capture works even when another window covers it.
+Capture the screen, a monitor or a window to see the result of your work. Returns the image and its PNG path. With no arguments it captures the Isaac Sim window if one is open, otherwise the primary monitor. A window capture works when another window covers it if the window manager composites (GNOME, KDE); doctor reports whether it does.
 
 - `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
 - `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
@@ -1046,7 +1110,7 @@ Capture the screen, a monitor or a window to see the result of your work. Return
 
 Listed as `screen_recording(action="start")`.
 
-Start a desktop MP4 recording; one at a time, no audio. E.g. for a demo. Stop it with stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window if one is open; a window recording works when covered or on a locked screen. The recording ends if this MCP server process exits, so keep one client connected from start to stop. Details: docs/TOOLS-HOST.md. UR5e work cell render: workcell__start_recording; to combine clips, join_videos.
+Start a desktop MP4 recording; one at a time, no audio. Stop it with stop_screen_recording, which gives the path. With no arguments it records the Isaac Sim window if one is open; a window recording works on a locked screen, or covered with a compositor. The recording ends if this MCP server process exits, so keep one client connected from start to stop. Details: docs/TOOLS-HOST.md. UR5e work cell render: workcell__start_recording; to combine clips, join_videos.
 
 - `monitor` (int | None, default `None`): 1-based monitor index from screen_info; 0 means all monitors combined.
 - `window` (str | None, default `None`): Window title or WM class substring, from list_windows.
@@ -1520,7 +1584,7 @@ No arguments.
 
 Listed as `workcell__cell(action="quick_start")`.
 
-Build a stopped workcell from an external asset pack; qualified on PhysX only, so a Newton session refuses it. Refuses unsaved stage changes unless explicitly allowed.
+Build a stopped workcell from an external asset pack, on PhysX or Newton (Newton uses the config's per-engine drives; mirror_real needs PhysX). Refuses unsaved stage changes unless explicitly allowed.
 
 - `config_path` (string, optional): Optional hardware configuration path.
 - `mode` (physics|mirror_real, default `"physics"`): Physics mode, or zero-gravity mirror mode.

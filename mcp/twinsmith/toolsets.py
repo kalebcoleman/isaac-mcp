@@ -44,7 +44,7 @@ _ROOTS = {
     "scene": "sim__quick_start sim__stage sim__prim sim__timeline__control sim__light sim__material",
     "physics": "sim__physics sim__joints sim__arm sim__simulation",
     "sensors": "sim__camera sim__lidar sim__viewport__frame",
-    "assets": "assets__import_path assets__library assets__pack",
+    "assets": "assets__import_path assets__library assets__pack assets__mesh assets__validate",
     "code": "run_python files reload_tools sim__controller run_script",
     "screen": "screenshot screen_recording windows join_videos doctor",
     "ros2": "sim__ros2__tf_setup sim__graph sim__map__occupancy",

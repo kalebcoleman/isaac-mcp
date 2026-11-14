@@ -31,7 +31,7 @@ export ROS_DOMAIN_ID=42
 ./run.sh --headless --realtime
 ```
 
-**1. Build the scene.** In your MCP client, call each tool below. `sim__quick_start` needs no IDs. Every later call also needs the `session_id` and `stage_id` it returns: add them to each block below. `sim__quick_start` and `sim__stage__info` refuse them.
+**1. Build the scene.** In your MCP client, call each tool below. `sim__quick_start` needs no IDs. Every later call also needs the `session_id` and `stage_id` it returns: add them to each block below. `sim__quick_start` and `sim__stage(action="info")` refuse them.
 
 Tool `sim__quick_start`:
 
@@ -42,52 +42,52 @@ Tool `sim__quick_start`:
 Keep the result: `robot.cmd_vel_graph` is used in step 3, and `assets` shows which file loaded. It came from this simulator's own assets root, so nothing is downloaded into the repository. If you already have a scene open, the call says how to replace it.
 Names: `franka`, `turtlebot3_burger`, `carter_v1`, `nova_carter`, `jetbot`, `create3`, `ur5e`.
 
-Four walls and a box to drive around, each with one `sim__prim__create` call. Don't build a floor: Quick Start's ground is the floor, and [a flat box floor can stop a robot driving](#wheels-spin-but-the-robot-stays-put).
+Four walls and a box to drive around, each with one `sim__prim(action="create")` call. Don't build a floor: Quick Start's ground is the floor, and [a flat box floor can stop a robot driving](#wheels-spin-but-the-robot-stays-put).
 
-Tool `sim__prim__create`:
+Tool `sim__prim`:
 
 ```json
-{"path": "/World/WallEast", "kind": "Cube", "collision": true, "position": [3, 0, 0.5], "scale": [0.2, 6.2, 1]}
+{"action": "create", "path": "/World/WallEast", "kind": "Cube", "collision": true, "position": [3, 0, 0.5], "scale": [0.2, 6.2, 1]}
 ```
 
-Tool `sim__prim__create`:
+Tool `sim__prim`:
 
 ```json
-{"path": "/World/WallWest", "kind": "Cube", "collision": true, "position": [-3, 0, 0.5], "scale": [0.2, 6.2, 1]}
+{"action": "create", "path": "/World/WallWest", "kind": "Cube", "collision": true, "position": [-3, 0, 0.5], "scale": [0.2, 6.2, 1]}
 ```
 
-Tool `sim__prim__create`:
+Tool `sim__prim`:
 
 ```json
-{"path": "/World/WallNorth", "kind": "Cube", "collision": true, "position": [0, 3, 0.5], "scale": [6.2, 0.2, 1]}
+{"action": "create", "path": "/World/WallNorth", "kind": "Cube", "collision": true, "position": [0, 3, 0.5], "scale": [6.2, 0.2, 1]}
 ```
 
-Tool `sim__prim__create`:
+Tool `sim__prim`:
 
 ```json
-{"path": "/World/WallSouth", "kind": "Cube", "collision": true, "position": [0, -3, 0.5], "scale": [6.2, 0.2, 1]}
+{"action": "create", "path": "/World/WallSouth", "kind": "Cube", "collision": true, "position": [0, -3, 0.5], "scale": [6.2, 0.2, 1]}
 ```
 
-Tool `sim__prim__create`:
+Tool `sim__prim`:
 
 ```json
-{"path": "/World/Box", "kind": "Cube", "collision": true, "position": [1.1, 0, 0.5], "scale": [0.8, 1.4, 1]}
+{"action": "create", "path": "/World/Box", "kind": "Cube", "collision": true, "position": [1.1, 0, 0.5], "scale": [0.8, 1.4, 1]}
 ```
 
 A camera above the room, so you can look at the result:
 
-Tool `sim__camera__create`:
+Tool `sim__camera`:
 
 ```json
-{"path": "/World/TopCamera", "position": [0, -0.5, 9], "target": [0, 0, 0], "frame": "world", "focal_length": 12}
+{"action": "create", "path": "/World/TopCamera", "position": [0, -0.5, 9], "target": [0, 0, 0], "frame": "world", "focal_length": 12}
 ```
 
 **2. Add a 2D LiDAR.** `RPLIDAR_S2E` sees from 0.05 m, while `Example_Rotary_2D` is blind within 1 m, so a costmap would miss anything close to the robot.
 
-Tool `sim__lidar__create`:
+Tool `sim__lidar`:
 
 ```json
-{"path": "/World/Create3/base_link/Lidar2D", "config": "RPLIDAR_S2E", "position": [0, 0, 0.12]}
+{"action": "create", "path": "/World/Create3/base_link/Lidar2D", "config": "RPLIDAR_S2E", "position": [0, 0, 0.12]}
 ```
 
 Keep the result: `sensor_path` is the OmniLidar inside that asset, and `ros2_scan_graph` is used in step 3.
@@ -100,7 +100,7 @@ Tool `sim__ros2__tf_setup`:
 {"robot": "/World/Create3", "base": "mobile", "world_frame": "", "base_link": "base_link", "extra_frames": ["/World/Create3/base_link/Lidar2D/RPLidar_S2E"]}
 ```
 
-Then call `sim__graph__build` twice: once with every field of `robot.cmd_vel_graph` from step 1, and once with every field of `ros2_scan_graph` from step 2.
+Then call `sim__graph(action="build")` twice: once with every field of `robot.cmd_vel_graph` from step 1, and once with every field of `ros2_scan_graph` from step 2.
 
 **4. Make the map.** This plays a few frames, then stops, so the robot returns to its start. `clear` removes the robot's own footprint, so use at least the robot's radius.
 
@@ -122,10 +122,10 @@ Tool `sim__timeline__control`:
 
 Look at the room from above:
 
-Tool `sim__camera__capture`:
+Tool `sim__camera`:
 
 ```json
-{"path": "/World/TopCamera", "filename": "start.png"}
+{"action": "capture", "path": "/World/TopCamera", "filename": "start.png"}
 ```
 
 **Terminal 2, ROS 2.** Stay in the repository folder. Use the same domain, and add `--overlay <Nav2 prefix>` if Nav2 is installed separately.
@@ -144,7 +144,7 @@ python3 scripts/cmd_vel_sequence.py "0.15,0,5;0,0.5,3;0,0,1"
 timeout -s KILL 10 ros2 topic echo --once /odom --field pose.pose.position
 ```
 
-The robot prim's own position agrees with `/odom`; `sim__body__state` with `path` `/World/Create3/base_link` reads it.
+The robot prim's own position agrees with `/odom`; `sim__physics(action="body_state")` with `path` `/World/Create3/base_link` reads it.
 
 **6. Back to the start.** Stopping returns the robot to its start pose. Nav2 will assume it starts there.
 
@@ -182,19 +182,19 @@ timeout -s KILL 150 ros2 action send_goal /navigate_to_pose nav2_msgs/action/Nav
 
 It prints `Goal finished with status: SUCCEEDED`. Check from the simulator, and look:
 
-Tool `sim__body__state`:
+Tool `sim__physics`:
 
 ```json
-{"path": "/World/Create3/base_link"}
+{"action": "body_state", "path": "/World/Create3/base_link"}
 ```
 
-Tool `sim__camera__capture`:
+Tool `sim__camera`:
 
 ```json
-{"path": "/World/TopCamera", "filename": "goal.png"}
+{"action": "capture", "path": "/World/TopCamera", "filename": "goal.png"}
 ```
 
-**9. Clean up and save.** `pkill -INT -f '[p]arams_file:=/tmp/isaac_nav2.yaml'` (use the path you gave `nav2_params.py`) stops this Nav2 and not anyone else's; the brackets stop it matching your own shell. If it keeps running (a launch started with `setsid nohup` from a script ignored SIGINT in one run), `kill -TERM` the launch's PID, then its direct children (`pgrep -P <pid>`). A launch backgrounded by a script can ignore SIGINT, and SIGTERM on the launch alone can leave its nodes running, so confirm with `ros2 node list` and stop any left by PID. Then stop the timeline and save a copy. The flag removes this session's render handles from the copy; without it, the save refuses and says so. In the saved file, the drive and LiDAR graphs make their own render products at Play, so `/scan` comes back when you open it with `sim__stage__open`.
+**9. Clean up and save.** `pkill -INT -f '[p]arams_file:=/tmp/isaac_nav2.yaml'` (use the path you gave `nav2_params.py`) stops this Nav2 and not anyone else's; the brackets stop it matching your own shell. If it keeps running (a launch started with `setsid nohup` from a script ignored SIGINT in one run), `kill -TERM` the launch's PID, then its direct children (`pgrep -P <pid>`). A launch backgrounded by a script can ignore SIGINT, and SIGTERM on the launch alone can leave its nodes running, so confirm with `ros2 node list` and stop any left by PID. Then stop the timeline and save a copy. The flag removes this session's render handles from the copy; without it, the save refuses and says so. In the saved file, the drive and LiDAR graphs make their own render products at Play, so `/scan` comes back when you open it with `sim__stage(action="open")`.
 
 Tool `sim__timeline__control`:
 
@@ -202,15 +202,15 @@ Tool `sim__timeline__control`:
 {"action": "stop"}
 ```
 
-Tool `sim__stage__save`:
+Tool `sim__stage`:
 
 ```json
-{"filename": "nav2_room", "reset_camera_render_handles": true}
+{"action": "save", "filename": "nav2_room", "reset_camera_render_handles": true}
 ```
 
 ### Other robots
 
-Use the robot's `wheels` values from the Quick Start result. The base link and the LiDAR's parent differ per robot: find a link with `sim__prim__find`.
+Use the robot's `wheels` values from the Quick Start result. The base link and the LiDAR's parent differ per robot: find a link with `sim__prim(action="find")`.
 
 | Robot | LiDAR parent | `base_link` | `nav2_params.py` flags |
 |---|---|---|---|
@@ -227,7 +227,7 @@ TurtleBot3 Burger's rear caster is a box collider, and turning in place it reach
 
 ### What was measured
 
-Each run used `--realtime`, the room above and a goal at (2.2, 0), with ROS 2 Jazzy, and PhysX. "Doc text" means a script ran this page's own blocks in order. Distance is the robot's real position from `sim__body__state` when Nav2 finished; Nav2's default tolerance is 0.25 m.
+Each run used `--realtime`, the room above and a goal at (2.2, 0), with ROS 2 Jazzy, and PhysX. "Doc text" means a script ran this page's own blocks in order. Distance is the robot's real position from `sim__physics(action="body_state")` when Nav2 finished; Nav2's default tolerance is 0.25 m.
 
 | Build | Robot | `/cmd_vel` (commanded, measured) | Nav2 goal |
 |---|---|---|---|
@@ -263,7 +263,7 @@ Measured with a cube floor on 6.2, with its top at z=0. The same 20 x 20 x 0.1 a
 | 20, 20, 0.1, launched with `--/physics/collisionApproximateCylinders=true` | 200:1 | drove, 0.178 m/s | drove unevenly: started 0.9 m off, wheels 1.99 and 2.34 rad/s |
 
 - Use `sim__quick_start`'s ground. A thicker box, thicker than the wheels, also works; no safe ratio is claimed.
-- `sim__prim__create` warns about a box collider at 50:1 or more.
+- `sim__prim(action="create")` warns about a box collider at 50:1 or more.
 - In the run that found this, friction 1.5, mass on the root, a lower floor and position targets didn't change it. Kinematic flags and fixed roots aren't involved: the NVIDIA robots tested have neither.
 - A course's own TurtleBot file that did drive wasn't available for comparison, so it isn't known why it drove.
 
@@ -317,7 +317,7 @@ Every "the map is wrong", "frames jump" or "RobotModel is white" problem we have
    (`/Graph/twinsmith_ros2_clock`) for every robot it sets up, and matches its TF stamps to that
    clock's stop/play behaviour. If another graph adds a second
    clock afterwards, call the tool again with `clock=auto`; it drops its clock and updates every robot it
-   set up. The shared clock stays after the last robot graph is deleted (`sim__stage__clear_owned`
+   set up. The shared clock stays after the last robot graph is deleted (`sim__stage(action="clear_owned")`
    removes it). Every other node, RViz included, must run with
    `use_sim_time:=true`; mixing wall-clock and sim stamps makes TF lookups fail or extrapolate.
 3. **One root.** RViz's *Fixed Frame* must be the root of a single connected tree
@@ -338,10 +338,10 @@ graph (`/Graph/twinsmith_ros2`, or `/Graph/twinsmith_ros2_<namespace>_<hash>`), 
 published twice by it. The static `world -> base_link` (or `world -> <odom>`) is the pose at setup
 time: call it again after moving the robot.
 
-Tool `sim__ros2__tf_setup`, with the IDs from `sim__stage__info`:
+Tool `sim__ros2__tf_setup`, with the IDs from `sim__stage(action="info")`:
 
 ```json
-{"session_id": "<from sim__stage__info>", "stage_id": "<from sim__stage__info>", "robot": "/World/UR5e"}
+{"session_id": "<from sim__stage info>", "stage_id": "<from sim__stage info>", "robot": "/World/UR5e"}
 ```
 
 | Situation | Arguments |
@@ -529,10 +529,10 @@ Frame naming rules in `IsaacComputeTransformTree` preserve existing ROS consumer
 | ROS 2 node fails: "SharedMemory: unknown element" / "rmw handle is invalid" | an old `cyclonedds.xml` with `<SharedMemory>` and a Cyclone build without it | use this repository's current `config/cyclonedds.xml` |
 | Wheels turn at v/r, chassis doesn't move | wheels are `Cylinder` colliders on a very flat box floor | [use Quick Start's ground](#wheels-spin-but-the-robot-stays-put) |
 | Costmaps: "The tf tree is invalid because it contains a loop" | two publishers for one edge, or an older `sim__ros2__tf_setup` on a `base_footprint` robot | doctor shows `TF loop`; rerun the current tool, stopped |
-| `/scan` silent, Kit logs "not attached to RTX Lidar" | the render product targets the wrapper prim, not the OmniLidar | use `ros2_scan_graph` from `sim__lidar__create`, whose target is its `sensor_path` |
+| `/scan` silent, Kit logs "not attached to RTX Lidar" | the render product targets the wrapper prim, not the OmniLidar | use `ros2_scan_graph` from `sim__lidar(action="create")`, whose target is its `sensor_path` |
 | `/scan` silent after reopening a saved scene | the helper was wired to the tool's own `IsaacMCP_*` product, which saves drop | use `ros2_scan_graph`, which makes its own product at Play |
 | `/scan` is all `-1.0` | no return for those beams: `-1.0` means nothing in range. A few are normal | put something within the sensor's range, on its scan plane |
-| Kit logs "no usable time-code range" | a hand-written file has no `startTimeCode`/`endTimeCode` | add `startTimeCode = 0` and `endTimeCode = 1000000` to its header. `sim__stage__open` reports this. Measured: driving still worked on 6.2 and 5.1, and `/scan` on 6.2 |
+| Kit logs "no usable time-code range" | a hand-written file has no `startTimeCode`/`endTimeCode` | add `startTimeCode = 0` and `endTimeCode = 1000000` to its header. `sim__stage(action="open")` reports this. Measured: driving still worked on 6.2 and 5.1, and `/scan` on 6.2 |
 | Nav2 "Control loop missed its desired rate", "Costmap timed out" | headless Kit runs faster than real time | `./run.sh --headless --realtime` |
 | Frames stop after reset | timeline stopped | play again; RViz resets once if `/clock` restarts from 0 |
 | Robot vanishes after stop/play, "extrapolation into the past" | TF and `/clock` from different time sources | doctor reports the skew; re-run `sim__ros2__tf_setup` (`clock=auto`) |

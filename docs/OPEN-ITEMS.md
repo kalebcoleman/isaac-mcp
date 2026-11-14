@@ -17,7 +17,7 @@ version.
 - [x] Hold a full 54-block Jenga tower for ten seconds on Newton with the contact-buffer check on (500 Hz; 1.7 mm).
 - [ ] Make a Franka joint move settle within the PhysX tolerance on Newton.
 - [ ] Decide `sim__physics(action="raycast")` on Newton: implement a query, or keep it refused and say so.
-- [ ] The UR5e work cell on Newton: see [Work cell on Newton](#work-cell-on-newton) below.
+- [ ] The UR5e work cell on Newton: it builds and holds; the force/torque read, cameras and `mirror_real` remain (see [Work cell on Newton](#work-cell-on-newton)).
 - [ ] Record the live runs that show exact stepping, the one-off push and camera capture after motion passing on Newton; they
   are reported, not yet recorded in this repository. Run `scripts/smoke.py physics --backend newton --discard-changes
   --check newton_checks` on a free GPU and keep the JSON report. If a step-timing mismatch remains, read `newton.clocks_before`,
@@ -38,46 +38,36 @@ version.
 
 ### Work cell on Newton
 
-The default engine is Newton, but the UR5e work cell (`workcell__cell` quick start and tower rebuild) is qualified on PhysX
-only, and refuses on a Newton session with the message below and no engine switch. Get a PhysX session with
-`run.sh --physics-backend physx`, `[sim] physics_backend = "physx"` or `TWINSMITH_PHYSICS_BACKEND=physx`.
-`scripts/workcell_smoke.py` and the work-cell tests still qualify PhysX only.
+The work cell builds on Newton since 2026-11-14. Pack `ur5e-jenga-workcell/v2` fixes the asset side:
+- a box collision layer for the bench;
+- the RG2 in the arm's articulation, with mimic fingers and no zero-force drives.
 
-Live results from a probe that bypassed the refusal (Isaac Sim 6.2.0.0, Newton 1.6.1, RTX 5080, headless, pack
-`ur5e-jenga-workcell/v1`, 2026-11-13; run files outside this repository):
+The config's `newton` section gives the per-engine side: arm drives with armature, 500 Hz, and the tower's solver settings. The
+live results for both engines are in the [work cell README](../exts/workcell/workcell/README.md#newton).
 
-What works, once the scene is adapted in the session layer:
+Done:
 
-- [x] The bench's 385 triangle-mesh colliders (1.63 M triangles) overflow Newton's triangle-pair buffer ("7500052 > 1000000");
-  convex hulls per bench mesh avoid it.
-- [x] The RG2's passive joints author a drive with `maxForce` 0, which MuJoCo rejects ("actfrcrange[0] should be smaller than
-  actfrcrange[1]"); removing those drives avoids it.
-- [x] One articulation for the arm and gripper (the RG2 mount joint included in the arm, the RG2 articulation root removed)
-  initializes. With the pack's separate RG2 articulation, Newton 1.6.1's USD importer lists the RG2 base in the arm's bodies and
-  the forearm twice, skips `MjcEqualityWeldAPI` on the mount joint ("unresolved body target"), and MuJoCo fails with "mass and
-  inertia of moving bodies must be larger than mjMINVAL".
-- [x] The pack's UR5e and RG2 force drives (9400 N m per degree on the shoulder) are unstable in MuJoCo-Warp: the arm went
-  non-finite and knocked the tower over 3 to 10 s in. Explicit gains (800/80, 800/80, 600/60, 200/20, 200/20, 100/10 N m/rad and
-  N m s/rad; RG2 30/8 with its 1 N m limit) held the arm for 12 s.
-- [x] The tower in the cell at 500 Hz with an elliptic friction cone, 100 iterations, contact gap 4 mm and `impratio` 10: max block
-  drift 0.2 to 0.3 mm over 11 s after a 1 s settle (3.5 mm from the authored poses, mostly the 2 mm that the gaps from the
-  per-block size variation close); 2150 of 2240 contact slots in use, no overflow. At 360 Hz 0.66 mm; at 250 and 120 Hz the tower
-  collapses; without `impratio` 10 the top layer creeps 0.4 mm/s. The cell's tower needs the same 500 Hz as the generic one.
+- [x] Bench collisions within Newton's contact buffer: 385 boxes instead of 1.63 M triangles, with no overflow.
+- [x] One articulation; no zero-force drives; the RG2 fingers move, the mimic followers within 0.003 degrees.
+- [x] Stable arm drives on MuJoCo-Warp at 500 Hz. At the presentation pose with gravity on, every joint holds within 0.05
+  degrees, and 0.05 rad joint steps settle in 0.2 s. The pack's PhysX gains went non-finite there.
+- [x] The tower in the cell: at most 0.54 mm over 11 s after a 1.2 s settle.
+- [x] `workcell_smoke.py` takes the session's engine. The host tests cover the engine gating, the `newton` section's
+  validation and the per-degree drive authoring. The Newton build itself is covered by the live run, not the host tests.
 
-What does not work or is not yet done:
+Still open:
 
-- [ ] The RG2 fingers do not move: `finger_joint` and `right_outer_knuckle_joint` targets of +0.3 and -0.5 rad left every gripper
-  joint at 0.0000 after 100 steps. The closed chain, held by the excluded loop-closing revolute joints, is locked as converted.
-  Needs a Newton-specific representation (equality or mimic constraints) and a measured finger width at open, mid and closed.
-- [ ] The flange force and torque read: `get_link_incoming_joint_force` fails ("Failed to get incoming link joint forces from
-  backend") without Newton's `link_incoming_joint_force` output enabled before initialization, which was not yet tried; the finger
-  contact reads need Newton's contact snapshot instead of the PhysX contact view. Sensors keep reporting "unavailable" rather than
+- [ ] The flange force and torque read on Newton. `get_link_incoming_joint_force` fails ("Failed to get incoming link joint
+  forces from backend") unless Newton's `link_incoming_joint_force` output is enabled before initialization. The finger contact
+  reads need Newton's contact snapshot instead of the PhysX contact view. Sensors keep reporting "unavailable" rather than
   inventing values.
-- [ ] Per-engine friction profiles in `lab_hardware.json` (unconfirmed; start equal to the PhysX values).
-- [ ] The robot-only gravity disablement for `mirror_real` on Newton (the PhysX rigid-body API is used today).
+- [ ] `mirror_real` (robot-only gravity off) on Newton. It is refused today. Newton's PhysX resolver may read
+  `physxRigidBody:disableGravity`, which needs a live check.
+- [ ] Per-engine friction profiles in `lab_hardware.json` (unconfirmed; they start equal to the PhysX values).
+- [ ] Measured finger width at open, mid and closed on both engines. The RG2 knuckle drives (1 N m) are slow. Of a -20 degree
+  target, they reached -17.7 degrees on PhysX after 360 steps, and -15.2 and -15.5 degrees on Newton after 0.72 s.
 - [ ] The static check at rest (flange wrench equals the weight below the sensor) on both engines.
-- [ ] Renders (cell, wrist, overhead) on Newton, and a PhysX re-check after the Newton changes.
-- [ ] Then: remove the refusal in `workcell/scene.py`, make `workcell_smoke.py` take the engine, and cover both engines in the tests.
+- [ ] Renders (cell, wrist, overhead) on Newton.
 
 ## Real-to-sim with RoboSimStudio
 
