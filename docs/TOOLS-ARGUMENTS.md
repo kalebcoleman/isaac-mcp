@@ -104,7 +104,7 @@ Switch this MCP server to another running Kit bridge on this machine.
 
 - `port` (int, required): Bridge TCP port from --list-bridges or status.
 
-## `screen`: Capture, record and arrange desktop windows
+## `screen`: Capture, record and arrange windows
 
 Toolset `screen` is off until you select it with `+screen`. Reference: [TOOLS-HOST.md](TOOLS-HOST.md). 11 tools, listed as 5: `doctor`, `join_videos`, `screen_recording` (start, stop, status), `screenshot`, `windows` (info, list, raise, move, tile).
 
@@ -227,7 +227,7 @@ Tile 2-6 windows over a monitor's work area. E.g. Isaac Sim left and RViz 2 righ
 - `monitor` (int | None, default `None`): 1-based index from screen_info. Default: the monitor holding the first window.
 - `gap` (int, default `0`): Pixels between tiles.
 
-## `sim`: Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim
+## `sim`: Scenes, physics, sensors, code, Kit log and UI in Isaac Sim
 
 Toolset `sim` is off until you select it with `+sim`. Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 58 tools, listed as 19: `files` (put, get, stat), `reload_tools`, `run_python`, `sim__arm` (ik, fk), `sim__camera` (list, create, capture), `sim__controller` (create, update), `sim__joints` (inspect, state, command, move, drive, gains, teleport), `sim__lidar` (create, read), `sim__light` (create, modify), `sim__logs` (tail, mark, summary), `sim__material` (create, apply), `sim__physics` (inspect, body_state, contacts, raycast, configure, apply), `sim__prim` (get, find, bounds, measure, create, create_many, set_transform, set_attribute, clone, delete, revert), `sim__quick_start`, `sim__simulation` (step, run, replay), `sim__stage` (info, tree, open, save, clear_owned), `sim__timeline__control`, `sim__ui` (find, act), `sim__viewport__frame`.
 
@@ -984,7 +984,7 @@ Check a file's existence, size and sha256 on the bridge's box. Skips unchanged p
 
 - `path` (string, required): Path on the bridge's box (~ expands).
 
-## `assets`: Import and manage robot and scene assets
+## `assets`: Import and manage assets
 
 Toolset `assets` is off until you select it with `+assets`. Reference: [ASSET-IMPORT.md](ASSET-IMPORT.md). 16 tools, listed as 5: `assets__import_path`, `assets__library` (roots, scan, search, info), `assets__mesh` (inspect, decimate, hulls, split), `assets__pack` (list, doctor, dependencies, adopt, pin, build), `assets__validate`.
 
@@ -1182,7 +1182,7 @@ Check from the file alone whether a USD asset loads on Newton or PhysX: units, t
 - `triangle_budget` (integer, default `200000`): Triangle-mesh collider triangles allowed.
 - `kit` (boolean, default `false`): Also run Isaac Sim's Asset Validator: not available yet, refused.
 
-## `real2sim`: RoboSimStudio real-to-sim and MuJoCo system identification
+## `real2sim`: RoboSimStudio real-to-sim and MuJoCo sysid
 
 Toolset `real2sim` is off until you select it with `+real2sim`. Reference: [ROBOSIM.md](ROBOSIM.md). 2 tools, listed as 2: `robosim`, `sysid`.
 
@@ -1230,7 +1230,7 @@ Fit model parameters (joint damping, armature, friction loss, position gains, ge
 - `max_iters` (int, default `50`): fit: optimiser iterations at most.
 - `timeout_s` (float, default `3600.0`): fit: the job is stopped after this many seconds.
 
-## `lab`: Isaac Lab jobs and script jobs
+## `lab`: Isaac Lab and script jobs
 
 Toolset `lab` is off until you select it with `+lab`. Reference: [TOOLS-ISAACLAB.md](TOOLS-ISAACLAB.md). 13 tools, listed as 5: `isaaclab__checkpoint_register`, `isaaclab__inspect` (install, envs, preflight, checkpoints), `isaaclab__launch` (train, eval, play, record, env_check), `isaaclab__metrics` (summary, curve), `run_script`.
 
@@ -1460,7 +1460,7 @@ Run any Python script as a managed job: a job_id at once, a log, a hard timeout,
 - `min_free_vram_mb` (int | None, default `None`): Refuse to start unless this much GPU memory (MiB) is free on GPU 0 (refused together with CUDA_VISIBLE_DEVICES other than 0). Default: no check.
 - `wait_for_vram_s` (float, default `0`): With min_free_vram_mb: wait up to this many seconds for the memory to free up (at most 3600).
 
-## `ros2`: ROS 2 transforms, graphs and occupancy maps
+## `ros2`: ROS 2 TF, graphs and occupancy maps
 
 Toolset `ros2` is off until you select it with `+ros2`. Reference: [TOOLS-SCENE.md](TOOLS-SCENE.md). 6 tools, listed as 3: `sim__graph` (node_types, build, inspect, show), `sim__map__occupancy`, `sim__ros2__tf_setup`.
 
@@ -1551,7 +1551,7 @@ Build one ROS 2 graph for a robot, the same way every time: /clock (sim time), /
 
 <a id="ur5e-twin-workcell__"></a>
 
-## `workcell`: UR5e workcell tools
+## `workcell`: UR5e work cell
 
 Toolset `workcell` is off until you select it with `+workcell`. Reference: [README.md](../exts/workcell/workcell/README.md). 7 tools, listed as 4: `workcell__cell` (quick_start, status, shutdown), `workcell__jenga` (build, status), `workcell__perception` (status), `workcell__robot` (status).
 
@@ -1614,7 +1614,7 @@ Read the current workcell build report.
 
 No arguments.
 
-## `cad`: PCB checks, fab files and renders
+## `cad`: PCB checks, fab files, renders
 
 Toolset `cad` is off until you select it with `+cad`. Reference: [HARDWARE.md](HARDWARE.md). 1 tools, listed as 1: `hardware`.
 
@@ -1632,7 +1632,7 @@ PCB and enclosure outputs from tools beside twinsmith; no simulator. status: ver
 - `samples` (int, default `128`): render: Cycles samples per pixel.
 - `allow_concurrent_gpu` (bool, default `False`): render: knowingly start next to another GPU job or a running simulator.
 
-## `planning`: Graph-as-Policy skill graphs in simulation
+## `planning`: Graph-as-Policy skill graphs
 
 Toolset `planning` is off until you select it with `+planning`. Reference: [PLANNING-EVAL.md](PLANNING-EVAL.md#gap). 1 tools, listed as 1: `gap`.
 
@@ -1649,7 +1649,7 @@ Graph-as-Policy skill graphs, from its own pinned checkout: status (checkout, GP
 - `timeout_s` (float, default `3600`): generate/run: job time limit in seconds.
 - `allow_concurrent_gpu` (bool, default `False`): run: knowingly start beside another GPU job or a running Isaac Sim.
 
-## `eval`: VABAR benchmark runs
+## `eval`: VABAR benchmark
 
 Toolset `eval` is off until you select it with `+eval`. Reference: [PLANNING-EVAL.md](PLANNING-EVAL.md#vabar). 1 tools, listed as 1: `vabar`.
 
@@ -1671,7 +1671,7 @@ VABAR benchmark from its own pinned checkout: status (pins, warmup), list (tasks
 - `timeout_s` (float, default `21600`): run/bench: job time limit in seconds.
 - `allow_concurrent_gpu` (bool, default `False`): run/bench: knowingly start beside another GPU job or a running Isaac Sim.
 
-## `input`: Desktop mouse and keyboard input
+## `input`: Desktop mouse and keyboard
 
 Toolset `input` is off until you select it with `+input` (never enabled by `all`). Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-desktop-input). 6 tools, listed as 1: `computer` (click, drag, scroll, type, key, batch).
 
@@ -1763,7 +1763,7 @@ Type up to 200 printable ASCII characters into the focused selected X11 window.
 - `text` (str, required): Up to 200 printable ASCII characters.
 - `screenshot_after` (bool, default `False`): Also return a screenshot of the window after the action.
 
-## `launch`: Launch and stop simulator processes
+## `launch`: Start and stop simulators
 
 Toolset `launch` is off until you select it with `+launch` (never enabled by `all`). Reference: [TOOLS-HOST.md](TOOLS-HOST.md#optional-simulator-sessions). 4 tools, listed as 1: `sim__session` (launch, list, status, stop).
 

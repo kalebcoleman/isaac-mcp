@@ -17,19 +17,19 @@ rows for the server you have installed, with the current state of each.
 | Toolset | Default | Listed tools |
 |---|---|---|
 | `core`: Connection, discovery, help, jobs and toolsets | on | `help`, `jobs`, `refresh_tools`, `status`, `toolsets`, `use_bridge` |
-| `screen`: Capture, record and arrange desktop windows | off | `doctor`, `join_videos`, `screen_recording`, `screenshot`, `windows` |
-| `sim`: Scenes, prims, physics, joints, sensors, code, Kit's log and UI, in a running Isaac Sim | off | `files`, `reload_tools`, `run_python`, `sim__arm`, `sim__camera`, `sim__controller`, `sim__joints`, `sim__lidar`, `sim__light`, `sim__logs`, `sim__material`, `sim__physics`, `sim__prim`, `sim__quick_start`, `sim__simulation`, `sim__stage`, `sim__timeline__control`, `sim__ui`, `sim__viewport__frame` |
-| `assets`: Import and manage robot and scene assets | off | `assets__import_path`, `assets__library`, `assets__mesh`, `assets__pack`, `assets__validate` |
-| `real2sim`: RoboSimStudio real-to-sim and MuJoCo system identification | off | `robosim`, `sysid` |
-| `lab`: Isaac Lab jobs and script jobs | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics`, `run_script` |
-| `ros2`: ROS 2 transforms, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
-| `workcell`: UR5e workcell tools | off | `workcell__cell`, `workcell__jenga`, `workcell__perception`, `workcell__robot` |
-| `cad`: PCB checks, fab files and renders | off | `hardware` |
-| `planning`: Graph-as-Policy skill graphs in simulation | off | `gap` |
-| `eval`: VABAR benchmark runs | off | `vabar` |
-| `input`: Desktop mouse and keyboard input | explicit only | `computer` |
-| `launch`: Launch and stop simulator processes | explicit only | `sim__session` |
-| `extensions`: Tools from uncatalogued extension namespaces | off | none |
+| `screen`: Capture, record and arrange windows | off | `doctor`, `join_videos`, `screen_recording`, `screenshot`, `windows` |
+| `sim`: Scenes, physics, sensors, code, Kit log and UI in Isaac Sim | off | `files`, `reload_tools`, `run_python`, `sim__arm`, `sim__camera`, `sim__controller`, `sim__joints`, `sim__lidar`, `sim__light`, `sim__logs`, `sim__material`, `sim__physics`, `sim__prim`, `sim__quick_start`, `sim__simulation`, `sim__stage`, `sim__timeline__control`, `sim__ui`, `sim__viewport__frame` |
+| `assets`: Import and manage assets | off | `assets__import_path`, `assets__library`, `assets__mesh`, `assets__pack`, `assets__validate` |
+| `real2sim`: RoboSimStudio real-to-sim and MuJoCo sysid | off | `robosim`, `sysid` |
+| `lab`: Isaac Lab and script jobs | off | `isaaclab__checkpoint_register`, `isaaclab__inspect`, `isaaclab__launch`, `isaaclab__metrics`, `run_script` |
+| `ros2`: ROS 2 TF, graphs and occupancy maps | off | `sim__graph`, `sim__map__occupancy`, `sim__ros2__tf_setup` |
+| `workcell`: UR5e work cell | off | `workcell__cell`, `workcell__jenga`, `workcell__perception`, `workcell__robot` |
+| `cad`: PCB checks, fab files, renders | off | `hardware` |
+| `planning`: Graph-as-Policy skill graphs | off | `gap` |
+| `eval`: VABAR benchmark | off | `vabar` |
+| `input`: Desktop mouse and keyboard | explicit only | `computer` |
+| `launch`: Start and stop simulators | explicit only | `sim__session` |
+| `extensions`: Tools of uncatalogued Kit extensions | off | none |
 <!-- /generated -->
 
 - `core` is always on and cannot be turned off. It is the only toolset on by default: name the others you want.
