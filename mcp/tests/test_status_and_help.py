@@ -109,10 +109,17 @@ def test_a_simulator_job_s_wait_is_served_by_the_simulator_in_one_call(state):
     out = json.loads(gw._dispatch("job_status", {"job_id": "job-1", "wait_s": 30}, state))
     assert out["state"] == "succeeded"
     assert state.client.calls == [("job_status", {"job_id": "job-1", "wait_s": 30})], "one call: the bridge waits, not the host"
-    for bad in (61, -1, True):
+    for bad in (-1, True, float("nan"), "30"):
         refused = gw._dispatch("job_status", {"job_id": "job-1", "wait_s": bad}, state)
         assert gw._failed_tool_result(refused) and "wait_s" in refused
     assert len(state.client.calls) == 1, "a bad wait is refused before anything is asked"
+
+
+def test_a_longer_wait_waits_the_most_a_call_may_instead_of_failing(state):
+    state.client = Bridge({"job_status": lambda params: {"job_id": "job-1", "state": "running", "wait_timed_out": True}})
+    out = json.loads(gw._dispatch("job_status", {"job_id": "job-1", "wait_s": 300}, state))
+    assert state.client.calls == [("job_status", {"job_id": "job-1", "wait_s": 60.0})], "the simulator gets 60, not 300"
+    assert out["wait_s_used"] == 60.0 and "Call again" in out["note"] and out["state"] == "running"
 
 
 def replay_result(folder, frames=4):
