@@ -13,7 +13,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from twinsmith import legacy
 
 def _env(env: Any) -> Any:
     return os.environ if env is None else env
@@ -146,7 +145,7 @@ def _named_project_file(env: Any) -> Path | None:
         return None
     path = Path(override).expanduser()
     if path.is_dir():
-        path = legacy.choose_file(path / _PROJECT_FILE, path / legacy.OLD_PROJECT_JSON) or path / _PROJECT_FILE
+        path = path / _PROJECT_FILE
     return path.resolve() if path.is_file() else None
 
 
@@ -156,8 +155,8 @@ def _walked_up_project_file() -> Path | None:
     except OSError:
         return None
     for directory in (here, *here.parents):
-        found = legacy.choose_file(directory / _PROJECT_FILE, directory / legacy.OLD_PROJECT_JSON)
-        if found is not None:
+        found = directory / _PROJECT_FILE
+        if found.is_file():
             return found
     return None
 

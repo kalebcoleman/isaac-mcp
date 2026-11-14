@@ -13,7 +13,7 @@ from twinsmith import asset_packs as packs
 from twinsmith import pack_manifest as pm, urdf_physics, urdf_refs
 from twinsmith.project_assets import AssetError, Broker
 
-ENV = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_PROJECT", "TWINSMITH_WORKSPACE", "TWINSMITH_USD_PYTHON", *pm.REMOVED_ENVIRONMENT)
+ENV = ("TWINSMITH_ASSET_ROOT", "TWINSMITH_PROJECT", "TWINSMITH_WORKSPACE", "TWINSMITH_USD_PYTHON")
 PROVENANCE = dict(source="unit test", license="test fixture")
 
 

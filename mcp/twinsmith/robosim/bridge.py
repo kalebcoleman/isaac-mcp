@@ -19,7 +19,7 @@ import threading
 import time
 import uuid
 
-from twinsmith import legacy, pack_manifest
+from twinsmith import pack_manifest
 
 from . import plan
 from . import template as scene_template_module
@@ -114,7 +114,7 @@ class RoboSimBridge:
         if path.is_symlink() or path.resolve().parent != self.runs.resolve():
             raise ValueError("Run must be a direct, non-symlink bridge run folder.")
         ledger = json.loads((path / "run.json").read_text())
-        if ledger.get("bridge") not in ("twinsmith-robosim-v1", legacy.OLD_ROBOSIM_LEDGER_ID) or ledger.get("run") != run:
+        if ledger.get("bridge") != "twinsmith-robosim-v1" or ledger.get("run") != run:
             raise ValueError("Not a bridge-owned RSS run.")
         if ledger["checkout"] != str(self.root):
             raise ValueError("Run belongs to another RSS checkout; set TWINSMITH_ROBOSIM_ROOT accordingly.")
