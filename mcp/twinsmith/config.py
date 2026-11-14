@@ -145,12 +145,12 @@ def resolve(env: Mapping[str, str] | None = None, cli_toolsets: str | None = Non
     return Config(enabled, backend, source, runtime, cursor_badge=badge)
 
 
-def _owner_planning_flag(name: str, home: Path | None = None) -> bool:
-    """``[planning] <name>`` from the owner's own ``~/.config/twinsmith/config.toml`` only, false when unset. No project
-    file is read, so a cloned repository cannot turn it on. A malformed file or value raises ValueError."""
+def _owner_planning(home: Path | None = None) -> tuple[Path, dict]:
+    """The ``[planning]`` table of the owner's own ``~/.config/twinsmith/config.toml`` (empty when unset), and its path.
+    No project file is read, so a cloned repository cannot change it. A malformed file raises ValueError."""
     path = (Path.home() if home is None else Path(home)) / ".config/twinsmith/config.toml"
     if not path.is_file():
-        return False
+        return path, {}
     if tomllib is None:
         raise ValueError(f"Reading {path} needs Python 3.11 or the tomli package.")
     try:
@@ -161,6 +161,12 @@ def _owner_planning_flag(name: str, home: Path | None = None) -> bool:
     planning = data.get("planning", {})
     if not isinstance(planning, dict):
         raise ValueError(f"[planning] in {path} must be a table.")
+    return path, planning
+
+
+def _owner_planning_flag(name: str, home: Path | None = None) -> bool:
+    """``[planning] <name>`` from the owner's own file, false when unset; a value that is not a TOML boolean raises."""
+    path, planning = _owner_planning(home)
     value = planning.get(name, False)
     if not isinstance(value, bool):   # an opt-in is a TOML boolean, never a string or number that might mean yes
         raise ValueError(f"planning.{name} in {path} must be true or false, not {value!r}.")
@@ -176,6 +182,116 @@ def allow_scripts(home: Path | None = None) -> bool:
     """Whether the owner allows graph ``script`` and ``router`` nodes from outside the pinned checkouts
     (``[planning] allow_scripts``). Those nodes are arbitrary Python run inside Graph-as-Policy."""
     return _owner_planning_flag("allow_scripts", home)
+
+
+def loopback_url(value, name: str) -> str:
+    """An ``http(s)`` URL whose host is this machine (``localhost``, ``127.0.0.0/8`` or ``::1``), with no user or
+    password in it. Raises ValueError otherwise."""
+    import ipaddress
+    from urllib.parse import urlsplit
+
+    if not isinstance(value, str) or not value or any(ord(c) < 33 for c in value):
+        raise ValueError(f"{name} must be a URL without spaces.")
+    try:
+        parts = urlsplit(value)
+        host, _ = parts.hostname, parts.port      # .port raises on a malformed port
+    except ValueError as error:
+        raise ValueError(f"{name} is not a URL: {error}") from None
+    if parts.scheme not in ("http", "https") or not host or parts.username is not None or parts.password is not None:
+        raise ValueError(f"{name} must be http:// or https:// with a host and no user or password.")
+    if host != "localhost":
+        try:
+            loopback = ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            loopback = False
+        if not loopback:
+            raise ValueError(f"{name} must point at this machine (localhost, 127.0.0.1 or ::1), not {host!r}.")
+    return value
+
+
+def vlm_url(value, name: str) -> str:
+    """A VLM endpoint the owner wrote: ``https`` to any host, or ``http`` only to this machine; never a user or password
+    in it. Raises ValueError otherwise."""
+    from urllib.parse import urlsplit
+
+    if not isinstance(value, str) or not value or any(ord(c) < 33 for c in value):
+        raise ValueError(f"{name} must be a URL without spaces.")
+    try:
+        parts = urlsplit(value)
+        host, _ = parts.hostname, parts.port
+    except ValueError as error:
+        raise ValueError(f"{name} is not a URL: {error}") from None
+    if not host or parts.username is not None or parts.password is not None:
+        raise ValueError(f"{name} needs a host and no user or password.")
+    if parts.query or parts.fragment or "?" in value or "#" in value:
+        raise ValueError(f"{name} must not have a query or fragment: a key belongs in vlm_api_key_file.")
+    if parts.scheme == "https":
+        return value
+    if parts.scheme == "http":
+        return loopback_url(value, name)   # plain http only to this machine
+    raise ValueError(f"{name} must be https://, or http:// to this machine.")
+
+
+SECRET_FILE_MAX = 4096
+
+
+def read_secret_file(path: Path, name: str) -> str:
+    """One line from a key file the owner keeps private: a regular file (not a link) owned by them, readable by no one
+    else, at most ``SECRET_FILE_MAX`` bytes. Error messages name the file, never its contents."""
+    import stat as stat_module
+
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(path, flags)      # never a link, and a FIFO cannot block the call
+    except OSError as error:
+        if error.errno == getattr(__import__("errno"), "ELOOP"):
+            raise ValueError(f"{name} {path} must be a regular file, not a link or folder.") from None
+        raise ValueError(f"{name} {path} cannot be read: {error.strerror}.") from None
+    try:
+        info = os.fstat(fd)            # the checks are on the file that was opened
+        if not stat_module.S_ISREG(info.st_mode):
+            raise ValueError(f"{name} {path} must be a regular file, not a link or folder.")
+        if info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise ValueError(f"{name} {path} must be yours and readable only by you (chmod 600).")
+        data = os.read(fd, SECRET_FILE_MAX + 1)
+    finally:
+        os.close(fd)
+    if len(data) > SECRET_FILE_MAX:
+        raise ValueError(f"{name} {path} is larger than a key ({SECRET_FILE_MAX} bytes).")
+    try:
+        lines = [line.strip() for line in data.decode().splitlines() if line.strip()]
+    except UnicodeDecodeError:
+        raise ValueError(f"{name} {path} cannot be read as text.") from None
+    if len(lines) != 1 or any(ord(c) < 33 for c in lines[0]):
+        raise ValueError(f"{name} {path} must hold one key on one line.")
+    return lines[0]
+
+
+def vlm_endpoint(home: Path | None = None) -> dict | None:
+    """The owner's VLM endpoint for graph nodes from ``[planning] vlm_url``, ``vlm_model`` and ``vlm_api_key_file``, or
+    None when unset. The key file is checked here and read only when a process starts (``read_secret_file``). A bad
+    value raises ValueError."""
+    path, planning = _owner_planning(home)
+    names = ("vlm_url", "vlm_model", "vlm_api_key_file")
+    if "vlm_url" not in planning:
+        extra = [key for key in names if key in planning]
+        if extra:
+            raise ValueError(f"planning.{extra[0]} in {path} needs planning.vlm_url.")
+        return None
+    url = vlm_url(planning["vlm_url"], f"planning.vlm_url in {path}")
+    model = planning.get("vlm_model")
+    if model is not None and (not isinstance(model, str) or not model.strip() or any(ord(c) < 33 for c in model)):
+        raise ValueError(f"planning.vlm_model in {path} must be a model name without spaces.")
+    key_file = planning.get("vlm_api_key_file")
+    if key_file is not None:
+        if not isinstance(key_file, str) or not key_file.strip():
+            raise ValueError(f"planning.vlm_api_key_file in {path} must be a file path.")
+        key_file = Path(key_file).expanduser()
+        if not key_file.is_absolute():
+            raise ValueError(f"planning.vlm_api_key_file in {path} must be an absolute path or begin with the home folder (~).")
+    from urllib.parse import urlsplit
+
+    return {"url": url, "host": urlsplit(url).hostname, "model": model, "api_key_file": key_file}
 
 
 def physics_backend(**kwargs) -> str:

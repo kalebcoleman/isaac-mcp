@@ -44,7 +44,7 @@ def test_graph_runs_take_a_shipped_label(workspace):
     co = vabar.checkout(workspace=workspace)
     result = vabar.call(co, "run", task="tool_hanging/scissors_level1", solve="graph", graph="gt", name="g")
     assert result["result"]["command"][6:10] == ["--solve", "graph", "--graph", "gt"]
-    assert "Paid model calls are off" in result["warnings"][-1]
+    assert "No model is available" in result["warnings"][-1]
     wait_for(result["result"]["job_id"])
     assert vabar.call(co, "run", task="a/b", solve="routine", graph="gt")["code"] == "INVALID_VALUE"
     assert vabar.call(co, "run", task="a/b", solve="graph", graph="../x")["code"] == "INVALID_VALUE"
@@ -140,3 +140,25 @@ def test_results_skip_links_and_cap_each_file(workspace, tmp_path, monkeypatch):
     assert result["truncated"] == ["c/episode_results.jsonl"]
     (workspace / "runs/vabar/alias").symlink_to(folder)
     assert vabar.call(vabar.checkout(workspace=workspace), "results", run="alias")["code"] == "NOT_FOUND"
+
+
+def test_list_and_a_planned_bench_never_read_the_endpoint_key(workspace, tmp_path):
+    secrets = tmp_path / "home/.config/agent-secrets"
+    secrets.mkdir(parents=True)
+    (secrets / "key").write_text("nvapi-vabar\n")
+    (secrets / "key").chmod(0o644)                                # unusable: run would refuse
+    (tmp_path / "home/.config/twinsmith").mkdir(parents=True)
+    (tmp_path / "home/.config/twinsmith/config.toml").write_text(
+        f'[planning]\nvlm_url = "https://h.example/v1"\nvlm_api_key_file = "{secrets / "key"}"\n')
+    co = vabar.checkout(workspace=workspace)
+    assert vabar.call(co, "list")["ok"]
+    assert "GAP_VLM_API_KEY" not in calls(co.root)[-1]["env"] and "GAP_VLM_BASE_URL" not in calls(co.root)[-1]["env"]
+    assert vabar.call(co, "bench", cell="tool_hanging/L1")["ok"]          # print_only: nothing runs, nothing read
+    assert vabar.call(co, "run", task="tool_hanging/wrenches_level1")["code"] == "CONFIG_INVALID"
+    (secrets / "key").chmod(0o600)
+    started = vabar.call(co, "run", task="tool_hanging/wrenches_level1", name="v")
+    assert started["ok"], started
+    wait_for(started["result"]["job_id"])
+    env = calls(co.root)[-1]["env"]
+    assert env["GAP_VLM_API_KEY"] == "nvapi-vabar" and env["GAP_VLM_BASE_URL"] == "https://h.example/v1"
+    assert "OPENROUTER_API_KEY" not in env
