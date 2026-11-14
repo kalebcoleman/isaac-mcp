@@ -55,8 +55,7 @@ logger = logging.getLogger("twinsmith.server")
 # alone fails there; the file itself is stdlib-only. status also lists advertised bridges.
 LIST_BRIDGES_HELP = (
     "`python3 mcp/twinsmith/client.py --list-bridges` from a twinsmith checkout, "
-    "`\"$(uv tool dir)/twinsmith/bin/python\" -m twinsmith.client --list-bridges` for the twinsmith "
-    "tool's own Python, or status")
+    "`python3 <checkout>/mcp/twinsmith/client.py --list-bridges` from elsewhere, or status")
 
 SERVER_NAME = os.getenv("TWINSMITH_NAME", "twinsmith")
 SERVER_INSTRUCTIONS = (

@@ -16,7 +16,8 @@ def _printed_argv(text):
     import shlex
 
     line = next(x for x in text.splitlines() if "twinsmith.project_assets" in x)
-    return shlex.split(line.strip())[3:]  # after: "<python>" -m twinsmith.project_assets
+    words = shlex.split(line.strip())
+    return words[words.index("twinsmith.project_assets") + 1:]  # after: <python> -m twinsmith.project_assets
 
 
 def test_the_approval_command_is_filled_in(monkeypatch):
@@ -216,7 +217,8 @@ def test_a_hostile_config_or_folder_cannot_add_commands_to_the_printed_line(monk
     assert argv[argv.index("--config") + 1] == "<x;touch /tmp/PWNED2"
     assert argv[argv.index("--root") + 1] == "<y; touch /tmp/PWNED #/assets"
     line = next(x for x in text.splitlines() if "twinsmith.project_assets" in x)
-    assert shlex.split(line.strip())[0].endswith("python")  # the line is one command: no extra tokens ran or split off
+    words = shlex.split(line.strip())
+    assert words[:2] == ["uv", "run"] and ";" not in words  # the line is one command: no extra tokens ran or split off
 
 
 @pytest.mark.parametrize("name", ["model.glb", "scene.gltf", "mesh.fbx", "robot.sdf", "points.ply", "sky.hdr", "tex.exr", "table.csv"])
@@ -314,3 +316,17 @@ def test_the_users_own_local_and_cache_folders_are_ordinary_project_homes(tmp_pa
 def test_a_folder_under_tmp_opt_mnt_or_srv_is_offered(path, monkeypatch):
     monkeypatch.delenv("TWINSMITH_ASSET_CONFIG", raising=False)
     assert "twinsmith.project_assets" in a.approval_help(path)
+
+
+def test_the_printed_python_exists_after_install_sh(monkeypatch):
+    """install.sh removes any uv tool and installs into mcp/.venv, so "$(uv tool dir)" named no Python.
+    The command names this checkout's mcp project, the same in the MCP server and in Kit."""
+    import shlex
+
+    monkeypatch.setenv("TWINSMITH_ASSET_CONFIG", "/srv/isaac/approval.json")
+    line = next(x for x in a.approval_help("/work/projects/demo").splitlines() if "twinsmith.project_assets" in x)
+    assert "uv tool dir" not in line
+    words = shlex.split(line.strip())
+    project = Path(words[words.index("--project") + 1])
+    assert words[:2] == ["uv", "run"] and (project / "pyproject.toml").is_file() and (project / "twinsmith").is_dir()
+    assert words[words.index("twinsmith.project_assets") - 1] == "-m"

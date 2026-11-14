@@ -21,6 +21,11 @@ import time
 import uuid
 from .scene_contracts import DISABLED
 
+# A Python that has twinsmith, spelled so it works in the user's shell whichever process (the MCP server or Kit)
+# prints it: install.sh puts the host in mcp/.venv and removes any uv tool, so "$(uv tool dir)" names nothing.
+HELPER_PYTHON = (f"uv run --locked --isolated --project {shlex.quote(str(Path(__file__).resolve().parents[1]))} "
+                 "--python 3.12 python")
+
 MAX_FILE = 64 * 1024**2
 MAX_BYTES = 256 * 1024**2
 MAX_FILES = 1000
@@ -154,7 +159,7 @@ def approval_help(folder=None) -> str:
     staging = os.environ.get("TWINSMITH_STAGING", "").strip() or "~/.cache/twinsmith/staging"
     extra = f" --staging {_shell_word(staging)}" if new_file else ""
     return (f" To approve {_shell_word(target) if folder else target}, ask the user to run this in their own shell (an agent cannot):\n"
-            f"    \"$(uv tool dir)/twinsmith/bin/python\" -m twinsmith.project_assets --config {_shell_word(config)} "
+            f"    {HELPER_PYTHON} -m twinsmith.project_assets --config {_shell_word(config)} "
             f"--root-id {root_id} --root {_shell_word(target)}{extra} --trust-project\n"
             "Then reconnect the MCP server and restart Kit, because both read the approval file at startup. "
             "Approve the smallest folder that holds the files: every import copies the whole approved folder "

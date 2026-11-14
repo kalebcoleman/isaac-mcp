@@ -8,9 +8,9 @@ The primary tested pairings are **Isaac Sim 5.1 with Isaac Lab 2.3.2** and **Isa
 ## Target engine
 
 **Newton is the default engine for the scenes these tools build. PhysX is opt-in: choose it with `[sim] physics_backend = "physx"`,
-`TWINSMITH_PHYSICS_BACKEND=physx` or `--physics-backend physx` (`run.sh`). The UR5e work cell is still PhysX-only: on a
-Newton session its quick start refuses and says how to get a PhysX session
-([open item](OPEN-ITEMS.md#work-cell-on-newton)).**
+`TWINSMITH_PHYSICS_BACKEND=physx` or `--physics-backend physx` (`run.sh`). The UR5e work cell builds on either engine (pack
+`ur5e-jenga-workcell/v2`); on Newton its force/torque read, cameras and `mirror_real` are not qualified yet, and
+`mirror_real` is refused there ([open item](OPEN-ITEMS.md#work-cell-on-newton)).**
 
 This is the one place the statement is written; other pages link here. For a session on Newton:
 

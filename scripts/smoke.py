@@ -13,6 +13,8 @@ import time
 import traceback
 
 SCRIPTS = Path(__file__).resolve().parent
+# The checks import the MCP SDK (and the work cell check pxr), which a stock python3 lacks; --list needs neither.
+RUN = "cd mcp && uv run --locked --isolated --python 3.12 --extra test --extra isaaclab --extra scene-test python ../scripts/smoke.py"
 TOOLSETS = {
     "core": ["validate_scene_sessions"],
     "sim": ["validate_scene_tools", "validate_scene_prim_edit", "validate_scene_clear", "validate_scene_reopen",
@@ -148,7 +150,7 @@ def reopen_setup(args):
     check = f" --backend {args.backend}" if args.backend else ""
     return ("needs a session opened with a saved file. Save a scene with a rigid body (sim__stage action=save), "
             f"start a simulator ./run.sh --headless{launch} --port {port}, open that file in it "
-            "(sim__stage action=open path=<saved.usda>), then run: python3 scripts/smoke.py sim "
+            f"(sim__stage action=open path=<saved.usda>), then run: {RUN} sim "
             f"{check.strip()} --port {port} --check validate_scene_reopen "
             "--saved <saved.usda> --body </World/Body> --expected-z <rest height in metres>")
 
@@ -190,8 +192,8 @@ def execute(name, args, output, client_factory, metadata):
             require(args, "config")
             if not args.mutate_stage:
                 raise ValueError("workcell requires --mutate-stage")
-            if metadata["backend"] != "physx":
-                raise ValueError("Existing workcell_smoke supports PhysX only; no backend fallback")
+            if metadata["backend"] not in ("physx", "newton"):
+                raise ValueError(f"workcell_smoke supports PhysX and Newton, not {metadata['backend']!r}")
             command += ["--host", args.host, "--port", str(args.port), "--config", args.config,
                         "--mutate-stage"]
             if args.discard_changes:
@@ -289,6 +291,13 @@ def main(argv=None, client_factory=None):
         print("No checks registered for this toolset", file=sys.stderr)
         return 2
     if client_factory is None:
+        missing = [m for m in ("mcp", "pxr") if (m == "mcp" or "workcell_smoke" in checks)
+                   and importlib.util.find_spec(m) is None]
+        if missing:
+            print(f"This Python ({sys.executable}) has no {' or '.join(missing)}, which the checks import. "
+                  f"Run from the checkout root: {RUN} {' '.join(argv if argv is not None else sys.argv[1:])}",
+                  file=sys.stderr)
+            return 2
         sys.path.insert(0, str(SCRIPTS.parent / "mcp"))
         from twinsmith.client import BridgeClient
         client_factory = BridgeClient

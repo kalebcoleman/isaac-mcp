@@ -40,7 +40,9 @@ uv build
 
 ## Test matrix
 
-Live smokes are run with `python3 scripts/smoke.py <toolset>`; `python3 scripts/smoke.py --list` lists every check with its GPU
+Live smokes are run from `mcp/` with `uv run --locked --isolated --python 3.12 --extra test --extra isaaclab --extra scene-test
+python ../scripts/smoke.py <toolset>`, because the checks import the MCP SDK (and the work cell check `pxr`); a stock `python3`
+is refused with that command. `python3 scripts/smoke.py --list` lists every check with its GPU
 and simulator needs without connecting to anything. A smoke mutates the selected simulator, so use a disposable one on its own
 port. The runner verifies the engine before each check, prints a results table, writes a JSON report to a temporary folder (or
 `--output-dir`), and stops after the first failure. `--check <name>` runs one check; it can be repeated.
@@ -62,9 +64,12 @@ port. The runner verifies the engine before each check, prints a results table, 
 
 Prerequisites that still apply to individual checks:
 
-- The scene checks use the fixture folder made by `scripts/make_scene_fixture.py`; approve it as a project root first. Each
-  validator's docstring in `scripts/smoke/` states its own prerequisites (an explicit Kit script opt-in, a stopped fresh Sim, a
-  fixture name).
+- The shared-stage scene checks need three approved roots before Kit and the MCP server start (the owner approves them;
+  an agent cannot): `fixture`, the folder made by `scripts/make_scene_fixture.py`; `agilebot`, the Agilebot `gbt-c5a` folder
+  at the commit named in [VENDORING.md](VENDORING.md); and `package`, the folder made by `scripts/make_scene_package_fixture.py`
+  (run it from `mcp/` with `--extra scene-test`). Start Kit with `TWINSMITH_ENABLE_SCENE_SCRIPTS=1` and `TWINSMITH_ASSET_CONFIG`,
+  and give the runner the same `TWINSMITH_ASSET_CONFIG`. Each validator's docstring in `scripts/smoke/` states its own
+  prerequisites.
 - Clear requires the stage left by the equivalents check. Reopen requires a fresh process with the saved scene. Prim-edit needs
   `--directory` for its fixture. Generic scene replaces the stage and requires `--discard-changes`.
 - The work-cell check requires `--config` (absolute on the Kit host) and `--mutate-stage`, and rebuilds the work cell; do not run
@@ -95,7 +100,7 @@ stopped. Sessions needs `--second-port`; prim-edit needs `--directory` for its e
 replaces the stage and requires `--discard-changes`. Reopen needs a simulator that already has a saved scene
 open (the launcher cannot open a file at startup): without `--saved`, `--body` and `--expected-z` it is
 reported as `needs_setup` with the exact commands. Workcell delegates unchanged to `workcell_smoke.py` and
-needs `--config` and `--mutate-stage`; it remains PhysX-only. Lab delegates to `smoke_test.py` (started with
+needs `--config` and `--mutate-stage`; it runs on the session's engine, PhysX or Newton. Lab delegates to `smoke_test.py` (started with
 `default,+lab`), which starts GPU jobs rather than using the selected bridge; its backend/build are
 unavailable in the report and `--backend` is refused rather than claiming that the task engine was verified.
 Unmapped toolsets list no checks. A failed check is reported with its innermost exception and traceback and
@@ -103,6 +108,15 @@ the run continues with the next independent check; a check whose prerequisite di
 and a backend mismatch stops the run.
 
 ## Records of earlier runs
+
+<a id="headless-newton-check"></a>
+On 2026-11-14, headless Newton on Sim 6.2.0 (RTX 5080, `main` at `65220c1`, pack `ur5e-jenga-workcell/v2`) passed
+`newton_checks` (500 Hz quick scene, exact stepping at the default and a configured dt, camera after motion, the one-off push,
+a 54-block tower holding for 10 s with at most 1.7 mm of motion, contact buffers and pairs), `validate_scene_prim_edit`,
+`validate_generic_scene`, `validate_scene_joints` and `workcell_smoke`, and, with the `fixture`, `agilebot` and `package` roots
+approved and scene scripts enabled, `validate_scene_tools`, `validate_scene_camera_freshness`, `validate_scene_equivalents`,
+`validate_scene_edges`, `validate_scene_sensors` and `validate_scene_clear`. Not run: `validate_scene_reopen` (it needs a saved
+session) and any PhysX check on that day's code on this machine.
 
 <a id="last-live-check"></a><a id="headless-physx-check"></a>
 On 2026-11-03, headless PhysX checks on Sim 6.2 passed the 20-check smoke of the work cell that preceded the work cell, and generic scene checks with the stated test setup. They do not establish all tools,
