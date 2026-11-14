@@ -88,7 +88,7 @@ which keeps the tool list small. The counts below are listed tools; related tool
 | `scene` | on | 6 | Create and edit scenes and primitives |
 | `physics` | on | 4 | Physics, joints, arms and simulation |
 | `sensors` | on | 3 | Cameras, LiDAR and viewport framing |
-| `assets` | on | 3 | Import and manage robot and scene assets |
+| `assets` | on | 5 | Import and manage robot and scene assets |
 | `code` | on | 5 | Execute code and scripts, transfer files |
 | `screen` | on | 5 | Capture, record and arrange desktop windows |
 | `lab` | off | 4 | Isaac Lab training and evaluation |

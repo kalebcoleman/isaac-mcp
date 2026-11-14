@@ -45,7 +45,7 @@ this repository, so they are **not yet verified live here**.
 | A Franka joint move (`sim__joints(action="move")`) | **Does not yet settle within the PhysX tolerance.** |
 | Raycast (`sim__physics(action="raycast")`) | **Not available**: refused with `RAYCAST_UNSUPPORTED`. |
 | Occupancy-map start checks | Skipped (they are PhysX overlap queries); the result lists them in `checks_skipped`. |
-| Work cell (`workcell` toolset) | **Refused on Newton**: qualified on PhysX only; see its [README](../exts/workcell/workcell/README.md) and the [open item](OPEN-ITEMS.md#work-cell-on-newton). |
+| Work cell (`workcell` toolset) | **PhysX and Newton.** On Newton it authors the config's per-engine arm drives (stiffness, damping, armature) and the tower's solver settings; live-checked on Isaac Sim 6.2 / Newton 1.6.1 for hold, steps, fingers and tower. Force/torque, cameras and `mirror_real` are not qualified on Newton. See its [README](../exts/workcell/workcell/README.md#newton) and the [open item](OPEN-ITEMS.md#work-cell-on-newton). |
 
 Earlier records, kept as they were observed. Narrow 6.2 Newton experiments used MuJoCo Warp on CPU; earlier tests also produced
 native crashes, invalid state, rendering and contact failures. On 2026-11-06 a 6.2 headless Newton session reported the MuJoCo

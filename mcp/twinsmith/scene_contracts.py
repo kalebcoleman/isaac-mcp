@@ -322,6 +322,7 @@ add(
 # (TWINSMITH_READ_ONLY=1) runs only these.
 READ_ONLY = {
     "assets.roots", "assets.scan", "assets.search", "assets.info", "assets.packs", "assets.pack_doctor", "assets.dependencies",
+    "assets.mesh_inspect", "assets.validate",
     "sim.stage.info", "sim.stage.tree", "sim.prim.get", "sim.prim.find", "sim.prim.bounds", "sim.prim.measure",
     "sim.camera.list", "sim.physics.inspect", "sim.physics.raycast", "sim.physics.contacts", "sim.body.state",
     "sim.joints.inspect", "sim.joints.state", "sim.arm.fk", "sim.logs.tail", "sim.logs.mark", "sim.logs.summary",
@@ -343,6 +344,11 @@ HOST_ONLY = {
     "assets.pack_adopt",
     "assets.pack_pin",
     "assets.pack_build",
+    "assets.mesh_inspect",
+    "assets.mesh_decimate",
+    "assets.mesh_hulls",
+    "assets.mesh_split",
+    "assets.validate",
 }
 add(
     "assets.packs",
@@ -411,6 +417,68 @@ add(
             "boolean", "Build despite missing or remote references, and record them in pack.yaml.", False, default=False
         ),
         dry_run=field("boolean", "Report the closure and write nothing.", False, default=False),
+    ),
+)
+# Mesh preparation and validation: host-side, in a subprocess that needs the optional mesh extra.
+_MESH_SOURCE = dict(
+    source_path=field("string", "Absolute USD file under an approved root or the asset root; or give pack and asset_id.", False),
+    pack=field("string", "\"<pack id>/<version>\" holding asset_id. Default: the project file's pack.", False),
+    asset_id=field("string", "Asset id of a file in pack, e.g. bench.", False),
+    prims=field("array", "Only meshes at or under these prim paths.", False),
+)
+_MESH_OUTPUT = dict(
+    output=field("string", "New absolute folder under an approved root, outside the asset root."),
+)
+_COLLISION = dict(
+    method=field("string", "box (oriented box per mesh), convex (one hull), coacd (decomposition) or auto (box unless "
+                 "over twice the hull's volume, then coacd).", False, default="box"),
+    max_hulls=field("integer", "coacd/auto: most convex pieces per mesh, 1 to 256.", False, default=16),
+    threshold=field("number", "coacd/auto: concavity, 0.01 to 1; lower is finer and slower.", False, default=0.05),
+)
+add(
+    "assets.mesh_inspect",
+    "Report every mesh of a USD file: triangles, bounds, closed or not, whether it is a collider and its approximation, "
+    "and totals including the triangles in triangle-mesh colliders (what overflows Newton). Read-only; parses USD in a "
+    "subprocess of this server's interpreter (the mesh extra). Native USD parsing is not sandboxed.",
+    dict(**_MESH_SOURCE),
+)
+add(
+    "assets.mesh_decimate",
+    "Write a copy of a USD file whose render meshes are decimated (quadric) into a new folder, as a job. For render cost; "
+    "it does not fix a collider overflow (use split). The source is never changed. Normals and texture coordinates of a "
+    "decimated mesh are blocked because they no longer match its faces.",
+    dict(**_MESH_SOURCE, **_MESH_OUTPUT,
+         target_tris=field("integer", "About this many triangles in all, shared by mesh size. Give this or ratio.", False),
+         ratio=field("number", "Keep this fraction of each mesh's triangles, above 0 and at most 1. Give this or target_tris.", False)),
+)
+add(
+    "assets.mesh_hulls",
+    "Write a collision layer for a USD file into a new folder, as a job: for each mesh, <parent>/<mesh>_collision with an "
+    "oriented box or convex hulls (purpose guide, CollisionAPI, convexHull approximation), in the mesh parent's frame so "
+    "rigid bodies and joints are untouched. Shapes go to the meshes under prims; else to the file's mesh colliders; else, "
+    "when no mesh is a collider, to every mesh. Sublayer it over the asset, or use split for the composed result.",
+    dict(**_MESH_SOURCE, **_MESH_OUTPUT, **_COLLISION),
+)
+add(
+    "assets.mesh_split",
+    "Write a USD asset as a render layer and a collision layer plus the file that composes them, into a new folder, as a "
+    "job: <stem>_render (the source; the replaced meshes lose their collision schemas, other colliders stay), "
+    "<stem>_collision.usdc (explicit shapes, purpose guide) and <stem>.usda (sublayers both, keeps the units, up axis and default prim). Point an asset at <stem>.usda; "
+    "make it a pack version with assets__pack action=build. The source is never changed.",
+    dict(**_MESH_SOURCE, **_MESH_OUTPUT,
+         collision=field("object", "Collision shape options: method, max_hulls, threshold (as for hulls).", False)),
+)
+add(
+    "assets.validate",
+    "Check from the file alone whether a USD asset loads on Newton or PhysX: units, triangle-mesh colliders over budget, "
+    "rendered collision shapes, zero-force drives, nested articulations, massless moving bodies, drive gains too stiff "
+    "for 500 Hz, invalid mimic joints. File only: colliders a scene adds at build time are not seen. Returns ok and each check's level, prim, detail and fix; on physx the "
+    "Newton-only rules are info. Read-only, in a subprocess (the mesh extra).",
+    dict(
+        source_path=_MESH_SOURCE["source_path"], pack=_MESH_SOURCE["pack"], asset_id=_MESH_SOURCE["asset_id"],
+        engine=field("string", "newton or physx.", False, default="newton"),
+        triangle_budget=field("integer", "Triangle-mesh collider triangles allowed.", False, default=200000),
+        kit=field("boolean", "Also run Isaac Sim's Asset Validator: not available yet, refused.", False, default=False),
     ),
 )
 add(

@@ -8,7 +8,8 @@ exact schema of the seeded Jenga variation.
 
 The work cell uses externally supplied, pack-resolved assets and ships no robot binaries. It builds a stopped scene; the default
 mode uses gravity and `mirror_real` uses zero gravity. Replacing an unsaved stage requires explicit consent, and the stage
-remains in place after shutdown. It is qualified on PhysX only; see [compatibility](COMPATIBILITY.md#target-engine). There is no
+remains in place after shutdown. It builds on PhysX (the pack's drives) and on Newton (the config's `newton` drives and solver
+settings; `mirror_real` refused there); see [compatibility](COMPATIBILITY.md#target-engine). There is no
 force capture, motion planning, real-hardware control or evaluation implementation.
 
 ## Seeded Jenga variation
